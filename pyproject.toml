@@ -1,0 +1,18 @@
+[project]
+name = "vilicus"
+version = "0.1.0"
+description = "Coding agent overseer"
+authors = [
+    {name = "Radosław Ganczarek",email = "radoslaw@ganczarek.in"}
+]
+license = {text = "BSD-3-Clause license"}
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "asyncio (>=4.0.0,<5.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
