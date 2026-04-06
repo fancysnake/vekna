@@ -1,2 +1,2 @@
-# vilicus
+# antistes
 Coding agent overseer
