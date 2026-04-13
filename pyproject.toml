@@ -1,15 +1,19 @@
 [project]
-name = "antistes"
-version = "0.0.2"
+name = "vekna"
+version = "0.0.3"
 description = "Coding agent overseer"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = { text = "BSD-3-Clause license" }
 readme = "README.md"
 requires-python = ">=3.14,<4"
-dependencies = ["libtmux (>=0.55.0,<0.56.0)", "click (>=8.3.2,<9.0.0)"]
+dependencies = [
+    "libtmux (>=0.55.0,<0.56.0)",
+    "click (>=8.3.2,<9.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+]
 
 [project.scripts]
-antistes = 'antistes.inits.scripts:run'
+vekna = 'vekna.inits.cli:run'
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -30,6 +34,7 @@ dev = [
     "pytest (>=9.0.2,<10.0.0)",
     "pytest-cov (>=7.1.0,<8.0.0)",
     "diff-cover (>=10.2.0,<11.0.0)",
+    "pytest-asyncio (>=1.3.0,<2.0.0)",
 ]
 
 # BLACK
@@ -43,57 +48,47 @@ target-version = ['py314']
 # DEPTRY
 
 [tool.deptry]
-known_first_party = ["antistes"]
+known_first_party = ["vekna"]
 
 # IMPORT LINTER
 
 [tool.importlinter]
 include_external_packages = "True"
-root_package = "antistes"
+root_package = "vekna"
 
 # Explanation <source_modules> can't import <forbidden_modules>
 
 [[tool.importlinter.contracts]]
 name = "gates"
 type = "forbidden"
-source_modules = ["antistes.gates"]
-forbidden_modules = [
-    "antistes.links",
-    "antistes.inits",
-    "antistes.specs",
-    "antistes.edges",
-]
+source_modules = ["vekna.gates"]
+forbidden_modules = ["vekna.links", "vekna.inits", "vekna.specs", "vekna.edges"]
 
 
 [[tool.importlinter.contracts]]
 name = "links"
 type = "forbidden"
-source_modules = ["antistes.links"]
-forbidden_modules = [
-    "antistes.gates",
-    "antistes.inits",
-    "antistes.specs",
-    "antistes.edges",
-]
+source_modules = ["vekna.links"]
+forbidden_modules = ["vekna.gates", "vekna.inits", "vekna.specs", "vekna.edges"]
 
 
 [[tool.importlinter.contracts]]
 name = "inits"
 type = "forbidden"
-source_modules = ["antistes.inits"]
-forbidden_modules = ["antistes.edges"]
+source_modules = ["vekna.inits"]
+forbidden_modules = ["vekna.edges"]
 
 
 [[tool.importlinter.contracts]]
 name = "mills"
 type = "forbidden"
-source_modules = ["antistes.mills"]
+source_modules = ["vekna.mills"]
 forbidden_modules = [
-    "antistes.gates",
-    "antistes.links",
-    "antistes.inits",
-    "antistes.specs",
-    "antistes.edges",
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.specs",
+    "vekna.edges",
     "django",
 ]
 
@@ -101,14 +96,14 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "pacts"
 type = "forbidden"
-source_modules = ["antistes.pacts"]
+source_modules = ["vekna.pacts"]
 forbidden_modules = [
-    "antistes.gates",
-    "antistes.links",
-    "antistes.inits",
-    "antistes.mills",
-    "antistes.specs",
-    "antistes.edges",
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.specs",
+    "vekna.edges",
     "django",
 ]
 
@@ -116,13 +111,13 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "specs"
 type = "forbidden"
-source_modules = ["antistes.specs"]
+source_modules = ["vekna.specs"]
 forbidden_modules = [
-    "antistes.gates",
-    "antistes.links",
-    "antistes.inits",
-    "antistes.mills",
-    "antistes.edges",
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.edges",
     "django",
 ]
 
@@ -130,14 +125,14 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "edges"
 type = "forbidden"
-source_modules = ["antistes.edges"]
+source_modules = ["vekna.edges"]
 forbidden_modules = [
-    "antistes.gates",
-    "antistes.links",
-    "antistes.inits",
-    "antistes.mills",
-    "antistes.pacts",
-    "antistes.specs",
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
 ]
 
 # MYPY
@@ -160,7 +155,7 @@ explicit_package_bases = true
 extra_checks = true
 implicit_reexport = true
 mypy_path = "src"
-plugins = []
+plugins = ["pydantic.mypy"]
 pretty = true
 python_version = "3.14"
 strict = true
@@ -185,8 +180,9 @@ preview = true
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "CPY", # Missing copyright notice at top of file
-    "D1",  # Missing docstring
+    "COM812", # Trailing comma missing
+    "CPY",    # Missing copyright notice at top of file
+    "D1",     # Missing docstring
 ]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -215,10 +211,14 @@ min_confidence = 61
 [tool.coverage.run]
 branch = true
 source = ["src"]
-omit = ["src/antistes/edges/*"]
+omit = ["src/vekna/edges/*"]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
 exclude_also = ["if TYPE_CHECKING:", "# pragma: no cover"]
 precision = 2
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
