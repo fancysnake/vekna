@@ -29,6 +29,7 @@ class ServerMill:
         bg_tasks: list[asyncio.Task[None]] = [
             asyncio.create_task(coro()) for coro in self._background
         ]
+        await asyncio.sleep(0)  # let background tasks reach their first await
         try:
             await asyncio.to_thread(self._tmux.attach)
         finally:
