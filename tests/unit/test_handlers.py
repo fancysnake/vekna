@@ -1,5 +1,6 @@
+import asyncio
 import json
-from unittest.mock import MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -196,6 +197,31 @@ class TestMarkWindowHandlerClearMarks:
         handler.clear_marks_once()
 
         tmux.unmark_window.assert_not_called()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_clear_marks_loop_exits_when_iterator_exhausted() -> None:
+        tmux = MagicMock()
+        handler = _make_mark_window_handler(tmux)
+
+        with patch("vekna.mills.handlers.itertools.count", return_value=iter([])):
+            await handler.clear_marks_loop()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_clear_marks_loop_sleeps_and_calls_clear_marks_once() -> None:
+        tmux = MagicMock()
+        tmux.active_window_id.return_value = None
+        handler = _make_mark_window_handler(tmux)
+        sleep_mock = AsyncMock(side_effect=[None, asyncio.CancelledError])
+
+        with (
+            patch("vekna.mills.handlers.asyncio.sleep", sleep_mock),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await handler.clear_marks_loop()
+
+        assert sleep_mock.call_args_list == [call(_POLL), call(_POLL)]
 
     @staticmethod
     @pytest.mark.asyncio

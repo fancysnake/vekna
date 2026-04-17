@@ -104,6 +104,22 @@ class TestRegisterAndPublish:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_cancelled_handler_does_not_propagate_error() -> None:
+        bus = EventBus()
+
+        async def slow_handler(_: Event) -> None:
+            await asyncio.sleep(100)
+
+        bus.register("claude", "Notification", slow_handler)
+        bus.publish(_event())
+
+        tasks = asyncio.all_tasks() - {asyncio.current_task()}
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_publish_multiple_events() -> None:
         bus = EventBus()
         handler = AsyncMock()
