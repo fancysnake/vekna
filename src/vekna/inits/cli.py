@@ -7,12 +7,17 @@ from vekna.links.socket_client import SocketClientLink
 from vekna.links.socket_server import SocketServerLink
 from vekna.links.tmux import TmuxLink
 from vekna.mills.bus import EventBus
-from vekna.mills.handlers import ClaudeNotificationHandler, SelectPaneHandler
+from vekna.mills.handlers import (
+    ClaudeNotificationHandler,
+    MarkWindowHandler,
+    SelectPaneHandler,
+)
 from vekna.mills.notify import NotifyClientMill
 from vekna.mills.server import ServerMill
 from vekna.pacts.notify import NotifyClientMillProtocol
 from vekna.pacts.server import ServerMillProtocol
 from vekna.specs import (
+    ATTENTION_POLL_INTERVAL_SECONDS,
     ATTENTION_WINDOW_STATUS_STYLE,
     IDLE_THRESHOLD_SECONDS,
     paths_for,
@@ -31,11 +36,20 @@ def _build_server_mill() -> ServerMillProtocol:
     )
     socket_server_link = SocketServerLink(socket_path=unix_socket_path)
     bus = EventBus()
+    mark_handler = MarkWindowHandler(
+        tmux_link, IDLE_THRESHOLD_SECONDS, ATTENTION_POLL_INTERVAL_SECONDS
+    )
+    bus.register("vekna", "SelectPane", mark_handler)
     bus.register(
         "vekna", "SelectPane", SelectPaneHandler(tmux_link, IDLE_THRESHOLD_SECONDS)
     )
     bus.register("claude", "Notification", ClaudeNotificationHandler(bus))
-    return ServerMill(tmux=tmux_link, socket_server=socket_server_link, bus=bus)
+    return ServerMill(
+        tmux=tmux_link,
+        socket_server=socket_server_link,
+        bus=bus,
+        background=[mark_handler.clear_marks_loop],
+    )
 
 
 def _build_notify_client_mill(tmux_env: str) -> NotifyClientMillProtocol:

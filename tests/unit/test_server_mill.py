@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 from unittest.mock import AsyncMock, MagicMock
 
@@ -74,6 +75,28 @@ class TestRun:
 
         socket_server.start.assert_not_called()
         tmux.attach.assert_not_called()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_cancels_background_tasks_after_attach() -> None:
+        tmux = _make_tmux()
+        socket_server = AsyncMock()
+        cancelled: list[bool] = []
+
+        async def bg() -> None:
+            try:
+                await asyncio.sleep(999)
+            except asyncio.CancelledError:
+                cancelled.append(True)
+                raise
+
+        mill = ServerMill(
+            tmux=tmux, socket_server=socket_server, bus=MagicMock(), background=[bg]
+        )
+
+        await mill.run()
+
+        assert cancelled == [True]
 
 
 class TestHandle:

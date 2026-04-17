@@ -1,4 +1,6 @@
 import asyncio
+import contextlib
+from collections.abc import Callable, Coroutine, Sequence
 
 from pydantic import ValidationError
 
@@ -14,17 +16,26 @@ class ServerMill:
         tmux: TmuxLinkProtocol,
         socket_server: SocketServerLinkProtocol,
         bus: EventBusProtocol,
+        background: Sequence[Callable[[], Coroutine[None, None, None]]] = (),
     ) -> None:
         self._tmux = tmux
         self._socket_server = socket_server
         self._bus = bus
+        self._background = background
 
     async def run(self) -> None:
         self._tmux.ensure_session()
         await self._socket_server.start(self.handle)
+        bg_tasks: list[asyncio.Task[None]] = [
+            asyncio.create_task(coro()) for coro in self._background
+        ]
         try:
             await asyncio.to_thread(self._tmux.attach)
         finally:
+            for task in bg_tasks:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             await self._socket_server.stop()
 
     async def handle(self, message: str) -> str:
