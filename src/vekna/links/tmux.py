@@ -1,3 +1,4 @@
+import math
 import time
 
 import libtmux
@@ -22,18 +23,6 @@ class TmuxLink:
     def select_pane(self, pane_id: str) -> None:
         self._server.cmd("select-window", "-t", pane_id)
         self._server.cmd("select-pane", "-t", pane_id)
-
-    def seconds_since_last_keystroke(self) -> float | None:
-        line = self._first_stdout_line(
-            self._server.cmd("display-message", "-p", "-F", "#{client_activity}")
-        )
-        if line is None:
-            return None
-        try:
-            last_activity = int(line)
-        except ValueError:
-            return None
-        return time.time() - last_activity
 
     def window_id_for_pane(self, pane_id: str) -> str | None:
         return self._first_stdout_line(
@@ -60,6 +49,20 @@ class TmuxLink:
         self._server.cmd(
             "set-window-option", "-u", "-t", window_id, "window-status-style"
         )
+
+    def display_message(self, text: str) -> None:
+        self._server.cmd("display-message", "-t", self._session_name, text)
+
+    def last_activity_seconds_ago(self) -> float:
+        line = self._first_stdout_line(
+            self._server.cmd("display-message", "-p", "-F", "#{client_activity}")
+        )
+        if line is None:
+            return math.inf
+        try:
+            return time.time() - int(line)
+        except ValueError:
+            return math.inf
 
     @staticmethod
     def _first_stdout_line(result: tmux_cmd) -> str | None:

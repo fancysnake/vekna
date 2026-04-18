@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 _SLUG_CLEAN = re.compile(r"[^a-z0-9]+")
 STEM_DIGEST_LENGTH = 6
 
-IDLE_TYPING_THRESHOLD_SECONDS = 3.0
+IDLE_THRESHOLD_SECONDS = 3.0
 ATTENTION_POLL_INTERVAL_SECONDS = 1.0
 ATTENTION_WINDOW_STATUS_STYLE = "bg=red,fg=white,bold"
 

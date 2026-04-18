@@ -1,6 +1,8 @@
 import asyncio
 import os
+import sys
 from collections.abc import Callable
+from typing import IO
 
 import click
 
@@ -29,13 +31,21 @@ class ClickGate:
                 asyncio.run(self._server_mill_factory().run())
 
         @click.command()
-        def notify() -> None:
+        @click.option("--app", required=True, help="Application name (e.g. claude)")
+        @click.option("--hook", required=True, help="Hook name (e.g. Notification)")
+        def notify(app: str, hook: str) -> None:
             tmux_env = os.environ.get("TMUX")
             pane_id = os.environ.get("TMUX_PANE")
             if tmux_env is None or pane_id is None:
                 raise click.UsageError(_MISSING_TMUX_MSG)
+            stdin: IO[str] = sys.stdin
+            payload: str = "" if stdin.isatty() else stdin.read()
             mill = self._notify_client_mill_factory(tmux_env)
-            asyncio.run(mill.notify(pane_id))
+            asyncio.run(
+                mill.notify(
+                    app=app, hook=hook, payload=payload, meta={"TMUX_PANE": pane_id}
+                )
+            )
 
         vekna.add_command(notify)
 

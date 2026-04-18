@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning].
 ### Security
 
 
+## [0.0.4] - 2026-04-17
+
+### Added
+
+- `vekna notify` now accepts `--app` and `--hook` flags and reads the
+  hook payload from stdin, making it suitable as a drop-in Claude Code
+  hook: `echo "$CLAUDE_HOOK_DATA" | vekna notify --app claude --hook Notification`.
+- Notifications carry the full hook payload to the server, so future
+  handlers can act on message content.
+
+### Changed
+
+- Focus switching now triggers only when the session has been idle for
+  at least 3 seconds (down from 5); the threshold is tunable via
+  `IDLE_THRESHOLD_SECONDS`.
+- When the user is active, the originating window turns red immediately
+  rather than waiting for the next poll cycle.
+
+
 ## [0.0.3] - 2026-04-13
 
 ### Added
@@ -79,7 +98,8 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.0.3...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/fancysnake/vekna/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/fancysnake/vekna/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/fancysnake/vekna/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/fancysnake/vekna/releases/tag/v0.0.1
