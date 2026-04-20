@@ -17,7 +17,7 @@ class TestNotifyFlow:
     @staticmethod
     @pytest.mark.asyncio
     async def test_client_sends_to_server_handler(socket_path) -> None:
-        handler = AsyncMock(return_value=OK_RESPONSE)
+        handler = AsyncMock(return_value=OK_RESPONSE.model_dump_json())
         server = SocketServerLink(socket_path=socket_path)
         client = SocketClientLink(socket_path=socket_path)
 
@@ -26,4 +26,4 @@ class TestNotifyFlow:
         await server.stop()
 
         handler.assert_called_once_with('{"pane_id": "%2"}')
-        assert response == OK_RESPONSE
+        assert response == OK_RESPONSE.model_dump_json()

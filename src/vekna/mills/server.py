@@ -44,6 +44,6 @@ class ServerMill:
         try:
             event = Event.model_validate_json(message)
         except ValidationError:
-            return ERROR_RESPONSE_INVALID
+            return ERROR_RESPONSE_INVALID.model_dump_json()
         self._bus.publish(event)
-        return OK_RESPONSE
+        return OK_RESPONSE.model_dump_json()

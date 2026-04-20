@@ -133,7 +133,7 @@ class TestHandle:
                 app="claude", hook="Notification", payload="", meta={"TMUX_PANE": "%3"}
             )
         )
-        assert result == OK_RESPONSE
+        assert result == OK_RESPONSE.model_dump_json()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -146,7 +146,7 @@ class TestHandle:
         handler = socket_server.start.call_args[0][0]
         result = await handler(_event_json())
 
-        assert result == OK_RESPONSE
+        assert result == OK_RESPONSE.model_dump_json()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -159,7 +159,7 @@ class TestHandle:
         handler = socket_server.start.call_args[0][0]
         result = await handler("not json")
 
-        assert result == ERROR_RESPONSE_INVALID
+        assert result == ERROR_RESPONSE_INVALID.model_dump_json()
 
     @staticmethod
     @pytest.mark.asyncio

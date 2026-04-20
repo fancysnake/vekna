@@ -1,5 +1,13 @@
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import Literal, Protocol
+
+from pydantic import BaseModel
+
+
+class Response(BaseModel):
+    status: Literal["ok", "error"]
+    data: dict[str, str] = {}
+    reason: str = ""
 
 
 class SocketServerLinkProtocol(Protocol):

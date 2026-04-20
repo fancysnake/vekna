@@ -13,6 +13,8 @@ class Hook(str, Enum):
     SELECT_PANE = "SelectPane"
     ERROR = "Error"
     NOTIFICATION = "Notification"
+    ENSURE_SESSION = "EnsureSession"
+    STATUS_BAR = "StatusBar"
 
 
 class HandlerProtocol(Protocol):

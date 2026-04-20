@@ -28,7 +28,7 @@ class TestSocketServer:
     @staticmethod
     @pytest.mark.asyncio
     async def test_accepts_connection_and_calls_handler(socket_path) -> None:
-        handler = AsyncMock(return_value=OK_RESPONSE)
+        handler = AsyncMock(return_value=OK_RESPONSE.model_dump_json())
         server = SocketServerLink(socket_path=socket_path)
 
         await server.start(handler)
@@ -41,12 +41,12 @@ class TestSocketServer:
         await server.stop()
 
         handler.assert_called_once_with('{"pane_id": "%1"}')
-        assert response == f"{OK_RESPONSE}\n".encode()
+        assert response == f"{OK_RESPONSE.model_dump_json()}\n".encode()
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_stop_removes_socket_file(socket_path) -> None:
-        handler = AsyncMock(return_value=OK_RESPONSE)
+        handler = AsyncMock(return_value=OK_RESPONSE.model_dump_json())
         server = SocketServerLink(socket_path=socket_path)
 
         await server.start(handler)
@@ -78,7 +78,7 @@ class TestSocketServer:
         socket_path,
     ) -> None:
         server = SocketServerLink(socket_path=socket_path)
-        await server.start(AsyncMock(return_value=OK_RESPONSE))
+        await server.start(AsyncMock(return_value=OK_RESPONSE.model_dump_json()))
         vars(server)["_handler"] = None  # clear handler after server is running
 
         reader, writer = await asyncio.open_unix_connection(socket_path)

@@ -27,7 +27,7 @@ class TestSocketClient:
         ) -> None:
             line = await reader.readline()
             received.append(line.decode().strip())
-            writer.write(f"{OK_RESPONSE}\n".encode())
+            writer.write(f"{OK_RESPONSE.model_dump_json()}\n".encode())
             await writer.drain()
             writer.close()
             await writer.wait_closed()
@@ -41,4 +41,4 @@ class TestSocketClient:
         await server.wait_closed()
 
         assert received == ['{"pane_id": "%1"}']
-        assert result == OK_RESPONSE
+        assert result == OK_RESPONSE.model_dump_json()
