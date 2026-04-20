@@ -1,3 +1,8 @@
+import asyncio
+import os
+import socket
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from click import Group
@@ -25,6 +30,10 @@ from vekna.specs import (
     stem_for_cwd,
 )
 
+_DAEMON_START_TIMEOUT_SECONDS = 3.0
+_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+_DAEMON_DID_NOT_START = "daemon did not start"
+
 
 def _build_server_mill() -> ServerMillProtocol:
     tmux_link = TmuxLink(attention_style=ATTENTION_WINDOW_STATUS_STYLE)
@@ -48,6 +57,44 @@ def _build_server_mill() -> ServerMillProtocol:
 def _build_notify_client_mill() -> NotifyClientMillProtocol:
     socket_client_link = SocketClientLink(socket_path=daemon_socket_path())
     return NotifyClientMill(socket_client=socket_client_link)
+
+
+def _socket_is_alive(path: str) -> bool:
+    alive = False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(path)
+            alive = True
+    except OSError:
+        pass
+    return alive
+
+
+def _spawn_daemon() -> None:  # pragma: no cover
+    """Fork and run the server mill as a detached background daemon."""
+    if os.fork() != 0:
+        return  # parent returns immediately; child is adopted by init
+    # Child: become a new session leader and redirect stdio
+    os.setsid()
+    devnull = os.open(os.devnull, os.O_RDWR)
+    for fd_num in (0, 1, 2):
+        os.dup2(devnull, fd_num)
+    os.close(devnull)
+    asyncio.run(_build_server_mill().run())
+    os._exit(0)
+
+
+def ensure_daemon_running(spawn: Callable[[], None] = _spawn_daemon) -> None:
+    socket_path = daemon_socket_path()
+    if _socket_is_alive(socket_path):
+        return
+    spawn()
+    iterations = round(_DAEMON_START_TIMEOUT_SECONDS / _DAEMON_POLL_INTERVAL_SECONDS)
+    for _ in range(iterations):
+        time.sleep(_DAEMON_POLL_INTERVAL_SECONDS)
+        if _socket_is_alive(socket_path):
+            return
+    raise RuntimeError(_DAEMON_DID_NOT_START)
 
 
 def init_command() -> Group:
