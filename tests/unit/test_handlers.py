@@ -329,7 +329,7 @@ class TestSelectPaneHandlerOnSessionVisited:
 
         await handler(_select_pane_event("%3"))
 
-        assert visited == []
+        assert not visited
 
     @staticmethod
     @pytest.mark.asyncio

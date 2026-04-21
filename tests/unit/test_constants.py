@@ -1,8 +1,6 @@
-import os
-import tempfile
 from pathlib import Path
 
-from vekna.specs.constants import STEM_DIGEST_LENGTH, daemon_socket_path, stem_for_cwd
+from vekna.specs.session import STEM_DIGEST_LENGTH, stem_for_cwd
 
 
 class TestStemForCwd:
@@ -48,11 +46,3 @@ class TestStemForCwd:
         stem = stem_for_cwd(Path("/"))
 
         assert stem.startswith("vekna-root-")
-
-
-class TestDaemonSocketPath:
-    @staticmethod
-    def test_returns_path_with_current_uid() -> None:
-        path = daemon_socket_path()
-
-        assert path == str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")

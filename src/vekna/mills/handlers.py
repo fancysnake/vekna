@@ -7,6 +7,10 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from vekna.pacts.bus import App, EventBusProtocol, Hook
 from vekna.pacts.notify import ERROR_PAYLOAD_INVALID_NOTIFICATION, Event
 from vekna.pacts.tmux import TmuxLinkProtocol
+from vekna.specs.attention import (
+    ATTENTION_POLL_INTERVAL_SECONDS,
+    IDLE_THRESHOLD_SECONDS,
+)
 
 
 class _ClaudeNotificationPayload(BaseModel):
@@ -66,8 +70,8 @@ class SelectPaneHandler:
     def __init__(
         self,
         tmux: TmuxLinkProtocol,
-        idle_threshold_seconds: float,
-        poll_interval_seconds: float,
+        idle_threshold_seconds: float = IDLE_THRESHOLD_SECONDS,
+        poll_interval_seconds: float = ATTENTION_POLL_INTERVAL_SECONDS,
         on_session_visited: Callable[[str], None] | None = None,
     ) -> None:
         self._tmux = tmux

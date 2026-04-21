@@ -7,7 +7,11 @@ from libtmux.common import tmux_cmd
 
 
 class TmuxLink:
-    def __init__(self, attention_style: str, conf_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        attention_style: str = "bg=red,fg=white,bold",
+        conf_path: Path | None = None,
+    ) -> None:
         self._server = libtmux.Server()
         self._attention_style = attention_style
         self._conf_path = conf_path

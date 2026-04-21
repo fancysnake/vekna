@@ -1,10 +1,21 @@
+import os
 import socket as _socket
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
-from vekna.inits.cli import ensure_daemon_running
+from vekna.inits.cli import daemon_socket_path, ensure_daemon_running
+
+
+class TestDaemonSocketPath:
+    @staticmethod
+    def test_returns_path_with_current_uid() -> None:
+        path = daemon_socket_path()
+
+        assert path == str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
 
 
 class TestEnsureDaemonRunning:

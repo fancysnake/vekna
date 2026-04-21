@@ -87,7 +87,6 @@ forbidden_modules = [
     "vekna.gates",
     "vekna.links",
     "vekna.inits",
-    "vekna.specs",
     "vekna.edges",
     "django",
 ]

@@ -1,16 +1,19 @@
 import asyncio
 import contextlib
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from vekna.mills.server import ServerMill
 from vekna.pacts.notify import ERROR_RESPONSE_INVALID, OK_RESPONSE, Event
+from vekna.specs.session import stem_for_cwd
 
 _SESSION_NAME_FOR_CWD = staticmethod(lambda cwd: f"vekna-{cwd.split('/')[-1]}-abc123")
 
-# Badge emitted when no session_name is passed (falls back to skull: dark red bg, white fg).
+# Badge emitted when no session_name is passed
+# (falls back to skull: dark red bg, white fg).
 _FALLBACK_BADGE = "#[bg=colour88,fg=colour231] ☠️ vekna #[bg=default,fg=colour245]"
 
 
@@ -319,6 +322,23 @@ class TestClearPending:
         mill.clear_pending("nonexistent")  # must not raise
 
 
+class TestDefaultSessionNameForCwd:
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_uses_stem_for_cwd_when_no_callable_injected(tmp_path: Path) -> None:
+        cwd = str(tmp_path)
+        mill = ServerMill(tmux=_make_tmux(), socket_server=AsyncMock(), bus=_make_bus())
+
+        ensure_msg = (
+            f'{{"app": "vekna", "hook": "EnsureSession",'
+            f' "payload": "", "meta": {{"cwd": "{cwd}"}}}}'
+        )
+        result = await mill.handle(ensure_msg)
+
+        data = json.loads(result)
+        assert data["data"]["session_name"] == stem_for_cwd(Path(cwd))
+
+
 class TestHandleStatusBar:
     @staticmethod
     @pytest.mark.asyncio
@@ -337,6 +357,27 @@ class TestHandleStatusBar:
         data = json.loads(result)
         assert data["status"] == "ok"
         assert data["data"]["text"] == _FALLBACK_BADGE
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_uses_session_mark_when_session_name_given() -> None:
+        mill = ServerMill(
+            tmux=_make_tmux(),
+            socket_server=AsyncMock(),
+            bus=_make_bus(),
+            session_name_for_cwd=_SESSION_NAME_FOR_CWD,
+        )
+
+        result = await mill.handle(
+            '{"app": "vekna", "hook": "StatusBar", "payload": "",'
+            ' "meta": {"session_name": "vekna-work-abc123"}}'
+        )
+
+        data = json.loads(result)
+        # Badge must reflect the session name, not the skull fallback.
+        assert data["status"] == "ok"
+        assert "vekna" not in data["data"]["text"].split("#[bg=default")[0].split()[-1]
+        assert "work" in data["data"]["text"]
 
     @staticmethod
     @pytest.mark.asyncio
