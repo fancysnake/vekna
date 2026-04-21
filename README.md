@@ -133,19 +133,7 @@ Session naming (`vekna-<basename>-<hash>`) lives in `src/vekna/specs/constants.p
 
 ## Architecture
 
-GLIMPSE layering (enforced by `import-linter`):
-
-| Layer | Role |
-|-------|------|
-| `pacts` | Protocols, DTOs (pydantic) |
-| `specs` | Constants |
-| `mills` | Business logic (`ServerMill`, `NotifyClientMill`, `EventBus`, handlers) |
-| `links` | I/O adapters (`TmuxLink`, `SocketServerLink`, `SocketClientLink`) |
-| `gates` | Entry points (`ClickGate` — CLI) |
-| `inits` | Wiring — registers handlers and starts background tasks |
-| `edges` | Infra boundary |
-
-Import rules in `pyproject.toml` under `[tool.importlinter]`.
+See [`docs/architecture.md`](docs/architecture.md).
 
 ## Development
 

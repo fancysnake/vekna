@@ -83,13 +83,7 @@ forbidden_modules = ["vekna.edges"]
 name = "mills"
 type = "forbidden"
 source_modules = ["vekna.mills"]
-forbidden_modules = [
-    "vekna.gates",
-    "vekna.links",
-    "vekna.inits",
-    "vekna.edges",
-    "django",
-]
+forbidden_modules = ["vekna.gates", "vekna.links", "vekna.inits", "vekna.edges"]
 
 
 [[tool.importlinter.contracts]]
@@ -103,7 +97,6 @@ forbidden_modules = [
     "vekna.mills",
     "vekna.specs",
     "vekna.edges",
-    "django",
 ]
 
 
@@ -117,7 +110,6 @@ forbidden_modules = [
     "vekna.inits",
     "vekna.mills",
     "vekna.edges",
-    "django",
 ]
 
 

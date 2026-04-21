@@ -381,6 +381,22 @@ class TestSelectPaneHandlerClearMarks:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_does_not_unmark_when_active_window_differs() -> None:
+        tmux = MagicMock()
+        tmux.session_name_for_pane.return_value = "work"
+        tmux.last_activity_seconds_ago.return_value = _THRESHOLD - 0.1
+        tmux.window_id_for_pane.return_value = "@5"
+        tmux.active_window_id.return_value = "@9"  # different window is active
+        handler = _make_select_pane_handler(tmux)
+
+        await handler(_select_pane_event("%3"))
+        handler.clear_marks_once()
+
+        tmux.unmark_window.assert_not_called()
+        assert "@5" in handler._marked_windows  # noqa: SLF001
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_clear_marks_loop_exits_when_iterator_exhausted() -> None:
         tmux = MagicMock()
         handler = _make_select_pane_handler(tmux)
