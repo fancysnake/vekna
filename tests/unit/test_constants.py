@@ -1,11 +1,6 @@
 from pathlib import Path
 
-from vekna.specs.constants import (
-    STEM_DIGEST_LENGTH,
-    paths_for,
-    stem_for_cwd,
-    stem_from_tmux_env,
-)
+from vekna.specs.session import STEM_DIGEST_LENGTH, stem_for_cwd
 
 
 class TestStemForCwd:
@@ -51,27 +46,3 @@ class TestStemForCwd:
         stem = stem_for_cwd(Path("/"))
 
         assert stem.startswith("vekna-root-")
-
-
-class TestStemFromTmuxEnv:
-    @staticmethod
-    def test_extracts_basename_of_socket_path() -> None:
-        env = "/tmp/tmux-1000/vekna-foo-a3f1c2,12345,$0"
-
-        assert stem_from_tmux_env(env) == "vekna-foo-a3f1c2"
-
-    @staticmethod
-    def test_handles_default_tmux_socket() -> None:
-        env = "/tmp/tmux-1000/default,99,$1"
-
-        assert stem_from_tmux_env(env) == "default"
-
-
-class TestPathsFor:
-    @staticmethod
-    def test_returns_stem_stem_and_socket_path() -> None:
-        tmux_socket, tmux_session, unix_socket_path = paths_for("vekna-foo-a3f1c2")
-
-        assert tmux_socket == "vekna-foo-a3f1c2"
-        assert tmux_session == "vekna-foo-a3f1c2"
-        assert unix_socket_path.endswith("/vekna-foo-a3f1c2.sock")

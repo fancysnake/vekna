@@ -87,6 +87,10 @@ run = "mise run _pytest -- tests/unit --cov=tests.unit --cov=ludamus"
 description = "Run all tests"
 run = "mise run _pytest -- tests"
 
+[tasks.coverage]
+description = "Run all tests with coverage"
+run = "mise run _pytest -- tests --cov"
+
 [tasks.diff-cover]
 depends = ["coverage"]
 run = """

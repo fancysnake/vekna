@@ -1,3 +1,9 @@
+import asyncio
+import os
+import socket
+import tempfile
+import time
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 
 from click import Group
@@ -6,48 +12,96 @@ from vekna.gates.cli.click.command import ClickGate
 from vekna.links.socket_client import SocketClientLink
 from vekna.links.socket_server import SocketServerLink
 from vekna.links.tmux import TmuxLink
+from vekna.mills.bus import EventBus
+from vekna.mills.handlers import (
+    ClaudeNotificationHandler,
+    DisplayErrorHandler,
+    SelectPaneHandler,
+)
 from vekna.mills.notify import NotifyClientMill
 from vekna.mills.server import ServerMill
+from vekna.pacts.bus import App, Hook
 from vekna.pacts.notify import NotifyClientMillProtocol
 from vekna.pacts.server import ServerMillProtocol
-from vekna.specs import (
-    ATTENTION_POLL_INTERVAL_SECONDS,
-    ATTENTION_WINDOW_STATUS_STYLE,
-    IDLE_TYPING_THRESHOLD_SECONDS,
-    paths_for,
-    stem_for_cwd,
-    stem_from_tmux_env,
-)
+
+_TMUX_CONF_PATH: Path = Path(__file__).parent.parent / "conf" / "tmux.conf"
+
+
+def daemon_socket_path() -> str:
+    return str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
+
+
+_DAEMON_START_TIMEOUT_SECONDS = 3.0
+_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+_DAEMON_DID_NOT_START = "daemon did not start"
 
 
 def _build_server_mill() -> ServerMillProtocol:
-    stem = stem_for_cwd(Path.cwd())
-    tmux_socket_name, tmux_session_name, unix_socket_path = paths_for(stem)
-    tmux_link = TmuxLink(
-        socket_name=tmux_socket_name,
-        session_name=tmux_session_name,
-        attention_style=ATTENTION_WINDOW_STATUS_STYLE,
+    tmux_link = TmuxLink(conf_path=_TMUX_CONF_PATH)
+    socket_server_link = SocketServerLink(socket_path=daemon_socket_path())
+    bus = EventBus()
+    background: list[Callable[[], Coroutine[None, None, None]]] = []
+    server_mill = ServerMill(
+        tmux=tmux_link, socket_server=socket_server_link, bus=bus, background=background
     )
-    socket_server_link = SocketServerLink(socket_path=unix_socket_path)
-    return ServerMill(
-        tmux=tmux_link,
-        socket_server=socket_server_link,
-        idle_threshold_seconds=IDLE_TYPING_THRESHOLD_SECONDS,
-        clear_poll_interval_seconds=ATTENTION_POLL_INTERVAL_SECONDS,
+    select_handler = SelectPaneHandler(
+        tmux_link, on_session_visited=server_mill.clear_pending
     )
+    background.append(select_handler.clear_marks_loop)
+    bus.register(App.VEKNA, Hook.SELECT_PANE, select_handler)
+    bus.register(App.VEKNA, Hook.ERROR, DisplayErrorHandler(tmux_link))
+    bus.register(App.CLAUDE, Hook.NOTIFICATION, ClaudeNotificationHandler(bus))
+    return server_mill
 
 
-def _build_notify_client_mill(tmux_env: str) -> NotifyClientMillProtocol:
-    stem = stem_from_tmux_env(tmux_env)
-    _, _, unix_socket_path = paths_for(stem)
-    socket_client_link = SocketClientLink(socket_path=unix_socket_path)
+def _build_notify_client_mill() -> NotifyClientMillProtocol:
+    socket_client_link = SocketClientLink(socket_path=daemon_socket_path())
     return NotifyClientMill(socket_client=socket_client_link)
+
+
+def _socket_is_alive(path: str) -> bool:
+    alive = False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(path)
+            alive = True
+    except OSError:
+        pass
+    return alive
+
+
+def _spawn_daemon() -> None:  # pragma: no cover
+    """Fork and run the server mill as a detached background daemon."""
+    if os.fork() != 0:
+        return  # parent returns immediately; child is adopted by init
+    # Child: become a new session leader and redirect stdio
+    os.setsid()
+    devnull = os.open(os.devnull, os.O_RDWR)
+    for fd_num in (0, 1, 2):
+        os.dup2(devnull, fd_num)
+    os.close(devnull)
+    asyncio.run(_build_server_mill().run())
+    os._exit(0)
+
+
+def ensure_daemon_running(spawn: Callable[[], None] = _spawn_daemon) -> None:
+    socket_path = daemon_socket_path()
+    if _socket_is_alive(socket_path):
+        return
+    spawn()
+    iterations = round(_DAEMON_START_TIMEOUT_SECONDS / _DAEMON_POLL_INTERVAL_SECONDS)
+    for _ in range(iterations):
+        time.sleep(_DAEMON_POLL_INTERVAL_SECONDS)
+        if _socket_is_alive(socket_path):
+            return
+    raise RuntimeError(_DAEMON_DID_NOT_START)
 
 
 def init_command() -> Group:
     click_gate = ClickGate(
         server_mill_factory=_build_server_mill,
         notify_client_mill_factory=_build_notify_client_mill,
+        ensure_daemon=ensure_daemon_running,
     )
     return click_gate.build_group()
 

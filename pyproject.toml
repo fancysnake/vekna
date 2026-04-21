@@ -1,6 +1,6 @@
 [project]
 name = "vekna"
-version = "0.0.3"
+version = "0.0.4"
 description = "Coding agent overseer"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = { text = "BSD-3-Clause license" }
@@ -87,7 +87,6 @@ forbidden_modules = [
     "vekna.gates",
     "vekna.links",
     "vekna.inits",
-    "vekna.specs",
     "vekna.edges",
     "django",
 ]

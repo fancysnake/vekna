@@ -19,9 +19,16 @@ class TestSocketServer:
         return str(tmp_path / "test.sock")
 
     @staticmethod
+    @pytest.fixture
+    def socket_path_with_file(tmp_path: Path) -> str:
+        path = tmp_path / "leftover.sock"
+        path.touch()
+        return str(path)
+
+    @staticmethod
     @pytest.mark.asyncio
     async def test_accepts_connection_and_calls_handler(socket_path) -> None:
-        handler = AsyncMock(return_value=OK_RESPONSE)
+        handler = AsyncMock(return_value=OK_RESPONSE.model_dump_json())
         server = SocketServerLink(socket_path=socket_path)
 
         await server.start(handler)
@@ -34,12 +41,12 @@ class TestSocketServer:
         await server.stop()
 
         handler.assert_called_once_with('{"pane_id": "%1"}')
-        assert response == f"{OK_RESPONSE}\n".encode()
+        assert response == f"{OK_RESPONSE.model_dump_json()}\n".encode()
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_stop_removes_socket_file(socket_path) -> None:
-        handler = AsyncMock(return_value=OK_RESPONSE)
+        handler = AsyncMock(return_value=OK_RESPONSE.model_dump_json())
         server = SocketServerLink(socket_path=socket_path)
 
         await server.start(handler)
@@ -47,3 +54,39 @@ class TestSocketServer:
         await server.stop()
 
         assert not _socket_exists(socket_path)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_stop_when_never_started_does_not_raise(socket_path) -> None:
+        server = SocketServerLink(socket_path=socket_path)
+        await server.stop()  # _server is None — must not raise
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_stop_removes_manually_created_socket_file(
+        socket_path_with_file,
+    ) -> None:
+        server = SocketServerLink(socket_path=socket_path_with_file)
+
+        await server.stop()
+
+        assert not _socket_exists(socket_path_with_file)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_handle_connection_skips_write_when_handler_not_set(
+        socket_path,
+    ) -> None:
+        server = SocketServerLink(socket_path=socket_path)
+        await server.start(AsyncMock(return_value=OK_RESPONSE.model_dump_json()))
+        vars(server)["_handler"] = None  # clear handler after server is running
+
+        reader, writer = await asyncio.open_unix_connection(socket_path)
+        writer.write(b"test\n")
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(1), timeout=1.0)
+        writer.close()
+        await writer.wait_closed()
+        await server.stop()
+
+        assert response == b""  # connection closed without writing any data
