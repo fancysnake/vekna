@@ -3,7 +3,7 @@
 jobs = 1
 
 [tools]
-python = "3.10"
+python = "3.14.4"
 
 [env]
 # Mise creates and activates this virtualenv automatically
