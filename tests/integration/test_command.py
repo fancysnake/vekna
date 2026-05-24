@@ -12,6 +12,26 @@ def _clean_tmux_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("_clean_tmux_env")
+class TestRoot:
+    @staticmethod
+    @patch("vekna.mills.notify.NotifyClientMill.request", new_callable=AsyncMock)
+    @patch("vekna.inits.cli.ensure_daemon_running")
+    @patch("os.execvp")
+    def test_bare_invocation_prints_help_and_does_not_attach(
+        execvp_mock, ensure_mock, request_mock
+    ) -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), [])
+
+        assert result.exit_code == 0
+        assert "tmux" in result.output
+        ensure_mock.assert_not_called()
+        execvp_mock.assert_not_called()
+        request_mock.assert_not_called()
+
+
+@pytest.mark.usefixtures("_clean_tmux_env")
 class TestVekna:
     @staticmethod
     def test_bare_vekna_prints_help_listing_tmux() -> None:
