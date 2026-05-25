@@ -20,6 +20,34 @@ and this project adheres to [Semantic Versioning].
 ### Security
 
 
+## [0.1.0] - 2026-05-24
+
+### Added
+
+- Bare `vekna` (no subcommand) now prints help listing the `tmux` subgroup
+  and exits 0; reserved for a future default behaviour.
+
+### Changed
+
+- **CLI re-rooted under `vekna tmux …`.** The existing tmux-session
+  commands move from the top level into a `tmux` subgroup so the top-level
+  `vekna` name is free for the future orchestrator. Mapping:
+  - `vekna` (attach) → `vekna tmux`
+  - `vekna daemon` → `vekna tmux daemon`
+  - `vekna notify …` → `vekna tmux notify …`
+  - `vekna status-bar` → `vekna tmux status-bar`
+
+  Update the Claude Code notification hook to
+  `echo "$CLAUDE_HOOK_DATA" | vekna tmux notify --app claude --hook Notification`
+  and the tmux status-right line to
+  `#(vekna tmux status-bar)`.
+
+### Removed
+
+- Bare `vekna` no longer attaches directly; use `vekna tmux` to get the
+  previous `0.0.4` behaviour.
+
+
 ## [0.0.4] - 2026-04-21
 
 ### Added
@@ -168,7 +196,8 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.0.4...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/fancysnake/vekna/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/fancysnake/vekna/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/fancysnake/vekna/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/fancysnake/vekna/compare/v0.0.1...v0.0.2
