@@ -1,9 +1,9 @@
 # Vekna
 
 Vekna watches a tmux session full of running Claude Code instances and
-switches focus to whichever pane needs attention. The `vekna` command
+switches focus to whichever pane needs attention. The `vekna tmux` command
 starts a server that attaches the session and listens on a Unix socket;
-`vekna notify`, run from inside a pane, asks the server to select that
+`vekna tmux notify`, run from inside a pane, asks the server to select that
 pane so the user lands on the agent that wants them.
 
 ## Architecture

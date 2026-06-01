@@ -13,7 +13,7 @@ from vekna.pacts.notify import Event, NotifyClientMillProtocol
 from vekna.pacts.server import ServerMillProtocol
 
 _MISSING_TMUX_PANE_MSG = (
-    "TMUX_PANE must be set — run `vekna notify` from inside a tmux pane"
+    "TMUX_PANE must be set — run `vekna tmux notify` from inside a tmux pane"
 )
 
 
@@ -31,6 +31,12 @@ class ClickGate:
     def build_group(self) -> click.Group:
         @click.group(invoke_without_command=True)
         def vekna() -> None:
+            ctx = click.get_current_context()
+            if ctx.invoked_subcommand is None:
+                click.echo(ctx.get_help())
+
+        @click.group(invoke_without_command=True)
+        def tmux() -> None:
             ctx = click.get_current_context()
             if ctx.invoked_subcommand is None:
                 self._ensure_daemon()
@@ -86,8 +92,9 @@ class ClickGate:
                 )
                 click.echo(response.data.get("text", ""))
 
-        vekna.add_command(daemon)
-        vekna.add_command(notify)
-        vekna.add_command(status_bar)
+        tmux.add_command(daemon)
+        tmux.add_command(notify)
+        tmux.add_command(status_bar)
+        vekna.add_command(tmux)
 
         return vekna
