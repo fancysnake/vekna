@@ -14,6 +14,18 @@ def _clean_tmux_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.usefixtures("_clean_tmux_env")
 class TestVekna:
     @staticmethod
+    def test_bare_vekna_prints_help_listing_tmux() -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(init_command())
+
+        assert result.exit_code == 0
+        assert "tmux" in result.output
+
+
+@pytest.mark.usefixtures("_clean_tmux_env")
+class TestTmuxAttach:
+    @staticmethod
     @patch("vekna.mills.notify.NotifyClientMill.request", new_callable=AsyncMock)
     @patch("vekna.inits.cli.ensure_daemon_running")
     @patch("os.execvp")
@@ -25,7 +37,7 @@ class TestVekna:
         request_mock.return_value = response
         runner = CliRunner()
 
-        result = runner.invoke(init_command())
+        result = runner.invoke(init_command(), ["tmux"])
 
         assert result.exit_code == 0
         ensure_mock.assert_called_once_with()
@@ -46,7 +58,7 @@ class TestVekna:
         request_mock.return_value = response
         runner = CliRunner()
 
-        runner.invoke(init_command())
+        runner.invoke(init_command(), ["tmux"])
 
         ensure_mock.assert_called_once_with()
         execvp_mock.assert_called_once()
@@ -63,7 +75,7 @@ class TestDaemon:
     def test_invokes_server_mill_run(run_mock) -> None:
         runner = CliRunner()
 
-        result = runner.invoke(init_command(), ["daemon"])
+        result = runner.invoke(init_command(), ["tmux", "daemon"])
 
         assert result.exit_code == 0
         run_mock.assert_called_once_with()
@@ -80,7 +92,8 @@ class TestNotify:
         runner = CliRunner()
 
         result = runner.invoke(
-            init_command(), ["notify", "--app", "claude", "--hook", "Notification"]
+            init_command(),
+            ["tmux", "notify", "--app", "claude", "--hook", "Notification"],
         )
 
         assert result.exit_code == 0
@@ -98,7 +111,7 @@ class TestNotify:
 
         result = runner.invoke(
             init_command(),
-            ["notify", "--app", "claude", "--hook", "Notification"],
+            ["tmux", "notify", "--app", "claude", "--hook", "Notification"],
             input='{"title": "done"}',
         )
 
@@ -116,7 +129,8 @@ class TestNotify:
         runner = CliRunner()
 
         result = runner.invoke(
-            init_command(), ["notify", "--app", "claude", "--hook", "Notification"]
+            init_command(),
+            ["tmux", "notify", "--app", "claude", "--hook", "Notification"],
         )
 
         assert result.exit_code != 0
@@ -129,7 +143,9 @@ class TestNotify:
         monkeypatch.setenv("TMUX_PANE", "%7")
         runner = CliRunner()
 
-        result = runner.invoke(init_command(), ["notify", "--hook", "Notification"])
+        result = runner.invoke(
+            init_command(), ["tmux", "notify", "--hook", "Notification"]
+        )
 
         assert result.exit_code != 0
         notify_mock.assert_not_called()
@@ -140,7 +156,7 @@ class TestNotify:
         monkeypatch.setenv("TMUX_PANE", "%7")
         runner = CliRunner()
 
-        result = runner.invoke(init_command(), ["notify", "--app", "claude"])
+        result = runner.invoke(init_command(), ["tmux", "notify", "--app", "claude"])
 
         assert result.exit_code != 0
         notify_mock.assert_not_called()
@@ -156,7 +172,7 @@ class TestStatusBar:
         request_mock.return_value = response
         runner = CliRunner()
 
-        result = runner.invoke(init_command(), ["status-bar"])
+        result = runner.invoke(init_command(), ["tmux", "status-bar"])
 
         assert result.exit_code == 0
         assert "work(2)" in result.output
@@ -169,7 +185,7 @@ class TestStatusBar:
         request_mock.return_value = response
         runner = CliRunner()
 
-        runner.invoke(init_command(), ["status-bar"])
+        runner.invoke(init_command(), ["tmux", "status-bar"])
 
         call_event = request_mock.call_args[0][0]
         assert call_event.app == "vekna"
@@ -183,7 +199,7 @@ class TestStatusBar:
     def test_exits_silently_if_daemon_not_running(request_mock) -> None:
         runner = CliRunner()
 
-        result = runner.invoke(init_command(), ["status-bar"])
+        result = runner.invoke(init_command(), ["tmux", "status-bar"])
 
         request_mock.assert_called_once()
         assert result.exit_code == 0

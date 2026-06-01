@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning].
 ### Security
 
 
+## [0.1.0] - 2026-06-01
+
+### Changed
+
+- **CLI re-rooted under `vekna tmux`.** Existing behaviour moved one level
+  deeper to free the top-level `vekna` command for the upcoming rituals
+  overseer. Bare `vekna` now prints help listing available command groups.
+  - `vekna` (attach) → `vekna tmux`
+  - `vekna daemon` → `vekna tmux daemon`
+  - `vekna notify …` → `vekna tmux notify …`
+  - `vekna status-bar` → `vekna tmux status-bar`
+- Bundled `tmux.conf` updated to call `vekna tmux status-bar` in its
+  `status-right` line.
+- Claude Code notification hook is now
+  `vekna tmux notify --app claude --hook Notification`.
+
+
 ## [0.0.4] - 2026-04-21
 
 ### Added

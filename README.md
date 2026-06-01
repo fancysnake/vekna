@@ -1,7 +1,7 @@
 # vekna
 
 Overseer for multiple Claude Code (or any coding agent) instances running in
-tmux. One agent calls `vekna notify` → tmux jumps to its pane.
+tmux. One agent calls `vekna tmux notify` → tmux jumps to its pane.
 
 ## Requires
 
@@ -18,22 +18,22 @@ pip install .
 
 ### Starting a project session
 
-Run `vekna` from any project directory:
+Run `vekna tmux` from any project directory:
 
 ```bash
 cd ~/projects/myapp
-vekna
+vekna tmux
 ```
 
 This starts a background daemon (if not already running) and attaches you
 to a dedicated tmux session for that directory (`vekna-myapp-<hash>`). Open
 windows with `Ctrl-b c` and run a coding agent in each.
 
-Run `vekna` from a second project in another terminal:
+Run `vekna tmux` from a second project in another terminal:
 
 ```bash
 cd ~/projects/api
-vekna
+vekna tmux
 ```
 
 Both sessions share a single daemon — one socket, one process, all projects.
@@ -44,16 +44,16 @@ Both sessions share a single daemon — one socket, one process, all projects.
 |------|--------|
 | `Ctrl-b s` | Interactive session picker (all vekna sessions listed) |
 | `Ctrl-b )` / `Ctrl-b (` | Next / previous session |
-| `Ctrl-b d` | Detach — return to the terminal you launched `vekna` from |
+| `Ctrl-b d` | Detach — return to the terminal you launched `vekna tmux` from |
 
-After detaching, run `vekna` again from the same directory to reattach.
+After detaching, run `vekna tmux` again from the same directory to reattach.
 
 ### Claude Code configuration
 
 Add a notification hook in Claude Code settings:
 
 ```
-echo "$CLAUDE_HOOK_DATA" | vekna notify --app claude --hook Notification
+echo "$CLAUDE_HOOK_DATA" | vekna tmux notify --app claude --hook Notification
 ```
 
 `--app` and `--hook` are required. The payload is read from stdin and the
@@ -65,7 +65,7 @@ To show pending notification counts across all sessions, add this to your
 `~/.tmux.conf`:
 
 ```
-set -g status-right '#(vekna status-bar)'
+set -g status-right '#(vekna tmux status-bar)'
 ```
 
 > **Note:** tmux runs status bar commands with a limited `PATH`. If `vekna`
@@ -73,30 +73,31 @@ set -g status-right '#(vekna status-bar)'
 > path instead:
 >
 > ```
-> set -g status-right '#(/path/to/vekna status-bar)'
+> set -g status-right '#(/path/to/vekna tmux status-bar)'
 > ```
 >
 > Find the path with `which vekna`. To install globally, use
 > `pipx install .` from the repo root.
 
 Output looks like `myapp(2) api(1)` when agents in those sessions are
-waiting. The count resets when you run `vekna` from that directory again
-(i.e. when you attach to the session).
+waiting. The count resets when you run `vekna tmux` from that directory
+again (i.e. when you attach to the session).
 
 ### Commands
 
 | Command | Effect |
 |---------|--------|
-| `vekna` | Ensure daemon running, create session for current directory, attach |
-| `vekna daemon` | Start the daemon explicitly (blocks; use for init systems or debugging) |
-| `vekna notify --app <app> --hook <hook>` | Send a notification from the current pane; payload from stdin, pane from `$TMUX_PANE` |
-| `vekna status-bar` | Print pending notification summary (empty if daemon not running) |
+| `vekna` | Print help listing available command groups |
+| `vekna tmux` | Ensure daemon running, create session for current directory, attach |
+| `vekna tmux daemon` | Start the daemon explicitly (blocks; use for init systems or debugging) |
+| `vekna tmux notify --app <app> --hook <hook>` | Send a notification from the current pane; payload from stdin, pane from `$TMUX_PANE` |
+| `vekna tmux status-bar` | Print pending notification summary (empty if daemon not running) |
 
 ## How it works
 
 ```mermaid
 flowchart TD
-    A["agent pane\necho $CLAUDE_HOOK_DATA | vekna notify --app claude --hook Notification"]
+    A["agent pane\necho $CLAUDE_HOOK_DATA | vekna tmux notify --app claude --hook Notification"]
     B["/tmp/vekna-&lt;uid&gt;.sock"]
     C[ServerMill\ndaemon]
     D[EventBus]
@@ -112,13 +113,14 @@ flowchart TD
     E -->|"publish(vekna, SelectPane)"| H
 ```
 
-- One daemon owns `/tmp/vekna-<uid>.sock` and manages all sessions. `vekna`
-  starts it automatically on first use via `os.fork()`.
-- `vekna` sends an `EnsureSession{cwd}` request to the daemon, receives back
-  the session name, and calls `tmux attach-session` to hand control to tmux.
-- `vekna notify` sends a `(claude, Notification)` event to the daemon socket.
-  The daemon increments the pending count for that session and publishes the
-  event to the `EventBus`.
+- One daemon owns `/tmp/vekna-<uid>.sock` and manages all sessions.
+  `vekna tmux` starts it automatically on first use via `os.fork()`.
+- `vekna tmux` sends an `EnsureSession{cwd}` request to the daemon, receives
+  back the session name, and calls `tmux attach-session` to hand control to
+  tmux.
+- `vekna tmux notify` sends a `(claude, Notification)` event to the daemon
+  socket. The daemon increments the pending count for that session and
+  publishes the event to the `EventBus`.
 - **ClaudeNotificationHandler** validates the payload and re-publishes a
   `(vekna, SelectPane)` event carrying the pane ID.
 - **SelectPaneHandler** handles `SelectPane`:
@@ -126,7 +128,7 @@ flowchart TD
     to jump to the notifying pane immediately.
   - Otherwise, highlights the notifying window red. A background loop
     (`clear_marks_loop`) clears the mark once the user navigates to it.
-- `vekna status-bar` sends a `(vekna, StatusBar)` request; the daemon
+- `vekna tmux status-bar` sends a `(vekna, StatusBar)` request; the daemon
   responds with a formatted summary of all sessions with pending counts.
 
 Session naming (`vekna-<basename>-<hash>`) lives in `src/vekna/specs/constants.py`.
