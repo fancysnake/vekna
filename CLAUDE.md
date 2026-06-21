@@ -58,8 +58,4 @@ tests/
 - Mock at the lowest level or don't mock if possible
 - Check all mock calls and side effects
 
-### TDD workflow
-
-Plan -> Tests (red) -> Implement (green) -> Refactor.
-Wait for approval between phases.
 
