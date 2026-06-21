@@ -1,4 +1,5 @@
 from ._dispatch import ritual, step
+from ._gates import main
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import Compendium, Grimoire, run_cast
 from ._pacts import (
@@ -31,6 +32,7 @@ __all__ = [
     "default_socket_path",
     "done",
     "goto",
+    "main",
     "probe_daemon",
     "ritual",
     "run_cast",

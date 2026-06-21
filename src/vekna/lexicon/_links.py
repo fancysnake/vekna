@@ -44,9 +44,9 @@ def _render(event: WireMessage) -> str:
 
 
 class StandaloneRenderer:
-    def __init__(self, *, out: TextIO = sys.stdout, inp: TextIO = sys.stdin) -> None:
-        self._out = out
-        self._inp = inp
+    def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
+        self._out: TextIO = out if out is not None else sys.stdout
+        self._inp: TextIO = inp if inp is not None else sys.stdin
 
     def _say(self, line: str) -> None:
         self._out.write(line)

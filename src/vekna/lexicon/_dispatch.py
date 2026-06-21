@@ -1,10 +1,13 @@
+import importlib.util
 import inspect
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from types import UnionType
 from typing import Any, get_type_hints
 
 from pydantic import BaseModel, create_model
 
+from ._mills import Compendium
 from ._pacts import Ritual, RitualDefinitionError, Step, StepBoundaryError, Transition
 from ._specs import DEFAULT_MAX_STEPS
 
@@ -63,3 +66,17 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> Callable[..., Ri
         return Ritual(name=name, components=model, run=run, max_steps=max_steps)
 
     return wrap
+
+
+def load_rituals(path: Path) -> Compendium:
+    spec = importlib.util.spec_from_file_location("vekna_rituals", path)
+    if spec is None or spec.loader is None:
+        msg = f"cannot import rituals from {path}"
+        raise RitualDefinitionError(msg)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    compendium = Compendium()
+    for value in vars(module).values():
+        if isinstance(value, Ritual):
+            compendium.register(value)
+    return compendium

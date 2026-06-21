@@ -215,6 +215,14 @@ disallow_any_expr = false
 disallow_any_explicit = false
 warn_return_any = false
 
+# vekna.inits.cast dynamically imports vekna.lexicon and calls its entry point
+# (a string importlib dispatch — invisible to import-linter, so the daemon side
+# keeps no static lexicon edge). The dynamic call is inherently Any.
+[[tool.mypy.overrides]]
+module = "vekna.inits.cast"
+disallow_any_expr = false
+warn_return_any = false
+
 # RUFF
 
 [tool.ruff]

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import socket
+import sys
 import tempfile
 import time
 from collections.abc import Callable, Coroutine
@@ -9,6 +10,7 @@ from pathlib import Path
 from click import Group
 
 from vekna.gates.cli.click.command import ClickGate
+from vekna.inits.cast import dispatch_cast
 from vekna.links.socket_client import SocketClientLink
 from vekna.links.socket_server import SocketServerLink
 from vekna.links.tmux import TmuxLink
@@ -106,8 +108,10 @@ def init_command() -> Group:
     return click_gate.build_group()
 
 
-def run() -> None:
-    init_command()()  # pragma: no cover
+def run() -> None:  # pragma: no cover
+    if len(sys.argv) > 1 and sys.argv[1] == "cast":
+        raise SystemExit(dispatch_cast(sys.argv[2:]))
+    init_command()()
 
 
 if __name__ == "__main__":
