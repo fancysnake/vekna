@@ -34,18 +34,88 @@ named `vekna`.
 
 | Term       | Meaning |
 |------------|---------|
-| **Ritual** | Workflow definition — async Python in `rituals.py`, `@ritual`. |
+| **Ritual** | Workflow **entrypoint** — `@ritual` in `rituals.py`. Owns the external Component interface (CLI in, final out) and fires the opening transition into the first step. Not a step; never a `goto` target. |
+| **Step**   | One **task** in a workflow — `@step` async function. Typed input value → returns a `Transition`. Enforces its input/output type hints at runtime. Calls mediums in its body. |
+| **Workflow** | The graph of steps a ritual drives, connected by transitions. Shaped at runtime by `goto`/`done`, not declared up front. |
+| **Transition** | What a step returns: `goto(next_step, payload)` to continue, `done(result)` to finish. Routing lives in the value; target named by direct function reference. |
 | **Cast**   | One invocation of a ritual. Unit of execution. Owns locks, has a journal. Runs in a cast process. |
-| **Rite**   | One unit of work inside a cast. |
-| **Medium** | Kind of rite — typed call shape, declared value shape, `run()` body. ≈ port. |
+| **Rite**   | One **executed node** in the grimoire — a step or medium invocation. (`step`/`medium` are authored units; a rite is one run of one.) |
+| **Medium** | Kind of effect a step calls — typed call shape, declared value shape, `run()` body. ≈ port. (`shell`, `coding`, `decide`.) |
 | **Focus**  | Swappable backend a Medium channels. ≈ adapter (Claude SDK, pylint, bash). |
-| **Component** | Typed value on a ritual's interface (input/output). `File`, `Directory`, `Text`. |
+| **Component** | Typed value on a ritual's external interface (CLI in / final out). `File`, `Directory`, `Text`. |
 | **Folio**  | Bound bundle of Mediums and/or Foci, shaped like a future stand-alone dist. |
-| **Lexicon** | SDK users `import` in `rituals.py` — grammar of rituals. |
-| **Compendium** | Runtime registry of Mediums/Foci inside a cast process. |
+| **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
+| **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
 
 `cast` is the verb: `vekna cast write-tests`.
+
+## Ritual model
+
+A workflow is a **graph of steps**, not one imperative function:
+
+- **`@ritual`** marks the **entrypoint** — the only thing `vekna cast` invokes.
+  It owns the external Component interface (CLI flags in, final result out) and
+  fires the opening `goto` into the first step. It is not a step and is never a
+  `goto` target.
+- **`@step`** marks a **task** — an async function taking one typed value and
+  returning a **transition** (annotated `-> Transition`; it `return`s
+  `goto(...)`/`done(...)`, so the file stays lintable). Its body calls mediums
+  (`shell`, `coding`, `decide`). The engine validates the incoming value against
+  the step's input annotation **on entry** — so every value is checked by its
+  receiving step — raising on mismatch.
+- **Transitions** carry routing in the return value: `goto(next_step, payload)`
+  continues, `done(result)` finishes. Targets are named by direct function
+  reference. The engine trampolines step→step — emitting "finished A, starting
+  B" into the grimoire and cross-checking each payload against the target step's
+  input type — until a step returns `done`.
+
+```python
+from vekna.lexicon import ritual, step, goto, done, Transition
+from vekna.folio.shell import shell
+from vekna.folio.coding import coding
+
+class Attempt(BaseModel): failures: str; budget: int
+class Report(BaseModel):  fixed: bool
+
+@ritual("fix_demo")                                # boundary: CLI in, final out
+async def fix_demo(bound: int) -> Transition:
+    return goto(run_tests, Attempt(failures="", budget=bound))
+
+@step
+async def run_tests(a: Attempt) -> Transition:
+    fails = await shell("pytest")
+    if not fails:     return done(Report(fixed=True))
+    if a.budget == 0: return done(Report(fixed=False))
+    return goto(claude_fix, Attempt(failures=fails, budget=a.budget))
+
+@step
+async def claude_fix(a: Attempt) -> Transition:
+    await coding(f"fix:\n{a.failures}")
+    return goto(run_tests, Attempt(failures="", budget=a.budget - 1))
+```
+
+Routing lives in the value, not the type hint; the type hints are the data
+shapes, enforced at each boundary. **Annotation-gated dispatch** (route a
+payload to whichever step admits its type, so `goto(payload)` needs no named
+target) is a deferred, additive layer on top of explicit `goto`.
+
+**Loop safety.** The trampoline is bounded. `@ritual(…, max_steps=N)` caps the
+total transitions in a cast (default in `_specs.py`); `@step(…, max_visits=N)`
+optionally caps re-entry of one step. Exceeding either raises
+`WorkflowBudgetExceededError` — a naive cycle aborts loudly instead of hanging. This
+safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
+a step decides for itself.
+
+**Inferable graph.** Because each step declares its input type and its `goto`
+targets, the full **static** workflow graph is derivable without running: an
+edge `A → B` exists where step `A`'s body does `goto(B, …)`, and `done(…)` is a
+terminal. Execution walks one path at runtime via `goto` (recorded in the
+grimoire); the static graph is the superset. `vekna eye` renders it; `vekna rituals show` dumps
+it. The runtime cross-check guarantees every actual edge is a valid static edge,
+and static analysis can flag unreachable steps or dead-end payloads. (Inference
++ rendering land with `rituals show`/the dashboard; 0.2.0 only keeps the I/O
+type info the registry needs anyway.)
 
 ## Process model
 
@@ -68,11 +138,15 @@ rituals.py            ◄────── imports                          ┌
 
 1. `vekna cast write-tests --testdir=./tests`.
 2. The cast process loads `./rituals.py` (+ config modules), finds
-   `@ritual('write-tests')`, validates Components against the signature.
+   `@ritual('write-tests')`, validates Components against the entrypoint
+   signature, and registers its `@step`s + mediums in the compendium.
 3. It probes `/tmp/vekna-<uid>.sock`. Reachable → attach + `CastHello`.
    Not → standalone (stdout events, stdin prompts).
-4. It runs the ritual. Rites emit `RiteStarted`/`RiteFinished`; locks emit
-   `LockGranted`/`LockReleased`; prompts round-trip as `DecideRequested`/`Resolved`.
+4. It runs the ritual: the engine fires the opening transition and trampolines
+   step→step on each returned `goto`, validating payloads at every boundary,
+   until a step returns `done`. Steps and the mediums they call emit
+   `RiteStarted`/`RiteFinished`; locks emit `LockGranted`/`LockReleased`;
+   prompts round-trip as `DecideRequested`/`Resolved`.
 5. On disconnect or first mid-cast attach, it replays its full event log
    `GrimoireBegin` → current. The daemon rebuilds lock state from replayed lock
    events.
@@ -157,9 +231,12 @@ surfaces the conflict, does not undo past damage.
 
 ## Components (typed interface values)
 
-`@ritual` inspects the signature, builds a Pydantic model from Component
-annotations. CLI flags derive from the model; TUI/web render forms from its
-JSON schema; the journal stores validated values.
+`@ritual` inspects the **entrypoint** signature, builds a Pydantic model from
+Component annotations. CLI flags derive from the model; TUI/web render forms
+from its JSON schema; the journal stores validated values. Step payloads are
+separate **defined value types** (plain Pydantic models) validated at each step
+boundary — Components are specifically the ritual's external, CLI-facing
+interface.
 
 `vekna.lexicon.components`:
 
@@ -220,7 +297,7 @@ One command tree. Commands arrive across releases:
 ```
 vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only command running ritual code) — 0.2.0
 vekna rituals list                            # defined rituals + their Components — 0.3.0
-vekna rituals show <ritual>                   # Component schema + definition location — 0.3.0
+vekna rituals show <ritual>                   # Component schema + inferred step graph + location — 0.3.0
 vekna                                         # dashboard: observe running casts, drill in — 0.6.0
 vekna casts                                   # list active + recent casts — 0.6.0
 vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
@@ -259,8 +336,10 @@ run …` commands.
 1. One `vekna` binary, two roles: the `vekna cast` process (imports
    lexicon/folios/user code) and the long-running daemon (imports neither).
    Blast radius = one cast.
-2. Vocabulary: ritual (definition) / cast (invocation) / rite (step). "cast" =
-   verb.
+2. Vocabulary: ritual (workflow entrypoint) / step (task) / transition
+   (`goto`/`done`) / cast (invocation) / rite (one executed step-or-medium
+   node). "cast" = verb. A workflow is a graph of steps wired by transitions,
+   shaped at runtime.
 3. GLIMPSE for the daemon; underscored GLIMPSE-flat for lexicon + folios.
    Promote files to packages on growth.
 4. Wire DTOs in own package (`vekna.wire`), versioned independently. No
