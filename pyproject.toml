@@ -186,6 +186,23 @@ forbidden_modules = [
     "vekna.gates",
     "vekna.inits",
     "vekna.edges",
+    "vekna.folio.shell",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.shell"
+type = "forbidden"
+source_modules = ["vekna.folio.shell"]
+forbidden_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
+    "vekna.folio.flow",
 ]
 
 # MYPY
