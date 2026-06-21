@@ -140,6 +140,7 @@ forbidden_modules = [
     "vekna.specs",
     "vekna.edges",
     "vekna.lexicon",
+    "vekna.folio",
 ]
 
 
@@ -155,13 +156,28 @@ source_modules = [
     "vekna.inits",
     "vekna.edges",
 ]
-forbidden_modules = ["vekna.lexicon"]
+forbidden_modules = ["vekna.lexicon", "vekna.folio"]
 
 
 [[tool.importlinter.contracts]]
 name = "lexicon"
 type = "forbidden"
 source_modules = ["vekna.lexicon"]
+forbidden_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.flow"
+type = "forbidden"
+source_modules = ["vekna.folio.flow"]
 forbidden_modules = [
     "vekna.pacts",
     "vekna.specs",
