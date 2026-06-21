@@ -6,12 +6,7 @@ from pydantic import BaseModel
 
 from vekna.wire import RiteFinished, RiteStarted, WireMessage
 
-from ._pacts import (
-    Done,
-    Ritual,
-    RitualDefinitionError,
-    WorkflowBudgetExceededError,
-)
+from ._pacts import Done, Ritual, RitualDefinitionError, WorkflowBudgetExceededError
 
 
 def _now() -> datetime:

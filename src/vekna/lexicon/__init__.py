@@ -1,4 +1,5 @@
 from ._dispatch import ritual, step
+from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import Compendium, Grimoire, run_cast
 from ._pacts import (
     Done,
@@ -6,6 +7,7 @@ from ._pacts import (
     Ritual,
     RitualDefinitionError,
     RitualError,
+    StandalonePromptError,
     StepBoundaryError,
     Transition,
     WorkflowBudgetExceededError,
@@ -21,11 +23,15 @@ __all__ = [
     "Ritual",
     "RitualDefinitionError",
     "RitualError",
+    "StandalonePromptError",
+    "StandaloneRenderer",
     "StepBoundaryError",
     "Transition",
     "WorkflowBudgetExceededError",
+    "default_socket_path",
     "done",
     "goto",
+    "probe_daemon",
     "ritual",
     "run_cast",
     "step",

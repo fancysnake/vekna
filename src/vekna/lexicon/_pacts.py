@@ -21,6 +21,10 @@ class StepBoundaryError(RitualError):
     pass
 
 
+class StandalonePromptError(RitualError):
+    pass
+
+
 @dataclass(frozen=True)
 class Done:
     result: object = None
