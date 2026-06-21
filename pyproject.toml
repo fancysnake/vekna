@@ -138,6 +138,37 @@ forbidden_modules = [
     "vekna.pacts",
     "vekna.specs",
     "vekna.edges",
+    "vekna.lexicon",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "core-no-lexicon"
+type = "forbidden"
+source_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
+]
+forbidden_modules = ["vekna.lexicon"]
+
+
+[[tool.importlinter.contracts]]
+name = "lexicon"
+type = "forbidden"
+source_modules = ["vekna.lexicon"]
+forbidden_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
 ]
 
 # MYPY
