@@ -6,14 +6,16 @@ Vekna uses the **GLIMPSE** layering model. Import boundaries are enforced by
 ## Layers
 
 ```
-pacts   Protocols, DTOs, errors, enums, TypedDicts. Depends on nothing.
-specs   Business invariants — pure constants, no IO. Depends on pacts.
-mills   Business logic and services. Depends on pacts + specs only.
-links   I/O adapters (sockets, tmux). Depends on pacts.
-gates   Entry points (CLI commands). Depends on pacts + mills.
+pacts   Protocols, DTOs, errors, enums, TypedDicts.
+specs   Business invariants — pure constants, no IO.
+mills   Business logic and services.
+links   I/O adapters (sockets, tmux).
+gates   Entry points (CLI commands).
 inits   Wiring — registers handlers, starts background tasks.
 edges   Infrastructure boundary (wsgi/asgi, manage, settings).
 ```
+
+Dependencies below are enforced; the list above is purpose only.
 
 ### Import rules (enforced)
 
@@ -26,6 +28,9 @@ edges   Infrastructure boundary (wsgi/asgi, manage, settings).
 | `gates` | pacts, mills            | links, inits, specs, edges                |
 | `inits` | pacts, mills, links, gates | edges                                  |
 | `edges` | stdlib, third-party     | all internal layers                       |
+
+`edges` is a leaf: imported by nothing. Inner layers reach infrastructure
+through `inits` wiring, never by importing `edges` directly.
 
 ## File layout
 
@@ -83,7 +88,9 @@ inits/
    tmux, or filesystem calls inside `mills/`.
 2. **Links implement protocols from pacts.** Each link adapter implements a
    `Protocol` defined in `pacts/`. Mills depend on the protocol, never the
-   concrete link.
+   concrete link. The class declares the `Protocol` as a base class, so the
+   type checker verifies conformance. Exception: very generic protocols
+   (structural callbacks) with many duck-typed implementations.
 3. **Gates call mills, not links.** Entry points wire through `inits`, not by
    importing links directly.
 4. **DTOs use Pydantic `BaseModel`.** Add
