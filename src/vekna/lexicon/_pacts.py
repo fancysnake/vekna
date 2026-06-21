@@ -1,8 +1,20 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from types import UnionType
+from typing import Protocol
 
 from pydantic import BaseModel
+
+from vekna.wire import WireMessage
+
+
+class Channel(Protocol):
+    async def emit(self, event: WireMessage) -> None: ...
+    async def decide(self, *, prompt: str, options: Sequence[str]) -> str: ...
+    async def approve(self, *, prompt: str) -> bool: ...
+    async def ask(
+        self, *, prompt: str, choices: Sequence[str] | None = None
+    ) -> str: ...
 
 
 class RitualError(Exception):

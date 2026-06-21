@@ -1,4 +1,5 @@
 import asyncio
+import io
 from datetime import datetime, timezone
 
 import pytest
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 from vekna.lexicon import (
     Goto,
     Grimoire,
+    StandaloneRenderer,
     Transition,
     WorkflowBudgetExceededError,
     done,
@@ -20,6 +22,10 @@ from vekna.wire import RiteStarted
 
 def _fixed_clock() -> datetime:
     return datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def _channel() -> StandaloneRenderer:
+    return StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
 
 
 class Tick(BaseModel):
@@ -76,6 +82,7 @@ class TestRunCast:
                 ritual=countdown,
                 components=countdown.components(start=start),
                 grimoire=grimoire,
+                channel=_channel(),
             )
         )
 
@@ -94,5 +101,6 @@ class TestRunCast:
                     ritual=spinner,
                     components=spinner.components(start=1),
                     grimoire=grimoire,
+                    channel=_channel(),
                 )
             )

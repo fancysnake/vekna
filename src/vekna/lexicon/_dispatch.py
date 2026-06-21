@@ -5,13 +5,29 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from types import UnionType
-from typing import Any, get_type_hints
+from typing import Any, ParamSpec, TypeVar, get_type_hints
 
 from pydantic import BaseModel, create_model
 
-from ._mills import Compendium
+from ._mills import Compendium, medium_rite
 from ._pacts import Ritual, RitualDefinitionError, Step, StepBoundaryError, Transition
 from ._specs import DEFAULT_MAX_STEPS
+
+_P = ParamSpec("_P")
+_MediumT = TypeVar("_MediumT")
+
+
+def medium(
+    func: Callable[_P, Awaitable[_MediumT]],
+) -> Callable[_P, Awaitable[_MediumT]]:
+    name = getattr(func, "__name__", "medium")
+
+    async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
+        async with medium_rite(name):
+            return await func(*args, **kwargs)
+
+    return wrapped
+
 
 if sys.version_info >= (3, 11):
     import tomllib
