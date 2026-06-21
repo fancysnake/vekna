@@ -205,6 +205,16 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+# vekna.lexicon._dispatch is the reflection boundary: it reads runtime
+# annotations and invokes heterogeneously-typed steps uniformly, which cannot
+# be expressed under disallow_any_expr/explicit. Relaxed here only; the engine
+# (_mills) consuming its typed Step surface stays strict.
+[[tool.mypy.overrides]]
+module = "vekna.lexicon._dispatch"
+disallow_any_expr = false
+disallow_any_explicit = false
+warn_return_any = false
+
 # RUFF
 
 [tool.ruff]

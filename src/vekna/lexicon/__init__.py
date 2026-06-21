@@ -1,3 +1,25 @@
-from ._pacts import RitualError, WorkflowBudgetExceededError
+from ._dispatch import step
+from ._pacts import (
+    Done,
+    Goto,
+    RitualDefinitionError,
+    RitualError,
+    StepBoundaryError,
+    Transition,
+    WorkflowBudgetExceededError,
+    done,
+    goto,
+)
 
-__all__ = ["RitualError", "WorkflowBudgetExceededError"]
+__all__ = [
+    "Done",
+    "Goto",
+    "RitualDefinitionError",
+    "RitualError",
+    "StepBoundaryError",
+    "Transition",
+    "WorkflowBudgetExceededError",
+    "done",
+    "goto",
+    "step",
+]
