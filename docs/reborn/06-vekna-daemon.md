@@ -1,0 +1,72 @@
+# Feature — Vekna daemon (lock coordination, journal, attach/replay)
+
+**Version:** `0.6.0`
+
+See [00-common.md](00-common.md) — process model, wire protocol, replay rule,
+CLI surface.
+
+## Goal
+
+The daemon arrives. Bare `vekna` becomes the daemon: binds the user's Unix
+socket, accepts cast-process connections, renders each cast's live Grimoire,
+routes approvals/decides/asks across the wire, coordinates locks for real, owns
+the durable journal. A second `vekna` in the same account attaches as a peer
+surface and sees the same view. Lock default flips to `deny`.
+
+## What ships
+
+- `vekna` (no subcommand) — daemon. First invocation binds
+  `/tmp/vekna-<uid>.sock` (`0600`) and renders active casts to the terminal;
+  later invocations attach as peer surfaces.
+- Vekna-side handlers for every wire message kind.
+- CLI Grimoire renderer: tree of running casts, drill-in to one, prompts for
+  `Decide`/`Approval`/`Ask`, response routed back to the originating cast
+  process.
+- Cross-project visibility: every cast process probing the user's socket shows
+  up, regardless of `cwd`.
+- **Lock manager** — project- and system-level intention-lock tree with real
+  coordination. Lock state rebuilt per cast from replayed grimoire events.
+  Standalone lock default flips to `deny`.
+- **Durable journal** — every wire event persisted under
+  `~/.config/vekna/runs/<cast_id>/` (JSONL log + `run.json`). The daemon
+  already records every event for replay.
+- **Resume** — `vekna casts resume <cast_id>` spawns a fresh cast process and
+  hands it the journal; it replays completed rite state, re-enters the current
+  rite. Always-fresh process (no pooling).
+- **Attention surfacing** across casts (the original soul).
+- Clean disconnect: a cast process closing the socket marks the cast ended; an
+  unclean exit surfaces as "cast disconnected", not a traceback.
+- `vekna casts` (list active + recent), `vekna locks` (current locks +
+  holders), `vekna unlock <key>` (admin override, confirmation).
+
+## Scope
+
+- `pacts/` — daemon protocols (import `vekna.wire` only; no schema mirror).
+- `mills/` — daemon engine: tracks casts, multiplexes surfaces, routes
+  round-trips, lock manager tree, journal writer + resume replay.
+- `links/socket_server.py` — extend the existing tmux Unix-socket adapter for
+  the daemon's framing.
+- `links/` filesystem journal (JSON + JSONL writer/reader).
+- `gates/cli/click/` — daemon renderer + input loop; `casts`, `locks`,
+  `unlock`, `casts resume`.
+- `inits/` — wires the daemon.
+- Lexicon wires its probe to actually attach (no behavioural change to
+  standalone fallback).
+
+## Out of scope
+
+TUI (0.7.0). Web (0.8.0). WhatsApp (0.9.0). Cross-machine peers.
+Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
+
+## Acceptance
+
+- Terminal A: `vekna` shows an empty view.
+- Terminal B: `vekna cast fix_demo` — the cast appears in A within ~2s.
+  Approvals/decides answered in A reach B.
+- Terminal C: a second `vekna` attaches as a peer; same view; can answer prompts.
+- Vekna killed: B keeps running standalone. Vekna restarted: B re-attaches and
+  replays from `GrimoireBegin`; lock state reconstructs from the replay.
+- Interrupt a cast mid-rite, `vekna casts resume <cast_id>` — picks up at that
+  rite; completed rites aren't re-run; agent rites reuse the prior SDK session
+  (validate with a context-dependent question across resume).
+- `mise run check` and `mise run test` pass.
