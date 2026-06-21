@@ -125,6 +125,21 @@ forbidden_modules = [
     "vekna.specs",
 ]
 
+
+[[tool.importlinter.contracts]]
+name = "wire"
+type = "forbidden"
+source_modules = ["vekna.wire"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.edges",
+]
+
 # MYPY
 
 [tool.mypy]
