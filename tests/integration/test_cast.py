@@ -27,6 +27,16 @@ _RITUALS = textwrap.dedent("""
     """)
 
 
+_EXTRA = textwrap.dedent("""
+    from vekna.lexicon import Transition, done, ritual
+
+
+    @ritual("ping")
+    async def ping() -> Transition:
+        return done("pong")
+    """)
+
+
 class TestCast:
     @staticmethod
     def test_runs_ritual_end_to_end(tmp_path, monkeypatch, capsys):
@@ -50,3 +60,11 @@ class TestCast:
         monkeypatch.chdir(tmp_path)
 
         assert main(["countdown"]) == _USAGE_EXIT
+
+    @staticmethod
+    def test_loads_ritual_from_vekna_toml(tmp_path, monkeypatch):
+        (tmp_path / "extra.py").write_text(_EXTRA)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["extra.py"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        assert main(["ping"]) == 0
