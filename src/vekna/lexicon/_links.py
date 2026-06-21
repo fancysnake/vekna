@@ -35,18 +35,11 @@ async def probe_daemon(
     return await asyncio.to_thread(_socket_alive, socket_path, timeout)
 
 
-def _render(event: WireMessage) -> str:
-    if isinstance(event, RiteStarted):
-        return f"▶ {event.name}"
-    if isinstance(event, RiteFinished):
-        return f"{'✓' if event.status == 'ok' else '✗'} {event.rite_id}"
-    return f"· {event.kind}"
-
-
 class StandaloneRenderer:
     def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin
+        self._rites: dict[str, tuple[str, int]] = {}
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -55,8 +48,24 @@ class StandaloneRenderer:
     async def _readline(self) -> str:
         return (await asyncio.to_thread(self._inp.readline)).strip()
 
+    def _format(self, event: WireMessage) -> str:
+        if isinstance(event, RiteStarted):
+            depth = (
+                0
+                if event.parent_id is None
+                else self._rites.get(event.parent_id, ("", 0))[1] + 1
+            )
+            self._rites[event.rite_id] = (event.name, depth)
+            mark = "▶" if event.category == "step" else "↳"
+            return f"{'  ' * depth}{mark} {event.name}"
+        if isinstance(event, RiteFinished):
+            name, depth = self._rites.get(event.rite_id, (event.rite_id, 0))
+            mark = "✓" if event.status == "ok" else "✗"
+            return f"{'  ' * depth}{mark} {name}"
+        return f"· {event.kind}"
+
     async def emit(self, event: WireMessage) -> None:
-        self._say(_render(event) + "\n")
+        self._say(self._format(event) + "\n")
 
     async def decide(self, *, prompt: str, options: Sequence[str]) -> str:
         lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
