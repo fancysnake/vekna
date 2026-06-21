@@ -1,9 +1,12 @@
 import inspect
 from collections.abc import Awaitable, Callable
 from types import UnionType
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
-from ._pacts import RitualDefinitionError, Step, StepBoundaryError, Transition
+from pydantic import BaseModel, create_model
+
+from ._pacts import Ritual, RitualDefinitionError, Step, StepBoundaryError, Transition
+from ._specs import DEFAULT_MAX_STEPS
 
 
 def _payload_type(
@@ -32,3 +35,31 @@ def step(func: Callable[..., Awaitable[Transition]]) -> Step:
         return await func(payload)
 
     return Step(name=name, run=run, input_type=payload_type)
+
+
+def _component_model(func: Callable[..., Awaitable[Transition]]) -> type[BaseModel]:
+    hints = get_type_hints(func)
+    fields: dict[str, Any] = {}
+    for parameter in inspect.signature(func).parameters.values():
+        annotation = hints.get(parameter.name, object)
+        default = (
+            ... if parameter.default is inspect.Parameter.empty else parameter.default
+        )
+        fields[parameter.name] = (annotation, default)
+    name = getattr(func, "__name__", "ritual")
+    return create_model(f"{name}_components", **fields)
+
+
+def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> Callable[..., Ritual]:
+    def wrap(func: Callable[..., Awaitable[Transition]]) -> Ritual:
+        model = _component_model(func)
+        field_names = list(model.model_fields)
+
+        async def run(values: BaseModel) -> Transition:
+            return await func(
+                **{field: getattr(values, field) for field in field_names}
+            )
+
+        return Ritual(name=name, components=model, run=run, max_steps=max_steps)
+
+    return wrap

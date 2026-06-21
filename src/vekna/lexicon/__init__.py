@@ -1,7 +1,9 @@
-from ._dispatch import step
+from ._dispatch import ritual, step
+from ._mills import Compendium, Grimoire, run_cast
 from ._pacts import (
     Done,
     Goto,
+    Ritual,
     RitualDefinitionError,
     RitualError,
     StepBoundaryError,
@@ -12,8 +14,11 @@ from ._pacts import (
 )
 
 __all__ = [
+    "Compendium",
     "Done",
     "Goto",
+    "Grimoire",
+    "Ritual",
     "RitualDefinitionError",
     "RitualError",
     "StepBoundaryError",
@@ -21,5 +26,7 @@ __all__ = [
     "WorkflowBudgetExceededError",
     "done",
     "goto",
+    "ritual",
+    "run_cast",
     "step",
 ]
