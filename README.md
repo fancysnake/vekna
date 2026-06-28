@@ -146,7 +146,7 @@ mise run check      # format + lint
 ```
 
 Tooling: black, ruff (`select = ["ALL"]`), mypy strict, import-linter,
-pytest, vulture, deptry, codespell, pip-audit.
+pytest, vulture, deptry, codespell.
 
 ## License
 

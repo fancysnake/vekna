@@ -3,7 +3,11 @@
 jobs = 1
 
 [tools]
-python = "3.10"
+poetry = "2.4.1"
+python = "3.14"
+
+[hooks]
+enter = "poetry install"
 
 [env]
 # Mise creates and activates this virtualenv automatically
@@ -21,12 +25,11 @@ poetry install
 
 [tasks.update]
 run = """
+mise upgrade --bump
 pre-commit autoupdate
 pip install -U pip
-pip install -U poetry
 poetry update
 deptry .
-pip-audit .
 poetry show -o
 """
 
