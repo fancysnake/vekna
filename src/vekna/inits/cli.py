@@ -1,12 +1,12 @@
 import asyncio
 import os
 import socket
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 
+import click
 from click import Group
 
 from vekna.gates.cli.click.command import ClickGate
@@ -99,18 +99,32 @@ def ensure_daemon_running(spawn: Callable[[], None] = _spawn_daemon) -> None:
     raise RuntimeError(_DAEMON_DID_NOT_START)
 
 
+_CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
+
+
+@click.command(
+    "cast",
+    context_settings=_CAST_CONTEXT,
+    add_help_option=False,
+    help="Run a ritual from rituals.py (try `vekna cast --help`).",
+)
+@click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
+def _cast(ritual_args: tuple[str, ...]) -> None:
+    raise SystemExit(dispatch_cast(list(ritual_args)))
+
+
 def init_command() -> Group:
     click_gate = ClickGate(
         server_mill_factory=_build_server_mill,
         notify_client_mill_factory=_build_notify_client_mill,
         ensure_daemon=ensure_daemon_running,
     )
-    return click_gate.build_group()
+    group = click_gate.build_group()
+    group.add_command(_cast)
+    return group
 
 
 def run() -> None:  # pragma: no cover
-    if len(sys.argv) > 1 and sys.argv[1] == "cast":
-        raise SystemExit(dispatch_cast(sys.argv[2:]))
     init_command()()
 
 

@@ -1,9 +1,13 @@
+import shutil
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from vekna.inits.cli import init_command
+
+_EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
 
 @pytest.fixture
@@ -29,6 +33,33 @@ class TestRoot:
         ensure_mock.assert_not_called()
         execvp_mock.assert_not_called()
         request_mock.assert_not_called()
+
+
+@pytest.mark.usefixtures("_clean_tmux_env")
+class TestCast:
+    @staticmethod
+    def test_top_level_help_lists_cast_command() -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), ["--help"])
+
+        assert result.exit_code == 0
+        assert "cast" in result.output
+        assert "rituals.py" in result.output
+
+    @staticmethod
+    def test_cast_help_lists_rituals_and_options(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        shutil.copy(_EXAMPLES / "rituals.py", tmp_path / "rituals.py")
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), ["cast", "--help"])
+
+        assert result.exit_code == 0
+        assert "fix_demo" in result.output
+        assert "--bound <int>" in result.output
 
 
 @pytest.mark.usefixtures("_clean_tmux_env")

@@ -76,6 +76,14 @@ def _component_model(func: Callable[..., Awaitable[Transition]]) -> type[BaseMod
     return create_model(f"{name}_components", **fields)
 
 
+def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:
+    flags: list[tuple[str, str, bool]] = []
+    for name, field in components.model_fields.items():
+        type_name: str = getattr(field.annotation, "__name__", "value")
+        flags.append((name, type_name, field.is_required()))
+    return flags
+
+
 def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> Callable[..., Ritual]:
     def wrap(func: Callable[..., Awaitable[Transition]]) -> Ritual:
         model = _component_model(func)
