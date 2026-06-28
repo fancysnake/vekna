@@ -1583,8 +1583,7 @@ version = "2.4.1"
 description = "A lil' TOML parser"
 optional = false
 python-versions = ">=3.8"
-groups = ["dev"]
-markers = "python_version < \"3.15\""
+groups = ["main", "dev"]
 files = [
     {file = "tomli-2.4.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:f8f0fc26ec2cc2b965b7a3b87cd19c5c6b8c5e5f436b984e85f486d652285c30"},
     {file = "tomli-2.4.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:4ab97e64ccda8756376892c53a72bd1f964e519c77236368527f758fbc36a53a"},
@@ -1634,6 +1633,7 @@ files = [
     {file = "tomli-2.4.1-py3-none-any.whl", hash = "sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe"},
     {file = "tomli-2.4.1.tar.gz", hash = "sha256:7c7e1a961a0b2f2472c1ac5b69affa0ae1132c39adcb67aba98568702b9cc23f"},
 ]
+markers = {main = "python_version == \"3.10\"", dev = "python_version < \"3.15\""}
 
 [[package]]
 name = "tomlkit"
@@ -1711,4 +1711,4 @@ tomli = {version = ">=1.1.0", markers = "python_version < \"3.11\""}
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "6b5feb83c88ad14008af8710e71e78edf5eb62ded760b49068a974de6bd92109"
+content-hash = "11a5069e7ce78a74076978a39d42c92e0ad1ad04d610e9ddad20226c012bb009"
