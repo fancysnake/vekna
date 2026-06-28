@@ -20,6 +20,45 @@ and this project adheres to [Semantic Versioning].
 ### Security
 
 
+## [0.2.0] - 2026-06-28
+
+### Added
+
+- **`vekna cast` command** — runs a ritual defined in a local `rituals.py`.
+  The runner loads the module in-process via `importlib`, dispatches to the
+  named `@ritual` entrypoint, and prints a structured Grimoire to stdout.
+  `vekna cast --help` lists available rituals.
+- **`vekna.lexicon` SDK** — the public surface for authoring rituals:
+  - `@ritual` marks a CLI entrypoint (the opening transition); `@step` marks a
+    task that takes a typed Pydantic payload and returns a `Transition`.
+  - `goto(step, payload)` / `done(result)` route the trampoline by returned
+    value, targeting steps by direct function reference. Input and output
+    payloads are validated at every step boundary.
+  - **Bounded execution** — `@ritual(max_steps=N)` caps total hops and
+    `@step(max_visits=N)` caps per-step visits; exceeding either raises
+    `WorkflowBudgetExceededError`.
+  - `Grimoire`, `Compendium`, `RiteContext`, and `current_rite` expose the run
+    record and execution context.
+- **`@medium` machinery** — rituals interact with the outside world through
+  mediums (`RiteContext`, `Channel`), keeping I/O out of step logic.
+- **`vekna.folio.flow`** — `decide`, `approve`, and `ask` helpers prompt the
+  user and route the answer back into the workflow.
+- **`vekna.folio.shell`** — a shell medium (`shell`, `ShellResult`) for running
+  bash commands, with focus handling.
+- **`vekna.wire`** — typed DTOs and length-prefixed framing for the daemon
+  protocol.
+- **Standalone renderer** — when no daemon socket is present, ritual prompts and
+  output render directly to the terminal; probing the absent socket is silent
+  and non-blocking (`probe_daemon`, `StandaloneRenderer`).
+- **`.vekna.toml` configuration** read via `tomli` (on Python < 3.11).
+- **`fix_demo` example ritual** plus end-to-end acceptance tests.
+
+### Changed
+
+- Top-level CLI now exposes the `cast` command alongside the existing `tmux`
+  group.
+
+
 ## [0.1.0] - 2026-06-01
 
 ### Changed
@@ -185,7 +224,9 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.0.4...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/fancysnake/vekna/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/fancysnake/vekna/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/fancysnake/vekna/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/fancysnake/vekna/compare/v0.0.1...v0.0.2
