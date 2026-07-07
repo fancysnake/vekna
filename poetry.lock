@@ -763,14 +763,14 @@ files = [
 
 [[package]]
 name = "libtmux"
-version = "0.58.1"
+version = "0.61.0"
 description = "Typed library that provides an ORM wrapper for tmux, a terminal multiplexer."
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "libtmux-0.58.1-py3-none-any.whl", hash = "sha256:ab0f47d03a59d674962bc23e36e188fcfa4a82b0f270d474afab519e3076839b"},
-    {file = "libtmux-0.58.1.tar.gz", hash = "sha256:a294dd585aa419d4ecce36f3e55df656693743c97a0b5b5bb1e5fea31ada2482"},
+    {file = "libtmux-0.61.0-py3-none-any.whl", hash = "sha256:b9315db6600757f840a8f16438725103e579aaa4be3c32728c105f2c284330df"},
+    {file = "libtmux-0.61.0.tar.gz", hash = "sha256:2d6081081a629b9236a36a64f874667533811d2ce5a1b0caa9c821f4d9d2e618"},
 ]
 
 [[package]]
@@ -1711,4 +1711,4 @@ tomli = {version = ">=1.1.0", markers = "python_version < \"3.11\""}
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "6b5feb83c88ad14008af8710e71e78edf5eb62ded760b49068a974de6bd92109"
+content-hash = "f7da9207f6b5e2a6984f49a38fab9b96b4e9fcb1b8f384f9913b0f01df1a00de"
