@@ -1,80 +1,56 @@
 # Current Task
 
-**Task:** Feature 0.2.0 — Lexicon SDK + standalone runner
-**Spec:** `docs/reborn/02-lexicon-standalone.md`
-**Plan:** `PLAN.md`
-**Branch:** `reborn`
-**Phase:** COMPLETE — all 8 steps delivered; acceptance verified
+**Task:** Feature 0.3.0 — `folio/coding` + `folio/coding_claude`
+**Spec:** `docs/reborn/03-coding-folios.md`
+**Plan:** not yet written (Explore done; Plan awaits approval)
+**Branch:** `vekna-reborn`
+**Phase:** EXPLORE complete — findings reported, awaiting plan go-ahead
 
-## Status
+## Context
 
-- [x] Explore — feature spec, common.md, current src/test layout, import-linter
-      contracts reviewed.
-- [x] Retire tbd-* commands + TDD workflow section (commit `7f69bc8`).
-- [x] **Plan approved**
-- [x] Step 1 — `vekna.wire` (DTOs + framing) — commit `e4ea50e`
-- [x] Step 2 — `vekna.lexicon` errors + components + skeleton — commit `d995bf1`
-      (transitions/protocols/_specs moved to Step 3; Email deferred)
-- [x] Step 3a — transitions + `@step` + `_dispatch` (mypy override) — commit `c9450fa`
-- [x] Step 3b — `@ritual` + Grimoire + Compendium + engine + budget — commit `f752d4a`
-- [x] Step 4 — links: probe + standalone renderer — commit `25e32bf`
-      (wire client deferred to 0.6.0)
-- [x] Step 5a — `vekna cast` runner + `inits` dispatch — commit `8d64972`
-- [x] Step 5b — `.vekna.toml` config (tomli) — commit `8f675b5`
-- [x] Step 6a — medium machinery (`@medium`, `RiteContext`, `Channel`) — commit `6c187f4`
-- [x] Step 6b — `folio.flow` (`decide`/`approve`/`ask`) — commit `67a54a8`
-      (`parallel` deferred)
-- [x] Step 7 — `folio.shell` (shell medium + bash focus) — commit `221e3e4`
-- [x] Step 8 — `fix_demo` example + acceptance — commit `d465502`
+0.2.0 shipped and released (2026-06-28). Docs reconciled to the step-graph
+model and decide-only prompts (commit `fc30588`). Product direction: daily dev
+workflows (PR triage, merge babysitting) as rituals — 0.3.0's `coding` medium
+is the last missing primitive for those.
 
-## Acceptance (all verified)
+## Exploration findings (2026-07-18)
 
-- [x] `vekna cast fix_demo --bound 3` runs end-to-end, structured Grimoire to
-      stdout, exits 0.
-- [x] `decide`/`approve`/`ask` prompt on stdin and route the answer back.
-- [x] Probing the absent daemon socket is silent and does not hang.
-- [x] `mise run check` and `mise run test` pass (165 passed; 12 contracts).
-
-## Resolved design decisions (see PLAN.md "Key design decisions")
-
-1. Dispatch lives in `inits/cli.py:run()` via dynamic `importlib` — `gates`
-   never reference lexicon (option A). Cast runtime is `vekna.lexicon.main`.
-2. `cast` loads `rituals.py` **in-process** via `importlib`; no ritual
-   subprocess. Per-invocation OS process = the cast process.
-3. `rituals.py` is self-sufficient/lintable; runner injects nothing;
-   `lexicon`/`folio` `__init__` are the typed public surface; decorators are
-   typing-transparent.
-4. **Workflow model** (reshaped — see `00-common.md` "Ritual model"):
-   `@ritual` = entrypoint (CLI Component interface + opening transition, not a
-   step); `@step` = task taking a typed value, returning a `Transition`;
-   `goto(step, payload)` / `done(result)` route by **returned value**, target
-   by **direct function reference**; the step engine trampolines + validates
-   input/output payloads at each boundary. Step payloads are defined Pydantic
-   value types, not `Annotated` markers. `branch`/`repeat`/`attempt` fold into
-   `goto`/guards/`try-except`; `folio/flow` = `decide` + `parallel`.
-   Annotation-gated dispatch deferred.
-5. **Loop safety (0.2.0):** trampoline is bounded — `@ritual(max_steps=N)`
-   (total hops, `DEFAULT_MAX_STEPS` default) + optional `@step(max_visits=N)`;
-   exceeding raises `WorkflowBudgetExceededError`. Distinct from business bounds
-   (a step's own `budget`).
-6. **Inferable graph (foundation now, render later):** static workflow graph is
-   derivable from step I/O types (edge `A→B` when A's output payload type fits
-   B's input; `done(T)` terminal). For `vekna eye` / `vekna rituals show`
-   visualization. 0.2.0 only keeps the registry's I/O type info; inference +
-   rendering land at 0.3.0/dashboard.
-
-## Spec docs updated (uncommitted, awaiting review)
-
-`docs/reborn/00-common.md` and `02-lexicon-standalone.md` rewritten to the new
-model (vocabulary, Ritual-model section, lifecycle, Components note, flow-folio
-scope, out-of-scope). Not committed — for human review.
+- **Decide consolidation is step 0.** Code still ships `approve`/`ask`:
+  `Channel` protocol (`lexicon/_pacts.py`), `StandaloneRenderer`
+  (`lexicon/_links.py`), `folio/flow/_mills.py`, and `Approval*`/`Ask*` DTOs in
+  `wire/_pacts.py`. Docs now say `decide` is the single human round-trip.
+  Unified `decide` signature is an open design decision.
+- **Shell folio is the template** for `folio/coding` (`_pacts` result model,
+  `_mills` medium, `_links` side effects). `@medium` wrapper + `RiteContext`/
+  `Channel` machinery already exist.
+- **No focus registry exists.** Compendium registers rituals only. `coding`
+  needs a way to resolve its Focus, plus `try/except ModuleNotFoundError` for
+  the missing `coding-claude` extra.
+- **Telemetry path:** `Grimoire` emits only `RiteStarted`/`RiteFinished`;
+  `RiteDelta` exists in wire but is unused — needed for streamed agent output
+  + telemetry in the grimoire entry.
+- **CLI dispatch pattern:** gates never import lexicon; `inits/cast.py`
+  `dispatch_cast` dynamically imports `vekna.lexicon.main(argv)`. `rituals
+  list/show` and the `vekna cast "<prompt>"` sugar must ride the same shim.
+  `_gates.py --help` already lists rituals + flags (basis for `rituals list`).
+- **pyproject changes required** (need per-case approval): `coding-claude`
+  extra with optional `claude-agent-sdk` dep; two new import-linter contracts
+  (`folio.coding`, `folio.coding_claude`).
+- **Owed from 0.2.0:** `parallel` deferred (TUI spec assumes it from 0.2.0);
+  not a 0.3.0 blocker. Wire client deferred to 0.6.0 by design.
 
 ## Open decisions needing human input
 
-1. Config-file approvals are requested **per step** (import-linter contracts;
-   `tomli` dep vs. raising Python floor to 3.11 at Step 5).
+1. Unified `decide` signature (choice / confirmation / free text in one
+   medium — modes? return type? docs example uses bare
+   `await decide("tests green — commit?")` as truthy).
+2. `vekna cast <arg>` disambiguation: ritual name vs prompt sugar.
+3. Focus-registry shape (how `coding` finds `ClaudeCodingFocus`; how a missing
+   extra surfaces).
+4. Approval to modify `pyproject.toml` (extra + contracts) during
+   implementation.
 
 ## Notes
 
-- Stay on `reborn`; commit after each green step.
-- `goal.md` is open in the IDE but not on disk — ignore unless it appears.
+- Stay on `vekna-reborn`; commit after each green step.
+- `mise run test` / `mise run check` for all verification (mise-managed env).
