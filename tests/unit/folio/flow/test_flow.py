@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
-from vekna.folio.flow import approve, ask, decide
+from vekna.folio.flow import decide
 from vekna.lexicon import (
     Grimoire,
     StandaloneRenderer,
@@ -33,9 +33,9 @@ class Survey(BaseModel):
 
 @step
 async def gather(_state: State) -> Transition:
-    choice = await decide(prompt="pick", options=["x", "y"])
-    approved = await approve(prompt="ok?")
-    note = await ask(prompt="note?")
+    choice = await decide("pick", options=["x", "y"])
+    approved = await decide("ok?")
+    note = await decide("note?", free=True)
     return done(Survey(choice=choice, approved=approved, note=note))
 
 
@@ -45,9 +45,9 @@ async def survey() -> Transition:
     return goto(gather, State())
 
 
-class TestFlowMediums:
+class TestDecideMedium:
     @staticmethod
-    def test_decide_approve_ask_round_trip_via_stdin():
+    def test_choice_confirm_free_round_trip_via_stdin():
         grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
         renderer = StandaloneRenderer(
             out=io.StringIO(), inp=io.StringIO("y\nyes\nhello\n")

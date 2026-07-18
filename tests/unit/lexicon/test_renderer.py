@@ -56,30 +56,32 @@ class TestDecide:
             asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
 
 
-class TestApprove:
+class TestDecideConfirm:
     @staticmethod
-    def test_yes_is_true():
+    def test_yes_answer():
         renderer, _ = _renderer("yes\n")
 
-        assert asyncio.run(renderer.approve(prompt="ok?")) is True
+        assert asyncio.run(renderer.decide(prompt="ok?")) == "yes"
 
     @staticmethod
-    def test_no_is_false():
+    def test_no_answer():
         renderer, _ = _renderer("n\n")
 
-        assert asyncio.run(renderer.approve(prompt="ok?")) is False
+        assert asyncio.run(renderer.decide(prompt="ok?")) == "no"
+
+    @staticmethod
+    def test_raises_after_repeated_invalid_input():
+        renderer, _ = _renderer("maybe\nmaybe\nmaybe\n")
+
+        with pytest.raises(StandalonePromptError):
+            asyncio.run(renderer.decide(prompt="ok?"))
 
 
-class TestAsk:
+class TestDecideFree:
     @staticmethod
     def test_returns_free_text():
         renderer, _ = _renderer("a branch name\n")
 
-        assert asyncio.run(renderer.ask(prompt="name?")) == "a branch name"
+        answer = asyncio.run(renderer.decide(prompt="name?", free=True))
 
-    @staticmethod
-    def test_rejects_value_outside_choices():
-        renderer, _ = _renderer("z\nz\nz\n")
-
-        with pytest.raises(StandalonePromptError):
-            asyncio.run(renderer.ask(prompt="pick", choices=["x", "y"]))
+        assert answer == "a branch name"

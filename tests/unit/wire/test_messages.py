@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
 from vekna.wire import (
-    ApprovalResolved,
     CastHello,
+    DecideRequested,
     DecideResolved,
     LockGranted,
     RiteStarted,
@@ -47,17 +47,22 @@ class TestRoundTrip:
 class TestDiscriminator:
     @staticmethod
     def test_kind_selects_concrete_class():
-        decided = decode_frame(
-            encode_frame(DecideResolved(cast_id="c1", request_id="q1", choice="yes"))
+        requested = decode_frame(
+            encode_frame(
+                DecideRequested(
+                    cast_id="c1", rite_id="r1", request_id="q1", prompt="ok?"
+                )
+            )
         )
-        approved = decode_frame(
-            encode_frame(ApprovalResolved(cast_id="c1", request_id="q2", approved=True))
+        decided = decode_frame(
+            encode_frame(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
         )
 
+        assert isinstance(requested, DecideRequested)
+        assert requested.options is None
+        assert requested.free is False
         assert isinstance(decided, DecideResolved)
-        assert decided.choice == "yes"
-        assert isinstance(approved, ApprovalResolved)
-        assert approved.approved is True
+        assert decided.answer == "yes"
 
     @staticmethod
     def test_lock_granted_carries_token():

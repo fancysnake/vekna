@@ -67,7 +67,16 @@ class StandaloneRenderer:
     async def emit(self, event: WireMessage) -> None:
         self._say(self._format(event) + "\n")
 
-    async def decide(self, *, prompt: str, options: Sequence[str]) -> str:
+    async def decide(
+        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+    ) -> str:
+        if free:
+            return await self._free_text(prompt)
+        if options is None:
+            return await self._confirm(prompt)
+        return await self._choose(prompt, options)
+
+    async def _choose(self, prompt: str, options: Sequence[str]) -> str:
         lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
         self._say("\n".join(lines) + "\n")
         for _ in range(_MAX_PROMPT_ATTEMPTS):
@@ -79,24 +88,18 @@ class StandaloneRenderer:
         msg = "no valid choice provided"
         raise StandalonePromptError(msg)
 
-    async def approve(self, *, prompt: str) -> bool:
+    async def _confirm(self, prompt: str) -> str:
         self._say(f"{prompt} [y/n] ")
         for _ in range(_MAX_PROMPT_ATTEMPTS):
             answer = (await self._readline()).lower()
             if answer in {"y", "yes"}:
-                return True
+                return "yes"
             if answer in {"n", "no"}:
-                return False
+                return "no"
             self._say("please answer y or n\n")
         msg = "no yes/no answer provided"
         raise StandalonePromptError(msg)
 
-    async def ask(self, *, prompt: str, choices: Sequence[str] | None = None) -> str:
+    async def _free_text(self, prompt: str) -> str:
         self._say(prompt + "\n")
-        for _ in range(_MAX_PROMPT_ATTEMPTS):
-            answer = await self._readline()
-            if choices is None or answer in choices:
-                return answer
-            self._say("invalid choice; try again\n")
-        msg = "no valid answer provided"
-        raise StandalonePromptError(msg)
+        return await self._readline()

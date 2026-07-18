@@ -39,7 +39,7 @@ async def check(attempt: Attempt) -> Transition:
     if attempt.budget == 0:
         return done(Report(fixed=False, remaining=0))
     choice = await decide(
-        prompt=f"not fixed yet ({attempt.budget} attempts left) — apply a fix?",
+        f"not fixed yet ({attempt.budget} attempts left) — apply a fix?",
         options=["fix", "stop"],
     )
     if choice == "stop":

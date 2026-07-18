@@ -72,43 +72,12 @@ class DecideRequested(BaseModel):
     rite_id: str
     request_id: str
     prompt: str
-    options: list[str]
+    options: list[str] | None = None
+    free: bool = False
 
 
 class DecideResolved(BaseModel):
     kind: Literal["decide_resolved"] = "decide_resolved"
-    cast_id: str
-    request_id: str
-    choice: str
-
-
-class ApprovalRequested(BaseModel):
-    kind: Literal["approval_requested"] = "approval_requested"
-    cast_id: str
-    rite_id: str
-    request_id: str
-    prompt: str
-    detail: JsonValue | None = None
-
-
-class ApprovalResolved(BaseModel):
-    kind: Literal["approval_resolved"] = "approval_resolved"
-    cast_id: str
-    request_id: str
-    approved: bool
-
-
-class AskRequested(BaseModel):
-    kind: Literal["ask_requested"] = "ask_requested"
-    cast_id: str
-    rite_id: str
-    request_id: str
-    prompt: str
-    choices: list[str] | None = None
-
-
-class AskResolved(BaseModel):
-    kind: Literal["ask_resolved"] = "ask_resolved"
     cast_id: str
     request_id: str
     answer: str
@@ -157,10 +126,6 @@ WireMessage = (
     | RiteFinished
     | DecideRequested
     | DecideResolved
-    | ApprovalRequested
-    | ApprovalResolved
-    | AskRequested
-    | AskResolved
     | LockAcquireRequested
     | LockGranted
     | LockDenied

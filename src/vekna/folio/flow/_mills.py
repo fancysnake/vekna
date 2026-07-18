@@ -1,18 +1,24 @@
 from collections.abc import Sequence
+from typing import Literal, overload
 
 from vekna.lexicon import current_rite, medium
 
 
-@medium
-async def decide(*, prompt: str, options: Sequence[str]) -> str:
-    return await current_rite().channel.decide(prompt=prompt, options=options)
+@overload
+async def decide(prompt: str) -> bool: ...
+@overload
+async def decide(prompt: str, *, options: Sequence[str]) -> str: ...
+@overload
+async def decide(prompt: str, *, free: Literal[True]) -> str: ...
 
 
 @medium
-async def approve(*, prompt: str) -> bool:
-    return await current_rite().channel.approve(prompt=prompt)
-
-
-@medium
-async def ask(*, prompt: str, choices: Sequence[str] | None = None) -> str:
-    return await current_rite().channel.ask(prompt=prompt, choices=choices)
+async def decide(
+    prompt: str, *, options: Sequence[str] | None = None, free: bool = False
+) -> bool | str:
+    answer = await current_rite().channel.decide(
+        prompt=prompt, options=options, free=free
+    )
+    if options is None and not free:
+        return answer == "yes"
+    return answer
