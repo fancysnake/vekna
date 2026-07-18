@@ -10,7 +10,7 @@ Get pinged — and approve — when away from the machine.
 
 ## What ships
 
-- Push a WhatsApp message for every `ApprovalRequested` event when enabled via
+- Push a WhatsApp message for every `DecideRequested` event when enabled via
   config.
 - Reply `yes` / `no` / `skip` in WhatsApp → `resolve()` routes the decision.
 - Config in `~/.config/vekna/config.toml`: provider (Twilio / WhatsApp Cloud
@@ -22,7 +22,7 @@ Get pinged — and approve — when away from the machine.
 - `pacts/notifications.py`, `mills/notifications.py` — generic notification hook.
 - `links/whatsapp/<provider>.py` — concrete adapter.
 - `gates/webhook/<provider>.py` — receives inbound replies, routes to the
-  approval bridge.
+  decide bridge.
 - Security review for webhook signature verification before merge.
 
 ## Out of scope

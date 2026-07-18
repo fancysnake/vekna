@@ -40,7 +40,7 @@ from vekna.lexicon import Scope, lock
 
 s = Scope("project") / "edit" / "tests"
 async with lock(s):
-    await coding(mode="edit", prompt="...")
+    await coding(prompt="...")
 ```
 
 `/` builds the path; the wire ships strings. `lock("project:edit:tests")`

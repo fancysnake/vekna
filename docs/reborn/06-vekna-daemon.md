@@ -9,7 +9,7 @@ CLI surface.
 
 The daemon arrives. Bare `vekna` becomes the daemon: binds the user's Unix
 socket, accepts cast-process connections, renders each cast's live Grimoire,
-routes approvals/decides/asks across the wire, coordinates locks for real, owns
+routes `decide` round-trips across the wire, coordinates locks for real, owns
 the durable journal. A second `vekna` in the same account attaches as a peer
 surface and sees the same view. Lock default flips to `deny`.
 
@@ -19,9 +19,8 @@ surface and sees the same view. Lock default flips to `deny`.
   `/tmp/vekna-<uid>.sock` (`0600`) and renders active casts to the terminal;
   later invocations attach as peer surfaces.
 - Vekna-side handlers for every wire message kind.
-- CLI Grimoire renderer: tree of running casts, drill-in to one, prompts for
-  `Decide`/`Approval`/`Ask`, response routed back to the originating cast
-  process.
+- CLI Grimoire renderer: tree of running casts, drill-in to one, `Decide`
+  prompts, response routed back to the originating cast process.
 - Cross-project visibility: every cast process probing the user's socket shows
   up, regardless of `cwd`.
 - **Lock manager** — project- and system-level intention-lock tree with real
@@ -62,7 +61,7 @@ Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 
 - Terminal A: `vekna` shows an empty view.
 - Terminal B: `vekna cast fix_demo` — the cast appears in A within ~2s.
-  Approvals/decides answered in A reach B.
+  Decides answered in A reach B.
 - Terminal C: a second `vekna` attaches as a peer; same view; can answer prompts.
 - Vekna killed: B keeps running standalone. Vekna restarted: B re-attaches and
   replays from `GrimoireBegin`; lock state reconstructs from the replay.

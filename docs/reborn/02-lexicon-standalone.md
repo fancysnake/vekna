@@ -29,9 +29,10 @@ work.
   independently). The single schema home; daemon-side handlers land at 0.6.0.
 - `vekna.lexicon._links` — wire client + probe loop (probes the Unix socket,
   falls back to standalone if unreachable) and the standalone renderer
-  (stdout events; stdin prompts for `decide`/`approve`/`ask`). Probe degrades
+  (stdout events; stdin prompts for `decide`). Probe degrades
   gracefully when the socket is absent.
-- `vekna.folio.flow` — `decide` (human choice) + `parallel`. `branch`/`repeat`
+- `vekna.folio.flow` — `decide` (the single human round-trip: choice,
+  confirmation, free text) + `parallel`. `branch`/`repeat`
   fold into conditional `goto` / `goto`-with-guard at the step level, and
   `attempt` into ordinary `try/except` in a step body — not separate mediums.
 - `vekna.folio.shell` — `shell` Medium + bash Focus.
@@ -60,6 +61,6 @@ for now.
 
 - `vekna cast fix_demo --bound 3` runs end-to-end, prints a structured Grimoire
   to stdout, exits 0.
-- `decide` / `approve` / `ask` prompt on stdin and route the answer back.
+- `decide` prompts on stdin and routes the answer back.
 - Probing the absent daemon socket is silent and does not hang.
 - `mise run check` and `mise run test` pass.

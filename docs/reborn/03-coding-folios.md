@@ -21,9 +21,10 @@ returns as sugar for a one-rite cast using this Medium.
 - `vekna.folio.coding_claude` — `ClaudeCodingFocus` implementing the protocol
   via `claude-agent-sdk`. Pulled in by `pip install vekna[coding-claude]`.
   `_links.py` is the only place importing `claude-agent-sdk`.
-- Approval round-trip: the SDK's `can_use_tool` callback emits
-  `ApprovalRequested` over the wire; the daemon routes to the active surface;
-  the answer returns; the future resolves. Same pattern in standalone (stdin).
+- Tool-use gate as a `decide` round-trip: the SDK's `can_use_tool` callback
+  emits `DecideRequested` over the wire; the daemon routes to the active
+  surface; the answer returns; the future resolves. Same pattern in standalone
+  (stdin).
 - `--auto-approve <tool>` flag and per-Focus options
   (`focus_options=ClaudeOptions(...)`) for Claude knobs (skills, agent presets)
   without polluting the Medium.
@@ -43,8 +44,8 @@ returns as sugar for a one-rite cast using this Medium.
   Medium.
 - `gates/cli/click/cast.py` — `vekna cast "<prompt>"`, `vekna rituals
   list/show`. Discovers `./rituals.py` via importlib.
-- Example: a real `fix_and_commit` ritual using `coding` + `shell` + `repeat` +
-  `decide`.
+- Example: a real `fix_and_commit` ritual using `coding` + `shell` + `decide`
+  in a budget-guarded `goto` loop.
 
 ## Out of scope
 
@@ -58,14 +59,27 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is v0.4.0.)
 - Motivating pattern works end-to-end:
 
   ```python
-  @ritual
-  async def fix_and_commit() -> None:
-      async for _ in repeat(name="fix-until-green", bound=5):
-          await coding(name="fix", prompt="fix the failing tests")
-          r = await shell(name="test", cmd="mise run test")
-          if await decide(name="green?", outcome=r.ok):
-              break
-      await coding(name="commit", prompt="commit the changes")
+  class Attempt(BaseModel): budget: int
+  class Report(BaseModel):  committed: bool
+
+  @ritual("fix_and_commit")
+  async def fix_and_commit() -> Transition:
+      return goto(fix, Attempt(budget=5))
+
+  @step
+  async def fix(a: Attempt) -> Transition:
+      await coding(prompt="fix the failing tests")
+      r = await shell("mise run test")
+      if r.ok and await decide("tests green — commit?"):
+          return goto(commit, a)
+      if a.budget == 0:
+          return done(Report(committed=False))
+      return goto(fix, Attempt(budget=a.budget - 1))
+
+  @step
+  async def commit(a: Attempt) -> Transition:
+      await coding(prompt="commit the changes")
+      return done(Report(committed=True))
   ```
 
 - `vekna rituals list` shows registered rituals and their typed flags.

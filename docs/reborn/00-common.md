@@ -111,8 +111,8 @@ a step decides for itself.
 targets, the full **static** workflow graph is derivable without running: an
 edge `A → B` exists where step `A`'s body does `goto(B, …)`, and `done(…)` is a
 terminal. Execution walks one path at runtime via `goto` (recorded in the
-grimoire); the static graph is the superset. `vekna eye` renders it; `vekna rituals show` dumps
-it. The runtime cross-check guarantees every actual edge is a valid static edge,
+grimoire); the static graph is the superset. `vekna rituals show` dumps it;
+the dashboard renders it. The runtime cross-check guarantees every actual edge is a valid static edge,
 and static analysis can flag unreachable steps or dead-end payloads. (Inference
 + rendering land with `rituals show`/the dashboard; 0.2.0 only keeps the I/O
 type info the registry needs anyway.)
@@ -146,7 +146,8 @@ rituals.py            ◄────── imports                          ┌
    step→step on each returned `goto`, validating payloads at every boundary,
    until a step returns `done`. Steps and the mediums they call emit
    `RiteStarted`/`RiteFinished`; locks emit `LockGranted`/`LockReleased`;
-   prompts round-trip as `DecideRequested`/`Resolved`.
+   every human prompt round-trips as `DecideRequested`/`Resolved` — the single
+   prompt kind (choice, tool-use approval, free text alike).
 5. On disconnect or first mid-cast attach, it replays its full event log
    `GrimoireBegin` → current. The daemon rebuilds lock state from replayed lock
    events.
@@ -216,9 +217,7 @@ cast process and a later daemon share compatible message kinds.
 | `CastGoodbye` | cast → daemon | clean exit + final status |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
-| `DecideRequested` / `DecideResolved` | both | flow-medium choice points |
-| `ApprovalRequested` / `ApprovalResolved` | both | coding's tool-use gate |
-| `AskRequested` / `AskResolved` | both | free-text / multiple-choice prompt |
+| `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
 
@@ -281,7 +280,7 @@ standalone = "warn"   # 0.5.0 default; flips to "deny" when the daemon lands (0.
 ## Standalone mode
 
 A cast without a daemon: structured events to stdout, stdin prompts for
-`decide`/`approve`/`ask`. The probe runs in background; the daemon comes up
+`decide`. The probe runs in background; the daemon comes up
 mid-cast → attach + replay.
 
 - **Loses:** durable journal, project/system coordination (modulated by
@@ -307,12 +306,12 @@ vekna tmux …                                  # legacy tmux peer-attach comman
 vekna --help
 ```
 
-### Hand and Eye (alternative execution path)
+### Hand and Eye (easter egg)
 
-`vekna hand` and `vekna eye` are a second, themed way into the same two roles —
-not plain aliases. They reach the same engine but wear a dark-magic skin:
-flavored wording, grimoire-styled output, ritual-toned prompts. The Hand and
-Eye of Vecna lore drives the mapping:
+`vekna hand` and `vekna eye` are an easter egg — a hidden, themed skin over
+the same two roles, nothing more. They reach the same engine but wear a
+dark-magic coat: flavored wording, grimoire-styled output, ritual-toned
+prompts. The Hand and Eye of Vecna lore drives the mapping:
 
 - `vekna hand <ritual>` — the acting hand. Same role as `vekna cast`.
 - `vekna eye` — the observing eye. Same role as bare `vekna` dashboard.

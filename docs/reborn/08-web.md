@@ -8,15 +8,15 @@ Same events, different surface. Another bus consumer — no engine changes.
 ## Goal
 
 A local web page showing the active casts, streaming rite output, and (second
-cut) fielding approvals.
+cut) fielding decides.
 
 ## What ships
 
 - `vekna web` serves a single-page app on `127.0.0.1:PORT` subscribing to the
   bus over WebSocket.
-- Read-only first: cast tree, rite streams, approval requests visible but not
+- Read-only first: cast tree, rite streams, decide requests visible but not
   actionable.
-- Second cut, same release: approval buttons wired to the same `resolve()`
+- Second cut, same release: decide buttons wired to the same `resolve()`
   mechanism as CLI/TUI.
 - Auth: localhost-only; short-lived token in the URL for `0.0.0.0` use (off by
   default).
@@ -37,5 +37,5 @@ add a history page later if asked).
 ## Acceptance
 
 - Start a cast, open the web view, see the same state the TUI shows.
-- Approve from the browser; the cast unblocks.
+- Answer a decide from the browser; the cast unblocks.
 - Closing the tab doesn't kill the cast.
