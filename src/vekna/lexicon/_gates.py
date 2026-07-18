@@ -110,13 +110,11 @@ async def _drive(argv: list[str]) -> int:
         sys.stderr.write(f"{error}\n")
         return 2
     await probe_daemon(socket_path=default_socket_path())
-    grimoire = Grimoire(cast_id=name)
     renderer = StandaloneRenderer()
+    grimoire = Grimoire(cast_id=name, on_event=renderer.render)
     result = await run_cast(
         ritual=the_ritual, components=components, grimoire=grimoire, channel=renderer
     )
-    for event in grimoire.events:
-        await renderer.emit(event)
     sys.stdout.write(f"result: {result}\n")
     return 0
 

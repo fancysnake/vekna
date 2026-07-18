@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
-from vekna.wire import RiteFinished, RiteStarted, WireMessage
+from vekna.wire import RiteDelta, RiteFinished, RiteStarted, WireMessage
 
 from ._pacts import StandalonePromptError
 
@@ -58,14 +58,22 @@ class StandaloneRenderer:
             self._rites[event.rite_id] = (event.name, depth)
             mark = "▶" if event.category == "step" else "↳"
             return f"{'  ' * depth}{mark} {event.name}"
+        if isinstance(event, RiteDelta):
+            _, depth = self._rites.get(event.rite_id, ("", 0))
+            pad = "  " * (depth + 1)
+            lines = event.delta.splitlines() or [""]
+            return "\n".join(f"{pad}{line}" for line in lines)
         if isinstance(event, RiteFinished):
             name, depth = self._rites.get(event.rite_id, (event.rite_id, 0))
             mark = "✓" if event.status == "ok" else "✗"
             return f"{'  ' * depth}{mark} {name}"
         return f"· {event.kind}"
 
-    async def emit(self, event: WireMessage) -> None:
+    def render(self, event: WireMessage) -> None:
         self._say(self._format(event) + "\n")
+
+    async def emit(self, event: WireMessage) -> None:
+        self.render(event)
 
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False

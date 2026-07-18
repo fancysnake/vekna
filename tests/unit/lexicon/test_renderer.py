@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from vekna.lexicon import StandalonePromptError, StandaloneRenderer
-from vekna.wire import RiteStarted
+from vekna.wire import RiteDelta, RiteStarted
 
 
 def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
@@ -29,6 +29,24 @@ class TestEmit:
         asyncio.run(renderer.emit(event))
 
         assert "run_tests" in out.getvalue()
+
+    @staticmethod
+    def test_renders_delta_indented_under_its_rite():
+        renderer, out = _renderer("")
+        started = RiteStarted(
+            cast_id="c1",
+            rite_id="r1",
+            parent_id=None,
+            name="fix",
+            category="medium",
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        delta = RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo")
+
+        renderer.render(started)
+        renderer.render(delta)
+
+        assert "  one\n  two\n" in out.getvalue()
 
 
 class TestDecide:

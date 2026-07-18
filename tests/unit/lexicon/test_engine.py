@@ -17,7 +17,7 @@ from vekna.lexicon import (
     run_cast,
     step,
 )
-from vekna.wire import RiteStarted
+from vekna.wire import RiteDelta, RiteFinished, RiteStarted
 
 
 def _fixed_clock() -> datetime:
@@ -104,3 +104,28 @@ class TestRunCast:
                     channel=_channel(),
                 )
             )
+
+
+class TestGrimoire:
+    @staticmethod
+    def test_on_event_fires_live_in_order():
+        seen = []
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=seen.append)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_delta(rite_id, "working...")
+        grimoire.rite_finished(rite_id, result={"session_id": "s1"})
+
+        assert [type(event) for event in seen] == [RiteStarted, RiteDelta, RiteFinished]
+        assert seen == grimoire.events
+
+    @staticmethod
+    def test_rite_finished_carries_result():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_finished(rite_id, result={"cost": 1})
+
+        finished = grimoire.events[-1]
+        assert isinstance(finished, RiteFinished)
+        assert finished.result == {"cost": 1}

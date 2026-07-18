@@ -5,9 +5,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
-from vekna.wire import RiteFinished, RiteStarted, WireMessage
+from vekna.wire import RiteDelta, RiteFinished, RiteStarted, WireMessage
 
 from ._pacts import (
     Channel,
@@ -24,11 +24,23 @@ def _now() -> datetime:
 
 
 class Grimoire:
-    def __init__(self, *, cast_id: str, clock: Callable[[], datetime] = _now) -> None:
+    def __init__(
+        self,
+        *,
+        cast_id: str,
+        clock: Callable[[], datetime] = _now,
+        on_event: Callable[[WireMessage], None] | None = None,
+    ) -> None:
         self._cast_id = cast_id
         self._clock = clock
+        self._on_event = on_event
         self._events: list[WireMessage] = []
         self._counter = 0
+
+    def _append(self, event: WireMessage) -> None:
+        self._events.append(event)
+        if self._on_event is not None:
+            self._on_event(event)
 
     def rite_started(
         self,
@@ -39,7 +51,7 @@ class Grimoire:
     ) -> str:
         self._counter += 1
         rite_id = f"r{self._counter}"
-        self._events.append(
+        self._append(
             RiteStarted(
                 cast_id=self._cast_id,
                 rite_id=rite_id,
@@ -51,14 +63,22 @@ class Grimoire:
         )
         return rite_id
 
+    def rite_delta(self, rite_id: str, delta: str) -> None:
+        self._append(RiteDelta(cast_id=self._cast_id, rite_id=rite_id, delta=delta))
+
     def rite_finished(
-        self, rite_id: str, *, status: Literal["ok", "error"] = "ok"
+        self,
+        rite_id: str,
+        *,
+        status: Literal["ok", "error"] = "ok",
+        result: JsonValue | None = None,
     ) -> None:
-        self._events.append(
+        self._append(
             RiteFinished(
                 cast_id=self._cast_id,
                 rite_id=rite_id,
                 status=status,
+                result=result,
                 finished_at=self._clock(),
             )
         )
