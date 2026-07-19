@@ -35,6 +35,10 @@ class StandalonePromptError(RitualError):
     pass
 
 
+class FocusMissingError(RitualError):
+    pass
+
+
 @dataclass(frozen=True)
 class Done:
     result: object = None

@@ -37,6 +37,10 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
 6. **Telemetry rides `RiteFinished.result`** (already in the wire schema);
    `Grimoire.rite_finished` gains `result=`. Streamed agent output uses the
    existing `RiteDelta` kind via new `Grimoire.rite_delta`.
+7. **Ruff PLR0913 stays strict** (approved 2026-07-19): portable knobs bundle
+   into `CodingOpts(model, system, cwd)` — `coding(prompt, *, output, opts,
+   gate_tools, focus_options)` — and the Focus protocol takes one `CodingCall`
+   plus `on_delta`/`gate` callbacks. No ruff config change.
 
 ## Steps
 

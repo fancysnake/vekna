@@ -1,7 +1,7 @@
 import contextlib
 from collections.abc import AsyncIterator, Callable
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -12,6 +12,7 @@ from vekna.wire import RiteDelta, RiteFinished, RiteStarted, WireMessage
 from ._pacts import (
     Channel,
     Done,
+    FocusMissingError,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -109,11 +110,36 @@ class Compendium:
         return sorted(self._rituals)
 
 
+_foci: dict[str, object] = {}
+
+
+def register_focus(medium_name: str, focus: object) -> None:
+    _foci[medium_name] = focus
+
+
+def resolve_focus(medium_name: str, *, hint: str) -> object:
+    try:
+        return _foci[medium_name]
+    except KeyError:
+        msg = f"no Focus registered for medium {medium_name!r} — {hint}"
+        raise FocusMissingError(msg) from None
+
+
+@dataclass
+class RiteOutcome:
+    result: JsonValue | None = None
+
+
 @dataclass(frozen=True)
 class RiteContext:
     grimoire: Grimoire
     channel: Channel
     parent_id: str | None = None
+    outcome: RiteOutcome = field(default_factory=RiteOutcome)
+
+
+def record_result(value: JsonValue) -> None:
+    current_rite().outcome.result = value
 
 
 _current_rite: ContextVar[RiteContext | None] = ContextVar(
@@ -134,12 +160,13 @@ async def medium_rite(name: str) -> AsyncIterator[None]:
     rite_id = parent.grimoire.rite_started(
         name=name, parent_id=parent.parent_id, category="medium"
     )
-    token = _current_rite.set(replace(parent, parent_id=rite_id))
+    outcome = RiteOutcome()
+    token = _current_rite.set(replace(parent, parent_id=rite_id, outcome=outcome))
     try:
         yield
     finally:
         _current_rite.reset(token)
-        parent.grimoire.rite_finished(rite_id)
+        parent.grimoire.rite_finished(rite_id, result=outcome.result)
 
 
 async def run_cast(

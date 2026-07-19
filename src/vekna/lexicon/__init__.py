@@ -1,10 +1,20 @@
 from ._dispatch import medium, ritual, step
 from ._gates import main
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
-from ._mills import Compendium, Grimoire, RiteContext, current_rite, run_cast
+from ._mills import (
+    Compendium,
+    Grimoire,
+    RiteContext,
+    current_rite,
+    record_result,
+    register_focus,
+    resolve_focus,
+    run_cast,
+)
 from ._pacts import (
     Channel,
     Done,
+    FocusMissingError,
     Goto,
     Ritual,
     RitualDefinitionError,
@@ -21,6 +31,7 @@ __all__ = [
     "Channel",
     "Compendium",
     "Done",
+    "FocusMissingError",
     "Goto",
     "Grimoire",
     "RiteContext",
@@ -39,6 +50,9 @@ __all__ = [
     "main",
     "medium",
     "probe_daemon",
+    "record_result",
+    "register_focus",
+    "resolve_focus",
     "ritual",
     "run_cast",
     "step",
