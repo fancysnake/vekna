@@ -53,15 +53,13 @@ Recorded because PLAN.md repeated these claims before they were tested:
 
 ## Remaining
 
-1. **`poetry lock`** — `libtmux` was dropped from `pyproject.toml` but the
-   lock still pins it, and `poetry` is unavailable in the agent environment.
-   Run before the next `poetry install`.
-2. **Release bump.** `CHANGELOG.md` `[Unreleased]` holds the whole 0.3.0
+1. **Release bump.** `CHANGELOG.md` `[Unreleased]` holds the whole 0.3.0
    story including this remediation. Bump only on explicit request.
-3. **`parallel`** — owed from 0.2.0, still deferred. The TUI spec assumes it.
-4. **Manual smoke test with the real SDK.** Every `coding` test runs against a
+2. **`parallel`** — owed from 0.2.0, still deferred. The TUI spec assumes it.
+3. **Manual smoke test with the real SDK.** Every `coding` test runs against a
    stubbed `claude_agent_sdk`; nothing has exercised the real one end-to-end.
-5. **P4 items 17–19 deliberately not done**: `probe_daemon`'s discarded result
+   This is the largest untested surface left.
+4. **P4 items 17–19 deliberately not done**: `probe_daemon`'s discarded result
    and `Channel.emit` stay until 0.6.0 decides their role. Both carry a
    comment saying so.
 
