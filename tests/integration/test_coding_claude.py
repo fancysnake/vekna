@@ -131,3 +131,49 @@ class TestCastWithClaudeFocus:
 
         assert exit_code == _USAGE_EXIT
         assert "claude-agent-sdk" in capsys.readouterr().err
+
+
+class TestPromptSugar:
+    @staticmethod
+    def test_casts_one_step_ritual_without_rituals_file(tmp_path, monkeypatch, capsys):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--prompt", "write a haiku"])
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "drafting the haiku" in out
+        assert "result: haiku done" in out
+        assert captured["prompt"] == "write a haiku"
+
+    @staticmethod
+    def test_short_flag_is_equivalent(tmp_path, monkeypatch, capsys):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["-p", "write a haiku"])
+
+        assert exit_code == 0
+        assert captured["prompt"] == "write a haiku"
+        assert "result: haiku done" in capsys.readouterr().out
+
+    @staticmethod
+    def test_empty_prompt_is_a_usage_error(tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--prompt"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "usage:" in capsys.readouterr().err
+
+    @staticmethod
+    def test_positional_arg_stays_a_ritual_name(tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write a haiku"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "no ritual named" in capsys.readouterr().err

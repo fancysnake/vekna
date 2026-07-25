@@ -2,7 +2,11 @@ import asyncio
 import contextlib
 import importlib
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Protocol, cast
+
+from pydantic import BaseModel
 
 from ._dispatch import (
     component_flags,
@@ -12,10 +16,16 @@ from ._dispatch import (
 )
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import Compendium, Grimoire, run_cast
-from ._pacts import FocusMissingError, Ritual, RitualError
+from ._pacts import FocusMissingError, Ritual, RitualError, Transition, done
 
-_USAGE = "usage: vekna cast <ritual> [--<component> value ...]\n"
+_USAGE = (
+    "usage: vekna cast <ritual> [--<component> value ...]\n"
+    '       vekna cast --prompt "<text>"\n'
+)
 _HELP_FLAGS = frozenset({"-h", "--help"})
+_PROMPT_FLAGS = frozenset({"-p", "--prompt"})
+_PROMPT_NAME = "prompt"
+_CODING_MODULE = "vekna.folio.coding"
 _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
 _OPTIONAL_FOLIOS = ("vekna.folio.coding_claude",)
 
@@ -75,6 +85,9 @@ def _help_text(cwd: Path) -> str:
         "Run a ritual defined in rituals.py (or configured via .vekna.toml).",
         "Each ritual's component fields are passed as --options.",
         "",
+        '--prompt/-p "<text>" casts a one-step ritual on the coding medium',
+        "instead, with no rituals.py required.",
+        "",
     ]
     try:
         compendium = _build_compendium(cwd)
@@ -91,6 +104,44 @@ def _help_text(cwd: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
+# The lexicon may not import a folio, so the `coding` medium is reached
+# dynamically — the same shim `inits` uses to reach the lexicon.
+class _HasText(Protocol):
+    @property
+    def text(self) -> str: ...
+
+
+class _NoComponents(BaseModel):
+    pass
+
+
+def _coding_medium() -> Callable[[str], Awaitable[object]]:
+    module = importlib.import_module(_CODING_MODULE)
+    return cast("Callable[[str], Awaitable[object]]", module.coding)
+
+
+def _prompt_ritual(prompt: str) -> Ritual:
+    coding = _coding_medium()
+
+    async def ask(_: BaseModel) -> Transition:
+        return done(cast("_HasText", await coding(prompt)).text)
+
+    return Ritual(name=_PROMPT_NAME, components=_NoComponents, run=ask, max_steps=1)
+
+
+def _prompt_text(argv: list[str]) -> str | None:
+    first, *rest = argv
+    flag, separator, inline = first.partition("=")
+    if flag not in _PROMPT_FLAGS:
+        return None
+    text = inline if separator else " ".join(rest)
+    if separator and rest:
+        raise ValueError(_USAGE.rstrip())
+    if not text:
+        raise ValueError(_USAGE.rstrip())
+    return text
+
+
 def _parse_flags(flags: list[str]) -> dict[str, str]:
     parsed: dict[str, str] = {}
     tokens = iter(flags)
@@ -104,6 +155,14 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
     return parsed
 
 
+def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
+    if (prompt := _prompt_text(argv)) is not None:
+        return _prompt_ritual(prompt), _NoComponents()
+    name, *flags = argv
+    the_ritual = _build_compendium(Path.cwd()).ritual(name)
+    return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))
+
+
 async def _drive(argv: list[str]) -> int:
     if argv and argv[0] in _HELP_FLAGS:
         sys.stdout.write(_help_text(Path.cwd()))
@@ -111,17 +170,15 @@ async def _drive(argv: list[str]) -> int:
     if not argv:
         sys.stderr.write(_USAGE)
         return 2
-    name, *flags = argv
     _load_optional_folios()
     try:
-        the_ritual = _build_compendium(Path.cwd()).ritual(name)
-        components = the_ritual.components.model_validate(_parse_flags(flags))
+        the_ritual, components = _resolve_cast(argv)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
     await probe_daemon(socket_path=default_socket_path())
     renderer = StandaloneRenderer()
-    grimoire = Grimoire(cast_id=name, on_event=renderer.render)
+    grimoire = Grimoire(cast_id=the_ritual.name, on_event=renderer.render)
     try:
         result = await run_cast(
             ritual=the_ritual,
