@@ -5,9 +5,9 @@ from types import ModuleType
 
 import pytest
 
-from vekna import lexicon
+from vekna.lexicon import _dispatch
 
-_DISPATCH_PATH = Path(lexicon.__file__).parent / "_dispatch.py"
+_DISPATCH_PATH = Path(_dispatch.__file__)
 
 
 def _load_dispatch(name: str) -> ModuleType:

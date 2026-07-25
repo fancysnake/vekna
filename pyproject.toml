@@ -327,7 +327,8 @@ convention = "pep257"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = [
-    "ANN", # flake8-annotations
+    "ANN",     # flake8-annotations
+    "PLC2701", # Private name import
     "S",
 ]
 
