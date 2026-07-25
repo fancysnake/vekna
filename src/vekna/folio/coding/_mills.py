@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, TypeVar, cast, overload
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from vekna.lexicon import (
+    AskFn,
     Channel,
     CodingCall,
     GateFn,
@@ -35,6 +36,16 @@ def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | N
         return answer == "yes"
 
     return gate
+
+
+def _make_ask(channel: Channel) -> AskFn:
+    # The agent asks; the human answers on whichever surface is attached.
+    async def ask(question: str, options: Sequence[str] | None) -> str:
+        if options:
+            return await channel.decide(prompt=question, options=options)
+        return await channel.decide(prompt=question, free=True)
+
+    return ask
 
 
 def _validate_output(output: type[_OutputT], text: str, structured: object) -> _OutputT:
@@ -99,7 +110,10 @@ async def coding(
         focus_options=focus_options,
     )
     reply = await focus.run(
-        call, on_delta=on_delta, gate=_make_gate(context.channel, gate_tools)
+        call,
+        on_delta=on_delta,
+        gate=_make_gate(context.channel, gate_tools),
+        ask=_make_ask(context.channel),
     )
     record_result(dict(reply.telemetry))
     if output is None:

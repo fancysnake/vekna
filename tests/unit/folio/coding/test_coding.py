@@ -34,26 +34,30 @@ class FakeFocus:
         structured: JsonValue | None = None,
         deltas: tuple[str, ...] = (),
         gate_tools: tuple[str, ...] = (),
+        questions: tuple[tuple[str, tuple[str, ...] | None], ...] = (),
     ) -> None:
-        self._text = text
-        self._structured = structured
+        self._reply = FocusReply(
+            text=text,
+            structured=structured,
+            telemetry={"session_id": "s1", "num_turns": 2, "cost_usd": 0.5},
+        )
         self._deltas = deltas
         self._gate_tools = gate_tools
+        self._questions = questions
         self.calls = []
         self.gate_answers = []
+        self.answers = []
 
-    async def run(self, call, *, on_delta, gate):
+    async def run(self, call, *, on_delta, gate, ask):
         self.calls.append(call)
         for delta in self._deltas:
             on_delta(delta)
         if gate is not None:
             for tool in self._gate_tools:
                 self.gate_answers.append(await gate(tool))
-        return FocusReply(
-            text=self._text,
-            structured=self._structured,
-            telemetry={"session_id": "s1", "num_turns": 2, "cost_usd": 0.5},
-        )
+        for question, options in self._questions:
+            self.answers.append(await ask(question, options))
+        return self._reply
 
 
 class Answer(BaseModel):
@@ -205,6 +209,46 @@ class TestCodingMedium:
         _cast(r, stdin="n\n")
 
         assert focus.gate_answers == [False, True]
+
+    @staticmethod
+    def test_agent_question_with_options_routes_through_decide():
+        focus = FakeFocus(
+            questions=(("unit or integration?", ("unit", "integration")),)
+        )
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("write the test")
+            return done(None)
+
+        @ritual("r")
+        async def r() -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r, stdin="2\n")
+
+        assert focus.answers == ["integration"]
+
+    @staticmethod
+    def test_agent_question_without_options_asks_for_free_text():
+        focus = FakeFocus(questions=(("which fixture?", None),))
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("write the test")
+            return done(None)
+
+        @ritual("r")
+        async def r() -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r, stdin="the tmp_path one\n")
+
+        assert focus.answers == ["the tmp_path one"]
 
     @staticmethod
     def test_missing_focus_raises_with_install_hint():

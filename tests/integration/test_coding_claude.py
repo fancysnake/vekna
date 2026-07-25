@@ -1,4 +1,5 @@
 import asyncio
+import io
 import sys
 import textwrap
 import types
@@ -9,6 +10,8 @@ import pytest
 from vekna.lexicon import main
 
 _USAGE_EXIT = 2
+_CAST_FAILED_EXIT = 1
+_MAX_TURNS = 2
 
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
@@ -32,13 +35,79 @@ _RITUALS = textwrap.dedent("""
         return goto(work, Task(text=text))
     """)
 
+_GATED_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
 
-def _sdk_stub(captured):
+    from vekna.folio.coding import coding
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    @step
+    async def work(task: Task) -> Transition:
+        result = await coding(task.text, gate_tools=["Bash"])
+        return done(result.text)
+
+
+    @ritual("gated")
+    async def gated(text: str) -> Transition:
+        return goto(work, Task(text=text))
+    """)
+
+_TYPED_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.coding import coding
+    from vekna.folio.coding_claude import ClaudeOptions
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    class Plan(BaseModel):
+        steps: int
+
+
+    @step
+    async def work(task: Task) -> Transition:
+        plan = await coding(
+            task.text,
+            output=Plan,
+            focus_options=ClaudeOptions(
+                permission_mode="plan",
+                allowed_tools=["Read"],
+                max_turns=2,
+                effort="high",
+            ),
+        )
+        return done(plan.steps)
+
+
+    @ritual("planned")
+    async def planned(text: str) -> Transition:
+        return goto(work, Task(text=text))
+    """)
+
+
+def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
     stub = types.ModuleType("claude_agent_sdk")
 
     @dataclass
     class TextBlock:
         text: str
+
+    @dataclass
+    class ToolUseBlock:
+        name: str
+
+    @dataclass
+    class SystemMessage:
+        subtype: str
 
     @dataclass
     class AssistantMessage:
@@ -64,21 +133,55 @@ def _sdk_stub(captured):
     class PermissionResultDeny:
         message: str = ""
 
+    def tool(name, description, input_schema):
+        # Mirrors the SDK decorator: it returns the tool, it does not call it.
+        def register(handler):
+            return {
+                "name": name,
+                "description": description,
+                "input_schema": input_schema,
+                "handler": handler,
+            }
+
+        return register
+
+    def create_sdk_mcp_server(name, version="1.0.0", tools=None):
+        return {"name": name, "version": version, "tools": list(tools or [])}
+
+    async def _ask(options, args):
+        # The CLI calls back into the host process; the agent waits here.
+        handler = options.mcp_servers["vekna"]["tools"][0]["handler"]
+        reply = await handler(args)
+        return reply["content"][0]["text"]
+
     async def query(*, prompt, options=None):
         await asyncio.sleep(0)
         captured["prompt"] = prompt
         captured["options"] = options
-        yield AssistantMessage(content=[TextBlock(text="drafting the haiku")])
+        yield SystemMessage(subtype="init")
+        yield AssistantMessage(
+            content=[TextBlock(text="drafting the haiku"), ToolUseBlock(name="Write")]
+        )
+        if tools:
+            captured["permissions"] = [
+                await options.can_use_tool(tool, {"tool": tool}, None) for tool in tools
+            ]
+        if questions:
+            captured["answers"] = [await _ask(options, args) for args in questions]
         yield ResultMessage(
-            session_id="s-stub", total_cost_usd=0.25, num_turns=3, result="haiku done"
+            session_id="s-stub", total_cost_usd=0.25, num_turns=3, result=result
         )
 
     stub.TextBlock = TextBlock
+    stub.ToolUseBlock = ToolUseBlock
+    stub.SystemMessage = SystemMessage
     stub.AssistantMessage = AssistantMessage
     stub.ResultMessage = ResultMessage
     stub.ClaudeAgentOptions = ClaudeAgentOptions
     stub.PermissionResultAllow = PermissionResultAllow
     stub.PermissionResultDeny = PermissionResultDeny
+    stub.create_sdk_mcp_server = create_sdk_mcp_server
+    stub.tool = tool
     stub.query = query
     return stub
 
@@ -133,6 +236,133 @@ class TestCastWithClaudeFocus:
         assert "claude-agent-sdk" in capsys.readouterr().err
 
 
+class TestToolGate:
+    @staticmethod
+    def test_watched_tool_is_denied_when_the_human_says_no(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {}
+        stub = _sdk_stub(captured, tools=("Bash", "Read"))
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        monkeypatch.setattr(sys, "stdin", io.StringIO("n\n"))
+        (tmp_path / "rituals.py").write_text(_GATED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["gated", "--text", "edit files"])
+
+        assert exit_code == 0
+        assert captured["options"].permission_mode == "default"
+        denied, allowed = captured["permissions"]
+        assert isinstance(denied, stub.PermissionResultDeny)
+        assert denied.message == "denied by the vekna decide gate"
+        assert isinstance(allowed, stub.PermissionResultAllow)
+        assert allowed.updated_input == {"tool": "Read"}
+        assert "allow tool 'Bash'?" in capsys.readouterr().out
+
+    @staticmethod
+    def test_watched_tool_is_allowed_when_the_human_says_yes(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {}
+        stub = _sdk_stub(captured, tools=("Bash",))
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))
+        (tmp_path / "rituals.py").write_text(_GATED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["gated", "--text", "edit files"])
+
+        assert exit_code == 0
+        (allowed,) = captured["permissions"]
+        assert isinstance(allowed, stub.PermissionResultAllow)
+        assert allowed.updated_input == {"tool": "Bash"}
+        assert "haiku done" in capsys.readouterr().out
+
+
+class TestAgentQuestions:
+    @staticmethod
+    def test_agent_asks_mid_rite_and_waits_for_the_answer(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {}
+        stub = _sdk_stub(
+            captured,
+            questions=(
+                {
+                    "question": "unit or integration?",
+                    "options": ["unit", "integration"],
+                },
+                {"question": "which fixture?"},
+            ),
+        )
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        monkeypatch.setattr(
+            sys, "stdin", io.StringIO("integration\nthe tmp_path one\n")
+        )
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        assert exit_code == 0
+        assert captured["answers"] == ["integration", "the tmp_path one"]
+        out = capsys.readouterr().out
+        assert "unit or integration?" in out
+        assert "which fixture?" in out
+
+    @staticmethod
+    def test_ask_tool_is_offered_on_every_call(tmp_path, monkeypatch):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        assert exit_code == 0
+        options = captured["options"]
+        assert options.allowed_tools == ["mcp__vekna__ask_human"]
+        assert options.mcp_servers["vekna"]["tools"][0]["name"] == "ask_human"
+        # The preset is appended to, not replaced.
+        assert options.system_prompt["type"] == "preset"
+        assert "ask_human" in options.system_prompt["append"]
+
+
+class TestFocusOptions:
+    @staticmethod
+    def test_knobs_and_output_schema_reach_the_sdk(tmp_path, monkeypatch, capsys):
+        captured = {}
+        stub = _sdk_stub(captured, result='{"steps": 3}')
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_TYPED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["planned", "--text", "plan the work"])
+
+        assert exit_code == 0
+        assert "result: 3" in capsys.readouterr().out
+        options = captured["options"]
+        assert options.permission_mode == "plan"
+        assert options.allowed_tools == ["Read", "mcp__vekna__ask_human"]
+        assert options.max_turns == _MAX_TURNS
+        assert options.effort == "high"
+        assert options.output_format["type"] == "json_schema"
+        assert options.output_format["schema"]["properties"]["steps"]
+
+    @staticmethod
+    def test_unparsable_structured_reply_fails_the_cast(tmp_path, monkeypatch, capsys):
+        captured = {}
+        stub = _sdk_stub(captured, result="not json at all")
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_TYPED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["planned", "--text", "plan the work"])
+
+        assert exit_code == _CAST_FAILED_EXIT
+        assert "cast failed: agent output does not validate" in capsys.readouterr().err
+
+
 class TestPromptSugar:
     @staticmethod
     def test_casts_one_step_ritual_without_rituals_file(tmp_path, monkeypatch, capsys):
@@ -159,6 +389,29 @@ class TestPromptSugar:
         assert exit_code == 0
         assert captured["prompt"] == "write a haiku"
         assert "result: haiku done" in capsys.readouterr().out
+
+    @staticmethod
+    def test_inline_prompt_form_is_equivalent(tmp_path, monkeypatch, capsys):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--prompt=write a haiku"])
+
+        assert exit_code == 0
+        assert captured["prompt"] == "write a haiku"
+        assert "result: haiku done" in capsys.readouterr().out
+
+    @staticmethod
+    def test_inline_prompt_with_trailing_words_is_a_usage_error(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--prompt=write", "a haiku"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "usage:" in capsys.readouterr().err
 
     @staticmethod
     def test_empty_prompt_is_a_usage_error(tmp_path, monkeypatch, capsys):

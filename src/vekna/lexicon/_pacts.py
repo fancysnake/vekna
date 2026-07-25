@@ -17,6 +17,9 @@ class Channel(Protocol):
 
 GateFn = Callable[[str], Awaitable[bool]]
 
+# The agent's own question, mid-rite: free text when no options are offered.
+AskFn = Callable[[str, Sequence[str] | None], Awaitable[str]]
+
 
 @dataclass(frozen=True)
 class CodingCall:
@@ -36,7 +39,12 @@ class FocusReply(BaseModel):
 
 class CodingFocusProtocol(Protocol):
     async def run(
-        self, call: CodingCall, *, on_delta: Callable[[str], None], gate: GateFn | None
+        self,
+        call: CodingCall,
+        *,
+        on_delta: Callable[[str], None],
+        gate: GateFn | None,
+        ask: AskFn,
     ) -> FocusReply: ...
 
 

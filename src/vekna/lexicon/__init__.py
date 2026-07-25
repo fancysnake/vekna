@@ -12,6 +12,7 @@ from ._mills import (
     run_cast,
 )
 from ._pacts import (
+    AskFn,
     Channel,
     CodingCall,
     CodingFocusProtocol,
@@ -32,6 +33,7 @@ from ._pacts import (
 )
 
 __all__ = [
+    "AskFn",
     "Channel",
     "CodingCall",
     "CodingFocusProtocol",
