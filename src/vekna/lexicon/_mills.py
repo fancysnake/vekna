@@ -93,13 +93,24 @@ class Grimoire:
 class Compendium:
     def __init__(self) -> None:
         self._rituals: dict[str, Ritual] = {}
+        self._sources: dict[str, str] = {}
         self._steps: dict[str, Step] = {}
 
-    def register(self, ritual: Ritual) -> None:
+    # `source` names where the ritual came from, so a genuine collision between
+    # two different files says which two rather than leaving the author to guess.
+    def register(self, ritual: Ritual, *, source: str | None = None) -> None:
         if ritual.name in self._rituals:
-            msg = f"ritual {ritual.name!r} is already registered"
-            raise RitualDefinitionError(msg)
+            raise RitualDefinitionError(self._collision(ritual.name, source))
         self._rituals[ritual.name] = ritual
+        if source is not None:
+            self._sources[ritual.name] = source
+
+    def _collision(self, name: str, source: str | None) -> str:
+        msg = f"ritual {name!r} is already registered"
+        first = self._sources.get(name)
+        if first is None or source is None:
+            return msg
+        return f"{msg} — declared in both {first} and {source}"
 
     # Steps are collected for `rituals show` only, so a name collision across
     # modules is not worth an error — the first definition wins.

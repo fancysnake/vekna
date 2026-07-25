@@ -66,10 +66,24 @@ def _config_files(cwd: Path) -> list[Path]:
     return found
 
 
+# `files` is additive, not a replacement for the rituals.py found by walking up:
+# naming that same file is how an author is explicit about it, so a source
+# already loaded is skipped rather than colliding with itself. Two *different*
+# sources claiming one ritual name is still an error.
 def _build_compendium(cwd: Path) -> Compendium:
     compendium = Compendium()
+    seen_files: set[Path] = set()
+    seen_modules: set[str] = set()
+
+    def load_file(path: Path) -> None:
+        # Resolved so `..`, symlinks and a config-relative spelling of the
+        # discovered file all collapse to one entry.
+        if (resolved := path.resolve()) not in seen_files:
+            seen_files.add(resolved)
+            load_rituals_file(compendium, resolved)
+
     if (implicit := _find_rituals_file(cwd)) is not None:
-        load_rituals_file(compendium, implicit)
+        load_file(implicit)
     for config in _config_files(cwd):
         modules, files = read_config(config)
         # Relative to the config file, not the cwd: a project .vekna.toml is
@@ -77,9 +91,11 @@ def _build_compendium(cwd: Path) -> Compendium:
         # directory — resolving against the cwd would mean a different file
         # each time.
         for relative in files:
-            load_rituals_file(compendium, config.parent / relative)
+            load_file(config.parent / relative)
         for module in modules:
-            load_rituals_module(compendium, module)
+            if module not in seen_modules:
+                seen_modules.add(module)
+                load_rituals_module(compendium, module)
     return compendium
 
 

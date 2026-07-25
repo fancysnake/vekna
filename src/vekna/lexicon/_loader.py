@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import importlib.util
 import sys
@@ -12,26 +13,36 @@ else:
     import tomli as tomllib
 
 
-def _register_rituals(compendium: Compendium, namespace: dict[str, object]) -> None:
+def _register_rituals(
+    compendium: Compendium, namespace: dict[str, object], *, source: str
+) -> None:
     for value in namespace.values():
         if isinstance(value, Ritual):
-            compendium.register(value)
+            compendium.register(value, source=source)
         elif isinstance(value, Step):
             compendium.register_step(value)
 
 
+# Derived from the path rather than a fixed "vekna_rituals": two different
+# ritual files loaded in one process must not both claim the same module name.
+def _module_name(path: Path) -> str:
+    return f"vekna_rituals_{hashlib.sha256(str(path).encode()).hexdigest()[:12]}"
+
+
 def load_rituals_file(compendium: Compendium, path: Path) -> None:
-    spec = importlib.util.spec_from_file_location("vekna_rituals", path)
+    spec = importlib.util.spec_from_file_location(_module_name(path), path)
     if spec is None or spec.loader is None:
         msg = f"cannot import rituals from {path}"
         raise RitualDefinitionError(msg)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    _register_rituals(compendium, vars(module))
+    _register_rituals(compendium, vars(module), source=str(path))
 
 
 def load_rituals_module(compendium: Compendium, name: str) -> None:
-    _register_rituals(compendium, vars(importlib.import_module(name)))
+    _register_rituals(
+        compendium, vars(importlib.import_module(name)), source=f"module {name}"
+    )
 
 
 def read_config(path: Path) -> tuple[list[str], list[str]]:

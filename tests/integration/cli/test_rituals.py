@@ -1,3 +1,4 @@
+import sys
 import textwrap
 
 import pytest
@@ -39,6 +40,21 @@ _BROKEN = "import a_module_that_does_not_exist\n"
 @pytest.fixture
 def _home(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+
+_SHARED = "shared_rituals"
+
+
+# Importable by name and gone again afterwards: load_rituals_module leaves the
+# module in sys.modules, where it would otherwise leak into later tests.
+@pytest.fixture
+def _shared_module(tmp_path, monkeypatch):
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    (lib / f"{_SHARED}.py").write_text(_RITUALS)
+    monkeypatch.syspath_prepend(str(lib))
+    yield
+    sys.modules.pop(_SHARED, None)
 
 
 @pytest.mark.usefixtures("_home")
@@ -103,6 +119,70 @@ class TestRitualsShow:
 
         assert exit_code == _USAGE_EXIT
         assert "no ritual named 'nope'" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("_home")
+class TestRitualSources:
+    @staticmethod
+    def test_config_may_name_the_discovered_rituals_file(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["rituals.py"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert out.count("ping\n") == 1
+
+    @staticmethod
+    def test_a_file_reached_by_two_spellings_loads_once(tmp_path, monkeypatch, capsys):
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "rituals.py").write_text(_RITUALS)
+        (nested / ".vekna.toml").write_text(
+            '[rituals]\nfiles = ["../nested/rituals.py"]\n'
+        )
+        monkeypatch.chdir(nested)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert out.count("ping\n") == 1
+
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_one_module_named_by_two_configs_loads_once(tmp_path, monkeypatch, capsys):
+        config = tmp_path / "home" / ".config" / "vekna"
+        config.mkdir(parents=True)
+        (config / "config.toml").write_text(f'[rituals]\nmodules = ["{_SHARED}"]\n')
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".vekna.toml").write_text(f'[rituals]\nmodules = ["{_SHARED}"]\n')
+        monkeypatch.chdir(project)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert out.count("ping\n") == 1
+
+    @staticmethod
+    def test_two_different_files_claiming_one_name_still_collide(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / "extra.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["extra.py"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "declared in both" in err
+        assert "extra.py" in err
 
 
 @pytest.mark.usefixtures("_home")
