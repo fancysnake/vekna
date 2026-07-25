@@ -207,14 +207,16 @@ async def run_cast(
     token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
     try:
         transition = await ritual.run(components)
-        taken = 0
-        while not isinstance(transition, Done):
-            if taken == ritual.max_steps:
-                msg = f"ritual {ritual.name!r} exceeded max_steps={ritual.max_steps}"
-                raise WorkflowBudgetExceededError(msg)
-            taken += 1
+        for _ in range(ritual.max_steps):
+            if isinstance(transition, Done):
+                break
             async with _rite(name=transition.target.name, category="step"):
                 transition = await transition.target.run(transition.payload)
     finally:
         _current_rite.reset(token)
-    return transition.result
+    if isinstance(transition, Done):
+        return transition.result
+    # Leaving the loop still mid-flight means the budget ran out, not that the
+    # ritual finished — the only reason the check appears twice.
+    msg = f"ritual {ritual.name!r} exceeded max_steps={ritual.max_steps}"
+    raise WorkflowBudgetExceededError(msg)

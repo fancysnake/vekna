@@ -1,9 +1,10 @@
 import textwrap
 
-from vekna.lexicon import main
+from vekna.lexicon import _gates, main
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
+_CASTS = 2
 
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
@@ -38,6 +39,15 @@ _EXTRA = textwrap.dedent("""
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"
+
+_DASHED = textwrap.dedent("""
+    from vekna.lexicon import Transition, done, ritual
+
+
+    @ritual("echo")
+    async def echo(text: str) -> Transition:
+        return done(text)
+    """)
 
 _BUDGET = textwrap.dedent("""
     from pydantic import BaseModel
@@ -112,6 +122,30 @@ class TestCast:
         assert "unexpected argument: '2'" in capsys.readouterr().err
 
     @staticmethod
+    def test_a_flag_cannot_swallow_the_next_flag_as_its_value(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["countdown", "--start", "--label"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "--start is missing a value" in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_value_starting_with_dashes_is_passed_with_equals(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_DASHED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["echo", "--text=--verbatim"])
+
+        assert exit_code == 0
+        assert "result: --verbatim" in capsys.readouterr().out
+
+    @staticmethod
     def test_ritual_error_exits_one(tmp_path, monkeypatch, capsys):
         (tmp_path / "rituals.py").write_text(_BUDGET)
         monkeypatch.chdir(tmp_path)
@@ -120,6 +154,26 @@ class TestCast:
 
         assert exit_code == _CAST_FAILED_EXIT
         assert "cast failed: " in capsys.readouterr().err
+
+
+class TestCastId:
+    @staticmethod
+    def test_two_casts_of_one_ritual_get_distinct_ids(tmp_path, monkeypatch):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+        seen: list[str] = []
+        real = _gates.Grimoire
+
+        def _record(*, cast_id: str, **kwargs):
+            seen.append(cast_id)
+            return real(cast_id=cast_id, **kwargs)
+
+        monkeypatch.setattr(_gates, "Grimoire", _record)
+
+        assert main(["countdown", "--start", "0"]) == 0
+        assert main(["countdown", "--start", "0"]) == 0
+        assert len(set(seen)) == len(seen) == _CASTS
+        assert "countdown" not in seen
 
 
 class TestCastHelp:
@@ -150,11 +204,22 @@ class TestCastConfig:
         config = tmp_path / "home" / ".config" / "vekna"
         config.mkdir(parents=True)
         (config / "config.toml").write_text('[rituals]\nfiles = ["extra.py"]\n')
+        (config / "extra.py").write_text(_EXTRA)
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         project = tmp_path / "project"
         project.mkdir()
-        (project / "extra.py").write_text(_EXTRA)
         monkeypatch.chdir(project)
+
+        assert main(["ping"]) == 0
+
+    @staticmethod
+    def test_config_files_resolve_against_the_config_not_the_cwd(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "extra.py").write_text(_EXTRA)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["extra.py"]\n')
+        nested = tmp_path / "src" / "deep"
+        nested.mkdir(parents=True)
+        monkeypatch.chdir(nested)
 
         assert main(["ping"]) == 0
 

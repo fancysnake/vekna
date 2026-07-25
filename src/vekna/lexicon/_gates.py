@@ -5,6 +5,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Protocol, cast
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -73,8 +74,12 @@ def _build_compendium(cwd: Path) -> Compendium:
         load_rituals_file(compendium, implicit)
     for config in _config_files(cwd):
         modules, files = read_config(config)
+        # Relative to the config file, not the cwd: a project .vekna.toml is
+        # found by walking parents, and a global one is shared by every
+        # directory — resolving against the cwd would mean a different file
+        # each time.
         for relative in files:
-            load_rituals_file(compendium, cwd / relative)
+            load_rituals_file(compendium, config.parent / relative)
         for module in modules:
             load_rituals_module(compendium, module)
     return compendium
@@ -222,7 +227,15 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
             msg = f"unexpected argument: {token!r}"
             raise ValueError(msg)
         key, separator, inline = token[2:].partition("=")
-        value = inline if separator else next(tokens, "")
+        if separator:
+            value = inline
+        else:
+            # Without this, `--a --b` reads --b as the value of --a and never
+            # sets b at all.
+            value = next(tokens, "")
+            if value.startswith("--"):
+                msg = f"--{key} is missing a value (write --{key}=<value>)"
+                raise ValueError(msg)
         parsed[key.replace("-", "_")] = value
     return parsed
 
@@ -253,7 +266,10 @@ async def _drive(argv: list[str]) -> int:
     # daemon yet. See docs/reborn/06-vekna-daemon.md.
     await probe_daemon(socket_path=default_socket_path())
     renderer = StandaloneRenderer()
-    grimoire = Grimoire(cast_id=the_ritual.name, on_event=renderer.render)
+    # Unique per cast, not per ritual: cast_id is the wire's correlation key
+    # for deltas, decisions and locks, and CastHello carries the ritual name
+    # in its own field.
+    grimoire = Grimoire(cast_id=uuid4().hex, on_event=renderer.render)
     try:
         result = await run_cast(
             ritual=the_ritual,
