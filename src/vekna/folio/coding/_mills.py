@@ -12,6 +12,7 @@ from vekna.lexicon import (
     emit_delta,
     expect_focus,
     medium,
+    offer_prompt,
     record_result,
     resolve_focus,
 )
@@ -25,8 +26,6 @@ _OutputT = TypeVar("_OutputT")
 
 _MEDIUM = "coding"
 _INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
-
-expect_focus(_MEDIUM, hint=_INSTALL_HINT)
 
 
 def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | None:
@@ -126,3 +125,14 @@ async def coding(
             cost_usd=reply.cost_usd,
         )
     return _validate_output(output=output, text=reply.text)
+
+
+# `vekna cast --prompt` reaches the medium through this, so the lexicon needs
+# no import of its own — and no structural type for the result.
+async def one_shot(prompt: str) -> str:
+    return (await coding(prompt)).text
+
+
+def register() -> None:
+    expect_focus(_MEDIUM, hint=_INSTALL_HINT)
+    offer_prompt(_MEDIUM, one_shot)

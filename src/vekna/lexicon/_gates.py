@@ -2,9 +2,7 @@ import asyncio
 import contextlib
 import importlib
 import sys
-from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -17,7 +15,7 @@ from ._dispatch import (
     step_graph,
 )
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
-from ._mills import Compendium, Grimoire, run_cast
+from ._mills import Compendium, Grimoire, prompt_runner, run_cast
 from ._pacts import (
     FocusMissingError,
     Ritual,
@@ -35,16 +33,18 @@ _NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
-_CODING_MODULE = "vekna.folio.coding"
+_PROMPT_MEDIUM = "coding"
 _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
-_OPTIONAL_FOLIOS = ("vekna.folio.coding_claude",)
+# The lexicon may not import a folio, so each one is loaded by name and asked
+# to register what it offers.
+_FOLIOS = ("vekna.folio.coding", "vekna.folio.coding_claude")
 
 
 # Registration is an explicit call, not an import side effect: importing a
 # folio twice must not mean registering twice, and tests need a seam that is
 # not "delete the module from sys.modules".
-def _load_optional_folios() -> None:
-    for name in _OPTIONAL_FOLIOS:
+def _load_folios() -> None:
+    for name in _FOLIOS:
         with contextlib.suppress(ModuleNotFoundError):
             importlib.import_module(name).register()
 
@@ -185,27 +185,15 @@ def rituals_show(name: str) -> int:
     return _show(compendium, name)
 
 
-# The lexicon may not import a folio, so the `coding` medium is reached
-# dynamically — the same shim `inits` uses to reach the lexicon.
-class _HasText(Protocol):
-    @property
-    def text(self) -> str: ...
-
-
 class _NoComponents(BaseModel):
     pass
 
 
-def _coding_medium() -> Callable[[str], Awaitable[object]]:
-    module = importlib.import_module(_CODING_MODULE)
-    return cast("Callable[[str], Awaitable[object]]", module.coding)
-
-
 def _prompt_ritual(prompt: str) -> Ritual:
-    coding = _coding_medium()
+    run_prompt = prompt_runner(_PROMPT_MEDIUM)
 
     async def ask(_: BaseModel) -> Transition:
-        return done(cast("_HasText", await coding(prompt)).text)
+        return done(await run_prompt(prompt))
 
     return Ritual(name=_PROMPT_NAME, components=_NoComponents, run=ask, max_steps=1)
 
@@ -259,7 +247,7 @@ async def _drive(argv: list[str]) -> int:
     if not argv:
         sys.stderr.write(_USAGE)
         return 2
-    _load_optional_folios()
+    _load_folios()
     try:
         the_ritual, components = _resolve_cast(argv)
     except _LOAD_ERRORS as error:

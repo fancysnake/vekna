@@ -1,5 +1,5 @@
 import contextlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -120,13 +120,17 @@ class Compendium:
         return sorted(self._rituals)
 
 
-# A medium declares that it needs a Focus and how to obtain one; a Focus
-# package registers itself. The hint is stated once, at declaration, rather
-# than passed to every lookup for an error the lookup may never raise.
-class FocusRegistry:
+# What a medium package offers the lexicon, which may not import it: the Focus
+# it needs (and how to obtain one), plus an optional one-shot entry so `cast
+# --prompt` can reach the medium without a second dynamic-import mechanism.
+PromptRunner = Callable[[str], Awaitable[str]]
+
+
+class MediumRegistry:
     def __init__(self) -> None:
         self._foci: dict[str, object] = {}
         self._hints: dict[str, str] = {}
+        self._prompts: dict[str, PromptRunner] = {}
 
     def expect(self, medium_name: str, *, hint: str) -> None:
         self._hints[medium_name] = hint
@@ -142,11 +146,21 @@ class FocusRegistry:
             msg = f"{msg} — {hint}"
         raise FocusMissingError(msg)
 
+    def offer_prompt(self, medium_name: str, run: PromptRunner) -> None:
+        self._prompts[medium_name] = run
+
+    def prompt_runner(self, medium_name: str) -> PromptRunner:
+        try:
+            return self._prompts[medium_name]
+        except KeyError:
+            msg = f"medium {medium_name!r} offers no one-shot prompt"
+            raise RitualError(msg) from None
+
     def reset(self) -> None:
         self._foci.clear()
 
 
-_registry = FocusRegistry()
+_registry = MediumRegistry()
 
 
 def expect_focus(medium_name: str, *, hint: str) -> None:
@@ -159,6 +173,14 @@ def register_focus(medium_name: str, focus: object) -> None:
 
 def resolve_focus(medium_name: str) -> object:
     return _registry.resolve(medium_name)
+
+
+def offer_prompt(medium_name: str, run: PromptRunner) -> None:
+    _registry.offer_prompt(medium_name, run)
+
+
+def prompt_runner(medium_name: str) -> PromptRunner:
+    return _registry.prompt_runner(medium_name)
 
 
 def reset_foci() -> None:

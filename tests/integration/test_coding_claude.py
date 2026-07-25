@@ -254,7 +254,9 @@ class TestCastWithClaudeFocus:
 
     @staticmethod
     def test_missing_focus_reports_install_hint(tmp_path, monkeypatch, capsys):
-        monkeypatch.setattr("vekna.lexicon._gates._OPTIONAL_FOLIOS", ())
+        # What a missing SDK looks like: folio.coding imports and declares what
+        # it needs, folio.coding_claude is simply not there.
+        monkeypatch.setattr("vekna.lexicon._gates._FOLIOS", ("vekna.folio.coding",))
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
