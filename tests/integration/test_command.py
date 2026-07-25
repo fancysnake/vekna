@@ -7,6 +7,8 @@ from click.testing import CliRunner
 
 from vekna.inits.cli import init_command
 
+_USAGE_EXIT = 2
+
 _RITUALS = textwrap.dedent("""
     from vekna.lexicon import Transition, done, ritual
 
@@ -67,6 +69,52 @@ class TestCast:
         assert result.exit_code == 0
         assert "fix_demo" in result.output
         assert "--bound <int>" in result.output
+
+
+@pytest.mark.usefixtures("_clean_tmux_env")
+class TestRituals:
+    @staticmethod
+    def test_list_prints_every_ritual(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), ["rituals", "list"])
+
+        assert result.exit_code == 0
+        assert "fix_demo  --bound <int>" in result.output
+
+    @staticmethod
+    def test_show_prints_the_ritual_detail(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), ["rituals", "show", "fix_demo"])
+
+        assert result.exit_code == 0
+        assert "components:" in result.output
+        assert "--bound <int>" in result.output
+
+    @staticmethod
+    def test_show_of_an_unknown_ritual_exits_nonzero(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+
+        result = runner.invoke(init_command(), ["rituals", "show", "nope"])
+
+        assert result.exit_code == _USAGE_EXIT
+        assert "no ritual named 'nope'" in result.output
 
 
 @pytest.mark.usefixtures("_clean_tmux_env")

@@ -77,11 +77,15 @@ class Done:
     result: object = None
 
 
+# `source` is the decorated function's own source text, captured at definition
+# time so `rituals show` can read the step graph off it. None when the function
+# was built dynamically and has no source to read.
 @dataclass(frozen=True)
 class Step:
     name: str
     run: Callable[[object], Awaitable["Transition"]]
     input_type: type[object] | UnionType
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,7 @@ class Ritual:
     components: type[BaseModel]
     run: Callable[[BaseModel], Awaitable[Transition]]
     max_steps: int
+    source: str | None = None
 
 
 def goto(target: Step, payload: object = None) -> Goto:

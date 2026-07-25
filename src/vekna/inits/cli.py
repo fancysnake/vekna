@@ -10,7 +10,7 @@ import click
 from click import Group
 
 from vekna.gates.cli.click.command import ClickGate
-from vekna.inits.cast import dispatch_cast
+from vekna.inits.cast import dispatch_cast, dispatch_rituals
 from vekna.links.socket_client import SocketClientLink
 from vekna.links.socket_server import SocketServerLink
 from vekna.links.tmux import TmuxLink
@@ -113,6 +113,26 @@ def _cast(ritual_args: tuple[str, ...]) -> None:
     raise SystemExit(dispatch_cast(list(ritual_args)))
 
 
+@click.command("list", help="List rituals and the options each one takes.")
+def _rituals_list() -> None:
+    raise SystemExit(dispatch_rituals(["list"]))
+
+
+@click.command("show", help="Show a ritual's components and step graph.")
+@click.argument("name")
+def _rituals_show(name: str) -> None:
+    raise SystemExit(dispatch_rituals(["show", name]))
+
+
+@click.group("rituals", help="Inspect the ritual library.")
+def _rituals() -> None:
+    pass
+
+
+_rituals.add_command(_rituals_list)
+_rituals.add_command(_rituals_show)
+
+
 def init_command() -> Group:
     click_gate = ClickGate(
         server_mill_factory=_build_server_mill,
@@ -121,6 +141,7 @@ def init_command() -> Group:
     )
     group = click_gate.build_group()
     group.add_command(_cast)
+    group.add_command(_rituals)
     return group
 
 

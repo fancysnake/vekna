@@ -1,5 +1,5 @@
 from ._dispatch import medium, ritual, step
-from ._gates import main
+from ._gates import main, rituals_main
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import (
     Compendium,
@@ -66,6 +66,7 @@ __all__ = [
     "register_focus",
     "resolve_focus",
     "ritual",
+    "rituals_main",
     "run_cast",
     "step",
 ]

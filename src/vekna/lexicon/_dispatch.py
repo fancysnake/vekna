@@ -1,7 +1,9 @@
+import ast
 import importlib
 import importlib.util
 import inspect
 import sys
+import textwrap
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from types import UnionType
@@ -60,7 +62,7 @@ def step(func: Callable[..., Awaitable[Transition]]) -> Step:
             raise StepBoundaryError(msg)
         return await func(payload)
 
-    return Step(name=name, run=run, input_type=payload_type)
+    return Step(name=name, run=run, input_type=payload_type, source=source_text(func))
 
 
 def _component_model(func: Callable[..., Awaitable[Transition]]) -> type[BaseModel]:
@@ -74,6 +76,84 @@ def _component_model(func: Callable[..., Awaitable[Transition]]) -> type[BaseMod
         fields[parameter.name] = (annotation, default)
     name = getattr(func, "__name__", "ritual")
     return create_model(f"{name}_components", **fields)
+
+
+_GOTO = "goto"
+_DONE = "done"
+# Labels for the two nodes that are not steps: where a cast enters, and where
+# it leaves.
+START = "(start)"
+ENDS = "(done)"
+
+
+def source_text(func: Callable[..., Awaitable[Transition]]) -> str | None:
+    try:
+        return textwrap.dedent(inspect.getsource(func))
+    except (OSError, TypeError):
+        return None
+
+
+# Best-effort and deliberately shallow: the graph is read off the source text,
+# so a `goto` whose target is computed rather than named simply does not show
+# up. Running the ritual remains the only way to know for certain.
+def _transitions(source: str | None) -> list[str]:
+    if source is None:
+        return []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    targets: list[str] = []
+    ends = False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id == _DONE:
+            ends = True
+        elif node.func.id == _GOTO and node.args:
+            target = node.args[0]
+            if isinstance(target, ast.Name) and target.id not in targets:
+                targets.append(target.id)
+    return [*targets, ENDS] if ends else targets
+
+
+def _walk(
+    *,
+    compendium: Compendium,
+    label: str,
+    source: str | None,
+    seen: set[str],
+    graph: list[tuple[str, list[str]]],
+) -> None:
+    targets = _transitions(source)
+    graph.append((label, targets))
+    for target in targets:
+        # A target the compendium never saw is a leaf: it is named here but
+        # its own transitions cannot be read.
+        if target in seen or (found := compendium.step(target)) is None:
+            continue
+        seen.add(target)
+        _walk(
+            compendium=compendium,
+            label=target,
+            source=found.source,
+            seen=seen,
+            graph=graph,
+        )
+
+
+def step_graph(
+    compendium: Compendium, the_ritual: Ritual
+) -> list[tuple[str, list[str]]]:
+    graph: list[tuple[str, list[str]]] = []
+    _walk(
+        compendium=compendium,
+        label=START,
+        source=the_ritual.source,
+        seen={START},
+        graph=graph,
+    )
+    return graph
 
 
 def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:
@@ -94,7 +174,13 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> Callable[..., Ri
                 **{field: getattr(values, field) for field in field_names}
             )
 
-        return Ritual(name=name, components=model, run=run, max_steps=max_steps)
+        return Ritual(
+            name=name,
+            components=model,
+            run=run,
+            max_steps=max_steps,
+            source=source_text(func),
+        )
 
     return wrap
 
@@ -103,6 +189,8 @@ def _register_rituals(compendium: Compendium, namespace: dict[str, object]) -> N
     for value in namespace.values():
         if isinstance(value, Ritual):
             compendium.register(value)
+        elif isinstance(value, Step):
+            compendium.register_step(value)
 
 
 def load_rituals_file(compendium: Compendium, path: Path) -> None:

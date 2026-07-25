@@ -60,3 +60,14 @@ class TestCompendium:
 
         with pytest.raises(RitualDefinitionError):
             compendium.ritual("nope")
+
+    @staticmethod
+    def test_registered_step_is_looked_up_by_name():
+        compendium = Compendium()
+        compendium.register_step(noop)
+
+        assert compendium.step("noop") is noop
+
+    @staticmethod
+    def test_unregistered_step_is_none():
+        assert Compendium().step("noop") is None

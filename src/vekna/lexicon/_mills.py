@@ -16,6 +16,7 @@ from ._pacts import (
     Ritual,
     RitualDefinitionError,
     RitualError,
+    Step,
     WorkflowBudgetExceededError,
 )
 
@@ -92,12 +93,21 @@ class Grimoire:
 class Compendium:
     def __init__(self) -> None:
         self._rituals: dict[str, Ritual] = {}
+        self._steps: dict[str, Step] = {}
 
     def register(self, ritual: Ritual) -> None:
         if ritual.name in self._rituals:
             msg = f"ritual {ritual.name!r} is already registered"
             raise RitualDefinitionError(msg)
         self._rituals[ritual.name] = ritual
+
+    # Steps are collected for `rituals show` only, so a name collision across
+    # modules is not worth an error — the first definition wins.
+    def register_step(self, the_step: Step) -> None:
+        self._steps.setdefault(the_step.name, the_step)
+
+    def step(self, name: str) -> Step | None:
+        return self._steps.get(name)
 
     def ritual(self, name: str) -> Ritual:
         try:

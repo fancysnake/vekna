@@ -13,15 +13,25 @@ from ._dispatch import (
     load_rituals_file,
     load_rituals_module,
     read_config,
+    step_graph,
 )
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import Compendium, Grimoire, run_cast
-from ._pacts import FocusMissingError, Ritual, RitualError, Transition, done
+from ._pacts import (
+    FocusMissingError,
+    Ritual,
+    RitualDefinitionError,
+    RitualError,
+    Transition,
+    done,
+)
 
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
 )
+_RITUALS_USAGE = "usage: vekna rituals list\n       vekna rituals show <ritual>\n"
+_NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
@@ -102,6 +112,68 @@ def _help_text(cwd: Path) -> str:
         f"  {name}{_component_options(compendium.ritual(name))}" for name in names
     ]
     return "\n".join(lines) + "\n"
+
+
+def _list_text(compendium: Compendium) -> str:
+    if not (names := compendium.names()):
+        return f"{_NO_RITUALS}\n"
+    return "".join(
+        f"{name}{_component_options(compendium.ritual(name))}\n" for name in names
+    )
+
+
+def _component_lines(the_ritual: Ritual) -> list[str]:
+    if not (flags := component_flags(the_ritual.components)):
+        return ["  (none)"]
+    return [
+        f"  --{name.replace('_', '-')} <{type_name}>"
+        + ("" if required else "  (optional)")
+        for name, type_name, required in flags
+    ]
+
+
+def _show_text(compendium: Compendium, the_ritual: Ritual) -> str:
+    graph = step_graph(compendium, the_ritual)
+    lines = [
+        the_ritual.name,
+        f"max steps: {the_ritual.max_steps}",
+        "",
+        "components:",
+        *_component_lines(the_ritual),
+        "",
+        "steps:",
+        *(f"  {label} → {', '.join(targets) or '?'}" for label, targets in graph),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _show(compendium: Compendium, name: str) -> int:
+    try:
+        the_ritual = compendium.ritual(name)
+    except RitualDefinitionError as error:
+        sys.stderr.write(f"{error}\n")
+        return 2
+    sys.stdout.write(_show_text(compendium, the_ritual))
+    return 0
+
+
+def rituals_main(argv: list[str]) -> int:
+    command, *rest = argv or [""]
+    if command not in {"list", "show"}:
+        sys.stderr.write(_RITUALS_USAGE)
+        return 2
+    try:
+        compendium = _build_compendium(Path.cwd())
+    except _LOAD_ERRORS as error:
+        sys.stderr.write(f"{error}\n")
+        return 2
+    if command == "list" and not rest:
+        sys.stdout.write(_list_text(compendium))
+        return 0
+    if command == "show" and len(rest) == 1:
+        return _show(compendium, rest[0])
+    sys.stderr.write(_RITUALS_USAGE)
+    return 2
 
 
 # The lexicon may not import a folio, so the `coding` medium is reached
