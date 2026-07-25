@@ -159,7 +159,7 @@ rituals.py            ◄────── imports                          ┌
 ```
 src/vekna/
   pacts/ specs/ mills/ links/ gates/ inits/ edges/   # vekna daemon: full GLIMPSE
-    gates/cli/click/                                  # vekna CLI — vekna, vekna cast, vekna tmux
+    gates/cli/click/                                  # vekna CLI — vekna, vekna cast
     gates/tui/textual/                                # vekna dashboard (0.7.0)
 
   wire/                            # wire DTOs — only schema both sides share
@@ -304,7 +304,6 @@ vekna casts                                   # list active + recent casts — 0
 vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
 vekna locks                                   # current locks + holders — 0.6.0
 vekna unlock <key>                            # admin override (confirmation) — 0.6.0
-vekna tmux …                                  # legacy tmux peer-attach commands — 0.1.0
 vekna --help
 ```
 

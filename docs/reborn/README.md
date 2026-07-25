@@ -14,7 +14,8 @@ casts, coordinates locks, owns the journal.
 1.0 ships when every feature below is ready — not when the daemon lands.
 
 - [01-cli-reroot.md](01-cli-reroot.md) — `0.1.0` re-root CLI under `vekna tmux`;
-  free top-level `vekna`.
+  free top-level `vekna`. **Superseded**: the tmux subsystem it re-rooted was
+  removed in 0.3.0, so the subgroup no longer exists.
 - [02-lexicon-standalone.md](02-lexicon-standalone.md) — `0.2.0` lexicon SDK +
   standalone runner; `folio/flow`, `folio/shell`. `vekna cast` runs rituals.
 - [03-coding-folios.md](03-coding-folios.md) — `0.3.0` `folio/coding` +

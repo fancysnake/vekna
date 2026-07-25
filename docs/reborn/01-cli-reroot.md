@@ -1,6 +1,11 @@
 # Feature — CLI re-root
 
-**Version:** `0.1.0`
+**Version:** `0.1.0` — **shipped, then superseded.**
+
+> The tmux subsystem this spec re-rooted was removed during 0.3.0: Claude Code
+> ships its own notifications and nothing else consumed it. `vekna tmux` and
+> everything under it no longer exist. Kept as the record of how the top-level
+> `vekna` command was freed.
 
 See [00-common.md](00-common.md) for vocabulary and architecture.
 

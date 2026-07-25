@@ -3,12 +3,13 @@ updated: 2026-05-24
 
 # Daemon attach and live cast list
 
-## Replacing the legacy tmux experience
+## Replacing the legacy tmux experience — done early, in 0.3.0
 
-As a developer, I want the old tmux pane-focusing commands to be gone in the same step that the new daemon arrives, so that there's exactly one meaning of "vekna" in my environment.
-
-- the prior tmux-attach behaviour no longer resolves
-- the documented commands now refer to the daemon
+This wanted the old tmux pane-focusing commands gone in the same step the
+daemon arrives. They went sooner: the whole subsystem was removed in 0.3.0
+once Claude Code shipped its own notifications. `vekna tmux` no longer
+resolves, and the documented commands are `cast` and `rituals`. Nothing here
+is owed by 0.6.0.
 
 ## Running the daemon
 

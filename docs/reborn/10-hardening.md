@@ -12,7 +12,8 @@ second person can use it.
 
 ## What ships
 
-- `README.md` rewritten around rituals and casts; tmux gets a section.
+- `README.md` rewritten around rituals and casts (done early, in 0.3.0, when
+  the tmux subsystem was removed).
 - Example `rituals.py` library — at least: PR triage, test-and-fix loop,
   migration babysitter.
 - Error pathways audited — SDK disconnects, resume on a corrupt run dir,

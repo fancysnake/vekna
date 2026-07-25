@@ -1,15 +1,27 @@
 # Vekna
 
-Vekna watches a tmux session full of running Claude Code instances and
-switches focus to whichever pane needs attention. The `vekna tmux` command
-starts a server that attaches the session and listens on a Unix socket;
-`vekna tmux notify`, run from inside a pane, asks the server to select that
-pane so the user lands on the agent that wants them.
+Vekna runs coding agents as **rituals**: small Python programs whose steps the
+author controls and whose agent calls happen inside those steps. `vekna cast
+<ritual>` runs one; output streams live as a tree of rites. Agents run
+permissively within a step; determinism lives at the step boundaries.
+
+(The tmux focus-switcher vekna started as was removed in 0.3.0 — Claude Code
+ships its own notifications now. `docs/reborn/` is the plan from here.)
 
 ## Architecture
 
-GLIMPSE layering. Layer order (outermost → innermost):
-`edges → inits → gates → links → mills → specs → pacts`
+Four packages:
+
+- `lexicon` — the engine. Ritual/step/medium model, the cast runtime, the
+  grimoire, the CLI gates. `vekna.lexicon` is the ritual author's door;
+  `vekna.lexicon.entry` is the CLI and cast-runtime door.
+- `folio` — the mediums: `coding`, `shell`, `flow`, plus `coding_claude`, the
+  Claude Agent SDK focus. Folios never import each other.
+- `wire` — the daemon protocol's DTOs and framing. Imports nothing.
+- `inits` — the click entry point.
+
+Within a package, GLIMPSE layering (outermost → innermost):
+`gates → links → mills → specs → pacts`
 
 Import boundaries enforced by `import-linter` (`pyproject.toml`). Full layer
 map, layout, patterns, and drift flags:

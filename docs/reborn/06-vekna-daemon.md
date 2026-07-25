@@ -32,7 +32,9 @@ surface and sees the same view. Lock default flips to `deny`.
 - **Resume** — `vekna casts resume <cast_id>` spawns a fresh cast process and
   hands it the journal; it replays completed rite state, re-enters the current
   rite. Always-fresh process (no pooling).
-- **Attention surfacing** across casts (the original soul).
+- **Attention surfacing** across casts — a cast blocked on a `decide` is
+  raised to the operator wherever they are looking. The idea vekna started
+  with, expressed in casts and rites rather than tmux panes.
 - Clean disconnect: a cast process closing the socket marks the cast ended; an
   unclean exit surfaces as "cast disconnected", not a traceback.
 - `vekna casts` (list active + recent), `vekna locks` (current locks +
@@ -43,8 +45,10 @@ surface and sees the same view. Lock default flips to `deny`.
 - `pacts/` — daemon protocols (import `vekna.wire` only; no schema mirror).
 - `mills/` — daemon engine: tracks casts, multiplexes surfaces, routes
   round-trips, lock manager tree, journal writer + resume replay.
-- `links/socket_server.py` — extend the existing tmux Unix-socket adapter for
-  the daemon's framing.
+- `links/socket_server.py` — a fresh Unix-socket adapter over `vekna.wire`'s
+  JSONL framing. (This once said "extend the existing tmux adapter"; that
+  adapter spoke a line-based request/response protocol, not the wire's, and
+  was removed with the rest of the tmux subsystem in 0.3.0.)
 - `links/` filesystem journal (JSON + JSONL writer/reader).
 - `gates/cli/click/` — daemon renderer + input loop; `casts`, `locks`,
   `unlock`, `casts resume`.

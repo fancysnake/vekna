@@ -49,11 +49,37 @@ and this project adheres to [Semantic Versioning].
   `coding-claude` extra was dropped, so the base wheel pulls it.
 - `docs/reborn/03-coding-folios.md` and `00-common.md` now describe what
   shipped rather than what was designed.
+- **`WorkflowBudgetExceededError` → `StepBudgetExceededError`.** "Workflow" was
+  not this project's vocabulary.
+- **`vekna.lexicon` split into two doors.** It keeps the ritual author's API;
+  CLI and cast-runtime plumbing (`main`, `rituals_list`, `rituals_show`,
+  `run_cast`, `Grimoire`, `Compendium`, `StandaloneRenderer`, `probe_daemon`)
+  moved to `vekna.lexicon.entry`. A `rituals.py` imports only the former.
+- **`FocusReply` carries typed telemetry** (`session_id`, `num_turns`,
+  `cost_usd`) instead of a `dict`, and is `extra="forbid"` — a focus that
+  misspells a field now fails at the boundary rather than silently losing it.
+  `FocusReply.structured` is gone; the reply text is validated directly.
+- **Focus registration is explicit.** The cast runtime calls each folio's
+  `register()`; importing `vekna.folio.coding_claude` no longer registers as a
+  side effect. `resolve_focus` lost its `hint` parameter — a medium declares
+  what it needs once, via `expect_focus`.
+- **`emit_delta`** replaces the identical delta-sink closures the `shell` and
+  `coding` folios each carried; `current_rite_id` leaves the public API.
+- `rituals_main(argv)` became `rituals_list()` / `rituals_show(name)`.
+- `lexicon/_dispatch` split into `_dispatch` (reflection), `_graph` (the AST
+  step-graph reader, now under strict mypy) and `_loader` (file/module/TOML
+  loading). `wire/_pacts` likewise sheds framing to `wire/_mills` and
+  `wire/_links`.
 
 ### Deprecated
 
 ### Removed
 
+- **The tmux subsystem.** `vekna tmux`, `vekna tmux notify`, `daemon` and
+  `status-bar`, along with `gates/`, `links/`, `mills/`, `pacts/`, `specs/`,
+  `edges/` and the `libtmux` dependency. Claude Code ships its own
+  notifications and nothing else consumed it; 0.6.0's daemon is built fresh
+  against `vekna.wire`. 14 import-linter contracts collapse to 6.
 - `examples/` — its contents moved to `rituals.py` at the repo root, and the
   integration tests that copied from it carry their own fixtures now.
 
@@ -61,6 +87,21 @@ and this project adheres to [Semantic Versioning].
 
 - `run_bash` never drained stdout: the first `asyncio.gather` argument had lost
   its `_pump(` wrapper, passing a raw tuple where a coroutine belonged.
+- **A failing rite was never journaled as failed.** `run_cast` called
+  `rite_finished` after its `try/finally`, so a step that raised left an open
+  rite; `medium_rite` always finished with `status="ok"`, so a medium that
+  raised was recorded as a success. `RiteFinished.status` could therefore never
+  be `"error"` in production and the renderer's `✗` was unreachable. Both call
+  sites now share one context manager.
+- **Config-relative ritual files resolved against the cwd.** A repo-root
+  `.vekna.toml` broke as soon as you worked from a subdirectory, and a global
+  `config.toml` entry meant a different file in every directory. Paths resolve
+  against the config file now.
+- **`--a --b` read `--b` as the value of `--a`** and never set `b`. A value
+  starting with `--` is rejected; `--a=--b` passes one deliberately.
+- **`cast_id` was the ritual name**, so two concurrent casts of one ritual
+  shared the wire's correlation key for deltas, decisions and locks.
+- A `@medium`-decorated function reported `__name__ == "wrapped"`.
 
 ### Security
 
