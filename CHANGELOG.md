@@ -41,6 +41,20 @@ and this project adheres to [Semantic Versioning].
 
 ### Changed
 
+- **The GLIMPSE layering inside a package is enforced, not just documented.**
+  The six `forbidden` contracts only ever governed the top-level packages, so
+  the layer table in `docs/architecture.md` was a convention nothing checked —
+  and two modules had inverted against it: `folio/shell/_mills` imported
+  `_links`, and `wire/_links` imported `_mills`. A `layers` contract per package
+  now holds the table up, with `_links` and `_mills` joined by import-linter's
+  independent delimiter so neither may import the other.
+- **`folio/shell` and `wire` lost their `_mills`.** `shell()` moved in beside
+  `run_bash` — three lines, no branches, no business logic. `wire`'s frame codec
+  moved into `_pacts`, beside the DTOs it serialises.
+- **Each folio registers through an `_inits.py`.** `register()` was living in
+  `_mills` (`coding`) and `_links` (`coding_claude`); registering handlers is
+  what the inits layer is for. `_load_folios` calls `register()` on the package,
+  so nothing outside changed.
 - **`approve` and `ask` are now one adaptive `decide`.** `decide(prompt)`
   returns `bool`; `decide(prompt, options=[...])` and `decide(prompt,
   free=True)` return `str`. One wire pair (`DecideRequested` /
@@ -85,6 +99,22 @@ and this project adheres to [Semantic Versioning].
 
 ### Fixed
 
+- **A `.vekna.toml` naming the `rituals.py` beside it broke every command.**
+  `files` is additive on top of the file found by walking up, and nothing
+  deduped, so being explicit about your own rituals file made `cast`, `rituals
+  list`, `rituals show` and `--help` all fail with `ritual '<name>' is already
+  registered` — naming neither source. Ritual files are now skipped if already
+  loaded (keyed on the resolved path, so `..` and symlinks collapse), and
+  modules are deduped by name, which fixes the same break when a global and a
+  project config list one module. Two genuinely different files claiming one
+  ritual name is still an error, and now says which two.
+- **A shell line over 1 MiB crashed the cast with a traceback.** `StreamReader`
+  iterates by lines and `readline` raises past its limit — clearing its buffer,
+  so the output was lost too. `_drive` catches only `RitualError`, so it escaped
+  as an unhandled traceback on output as ordinary as a minified bundle or
+  one-line JSON. `run_bash` reads chunks and splits lines itself; `read()` has
+  no limit, so the failure mode is gone rather than reported. Multi-byte UTF-8
+  split across a chunk boundary survives via an incremental decoder.
 - `run_bash` never drained stdout: the first `asyncio.gather` argument had lost
   its `_pump(` wrapper, passing a raw tuple where a coroutine belonged.
 - **A failing rite was never journaled as failed.** `run_cast` called

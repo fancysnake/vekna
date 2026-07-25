@@ -1,7 +1,10 @@
 # Architecture
 
 Vekna uses the **GLIMPSE** layering model. Import boundaries are enforced by
-`import-linter` (contracts in `pyproject.toml`).
+`import-linter` (contracts in `pyproject.toml`): `forbidden` contracts between
+the top-level packages, and a `layers` contract inside each one. Both halves
+matter — the package rules alone let two layers invert inside a package
+unnoticed, which is exactly what happened before the `layers` contracts existed.
 
 ## Packages
 
@@ -58,7 +61,19 @@ Dependencies below are enforced; the list above is purpose only.
 
 The lexicon's `_gates` imports `_links` (renderer, daemon probe) — the one
 documented exception, since the cast runtime *is* the wiring in a standalone
-process. 0.6.0's daemon revisits this.
+process. 0.6.0's daemon revisits this. A `layers` contract cannot express
+"except here", so the lexicon's contract places `_gates` above `_links` and the
+exception is permitted rather than caught; `lexicon` is the only package with a
+gates layer, so nothing else relaxes with it.
+
+The `mills`/`links` row is the one the contracts guard most closely: the two are
+joined by `|` in each contract, import-linter's *independent* delimiter, so
+neither may import the other. (`:` reads as "same layer, may import freely" and
+would pass vacuously.)
+
+Modules that sit across the model rather than in one layer of it are left out of
+the contracts: the lexicon's reflection helpers (`_dispatch`, `_graph`,
+`_loader`) and its two doors (`__init__`, `entry`).
 
 ## Current layout
 
@@ -75,12 +90,19 @@ lexicon/
   entry.py       # the CLI door
 folio/
   coding/        # the coding medium (backend-agnostic)
+    _pacts.py    # CodingOpts, CodingResult, CodingOutputError
+    _mills.py    # the medium itself, plus the one-shot prompt entry
+    _inits.py    # register(): expects a Focus, offers the prompt entry
   coding_claude/ # Claude Agent SDK focus for `coding`
+    _pacts.py    # ClaudeOptions
+    _links.py    # ClaudeCodingFocus — the only module importing the SDK
+    _inits.py    # register(): binds the Focus to the `coding` medium
   shell/         # the shell medium
+    _pacts.py    # ShellResult
+    _links.py    # run_bash and the `shell` medium that wraps it
   flow/          # the decide medium
 wire/
-  _pacts.py      # message models
-  _mills.py      # encode/decode a frame
+  _pacts.py      # message models, and the frame codec over them
   _links.py      # read_frames off a StreamReader
 inits/
   cli.py         # click root: cast, rituals

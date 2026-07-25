@@ -1,67 +1,75 @@
 # Current Task
 
-**Task:** 0.3.0 review remediation + tmux removal
-**Plan:** [`PLAN.md`](PLAN.md) — approved, complete (commit `1d8fb4d`)
-**Review:** PR [#50](https://github.com/fancysnake/vekna/pull/50), comment of
-2026-07-25 (items 1–16)
+**Task:** post-reborn review remediation
+**Plan:** [`PLAN.md`](PLAN.md) — approved, complete (commit `fe99c99`)
+**Review:** PR [#50](https://github.com/fancysnake/vekna/pull/50), GLIMPSE-lens
+comment of 2026-07-25
 **Branch:** `vekna-reborn`
-**Phase:** IMPLEMENT complete — all thirteen steps landed; awaiting review
+**Phase:** IMPLEMENT complete — all five steps landed; awaiting review
 
 ## Context
 
-Vekna is now `lexicon` + `folio` + `wire` + a thin `inits` CLI. The tmux
-focus-switcher it began as is gone: Claude Code ships its own notifications
-and nothing else consumed it. Everything the PR review raised at P1–P3 is
-fixed on that smaller surface, so the reborn line starts with no known
-defects.
+Vekna is `lexicon` + `folio` + `wire` + a thin `inits` CLI. This cycle fixed the
+two P1 crashes a normal user could hit and closed the P2 the review actually
+turned up: the layer table in `docs/architecture.md` was a convention nothing
+checked, and two modules had already inverted against it.
 
 ## Progress against PLAN.md
 
 | Step | State | Commit |
 | --- | --- | --- |
-| 0 — Delete the tmux subsystem | done | `aefa343` |
-| 1 — One rite context manager | done | `bd9eb6d` |
-| 2 — `_gates` input handling | done | `7280d3a` |
-| 3 — Typed `rituals` entry points | done | `215a20e` |
-| 4 — Framing out of `wire/_pacts` | done | `9392f52` |
-| 5 — A typed, closed focus reply | done | `8113f62` |
-| 6 — Explicit registration, one delta sink | done | `99d5871` |
-| 7 — `--prompt` through the registry | done | `846c359` |
-| 8 — Vocabulary and conformance sweep | done | `268b63d` |
-| 9 — Split `lexicon/_dispatch` | done | `7f2def4` |
-| 10 — Two doors | done | `b4f1824` |
-| 11 — Test layout and fixtures | done | `1c228a8` |
-| 12 — Docs, changelog, task record | done | this commit |
+| 1 — Ritual sources dedupe, silently | done | `0a053c8` |
+| 2 — Long output lines stop crashing the cast | done | `09f6b64` |
+| 3 — The layer table becomes true | done | `eee02b0` |
+| 4 — The contract that keeps it true | done | `b84af2c` |
+| 5 — Reconcile the record | done | this commit |
 
-## Where the review was wrong
+Gates after each step: 128 tests, 11 import-linter contracts, pylint 10.00,
+vulture clean.
 
-Recorded because PLAN.md repeated these claims before they were tested:
+## What the fixes actually were
 
-1. **`_loader` is not strictly typable.** `exec_module`, `vars(module)` and
-   `tomllib.load` all return `dict[str, Any]`, so it needs its own
-   `disallow_any_expr = false`. The override count went 1 → 2, not 1 → 1.
-   `_graph` *is* strict, which is the real win.
-2. **`medium` does not belong in `_mills`.** `ParamSpec` forwarding is
-   Any-tainted; moving it would have forced the engine to take an exemption.
-3. **Dropping `extra="ignore"` fixes nothing** — `ignore` is pydantic's
-   default. `FocusReply` needed `extra="forbid"`.
-4. **The `sys.modules` purge in `test_coding_claude` had to stay.** It is
-   needed because `_links` binds the SDK's names at import and each test
-   installs its own stub — a separate concern from registration.
-5. Smaller: `__all__` was 35 names, not 46; there were four ritual blobs, not
-   five, and one differs genuinely (~27 lines saved, not ~80).
+1. **Ritual sources are deduped by resolved path**, not by declining to search
+   when config names files — the skip rule would have let a global
+   `config.toml` suppress every project's own `rituals.py`.
+2. **`run_bash` iterates chunks, not lines.** The 1 MiB cap was guarding
+   nothing (`ShellResult.stdout` retains everything regardless) and its only
+   effect was to crash. `_Chunks` exists because the house rule bans `while`
+   and `StreamReader.__aiter__` yields the lines being avoided.
+3. **`folio/shell` and `wire` lost their `_mills`**; each folio gained an
+   `_inits.py` for its `register()`.
+
+## Friction
+
+- **import-linter's layer delimiters are the opposite of the intuitive
+  reading.** `:` means "same layer, may import each other"; `|` is the
+  *independent* one that forbids it. The first draft of the `layers` contracts
+  used `:` and passed while a deliberately reintroduced violation sat in the
+  tree — a vacuous green. Any new layers contract must be checked by breaking
+  it on purpose once, which is now a step in its own right.
 
 ## Remaining
 
-1. **Release bump.** `CHANGELOG.md` `[Unreleased]` holds the whole 0.3.0
-   story including this remediation. Bump only on explicit request.
+1. **Release bump.** `CHANGELOG.md` `[Unreleased]` holds the whole 0.3.0 story
+   including both remediation cycles. Bump only on explicit request.
 2. **`parallel`** — owed from 0.2.0, still deferred. The TUI spec assumes it.
+   Note the medium registry is a module-level singleton, which is the thing
+   that will need rethinking when casts can run concurrently.
 3. **Manual smoke test with the real SDK.** Every `coding` test runs against a
-   stubbed `claude_agent_sdk`; nothing has exercised the real one end-to-end.
-   This is the largest untested surface left.
-4. **P4 items 17–19 deliberately not done**: `probe_daemon`'s discarded result
-   and `Channel.emit` stay until 0.6.0 decides their role. Both carry a
-   comment saying so.
+   stubbed `claude_agent_sdk`, and `coding_claude` dispatches on
+   `runtime_checkable` protocols, which check attribute *presence* only. Still
+   the one place the suite can be green while the integration is wrong; owed
+   before any 0.3.0 tag.
+4. **Deferred from this review, all deliberate:**
+   - `_parse_flags` accepts a trailing flag with no value (`--name` →
+     `{'name': ''}`) while `--name --other x` correctly errors.
+   - `Grimoire._events` grows without bound and nothing in `src/` reads it;
+     wants the 0.6.0 daemon decision about journal-vs-buffer.
+   - `test_probe.py` binds a real unix socket under `tests/unit/`.
+   - `_validate_output` catches `(ValidationError, ValueError)`; the former
+     subclasses the latter.
+   - `probe_daemon`'s discarded result and `Channel.emit` stay until 0.6.0
+     decides their role. Both carry a comment saying so.
 
 ## Notes
 
