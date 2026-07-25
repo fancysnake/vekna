@@ -7,14 +7,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ._dispatch import (
-    component_flags,
-    load_rituals_file,
-    load_rituals_module,
-    read_config,
-    step_graph,
-)
+from ._dispatch import component_flags
+from ._graph import step_graph
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
+from ._loader import load_rituals_file, load_rituals_module, read_config
 from ._mills import Compendium, Grimoire, prompt_runner, run_cast
 from ._pacts import (
     FocusMissingError,

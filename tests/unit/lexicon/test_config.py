@@ -5,13 +5,13 @@ from types import ModuleType
 
 import pytest
 
-from vekna.lexicon import _dispatch
+from vekna.lexicon import _loader
 
-_DISPATCH_PATH = Path(_dispatch.__file__)
+_LOADER_PATH = Path(_loader.__file__)
 
 
-def _load_dispatch(name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, _DISPATCH_PATH)
+def _load_loader(name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, _LOADER_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -25,7 +25,7 @@ class TestTomlBackend:
     def test_uses_stdlib_tomllib_on_modern_python(monkeypatch):
         monkeypatch.setattr(sys, "version_info", (3, 11, 0, "final", 0))
 
-        module = _load_dispatch("vekna.lexicon._dispatch_modern")
+        module = _load_loader("vekna.lexicon._loader_modern")
 
         assert module.tomllib.__name__ == "tomllib"
 
@@ -42,7 +42,7 @@ class TestTomlBackend:
         monkeypatch.setitem(sys.modules, "tomli", stub)
         monkeypatch.setattr(sys, "version_info", (3, 10, 12, "final", 0))
 
-        module = _load_dispatch("vekna.lexicon._dispatch_py310")
+        module = _load_loader("vekna.lexicon._loader_py310")
 
         assert module.tomllib is stub
 

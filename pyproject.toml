@@ -157,15 +157,24 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
-# vekna.lexicon._dispatch is the reflection boundary: it reads runtime
-# annotations and invokes heterogeneously-typed steps uniformly, which cannot
-# be expressed under disallow_any_expr/explicit. Relaxed here only; the engine
-# (_mills) consuming its typed Step surface stays strict.
+# vekna.lexicon._dispatch is the reflection boundary and nothing else: it reads
+# runtime annotations and invokes heterogeneously-typed steps uniformly, which
+# cannot be expressed under disallow_any_expr/explicit. The AST reader (_graph)
+# and the file/TOML loaders (_loader) used to share this exemption for free;
+# they are strict now.
 [[tool.mypy.overrides]]
 module = "vekna.lexicon._dispatch"
 disallow_any_expr = false
 disallow_any_explicit = false
 warn_return_any = false
+
+# vekna.lexicon._loader is the dynamic-loading boundary: importlib's
+# exec_module, vars(module) and tomllib.load all hand back dict[str, Any] by
+# nature. Narrower than the exemption it was carved out of -- the AST reader
+# it used to sit beside (_graph) is strict.
+[[tool.mypy.overrides]]
+module = "vekna.lexicon._loader"
+disallow_any_expr = false
 
 # RUFF
 
