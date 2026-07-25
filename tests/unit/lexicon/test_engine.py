@@ -9,8 +9,8 @@ from vekna.lexicon import (
     Goto,
     Grimoire,
     StandaloneRenderer,
+    StepBudgetExceededError,
     Transition,
-    WorkflowBudgetExceededError,
     done,
     goto,
     medium,
@@ -160,7 +160,7 @@ class TestRunCast:
     def test_budget_exceeded_raises():
         grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
 
-        with pytest.raises(WorkflowBudgetExceededError):
+        with pytest.raises(StepBudgetExceededError):
             asyncio.run(
                 run_cast(
                     ritual=spinner,

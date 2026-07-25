@@ -112,7 +112,7 @@ def _help_text(cwd: Path) -> str:
         lines.append(f"(could not load rituals: {error})")
         return "\n".join(lines) + "\n"
     if not (names := compendium.names()):
-        lines.append("no rituals found (create a rituals.py in this directory)")
+        lines.append(_NO_RITUALS)
         return "\n".join(lines) + "\n"
     lines.append("available rituals:")
     lines += [

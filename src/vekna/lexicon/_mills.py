@@ -17,7 +17,7 @@ from ._pacts import (
     RitualDefinitionError,
     RitualError,
     Step,
-    WorkflowBudgetExceededError,
+    StepBudgetExceededError,
 )
 
 
@@ -277,4 +277,4 @@ async def run_cast(
     # Leaving the loop still mid-flight means the budget ran out, not that the
     # ritual finished — the only reason the check appears twice.
     msg = f"ritual {ritual.name!r} exceeded max_steps={ritual.max_steps}"
-    raise WorkflowBudgetExceededError(msg)
+    raise StepBudgetExceededError(msg)

@@ -6,6 +6,7 @@ _LINE_LIMIT = 1 << 20
 
 
 async def _pump(
+    *,
     stream: asyncio.StreamReader | None,
     sink: list[str],
     on_line: Callable[[str], None] | None,
@@ -39,6 +40,7 @@ async def run_bash(
     # Both pipes are drained concurrently, so `on_line` sees them in arrival
     # order and neither can fill and block the other.
     await asyncio.gather(
-        _pump(process.stdout, out, on_line), _pump(process.stderr, err, on_line)
+        _pump(stream=process.stdout, sink=out, on_line=on_line),
+        _pump(stream=process.stderr, sink=err, on_line=on_line),
     )
     return "".join(out), "".join(err), await process.wait()

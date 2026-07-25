@@ -28,6 +28,13 @@ def medium(
         async with medium_rite(name):
             return await func(*args, **kwargs)
 
+    # Set directly rather than via functools.wraps, whose _Wrapped return type
+    # is Any-tainted: a decorated medium should introspect as itself, not as
+    # `wrapped`.
+    wrapped.__name__ = name
+    wrapped.__qualname__ = getattr(func, "__qualname__", name)
+    wrapped.__module__ = getattr(func, "__module__", wrapped.__module__)
+    wrapped.__doc__ = func.__doc__
     return wrapped
 
 

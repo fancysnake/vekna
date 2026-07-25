@@ -103,7 +103,7 @@ target) is a deferred, additive layer on top of explicit `goto`.
 **Loop safety.** The trampoline is bounded. `@ritual(…, max_steps=N)` caps the
 total transitions in a cast (default in `_specs.py`); `@step(…, max_visits=N)`
 optionally caps re-entry of one step. Exceeding either raises
-`WorkflowBudgetExceededError` — a naive cycle aborts loudly instead of hanging. This
+`StepBudgetExceededError` — a naive cycle aborts loudly instead of hanging. This
 safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
 a step decides for itself.
 

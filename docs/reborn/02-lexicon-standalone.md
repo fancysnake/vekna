@@ -21,7 +21,7 @@ work.
 - `vekna.lexicon` — `@ritual` (entrypoint, `max_steps`), `@step` (task),
   `goto`/`done`/`Transition` (routing), `@medium`, the step engine (transition
   trampoline + on-entry input type enforcement + bounded loop-budget guard
-  raising `WorkflowBudgetExceededError`), the Grimoire event log, the compendium
+  raising `StepBudgetExceededError`), the Grimoire event log, the compendium
   registry. `RiteContext` is engine-internal, not user-facing (lands with the
   flow/coding folios). (Static graph-inference + rendering deferred to
   `rituals show`/the dashboard, derived from `goto` targets + step input types.)

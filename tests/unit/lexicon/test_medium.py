@@ -115,6 +115,10 @@ class TestMedium:
         assert medium_rite.parent_id == step_rite.rite_id
 
     @staticmethod
+    def test_a_decorated_medium_introspects_as_itself():
+        assert whoami.__name__ == "whoami"
+
+    @staticmethod
     def test_current_rite_outside_cast_raises():
         with pytest.raises(RitualError):
             current_rite()

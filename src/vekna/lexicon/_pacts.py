@@ -60,7 +60,7 @@ class RitualError(Exception):
     pass
 
 
-class WorkflowBudgetExceededError(RitualError):
+class StepBudgetExceededError(RitualError):
     pass
 
 
