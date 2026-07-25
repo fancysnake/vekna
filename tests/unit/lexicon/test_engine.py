@@ -13,6 +13,7 @@ from vekna.lexicon import (
     WorkflowBudgetExceededError,
     done,
     goto,
+    medium,
     ritual,
     run_cast,
     step,
@@ -71,6 +72,40 @@ _SPRINT_START = 7
 async def sprint(start: int) -> Transition:
     await asyncio.sleep(0)
     return goto(finish, Tick(left=start))
+
+
+class BoomError(RuntimeError):
+    pass
+
+
+@step
+async def explode(_state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    raise BoomError
+
+
+@ritual("detonate")
+async def detonate() -> Transition:
+    await asyncio.sleep(0)
+    return goto(explode, Tick(left=0))
+
+
+@medium
+async def combust() -> None:
+    await asyncio.sleep(0)
+    raise BoomError
+
+
+@step
+async def light_fuse(_state: Tick) -> Transition:
+    await combust()
+    return done(None)  # pragma: no cover
+
+
+@ritual("smoulder")
+async def smoulder() -> Transition:
+    await asyncio.sleep(0)
+    return goto(light_fuse, Tick(left=0))
 
 
 class TestRitual:
@@ -134,6 +169,59 @@ class TestRunCast:
                     channel=_channel(),
                 )
             )
+
+
+class TestFailedRiteIsJournaled:
+    @staticmethod
+    def _cast(the_ritual) -> Grimoire:
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        with pytest.raises(BoomError):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=grimoire,
+                    channel=_channel(),
+                )
+            )
+        return grimoire
+
+    @staticmethod
+    def _finished(grimoire: Grimoire) -> list[RiteFinished]:
+        return [e for e in grimoire.events if isinstance(e, RiteFinished)]
+
+    @classmethod
+    def test_a_step_that_raises_still_closes_its_rite(cls):
+        finished = cls._finished(cls._cast(detonate))
+
+        assert [(e.rite_id, e.status) for e in finished] == [("r1", "error")]
+
+    @classmethod
+    def test_a_medium_that_raises_is_not_journaled_as_success(cls):
+        finished = cls._finished(cls._cast(smoulder))
+
+        # The medium closes first, then the step it brought down with it.
+        assert [(e.rite_id, e.status) for e in finished] == [
+            ("r2", "error"),
+            ("r1", "error"),
+        ]
+
+    @classmethod
+    def test_renderer_marks_a_failed_rite(cls):
+        out = io.StringIO()
+        renderer = StandaloneRenderer(out=out, inp=io.StringIO())
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=renderer.render)
+        with pytest.raises(BoomError):
+            asyncio.run(
+                run_cast(
+                    ritual=detonate,
+                    components=detonate.components(),
+                    grimoire=grimoire,
+                    channel=renderer,
+                )
+            )
+
+        assert "✗ explode" in out.getvalue()
 
 
 class TestGrimoire:

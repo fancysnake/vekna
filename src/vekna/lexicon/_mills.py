@@ -173,41 +173,48 @@ def current_rite_id() -> str:
     return rite_id
 
 
+# The one place a rite is opened and closed. A rite whose body raises is
+# journaled with status="error" — steps and mediums alike, which is the whole
+# reason both call sites share this.
 @contextlib.asynccontextmanager
-async def medium_rite(name: str) -> AsyncIterator[None]:
+async def _rite(
+    *, name: str, category: Literal["step", "medium"]
+) -> AsyncIterator[None]:
     parent = current_rite()
     rite_id = parent.grimoire.rite_started(
-        name=name, parent_id=parent.parent_id, category="medium"
+        name=name, parent_id=parent.parent_id, category=category
     )
     outcome = RiteOutcome()
     token = _current_rite.set(replace(parent, parent_id=rite_id, outcome=outcome))
+    finished = False
     try:
         yield
+        finished = True
     finally:
         _current_rite.reset(token)
-        parent.grimoire.rite_finished(rite_id, result=outcome.result)
+        parent.grimoire.rite_finished(
+            rite_id, status="ok" if finished else "error", result=outcome.result
+        )
+
+
+def medium_rite(name: str) -> contextlib.AbstractAsyncContextManager[None]:
+    return _rite(name=name, category="medium")
 
 
 async def run_cast(
     *, ritual: Ritual, components: BaseModel, grimoire: Grimoire, channel: Channel
 ) -> object:
-    root = RiteContext(grimoire=grimoire, channel=channel)
-    token = _current_rite.set(root)
+    token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
     try:
         transition = await ritual.run(components)
-        for _ in range(ritual.max_steps):
-            if isinstance(transition, Done):
-                return transition.result
-            rite_id = grimoire.rite_started(name=transition.target.name)
-            step_token = _current_rite.set(replace(root, parent_id=rite_id))
-            try:
+        taken = 0
+        while not isinstance(transition, Done):
+            if taken == ritual.max_steps:
+                msg = f"ritual {ritual.name!r} exceeded max_steps={ritual.max_steps}"
+                raise WorkflowBudgetExceededError(msg)
+            taken += 1
+            async with _rite(name=transition.target.name, category="step"):
                 transition = await transition.target.run(transition.payload)
-            finally:
-                _current_rite.reset(step_token)
-            grimoire.rite_finished(rite_id)
     finally:
         _current_rite.reset(token)
-    if isinstance(transition, Done):
-        return transition.result
-    msg = f"ritual {ritual.name!r} exceeded max_steps={ritual.max_steps}"
-    raise WorkflowBudgetExceededError(msg)
+    return transition.result
