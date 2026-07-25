@@ -40,10 +40,13 @@ _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
 _OPTIONAL_FOLIOS = ("vekna.folio.coding_claude",)
 
 
+# Registration is an explicit call, not an import side effect: importing a
+# folio twice must not mean registering twice, and tests need a seam that is
+# not "delete the module from sys.modules".
 def _load_optional_folios() -> None:
     for name in _OPTIONAL_FOLIOS:
         with contextlib.suppress(ModuleNotFoundError):
-            importlib.import_module(name)
+            importlib.import_module(name).register()
 
 
 def _find_rituals_file(start: Path) -> Path | None:

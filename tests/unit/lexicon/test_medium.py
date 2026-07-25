@@ -11,15 +11,15 @@ from vekna.lexicon import (
     StandaloneRenderer,
     Transition,
     current_rite,
-    current_rite_id,
     done,
+    emit_delta,
     goto,
     medium,
     ritual,
     run_cast,
     step,
 )
-from vekna.wire import RiteStarted
+from vekna.wire import RiteDelta, RiteStarted
 
 
 def _fixed_clock() -> datetime:
@@ -52,14 +52,15 @@ async def chooser() -> Transition:
 
 
 @medium
-async def whoami() -> str:
+async def whoami() -> None:
     await asyncio.sleep(0)
-    return current_rite_id()
+    emit_delta("here")
 
 
 @step
 async def identify(_state: Start) -> Transition:
-    return done(await whoami())
+    await whoami()
+    return done(None)
 
 
 @ritual("identifier")
@@ -72,7 +73,8 @@ async def identifier() -> Transition:
 @ritual("rootless")
 async def rootless() -> Transition:
     await asyncio.sleep(0)
-    return done(current_rite_id())
+    emit_delta("nowhere to hang")
+    return done(None)
 
 
 class TestMedium:
@@ -118,13 +120,13 @@ class TestMedium:
             current_rite()
 
 
-class TestCurrentRiteId:
+class TestEmitDelta:
     @staticmethod
-    def test_inside_a_medium_it_is_the_medium_rite():
+    def test_inside_a_medium_it_hangs_off_the_medium_rite():
         grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
         renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
 
-        result = asyncio.run(
+        asyncio.run(
             run_cast(
                 ritual=identifier,
                 components=identifier.components(),
@@ -135,7 +137,8 @@ class TestCurrentRiteId:
 
         started = [e for e in grimoire.events if isinstance(e, RiteStarted)]
         medium_rite = next(e for e in started if e.name == "whoami")
-        assert result == medium_rite.rite_id
+        delta = next(e for e in grimoire.events if isinstance(e, RiteDelta))
+        assert (delta.rite_id, delta.delta) == (medium_rite.rite_id, "here")
 
     @staticmethod
     def test_at_the_cast_root_it_raises():

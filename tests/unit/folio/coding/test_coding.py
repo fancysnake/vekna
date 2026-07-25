@@ -15,6 +15,7 @@ from vekna.lexicon import (
     done,
     goto,
     register_focus,
+    reset_foci,
     ritual,
     run_cast,
     step,
@@ -60,8 +61,10 @@ class Answer(BaseModel):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_registry(monkeypatch):
-    monkeypatch.setattr("vekna.lexicon._mills._foci", {})
+def _isolated_registry():
+    reset_foci()
+    yield
+    reset_foci()
 
 
 def _cast(the_ritual, *, stdin: str = "") -> tuple[object, Grimoire]:

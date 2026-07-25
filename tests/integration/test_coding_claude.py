@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from vekna.lexicon import main
+from vekna.lexicon import main, reset_foci
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
@@ -209,6 +209,10 @@ def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
     return stub
 
 
+# _links binds the SDK's names at import time, and every test installs its own
+# claude_agent_sdk stub — so the folio has to be re-imported per test. This is
+# about rebinding the stub, not about registration, which is now an explicit
+# call the cast makes.
 def _purge_coding_claude():
     for name in [
         module
@@ -219,10 +223,11 @@ def _purge_coding_claude():
 
 
 @pytest.fixture(autouse=True)
-def _isolated(monkeypatch):
-    monkeypatch.setattr("vekna.lexicon._mills._foci", {})
+def _isolated():
+    reset_foci()
     _purge_coding_claude()
     yield
+    reset_foci()
     _purge_coding_claude()
 
 

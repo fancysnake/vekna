@@ -185,6 +185,3 @@ class ClaudeCodingFocus:
 
 def register() -> None:
     register_focus("coding", ClaudeCodingFocus())
-
-
-register()

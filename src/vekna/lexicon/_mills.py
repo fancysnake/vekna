@@ -120,19 +120,49 @@ class Compendium:
         return sorted(self._rituals)
 
 
-_foci: dict[str, object] = {}
+# A medium declares that it needs a Focus and how to obtain one; a Focus
+# package registers itself. The hint is stated once, at declaration, rather
+# than passed to every lookup for an error the lookup may never raise.
+class FocusRegistry:
+    def __init__(self) -> None:
+        self._foci: dict[str, object] = {}
+        self._hints: dict[str, str] = {}
+
+    def expect(self, medium_name: str, *, hint: str) -> None:
+        self._hints[medium_name] = hint
+
+    def register(self, medium_name: str, focus: object) -> None:
+        self._foci[medium_name] = focus
+
+    def resolve(self, medium_name: str) -> object:
+        if (focus := self._foci.get(medium_name)) is not None:
+            return focus
+        msg = f"no Focus registered for medium {medium_name!r}"
+        if hint := self._hints.get(medium_name):
+            msg = f"{msg} — {hint}"
+        raise FocusMissingError(msg)
+
+    def reset(self) -> None:
+        self._foci.clear()
+
+
+_registry = FocusRegistry()
+
+
+def expect_focus(medium_name: str, *, hint: str) -> None:
+    _registry.expect(medium_name, hint=hint)
 
 
 def register_focus(medium_name: str, focus: object) -> None:
-    _foci[medium_name] = focus
+    _registry.register(medium_name, focus)
 
 
-def resolve_focus(medium_name: str, *, hint: str) -> object:
-    try:
-        return _foci[medium_name]
-    except KeyError:
-        msg = f"no Focus registered for medium {medium_name!r} — {hint}"
-        raise FocusMissingError(msg) from None
+def resolve_focus(medium_name: str) -> object:
+    return _registry.resolve(medium_name)
+
+
+def reset_foci() -> None:
+    _registry.reset()
 
 
 @dataclass
@@ -166,11 +196,17 @@ def current_rite() -> RiteContext:
 
 # Deltas need a rite to hang off. Steps and mediums both open one; a ritual
 # body runs at the cast root, where there is none.
-def current_rite_id() -> str:
-    if (rite_id := current_rite().parent_id) is None:
+def _current_rite_id(rite: RiteContext) -> str:
+    if (rite_id := rite.parent_id) is None:
         msg = "no rite is running — deltas belong to a step or a medium"
         raise RitualError(msg)
     return rite_id
+
+
+# The one way a medium streams output into its own rite.
+def emit_delta(text: str) -> None:
+    rite = current_rite()
+    rite.grimoire.rite_delta(_current_rite_id(rite), text)
 
 
 # The one place a rite is opened and closed. A rite whose body raises is

@@ -9,7 +9,8 @@ from vekna.lexicon import (
     CodingCall,
     GateFn,
     current_rite,
-    current_rite_id,
+    emit_delta,
+    expect_focus,
     medium,
     record_result,
     resolve_focus,
@@ -22,7 +23,10 @@ if TYPE_CHECKING:
 
 _OutputT = TypeVar("_OutputT")
 
+_MEDIUM = "coding"
 _INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
+
+expect_focus(_MEDIUM, hint=_INSTALL_HINT)
 
 
 def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | None:
@@ -88,13 +92,8 @@ async def coding(
     gate_tools: Sequence[str] | None = None,
     focus_options: object | None = None,
 ) -> CodingResult | _OutputT:
-    focus = cast("CodingFocusProtocol", resolve_focus("coding", hint=_INSTALL_HINT))
+    focus = cast("CodingFocusProtocol", resolve_focus(_MEDIUM))
     context = current_rite()
-    rite_id = current_rite_id()
-
-    def on_delta(text: str) -> None:
-        context.grimoire.rite_delta(rite_id, text)
-
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = cast("dict[str, JsonValue]", TypeAdapter(output).json_schema())
@@ -109,7 +108,7 @@ async def coding(
     )
     reply = await focus.run(
         call,
-        on_delta=on_delta,
+        on_delta=emit_delta,
         gate=_make_gate(context.channel, gate_tools),
         ask=_make_ask(context.channel),
     )
