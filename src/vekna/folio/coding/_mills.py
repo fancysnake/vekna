@@ -9,6 +9,7 @@ from vekna.lexicon import (
     CodingCall,
     GateFn,
     current_rite,
+    current_rite_id,
     medium,
     record_result,
     resolve_focus,
@@ -91,11 +92,10 @@ async def coding(
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus("coding", hint=_INSTALL_HINT))
     context = current_rite()
-    rite_id = context.parent_id
+    rite_id = current_rite_id()
 
     def on_delta(text: str) -> None:
-        if rite_id is not None:
-            context.grimoire.rite_delta(rite_id, text)
+        context.grimoire.rite_delta(rite_id, text)
 
     schema: dict[str, JsonValue] | None = None
     if output is not None:

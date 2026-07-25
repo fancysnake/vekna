@@ -94,6 +94,29 @@ _TYPED_RITUALS = textwrap.dedent("""
     """)
 
 
+_SYSTEM_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.coding import coding, CodingOpts
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    @step
+    async def work(task: Task) -> Transition:
+        result = await coding(task.text, opts=CodingOpts(system="you are a poet"))
+        return done(result.text)
+
+
+    @ritual("poet")
+    async def poet(text: str) -> Transition:
+        return goto(work, Task(text=text))
+    """)
+
+
 def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
     stub = types.ModuleType("claude_agent_sdk")
 
@@ -326,6 +349,23 @@ class TestAgentQuestions:
         # The preset is appended to, not replaced.
         assert options.system_prompt["type"] == "preset"
         assert "ask_human" in options.system_prompt["append"]
+
+    @staticmethod
+    def test_custom_system_prompt_still_carries_the_ask_instruction(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_SYSTEM_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["poet", "--text", "write a haiku"])
+
+        assert exit_code == 0
+        assert "haiku done" in capsys.readouterr().out
+        system_prompt = captured["options"].system_prompt
+        assert system_prompt.startswith("you are a poet")
+        assert "ask_human" in system_prompt
 
 
 class TestFocusOptions:

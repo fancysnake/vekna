@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from vekna.lexicon import StandalonePromptError, StandaloneRenderer
-from vekna.wire import RiteDelta, RiteStarted
+from vekna.wire import GrimoireBegin, RiteDelta, RiteStarted
 
 
 def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
@@ -47,6 +47,14 @@ class TestEmit:
         renderer.render(delta)
 
         assert "  one\n  two\n" in out.getvalue()
+
+    @staticmethod
+    def test_falls_back_to_the_kind_for_other_events():
+        renderer, out = _renderer("")
+
+        renderer.render(GrimoireBegin(cast_id="c1"))
+
+        assert out.getvalue() == "· grimoire_begin\n"
 
 
 class TestDecide:

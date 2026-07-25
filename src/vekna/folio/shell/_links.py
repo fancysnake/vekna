@@ -11,7 +11,7 @@ async def _pump(
     on_line: Callable[[str], None] | None,
 ) -> None:
     if stream is None:
-        return
+        return  # pragma: no cover
     async for raw in stream:
         line = raw.decode()
         sink.append(line)

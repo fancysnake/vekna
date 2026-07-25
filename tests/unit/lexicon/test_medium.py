@@ -11,6 +11,7 @@ from vekna.lexicon import (
     StandaloneRenderer,
     Transition,
     current_rite,
+    current_rite_id,
     done,
     goto,
     medium,
@@ -48,6 +49,30 @@ async def choose(_state: Start) -> Transition:
 async def chooser() -> Transition:
     await asyncio.sleep(0)
     return goto(choose, Start())
+
+
+@medium
+async def whoami() -> str:
+    await asyncio.sleep(0)
+    return current_rite_id()
+
+
+@step
+async def identify(_state: Start) -> Transition:
+    return done(await whoami())
+
+
+@ritual("identifier")
+async def identifier() -> Transition:
+    await asyncio.sleep(0)
+    return goto(identify, Start())
+
+
+# The ritual body itself runs at the cast root, outside any rite.
+@ritual("rootless")
+async def rootless() -> Transition:
+    await asyncio.sleep(0)
+    return done(current_rite_id())
 
 
 class TestMedium:
@@ -91,3 +116,38 @@ class TestMedium:
     def test_current_rite_outside_cast_raises():
         with pytest.raises(RitualError):
             current_rite()
+
+
+class TestCurrentRiteId:
+    @staticmethod
+    def test_inside_a_medium_it_is_the_medium_rite():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+
+        result = asyncio.run(
+            run_cast(
+                ritual=identifier,
+                components=identifier.components(),
+                grimoire=grimoire,
+                channel=renderer,
+            )
+        )
+
+        started = [e for e in grimoire.events if isinstance(e, RiteStarted)]
+        medium_rite = next(e for e in started if e.name == "whoami")
+        assert result == medium_rite.rite_id
+
+    @staticmethod
+    def test_at_the_cast_root_it_raises():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+
+        with pytest.raises(RitualError, match="no rite is running"):
+            asyncio.run(
+                run_cast(
+                    ritual=rootless,
+                    components=rootless.components(),
+                    grimoire=grimoire,
+                    channel=renderer,
+                )
+            )

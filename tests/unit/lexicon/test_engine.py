@@ -58,6 +58,21 @@ async def spinner(start: int) -> Transition:
     return goto(spin, Tick(left=start))
 
 
+@step
+async def finish(state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    return done(state.left)
+
+
+_SPRINT_START = 7
+
+
+@ritual("sprint", max_steps=1)
+async def sprint(start: int) -> Transition:
+    await asyncio.sleep(0)
+    return goto(finish, Tick(left=start))
+
+
 class TestRitual:
     @staticmethod
     def test_builds_component_model_from_signature():
@@ -90,6 +105,21 @@ class TestRunCast:
         started = [event for event in grimoire.events if isinstance(event, RiteStarted)]
         assert len(started) == start + 1
         assert {event.name for event in started} == {"tick"}
+
+    @staticmethod
+    def test_returns_result_of_the_last_affordable_step():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        result = asyncio.run(
+            run_cast(
+                ritual=sprint,
+                components=sprint.components(start=_SPRINT_START),
+                grimoire=grimoire,
+                channel=_channel(),
+            )
+        )
+
+        assert result == _SPRINT_START
 
     @staticmethod
     def test_budget_exceeded_raises():

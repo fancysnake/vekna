@@ -154,6 +154,15 @@ def current_rite() -> RiteContext:
     return rite
 
 
+# Deltas need a rite to hang off. Steps and mediums both open one; a ritual
+# body runs at the cast root, where there is none.
+def current_rite_id() -> str:
+    if (rite_id := current_rite().parent_id) is None:
+        msg = "no rite is running — deltas belong to a step or a medium"
+        raise RitualError(msg)
+    return rite_id
+
+
 @contextlib.asynccontextmanager
 async def medium_rite(name: str) -> AsyncIterator[None]:
     parent = current_rite()
