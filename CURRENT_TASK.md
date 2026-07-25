@@ -2,55 +2,47 @@
 
 **Task:** Feature 0.3.0 — `folio/coding` + `folio/coding_claude`
 **Spec:** `docs/reborn/03-coding-folios.md`
-**Plan:** not yet written (Explore done; Plan awaits approval)
+**Plan:** [`PLAN.md`](PLAN.md) — approved, in flight (commit `66d238e`)
 **Branch:** `vekna-reborn`
-**Phase:** EXPLORE complete — findings reported, awaiting plan go-ahead
+**Phase:** IMPLEMENT — Steps 0–4 landed; Step 5 next
 
 ## Context
 
-0.2.0 shipped and released (2026-06-28). Docs reconciled to the step-graph
-model and decide-only prompts (commit `fc30588`). Product direction: daily dev
+0.2.0 shipped and released (2026-06-28). Product direction: daily dev
 workflows (PR triage, merge babysitting) as rituals — 0.3.0's `coding` medium
-is the last missing primitive for those.
+is the last missing primitive for those. The four open decisions this file
+used to track were all resolved in PLAN.md's "Approved design decisions".
 
-## Exploration findings (2026-07-18)
+## Progress against PLAN.md
 
-- **Decide consolidation is step 0.** Code still ships `approve`/`ask`:
-  `Channel` protocol (`lexicon/_pacts.py`), `StandaloneRenderer`
-  (`lexicon/_links.py`), `folio/flow/_mills.py`, and `Approval*`/`Ask*` DTOs in
-  `wire/_pacts.py`. Docs now say `decide` is the single human round-trip.
-  Unified `decide` signature is an open design decision.
-- **Shell folio is the template** for `folio/coding` (`_pacts` result model,
-  `_mills` medium, `_links` side effects). `@medium` wrapper + `RiteContext`/
-  `Channel` machinery already exist.
-- **No focus registry exists.** Compendium registers rituals only. `coding`
-  needs a way to resolve its Focus, plus `try/except ModuleNotFoundError` for
-  the missing `coding-claude` extra.
-- **Telemetry path:** `Grimoire` emits only `RiteStarted`/`RiteFinished`;
-  `RiteDelta` exists in wire but is unused — needed for streamed agent output
-  + telemetry in the grimoire entry.
-- **CLI dispatch pattern:** gates never import lexicon; `inits/cast.py`
-  `dispatch_cast` dynamically imports `vekna.lexicon.main(argv)`. `rituals
-  list/show` and the `vekna cast "<prompt>"` sugar must ride the same shim.
-  `_gates.py --help` already lists rituals + flags (basis for `rituals list`).
-- **pyproject changes required** (need per-case approval): `coding-claude`
-  extra with optional `claude-agent-sdk` dep; two new import-linter contracts
-  (`folio.coding`, `folio.coding_claude`).
-- **Owed from 0.2.0:** `parallel` deferred (TUI spec assumes it from 0.2.0);
-  not a 0.3.0 blocker. Wire client deferred to 0.6.0 by design.
+| Step | State | Commit |
+| --- | --- | --- |
+| 0 — Decide consolidation | done | `589d12a` |
+| 1 — Live grimoire + deltas | done | `c3e3b79` |
+| 2 — `folio/coding` + focus registry | done | `ee7d280` |
+| 3 — `folio/coding_claude` + packaging | done | `68a86a3` |
+| 4 — `vekna cast --prompt` sugar | done | `470799a` |
+| 5 — `vekna rituals list` / `show` | **not started** | — |
+| 6 — Example, docs, changelog | partial | `35b632e`, `088c1b3` |
 
-## Open decisions needing human input
+Landed alongside the numbered steps: `ask_human` mid-rite (`169a8eb`),
+shell output streamed into the rite (`1250951`), `current_rite_id` plus the
+coverage that flushed out a broken `asyncio.gather` call (`8b27b2a`).
 
-1. Unified `decide` signature (choice / confirmation / free text in one
-   medium — modes? return type? docs example uses bare
-   `await decide("tests green — commit?")` as truthy).
-2. `vekna cast <arg>` disambiguation: ritual name vs prompt sugar.
-3. Focus-registry shape (how `coding` finds `ClaudeCodingFocus`; how a missing
-   extra surfaces).
-4. Approval to modify `pyproject.toml` (extra + contracts) during
-   implementation.
+## Remaining
+
+1. **Step 5 — `vekna rituals list` / `show`.** Nothing exists yet: no
+   `dispatch_rituals` in `inits/cast.py`, no `rituals` click group, no
+   `rituals_main`. The step graph is the only under-specified piece of the
+   plan — "best-effort" AST scan for `goto(<step>` targets, shape TBD on
+   contact.
+2. **Step 6 — docs + changelog.** `rituals.py` at the root and `cover_diff`
+   are done; `docs/reborn/03-coding-folios.md` and `00-common.md` still
+   describe the pre-delivery design (`--auto-approve`, `coding-claude`
+   extra), and `CHANGELOG.md` `[Unreleased]` is empty.
 
 ## Notes
 
 - Stay on `vekna-reborn`; commit after each green step.
 - `mise run test` / `mise run check` for all verification (mise-managed env).
+- Release bump only on explicit request.
