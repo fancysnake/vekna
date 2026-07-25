@@ -51,14 +51,19 @@ mise run check      # format + lint
 tests/
   unit/                   # mirrors src/ structure
   integration/
-    cli/test_{command}.py
+    cli/test_{command}.py   # driven through a CLI entry point
+    folio/test_{folio}.py   # a medium end-to-end, real or stubbed backend
+    test_acceptance.py      # a spec's acceptance run, not one command
   conftest.py
 ```
 
 ### Unit tests (`tests/unit/`)
 
 - Yes: mills, specs, pacts (pure logic)
-- No: gates, links, inits
+- No: gates, inits
+- Links only when the logic is pure and the I/O is injected — a renderer
+  formatting to a supplied stream, a probe taking a socket path. A link that
+  reaches the network or filesystem on its own belongs in integration.
 - Write tests in classes
 - Mock at the highest level to avoid side effects
 - Check all mock calls

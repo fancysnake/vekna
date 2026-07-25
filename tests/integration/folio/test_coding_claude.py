@@ -14,49 +14,38 @@ _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
 _MAX_TURNS = 2
 
-_RITUALS = textwrap.dedent("""
-    from pydantic import BaseModel
 
-    from vekna.folio.coding import coding
-    from vekna.lexicon import Transition, done, goto, ritual, step
+# Three rituals differ only by the coding(...) call and the ritual name, so
+# the shared 18 lines live here once and the variation stays visible.
+def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
+    return textwrap.dedent(f"""
+        from pydantic import BaseModel
 
-
-    class Task(BaseModel):
-        text: str
-
-
-    @step
-    async def work(task: Task) -> Transition:
-        result = await coding(task.text)
-        return done(result.text)
+        from vekna.folio.coding import coding{imports}
+        from vekna.lexicon import Transition, done, goto, ritual, step
 
 
-    @ritual("write_haiku")
-    async def write_haiku(text: str) -> Transition:
-        return goto(work, Task(text=text))
-    """)
-
-_GATED_RITUALS = textwrap.dedent("""
-    from pydantic import BaseModel
-
-    from vekna.folio.coding import coding
-    from vekna.lexicon import Transition, done, goto, ritual, step
+        class Task(BaseModel):
+            text: str
 
 
-    class Task(BaseModel):
-        text: str
+        @step
+        async def work(task: Task) -> Transition:
+            result = await {call}
+            return done(result.text)
 
 
-    @step
-    async def work(task: Task) -> Transition:
-        result = await coding(task.text, gate_tools=["Bash"])
-        return done(result.text)
+        @ritual("{name}")
+        async def {name}(text: str) -> Transition:
+            return goto(work, Task(text=text))
+        """)
 
 
-    @ritual("gated")
-    async def gated(text: str) -> Transition:
-        return goto(work, Task(text=text))
-    """)
+_RITUALS = _ritual_source(name="write_haiku", call="coding(task.text)")
+
+_GATED_RITUALS = _ritual_source(
+    name="gated", call='coding(task.text, gate_tools=["Bash"])'
+)
 
 _TYPED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
@@ -95,27 +84,11 @@ _TYPED_RITUALS = textwrap.dedent("""
     """)
 
 
-_SYSTEM_RITUALS = textwrap.dedent("""
-    from pydantic import BaseModel
-
-    from vekna.folio.coding import coding, CodingOpts
-    from vekna.lexicon import Transition, done, goto, ritual, step
-
-
-    class Task(BaseModel):
-        text: str
-
-
-    @step
-    async def work(task: Task) -> Transition:
-        result = await coding(task.text, opts=CodingOpts(system="you are a poet"))
-        return done(result.text)
-
-
-    @ritual("poet")
-    async def poet(text: str) -> Transition:
-        return goto(work, Task(text=text))
-    """)
+_SYSTEM_RITUALS = _ritual_source(
+    name="poet",
+    call='coding(task.text, opts=CodingOpts(system="you are a poet"))',
+    imports=", CodingOpts",
+)
 
 
 def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
