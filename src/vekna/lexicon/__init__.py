@@ -13,8 +13,12 @@ from ._mills import (
 )
 from ._pacts import (
     Channel,
+    CodingCall,
+    CodingFocusProtocol,
     Done,
     FocusMissingError,
+    FocusReply,
+    GateFn,
     Goto,
     Ritual,
     RitualDefinitionError,
@@ -29,9 +33,13 @@ from ._pacts import (
 
 __all__ = [
     "Channel",
+    "CodingCall",
+    "CodingFocusProtocol",
     "Compendium",
     "Done",
     "FocusMissingError",
+    "FocusReply",
+    "GateFn",
     "Goto",
     "Grimoire",
     "RiteContext",

@@ -8,7 +8,7 @@ Shared context: [`docs/reborn/00-common.md`](docs/reborn/00-common.md)
 The `coding` Medium — the last primitive Radek's daily workflows need. Agents
 run permissively *inside* a step; determinism lives at step boundaries
 (shell gates, `decide` sign-offs, typed payload checklists). Claude Agent SDK
-is the first Focus behind the `coding-claude` extra. `vekna cast --prompt`
+is the first Focus. `vekna cast --prompt`
 gives one-shot casts; `vekna rituals list/show` inspects the library.
 
 ## Approved design decisions
@@ -21,9 +21,12 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
    exception to the keyword-only rule; the rest keyword-only.
 2. **`vekna cast --prompt "..."` / `-p`** — positional arg is ALWAYS a ritual
    name; unknown name is always an error. No heuristics.
-3. **pyproject.toml changes pre-approved**: `coding-claude` extra (optional
-   `claude-agent-sdk`) + import-linter contracts for `folio.coding` and
-   `folio.coding_claude`.
+3. **pyproject.toml changes pre-approved**: `claude-agent-sdk` dependency +
+   import-linter contracts for `folio.coding` and `folio.coding_claude`.
+   *Revised 2026-07-25*: `claude-agent-sdk` is a plain runtime dependency, not
+   a `coding-claude` extra — `[project.optional-dependencies]` is dropped.
+   The Focus is therefore always installed; the `FocusMissingError` path
+   remains for a broken/partial install and for future Foci.
 4. **Permissive by default**: `coding` does not gate tool use unless the call
    opts in (`gate_tools=[...]` → `decide` round-trip per matching tool). The
    spec's `--auto-approve` flag is dropped — auto-approve IS the default.
@@ -32,8 +35,9 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
    because folio⊥folio imports are forbidden: `coding_claude` registers via
    lexicon public surface; `coding` resolves the same way. The cast runtime
    dynamically imports `vekna.folio.coding_claude` under
-   `suppress(ModuleNotFoundError)`; a missing extra surfaces only when a
-   ritual reaches for the Medium (`FocusMissingError` with install hint).
+   `suppress(ModuleNotFoundError)`; a missing SDK surfaces only when a
+   ritual reaches for the Medium (`FocusMissingError` with install hint,
+   exit 2).
 6. **Telemetry rides `RiteFinished.result`** (already in the wire schema);
    `Grimoire.rite_finished` gains `result=`. Streamed agent output uses the
    existing `RiteDelta` kind via new `Grimoire.rite_delta`.
@@ -41,6 +45,17 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
    into `CodingOpts(model, system, cwd)` — `coding(prompt, *, output, opts,
    gate_tools, focus_options)` — and the Focus protocol takes one `CodingCall`
    plus `on_delta`/`gate` callbacks. No ruff config change.
+9. **Structural matching at the SDK boundary** (approved 2026-07-25): the
+   SDK's message dataclasses carry `Any`-typed fields, so naming
+   `AssistantMessage`/`ResultMessage` trips `disallow_any_expr`. `_links.py`
+   matches them via local `runtime_checkable` Protocols instead. No mypy
+   override, no `type: ignore`.
+8. **Medium↔Focus boundary types live in the lexicon** (approved 2026-07-19):
+   `CodingCall` (flat: prompt/model/system/cwd/output_schema/focus_options),
+   `FocusReply`, `GateFn`, `CodingFocusProtocol` move to `vekna.lexicon` so
+   folio⊥folio stays absolute — `coding_claude` imports lexicon only.
+   User-facing `CodingOpts`/`CodingResult`/`CodingOutputError` stay in
+   `folio/coding`.
 
 ## Steps
 
@@ -91,8 +106,8 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
   result message, requests JSON matching `output_schema` when given.
 - `__init__.py` `register()` → `lexicon.register_focus("coding", ...)`. Cast
   runtime imports it under `suppress(ModuleNotFoundError)`.
-- `pyproject.toml`: optional `claude-agent-sdk` dep + `coding-claude` extra +
-  two import-linter contracts (pre-approved).
+- `pyproject.toml`: `claude-agent-sdk` runtime dep + two import-linter
+  contracts (pre-approved).
 - Integration test with a stub `claude_agent_sdk` module in `sys.modules`.
 - Verify: `mise run check && mise run test`.
 
@@ -119,15 +134,16 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
   remaining/done payload, `coding` per item, shell verify gate, `decide`
   sign-off) demonstrating the can't-forget property.
 - `docs/reborn/03-coding-folios.md`: reflect delivered reality (adaptive
-  `decide`, `--prompt` flag, `gate_tools` opt-in replaces `--auto-approve`);
+  `decide`, `--prompt` flag, `gate_tools` opt-in replaces `--auto-approve`,
+  no `coding-claude` extra);
   `docs/reborn/00-common.md` CLI-surface line updated likewise.
 - `CHANGELOG.md` Unreleased section filled (release bump only on request).
 - Verify: `mise run check && mise run test`.
 
 ## Acceptance (spec, adjusted per decisions)
 
-- With the extra: `vekna cast --prompt "write a haiku"` streams output, exit 0.
-  Without: clear missing-Focus message, exit 2. (Integration: stubbed SDK;
+- `vekna cast --prompt "write a haiku"` streams output, exit 0. With the Focus
+  unregistered: clear missing-Focus message, exit 2. (Integration: stubbed SDK;
   manual smoke with real SDK.)
 - Checklist ritual runs end-to-end with a fake Focus; no item dropped.
 - `vekna rituals list` shows rituals + typed flags; `show` adds components +

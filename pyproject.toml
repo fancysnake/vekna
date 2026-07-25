@@ -9,6 +9,7 @@ requires-python = ">=3.10,<4"
 dependencies = [
     "libtmux (>=0.58.0,<0.59.0)",
     "click (>=8.3.2,<9.0.0)",
+    "claude-agent-sdk (>=0.2,<1.0)",
     "pydantic (>=2.12.5,<3.0.0)",
     "tomli (>=2.0,<3.0) ; python_version < '3.11'",
 ]
@@ -171,6 +172,8 @@ forbidden_modules = [
     "vekna.gates",
     "vekna.inits",
     "vekna.edges",
+    "vekna.folio.coding",
+    "vekna.folio.coding_claude",
 ]
 
 
@@ -187,6 +190,8 @@ forbidden_modules = [
     "vekna.inits",
     "vekna.edges",
     "vekna.folio.shell",
+    "vekna.folio.coding",
+    "vekna.folio.coding_claude",
 ]
 
 
@@ -203,6 +208,44 @@ forbidden_modules = [
     "vekna.inits",
     "vekna.edges",
     "vekna.folio.flow",
+    "vekna.folio.coding",
+    "vekna.folio.coding_claude",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.coding"
+type = "forbidden"
+source_modules = ["vekna.folio.coding"]
+forbidden_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
+    "vekna.folio.flow",
+    "vekna.folio.shell",
+    "vekna.folio.coding_claude",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.coding_claude"
+type = "forbidden"
+source_modules = ["vekna.folio.coding_claude"]
+forbidden_modules = [
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.mills",
+    "vekna.links",
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.edges",
+    "vekna.folio.flow",
+    "vekna.folio.shell",
+    "vekna.folio.coding",
 ]
 
 # MYPY

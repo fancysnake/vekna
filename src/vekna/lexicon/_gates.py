@@ -1,4 +1,6 @@
 import asyncio
+import contextlib
+import importlib
 import sys
 from pathlib import Path
 
@@ -10,11 +12,18 @@ from ._dispatch import (
 )
 from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import Compendium, Grimoire, run_cast
-from ._pacts import Ritual, RitualError
+from ._pacts import FocusMissingError, Ritual, RitualError
 
 _USAGE = "usage: vekna cast <ritual> [--<component> value ...]\n"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
+_OPTIONAL_FOLIOS = ("vekna.folio.coding_claude",)
+
+
+def _load_optional_folios() -> None:
+    for name in _OPTIONAL_FOLIOS:
+        with contextlib.suppress(ModuleNotFoundError):
+            importlib.import_module(name)
 
 
 def _find_rituals_file(start: Path) -> Path | None:
@@ -103,6 +112,7 @@ async def _drive(argv: list[str]) -> int:
         sys.stderr.write(_USAGE)
         return 2
     name, *flags = argv
+    _load_optional_folios()
     try:
         the_ritual = _build_compendium(Path.cwd()).ritual(name)
         components = the_ritual.components.model_validate(_parse_flags(flags))
@@ -112,9 +122,19 @@ async def _drive(argv: list[str]) -> int:
     await probe_daemon(socket_path=default_socket_path())
     renderer = StandaloneRenderer()
     grimoire = Grimoire(cast_id=name, on_event=renderer.render)
-    result = await run_cast(
-        ritual=the_ritual, components=components, grimoire=grimoire, channel=renderer
-    )
+    try:
+        result = await run_cast(
+            ritual=the_ritual,
+            components=components,
+            grimoire=grimoire,
+            channel=renderer,
+        )
+    except FocusMissingError as error:
+        sys.stderr.write(f"{error}\n")
+        return 2
+    except RitualError as error:
+        sys.stderr.write(f"cast failed: {error}\n")
+        return 1
     sys.stdout.write(f"result: {result}\n")
     return 0
 

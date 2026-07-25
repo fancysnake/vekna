@@ -1,19 +1,4 @@
 from ._mills import coding
-from ._pacts import (
-    CodingCall,
-    CodingFocusProtocol,
-    CodingOpts,
-    CodingOutputError,
-    CodingResult,
-    FocusReply,
-)
+from ._pacts import CodingOpts, CodingOutputError, CodingResult
 
-__all__ = [
-    "CodingCall",
-    "CodingFocusProtocol",
-    "CodingOpts",
-    "CodingOutputError",
-    "CodingResult",
-    "FocusReply",
-    "coding",
-]
+__all__ = ["CodingOpts", "CodingOutputError", "CodingResult", "coding"]

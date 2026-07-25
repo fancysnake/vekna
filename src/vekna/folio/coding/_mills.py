@@ -3,16 +3,24 @@ from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from vekna.lexicon import Channel, current_rite, medium, record_result, resolve_focus
+from vekna.lexicon import (
+    Channel,
+    CodingCall,
+    GateFn,
+    current_rite,
+    medium,
+    record_result,
+    resolve_focus,
+)
 
-from ._pacts import CodingCall, CodingOpts, CodingOutputError, CodingResult, GateFn
+from ._pacts import CodingOpts, CodingOutputError, CodingResult
 
 if TYPE_CHECKING:
-    from ._pacts import CodingFocusProtocol
+    from vekna.lexicon import CodingFocusProtocol
 
 _OutputT = TypeVar("_OutputT")
 
-_INSTALL_HINT = "install the Claude Focus with: pip install 'vekna[coding-claude]'"
+_INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
 
 
 def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | None:
@@ -81,9 +89,12 @@ async def coding(
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = cast("dict[str, JsonValue]", TypeAdapter(output).json_schema())
+    resolved = opts if opts is not None else CodingOpts()
     call = CodingCall(
         prompt=prompt,
-        opts=opts if opts is not None else CodingOpts(),
+        model=resolved.model,
+        system=resolved.system,
+        cwd=resolved.cwd,
         output_schema=schema,
         focus_options=focus_options,
     )

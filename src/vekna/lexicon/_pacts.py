@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from types import UnionType
 from typing import Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from vekna.wire import WireMessage
 
@@ -13,6 +13,31 @@ class Channel(Protocol):
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str: ...
+
+
+GateFn = Callable[[str], Awaitable[bool]]
+
+
+@dataclass(frozen=True)
+class CodingCall:
+    prompt: str
+    model: str | None
+    system: str | None
+    cwd: str | None
+    output_schema: dict[str, JsonValue] | None
+    focus_options: object | None
+
+
+class FocusReply(BaseModel):
+    text: str
+    structured: JsonValue | None = None
+    telemetry: dict[str, JsonValue] = {}
+
+
+class CodingFocusProtocol(Protocol):
+    async def run(
+        self, call: CodingCall, *, on_delta: Callable[[str], None], gate: GateFn | None
+    ) -> FocusReply: ...
 
 
 class RitualError(Exception):

@@ -5,15 +5,10 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from vekna.folio.coding import (
-    CodingOpts,
-    CodingOutputError,
-    CodingResult,
-    FocusReply,
-    coding,
-)
+from vekna.folio.coding import CodingOpts, CodingOutputError, CodingResult, coding
 from vekna.lexicon import (
     FocusMissingError,
+    FocusReply,
     Grimoire,
     StandaloneRenderer,
     Transition,
@@ -108,7 +103,9 @@ class TestCodingMedium:
         assert len(focus.calls) == 1
         call = focus.calls[0]
         assert call.prompt == "fix it"
-        assert call.opts == CodingOpts(model="opus", cwd="/tmp/x")
+        assert call.model == "opus"
+        assert call.system is None
+        assert call.cwd == "/tmp/x"
         assert call.output_schema is None
         assert call.focus_options is None
         deltas = [e.delta for e in grimoire.events if isinstance(e, RiteDelta)]
@@ -221,5 +218,5 @@ class TestCodingMedium:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
-        with pytest.raises(FocusMissingError, match="coding-claude"):
+        with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)

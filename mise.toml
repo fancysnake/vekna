@@ -3,7 +3,8 @@
 jobs = 1
 
 [tools]
-poetry = "2.4.1"
+pipx = "1.16.0"
+"pipx:poetry" = "2.4.1"
 python = "3.14"
 
 [hooks]
