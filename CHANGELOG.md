@@ -9,13 +9,58 @@ and this project adheres to [Semantic Versioning].
 
 ### Added
 
+- **`coding` medium** (`vekna.folio.coding`) — hand work to an agent from
+  inside a step. Portable knobs bundle into `CodingOpts(model, system, cwd)`;
+  `output=SomeModel` validates the agent's reply and returns it typed, raising
+  `CodingOutputError` when it does not fit. Permissive by default: tool use is
+  gated only when a call passes `gate_tools=[...]`, which turns each matching
+  tool into a `decide` round-trip.
+- **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
+  `_links.py` is the only module importing `claude-agent-sdk`.
+- **`ask_human`** — the agent can put a question to the operator mid-rite,
+  free-text or multiple-choice, answered on whichever surface is attached.
+  Offered on every `coding` call, including calls with a custom `system=`.
+- **Focus registry in the lexicon** — `register_focus` / `resolve_focus`, so a
+  folio never imports another folio. A missing or broken Focus surfaces as
+  `FocusMissingError` with an install hint when a ritual reaches for the
+  medium, not at import time.
+- **`vekna cast --prompt "<text>"` / `-p`** — a one-step cast on the `coding`
+  medium with no `rituals.py` required. It runs through the normal engine, so
+  grimoire, renderer and budgets all apply.
+- **`vekna rituals list` / `vekna rituals show <ritual>`** — `list` prints each
+  ritual with the flags its components take; `show` adds `max_steps`, the
+  component flags, and a step graph read off each function's source. The graph
+  is best-effort: a `goto` whose target is computed rather than named does not
+  appear.
+- **Live grimoire rendering** — `Grimoire(on_event=...)` fires on every append,
+  replacing the post-hoc replay loop. Agent text and shell output both stream
+  into the rite as `RiteDelta`; per-call telemetry rides `RiteFinished.result`.
+- **`rituals.py` at the repo root** — vekna's own rituals, cast on itself. It
+  ships `cover_diff`, a diff-coverage loop that measures with `shell`, hands
+  the uncovered lines to `coding`, and repeats under an attempt budget.
+
 ### Changed
+
+- **`approve` and `ask` are now one adaptive `decide`.** `decide(prompt)`
+  returns `bool`; `decide(prompt, options=[...])` and `decide(prompt,
+  free=True)` return `str`. One wire pair (`DecideRequested` /
+  `DecideResolved`) replaces the `Approval*` and `Ask*` messages.
+- `claude-agent-sdk` is a plain runtime dependency. The planned
+  `coding-claude` extra was dropped, so the base wheel pulls it.
+- `docs/reborn/03-coding-folios.md` and `00-common.md` now describe what
+  shipped rather than what was designed.
 
 ### Deprecated
 
 ### Removed
 
+- `examples/` — its contents moved to `rituals.py` at the repo root, and the
+  integration tests that copied from it carry their own fixtures now.
+
 ### Fixed
+
+- `run_bash` never drained stdout: the first `asyncio.gather` argument had lost
+  its `_pump(` wrapper, passing a raw tuple where a coroutine belonged.
 
 ### Security
 

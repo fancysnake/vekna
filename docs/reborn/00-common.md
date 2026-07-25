@@ -114,8 +114,9 @@ terminal. Execution walks one path at runtime via `goto` (recorded in the
 grimoire); the static graph is the superset. `vekna rituals show` dumps it;
 the dashboard renders it. The runtime cross-check guarantees every actual edge is a valid static edge,
 and static analysis can flag unreachable steps or dead-end payloads. (Inference
-+ rendering land with `rituals show`/the dashboard; 0.2.0 only keeps the I/O
-type info the registry needs anyway.)
+landed with `rituals show` in 0.3.0, read off each function's source text — so
+a `goto` whose target is computed rather than named does not appear, making the
+dump best-effort rather than exhaustive. Rendering waits for the dashboard.)
 
 ## Process model
 
@@ -295,8 +296,9 @@ One command tree. Commands arrive across releases:
 
 ```
 vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only command running ritual code) — 0.2.0
+vekna cast --prompt "<text>"                  # one-step cast on the coding medium, no rituals.py needed — 0.3.0
 vekna rituals list                            # defined rituals + their Components — 0.3.0
-vekna rituals show <ritual>                   # Component schema + inferred step graph + location — 0.3.0
+vekna rituals show <ritual>                   # Component schema + inferred step graph — 0.3.0
 vekna                                         # dashboard: observe running casts, drill in — 0.6.0
 vekna casts                                   # list active + recent casts — 0.6.0
 vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
@@ -325,8 +327,9 @@ intent, not a spec.
 
 Runtime deps: lower bounds only (`>=X.Y`), capped at next major (`<X+1`). Raise
 floors only on security advisory / upstream EOL. Keeps vekna installable
-alongside arbitrary project dep sets. `claude-agent-sdk` tracks latest behind
-the `coding-claude` extra; base wheel never pulls it. Python floor 3.10 —
+alongside arbitrary project dep sets. `claude-agent-sdk` tracks latest as a
+plain runtime dependency — the `coding-claude` extra was dropped in 0.3.0, so
+the base wheel does pull it. Python floor 3.10 —
 permissive because vekna is a dev dep elsewhere. Tooling: poetry deps, `mise
 run …` commands.
 
