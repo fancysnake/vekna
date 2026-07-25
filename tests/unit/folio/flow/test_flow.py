@@ -5,16 +5,8 @@ from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from vekna.folio.flow import decide
-from vekna.lexicon import (
-    Grimoire,
-    StandaloneRenderer,
-    Transition,
-    done,
-    goto,
-    ritual,
-    run_cast,
-    step,
-)
+from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
 
 
 def _fixed_clock() -> datetime:

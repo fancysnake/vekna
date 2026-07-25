@@ -6,9 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
-    Grimoire,
     RitualError,
-    StandaloneRenderer,
     Transition,
     current_rite,
     done,
@@ -16,9 +14,9 @@ from vekna.lexicon import (
     goto,
     medium,
     ritual,
-    run_cast,
     step,
 )
+from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
 from vekna.wire import RiteDelta, RiteStarted
 
 

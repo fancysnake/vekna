@@ -4,17 +4,8 @@ import io
 from pydantic import BaseModel
 
 from vekna.folio.shell import ShellResult, shell
-from vekna.lexicon import (
-    Grimoire,
-    Ritual,
-    StandaloneRenderer,
-    Transition,
-    done,
-    goto,
-    ritual,
-    run_cast,
-    step,
-)
+from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon.entry import Grimoire, Ritual, StandaloneRenderer, run_cast
 from vekna.wire import RiteDelta
 
 _FAILURE_EXIT = 3

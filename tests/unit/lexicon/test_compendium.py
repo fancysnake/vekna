@@ -3,15 +3,8 @@ import asyncio
 import pytest
 from pydantic import BaseModel
 
-from vekna.lexicon import (
-    Compendium,
-    RitualDefinitionError,
-    Transition,
-    done,
-    goto,
-    ritual,
-    step,
-)
+from vekna.lexicon import RitualDefinitionError, Transition, done, goto, ritual, step
+from vekna.lexicon.entry import Compendium
 
 
 class State(BaseModel):

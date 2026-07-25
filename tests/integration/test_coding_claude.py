@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from vekna.lexicon import main, reset_foci
+from vekna.lexicon import reset_foci
+from vekna.lexicon.entry import main
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1

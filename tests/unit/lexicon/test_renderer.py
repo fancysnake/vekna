@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from vekna.lexicon import StandalonePromptError, StandaloneRenderer
+from vekna.lexicon import StandalonePromptError
+from vekna.lexicon.entry import StandaloneRenderer
 from vekna.wire import GrimoireBegin, RiteDelta, RiteStarted
 
 

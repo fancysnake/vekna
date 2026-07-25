@@ -1,9 +1,11 @@
+"""The ritual author's door.
+
+Everything here is what a rituals.py — or a folio implementing a medium —
+reaches for. CLI and cast-runtime plumbing lives in `vekna.lexicon.entry`.
+"""
+
 from ._dispatch import medium, ritual, step
-from ._gates import main, rituals_list, rituals_show
-from ._links import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills import (
-    Compendium,
-    Grimoire,
     RiteContext,
     current_rite,
     emit_delta,
@@ -13,7 +15,6 @@ from ._mills import (
     register_focus,
     reset_foci,
     resolve_focus,
-    run_cast,
 )
 from ._pacts import (
     AskFn,
@@ -25,7 +26,6 @@ from ._pacts import (
     FocusReply,
     GateFn,
     Goto,
-    Ritual,
     RitualDefinitionError,
     RitualError,
     StandalonePromptError,
@@ -41,39 +41,29 @@ __all__ = [
     "Channel",
     "CodingCall",
     "CodingFocusProtocol",
-    "Compendium",
     "Done",
     "FocusMissingError",
     "FocusReply",
     "GateFn",
     "Goto",
-    "Grimoire",
     "RiteContext",
-    "Ritual",
     "RitualDefinitionError",
     "RitualError",
     "StandalonePromptError",
-    "StandaloneRenderer",
     "StepBoundaryError",
     "StepBudgetExceededError",
     "Transition",
     "current_rite",
-    "default_socket_path",
     "done",
     "emit_delta",
     "expect_focus",
     "goto",
-    "main",
     "medium",
     "offer_prompt",
-    "probe_daemon",
     "record_result",
     "register_focus",
     "reset_foci",
     "resolve_focus",
     "ritual",
-    "rituals_list",
-    "rituals_show",
-    "run_cast",
     "step",
 ]

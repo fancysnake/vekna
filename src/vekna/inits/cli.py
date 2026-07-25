@@ -1,7 +1,7 @@
 import click
 from click import Group
 
-from vekna.lexicon import main, rituals_list, rituals_show
+from vekna.lexicon.entry import main, rituals_list, rituals_show
 
 _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
 

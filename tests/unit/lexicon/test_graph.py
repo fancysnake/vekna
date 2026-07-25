@@ -3,10 +3,11 @@ from functools import partial
 
 from pydantic import BaseModel
 
-from vekna.lexicon import Compendium, Ritual, Transition, done, goto, ritual, step
+from vekna.lexicon import Transition, done, goto, ritual, step
 from vekna.lexicon._dispatch import source_text
 from vekna.lexicon._graph import ENDS, START, step_graph
 from vekna.lexicon._pacts import Step
+from vekna.lexicon.entry import Compendium, Ritual
 
 
 class State(BaseModel):

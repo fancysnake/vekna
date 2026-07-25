@@ -7,17 +7,15 @@ from pydantic import BaseModel
 
 from vekna.lexicon import (
     Goto,
-    Grimoire,
-    StandaloneRenderer,
     StepBudgetExceededError,
     Transition,
     done,
     goto,
     medium,
     ritual,
-    run_cast,
     step,
 )
+from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
 from vekna.wire import RiteDelta, RiteFinished, RiteStarted
 
 

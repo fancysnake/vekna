@@ -9,17 +9,15 @@ from vekna.folio.coding import CodingOpts, CodingOutputError, CodingResult, codi
 from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
-    Grimoire,
-    StandaloneRenderer,
     Transition,
     done,
     goto,
     register_focus,
     reset_foci,
     ritual,
-    run_cast,
     step,
 )
+from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
 from vekna.wire import RiteDelta, RiteFinished
 
 

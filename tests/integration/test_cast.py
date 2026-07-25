@@ -1,6 +1,7 @@
 import textwrap
 
-from vekna.lexicon import _gates, main
+from vekna.lexicon import _gates
+from vekna.lexicon.entry import main
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
