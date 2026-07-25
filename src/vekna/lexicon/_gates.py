@@ -31,7 +31,6 @@ _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
 )
-_RITUALS_USAGE = "usage: vekna rituals list\n       vekna rituals show <ritual>\n"
 _NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
@@ -162,23 +161,25 @@ def _show(compendium: Compendium, name: str) -> int:
     return 0
 
 
-def rituals_main(argv: list[str]) -> int:
-    command, *rest = argv or [""]
-    if command not in {"list", "show"}:
-        sys.stderr.write(_RITUALS_USAGE)
-        return 2
+def _compendium_or_usage() -> Compendium | None:
     try:
-        compendium = _build_compendium(Path.cwd())
+        return _build_compendium(Path.cwd())
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
+        return None
+
+
+def rituals_list() -> int:
+    if (compendium := _compendium_or_usage()) is None:
         return 2
-    if command == "list" and not rest:
-        sys.stdout.write(_list_text(compendium))
-        return 0
-    if command == "show" and len(rest) == 1:
-        return _show(compendium, rest[0])
-    sys.stderr.write(_RITUALS_USAGE)
-    return 2
+    sys.stdout.write(_list_text(compendium))
+    return 0
+
+
+def rituals_show(name: str) -> int:
+    if (compendium := _compendium_or_usage()) is None:
+        return 2
+    return _show(compendium, name)
 
 
 # The lexicon may not import a folio, so the `coding` medium is reached

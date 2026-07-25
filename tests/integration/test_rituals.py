@@ -2,7 +2,7 @@ import textwrap
 
 import pytest
 
-from vekna.lexicon import rituals_main
+from vekna.lexicon import rituals_list, rituals_show
 
 _USAGE_EXIT = 2
 
@@ -48,7 +48,7 @@ class TestRitualsList:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["list"])
+        exit_code = rituals_list()
 
         out = capsys.readouterr().out
         assert exit_code == 0
@@ -59,19 +59,10 @@ class TestRitualsList:
     def test_reports_when_no_rituals_are_found(tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["list"])
+        exit_code = rituals_list()
 
         assert exit_code == 0
         assert "no rituals found" in capsys.readouterr().out
-
-    @staticmethod
-    def test_extra_argument_is_a_usage_error(tmp_path, monkeypatch, capsys):
-        monkeypatch.chdir(tmp_path)
-
-        exit_code = rituals_main(["list", "countdown"])
-
-        assert exit_code == _USAGE_EXIT
-        assert "usage: vekna rituals list" in capsys.readouterr().err
 
 
 @pytest.mark.usefixtures("_home")
@@ -81,7 +72,7 @@ class TestRitualsShow:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["show", "countdown"])
+        exit_code = rituals_show("countdown")
 
         out = capsys.readouterr().out
         assert exit_code == 0
@@ -96,7 +87,7 @@ class TestRitualsShow:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["show", "ping"])
+        exit_code = rituals_show("ping")
 
         out = capsys.readouterr().out
         assert exit_code == 0
@@ -108,37 +99,14 @@ class TestRitualsShow:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["show", "nope"])
+        exit_code = rituals_show("nope")
 
         assert exit_code == _USAGE_EXIT
         assert "no ritual named 'nope'" in capsys.readouterr().err
 
-    @staticmethod
-    def test_missing_name_is_a_usage_error(tmp_path, monkeypatch, capsys):
-        monkeypatch.chdir(tmp_path)
-
-        exit_code = rituals_main(["show"])
-
-        assert exit_code == _USAGE_EXIT
-        assert "vekna rituals show <ritual>" in capsys.readouterr().err
-
 
 @pytest.mark.usefixtures("_home")
 class TestRitualsUsage:
-    @staticmethod
-    def test_unknown_command_is_a_usage_error(capsys):
-        exit_code = rituals_main(["dance"])
-
-        assert exit_code == _USAGE_EXIT
-        assert "usage: vekna rituals list" in capsys.readouterr().err
-
-    @staticmethod
-    def test_no_arguments_is_a_usage_error(capsys):
-        exit_code = rituals_main([])
-
-        assert exit_code == _USAGE_EXIT
-        assert "usage: vekna rituals list" in capsys.readouterr().err
-
     @staticmethod
     def test_rituals_that_cannot_be_loaded_are_a_usage_error(
         tmp_path, monkeypatch, capsys
@@ -146,7 +114,7 @@ class TestRitualsUsage:
         (tmp_path / "rituals.py").write_text(_BROKEN)
         monkeypatch.chdir(tmp_path)
 
-        exit_code = rituals_main(["list"])
+        exit_code = rituals_list()
 
         assert exit_code == _USAGE_EXIT
         assert "a_module_that_does_not_exist" in capsys.readouterr().err

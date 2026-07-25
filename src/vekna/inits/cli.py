@@ -1,7 +1,7 @@
 import click
 from click import Group
 
-from vekna.lexicon import main, rituals_main
+from vekna.lexicon import main, rituals_list, rituals_show
 
 _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
 
@@ -19,13 +19,13 @@ def _cast(ritual_args: tuple[str, ...]) -> None:
 
 @click.command("list", help="List rituals and the options each one takes.")
 def _rituals_list() -> None:
-    raise SystemExit(rituals_main(["list"]))
+    raise SystemExit(rituals_list())
 
 
 @click.command("show", help="Show a ritual's components and step graph.")
 @click.argument("name")
 def _rituals_show(name: str) -> None:
-    raise SystemExit(rituals_main(["show", name]))
+    raise SystemExit(rituals_show(name))
 
 
 @click.group("rituals", help="Inspect the ritual library.")
