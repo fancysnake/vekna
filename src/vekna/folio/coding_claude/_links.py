@@ -1,4 +1,3 @@
-import json
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Protocol, cast, runtime_checkable
 
@@ -150,15 +149,6 @@ def _agent_options(
     )
 
 
-def _structured(text: str, output_schema: object) -> JsonValue | None:
-    if output_schema is None:
-        return None
-    try:
-        return cast("JsonValue", json.loads(text))
-    except ValueError:
-        return None
-
-
 class ClaudeCodingFocus:
     @staticmethod
     async def run(
@@ -170,7 +160,9 @@ class ClaudeCodingFocus:
     ) -> FocusReply:
         options = _agent_options(call=call, gate=gate, ask=ask)
         parts: list[str] = []
-        telemetry: dict[str, JsonValue] = {}
+        session_id: str | None = None
+        num_turns: int | None = None
+        cost_usd: float | None = None
         result_text: str | None = None
         async for message in query(prompt=call.prompt, options=options):
             if isinstance(message, _AssistantLike):
@@ -179,17 +171,15 @@ class ClaudeCodingFocus:
                         parts.append(block.text)
                         on_delta(block.text)
             elif isinstance(message, _ResultLike):
-                telemetry = {
-                    "session_id": message.session_id,
-                    "num_turns": message.num_turns,
-                    "cost_usd": message.total_cost_usd,
-                }
+                session_id = message.session_id
+                num_turns = message.num_turns
+                cost_usd = message.total_cost_usd
                 result_text = message.result
-        text = result_text if result_text is not None else "".join(parts)
         return FocusReply(
-            text=text,
-            structured=_structured(text, call.output_schema),
-            telemetry=telemetry,
+            text=result_text if result_text is not None else "".join(parts),
+            session_id=session_id,
+            num_turns=num_turns,
+            cost_usd=cost_usd,
         )
 
 

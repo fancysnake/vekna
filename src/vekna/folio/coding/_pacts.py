@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from vekna.lexicon import RitualError
 
@@ -14,8 +14,6 @@ class CodingOpts(BaseModel):
 
 
 class CodingResult(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
     text: str
     session_id: str | None = None
     num_turns: int | None = None

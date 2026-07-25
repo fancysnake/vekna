@@ -3,7 +3,7 @@ import io
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, ValidationError
 
 from vekna.folio.coding import CodingOpts, CodingOutputError, CodingResult, coding
 from vekna.lexicon import (
@@ -31,16 +31,11 @@ class FakeFocus:
         self,
         *,
         text: str = "all done",
-        structured: JsonValue | None = None,
         deltas: tuple[str, ...] = (),
         gate_tools: tuple[str, ...] = (),
         questions: tuple[tuple[str, tuple[str, ...] | None], ...] = (),
     ) -> None:
-        self._reply = FocusReply(
-            text=text,
-            structured=structured,
-            telemetry={"session_id": "s1", "num_turns": 2, "cost_usd": 0.5},
-        )
+        self._reply = FocusReply(text=text, session_id="s1", num_turns=2, cost_usd=0.5)
         self._deltas = deltas
         self._gate_tools = gate_tools
         self._questions = questions
@@ -140,8 +135,8 @@ class TestCodingMedium:
         }
 
     @staticmethod
-    def test_typed_output_validates_structured_reply():
-        focus = FakeFocus(structured={"port": 8080})
+    def test_typed_output_validates_the_reply_text():
+        focus = FakeFocus(text='{"port": 9000}')
         register_focus("coding", focus)
 
         @step
@@ -155,25 +150,8 @@ class TestCodingMedium:
 
         result, _ = _cast(r)
 
-        assert result == Answer(port=8080)
-        assert focus.calls[0].output_schema is not None
-
-    @staticmethod
-    def test_typed_output_falls_back_to_text_json():
-        register_focus("coding", FakeFocus(text='{"port": 9000}'))
-
-        @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("start server", output=Answer))
-
-        @ritual("r")
-        async def r() -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
-
-        result, _ = _cast(r)
-
         assert result == Answer(port=9000)
+        assert focus.calls[0].output_schema is not None
 
     @staticmethod
     def test_invalid_typed_output_raises():
@@ -249,6 +227,14 @@ class TestCodingMedium:
         _cast(r, stdin="the tmp_path one\n")
 
         assert focus.answers == ["the tmp_path one"]
+
+    @staticmethod
+    def test_a_focus_cannot_smuggle_an_unknown_telemetry_key():
+        # The old dict-shaped telemetry was splatted into a model with
+        # extra="ignore", so a focus spelling cost_usd differently lost the
+        # field with no error anywhere.
+        with pytest.raises(ValidationError):
+            FocusReply(text="done", total_cost_usd=0.5)
 
     @staticmethod
     def test_missing_focus_raises_with_install_hint():

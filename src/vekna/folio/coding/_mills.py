@@ -49,11 +49,9 @@ def _make_ask(channel: Channel) -> AskFn:
     return ask
 
 
-def _validate_output(output: type[_OutputT], text: str, structured: object) -> _OutputT:
+def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
     adapter: TypeAdapter[_OutputT] = TypeAdapter(output)
     try:
-        if structured is not None:
-            return adapter.validate_python(structured)
         return adapter.validate_json(text)
     except (ValidationError, ValueError) as error:
         msg = f"agent output does not validate as {output!r}: {error}"
@@ -115,8 +113,17 @@ async def coding(
         gate=_make_gate(context.channel, gate_tools),
         ask=_make_ask(context.channel),
     )
-    record_result(dict(reply.telemetry))
+    telemetry: dict[str, JsonValue] = {
+        "session_id": reply.session_id,
+        "num_turns": reply.num_turns,
+        "cost_usd": reply.cost_usd,
+    }
+    record_result(telemetry)
     if output is None:
-        payload: dict[str, JsonValue] = {**reply.telemetry, "text": reply.text}
-        return CodingResult.model_validate(payload)
-    return _validate_output(output, reply.text, reply.structured)
+        return CodingResult(
+            text=reply.text,
+            session_id=reply.session_id,
+            num_turns=reply.num_turns,
+            cost_usd=reply.cost_usd,
+        )
+    return _validate_output(output=output, text=reply.text)

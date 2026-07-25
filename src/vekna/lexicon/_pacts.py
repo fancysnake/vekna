@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from types import UnionType
 from typing import Protocol
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue
 
 from vekna.wire import WireMessage
 
@@ -34,10 +34,15 @@ class CodingCall:
     focus_options: object | None
 
 
+# Typed and closed, not a loose telemetry dict: a focus that spelled a key
+# differently used to lose the field silently on the way into CodingResult.
 class FocusReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     text: str
-    structured: JsonValue | None = None
-    telemetry: dict[str, JsonValue] = {}
+    session_id: str | None = None
+    num_turns: int | None = None
+    cost_usd: float | None = None
 
 
 class CodingFocusProtocol(Protocol):
