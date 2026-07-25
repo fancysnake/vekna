@@ -9,6 +9,9 @@ from vekna.wire import WireMessage
 
 
 class Channel(Protocol):
+    # Events currently reach a surface through `Grimoire(on_event=...)`, so
+    # nothing calls `emit` yet. 0.6.0 decides whether the daemon renderer
+    # consumes events here or keeps the grimoire hook — kept until then.
     async def emit(self, event: WireMessage) -> None: ...
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False

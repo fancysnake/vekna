@@ -1,11 +1,16 @@
 import asyncio
+import contextlib
 
 from vekna.lexicon import default_socket_path, probe_daemon
 
 
+# The probe connects from a worker thread and drops the socket, so the close
+# handshake can fail. Awaiting it anyway keeps the accepted transport from
+# outliving the loop and being finalised against a closed server.
 async def _accept(_reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    await asyncio.sleep(0)
     writer.close()
+    with contextlib.suppress(ConnectionError):
+        await writer.wait_closed()
 
 
 class TestProbe:

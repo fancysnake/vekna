@@ -85,7 +85,7 @@ run = "pytest"
 
 [tasks.unittest]
 description = "Run unit tests"
-run = "mise run _pytest -- tests/unit --cov=tests.unit --cov=ludamus"
+run = "mise run _pytest -- tests/unit --cov=tests.unit --cov=vekna"
 
 [tasks.test]
 description = "Run all tests"

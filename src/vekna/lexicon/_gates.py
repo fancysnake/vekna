@@ -248,6 +248,9 @@ async def _drive(argv: list[str]) -> int:
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
+    # The answer is deliberately discarded until 0.6.0: the probe exists so the
+    # attach path is already on the hot path, but nothing consumes a reachable
+    # daemon yet. See docs/reborn/06-vekna-daemon.md.
     await probe_daemon(socket_path=default_socket_path())
     renderer = StandaloneRenderer()
     grimoire = Grimoire(cast_id=the_ritual.name, on_event=renderer.render)
