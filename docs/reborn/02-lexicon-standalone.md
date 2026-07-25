@@ -36,8 +36,9 @@ work.
   fold into conditional `goto` / `goto`-with-guard at the step level, and
   `attempt` into ordinary `try/except` in a step body — not separate mediums.
 - `vekna.folio.shell` — `shell` Medium + bash Focus.
-- Worked example `examples/rituals.py`: a `@ritual` with at least two `@step`s
-  wired by `goto`/`done`, using `shell` + `decide` and a guarded loop.
+- Worked example: a `@ritual` with at least two `@step`s wired by
+  `goto`/`done`, using `shell` + `decide` and a guarded loop. Since 0.3.0 this
+  is `rituals.py` at the repo root — vekna's own rituals, cast on itself.
 
 ## Scope
 

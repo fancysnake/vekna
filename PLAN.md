@@ -70,7 +70,7 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
 - `folio/flow/_mills.py`: single `decide` medium, returns `bool | str`
   (bool in confirm mode). Precise `@overload`s if mypy-strict-friendly.
 - Update: `tests/unit/lexicon/test_renderer.py`, `tests/unit/folio/flow/
-  test_flow.py`, wire tests, `examples/rituals.py`, integration tests.
+  test_flow.py`, wire tests, `rituals.py`, integration tests.
 - Verify: `mise run check && mise run test`.
 
 ### Step 1 — Live grimoire + deltas
@@ -130,9 +130,12 @@ gives one-shot casts; `vekna rituals list/show` inspects the library.
 - Verify: `mise run check && mise run test`.
 
 ### Step 6 — Example, docs, changelog
-- `examples/rituals.py`: add `fix_list` — checklist ritual (typed
-  remaining/done payload, `coding` per item, shell verify gate, `decide`
-  sign-off) demonstrating the can't-forget property.
+- ~~`examples/rituals.py`: add `fix_list`~~ *Done early, revised 2026-07-25*:
+  `examples/` is gone; `rituals.py` at the repo root holds vekna's own
+  rituals and the project casts them on itself. It ships `cover_diff` — a
+  diff-coverage loop (`shell` measure → `coding` writes tests → repeat under
+  an attempt budget). Integration tests that used to copy the example now
+  carry their own fixtures.
 - `docs/reborn/03-coding-folios.md`: reflect delivered reality (adaptive
   `decide`, `--prompt` flag, `gate_tools` opt-in replaces `--auto-approve`,
   no `coding-claude` extra);

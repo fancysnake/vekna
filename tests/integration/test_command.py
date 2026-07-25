@@ -1,4 +1,4 @@
-import shutil
+import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,7 +7,14 @@ from click.testing import CliRunner
 
 from vekna.inits.cli import init_command
 
-_EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
+_RITUALS = textwrap.dedent("""
+    from vekna.lexicon import Transition, done, ritual
+
+
+    @ritual("fix_demo")
+    async def fix_demo(bound: int) -> Transition:
+        return done(bound)
+    """)
 
 
 @pytest.fixture
@@ -51,7 +58,7 @@ class TestCast:
     def test_cast_help_lists_rituals_and_options(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        shutil.copy(_EXAMPLES / "rituals.py", tmp_path / "rituals.py")
+        (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
 
