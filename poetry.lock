@@ -1133,18 +1133,6 @@ files = [
 ]
 
 [[package]]
-name = "libtmux"
-version = "0.58.1"
-description = "Typed library that provides an ORM wrapper for tmux, a terminal multiplexer."
-optional = false
-python-versions = "<4.0,>=3.10"
-groups = ["main"]
-files = [
-    {file = "libtmux-0.58.1-py3-none-any.whl", hash = "sha256:ab0f47d03a59d674962bc23e36e188fcfa4a82b0f270d474afab519e3076839b"},
-    {file = "libtmux-0.58.1.tar.gz", hash = "sha256:a294dd585aa419d4ecce36f3e55df656693743c97a0b5b5bb1e5fea31ada2482"},
-]
-
-[[package]]
 name = "markdown-it-py"
 version = "4.2.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -2584,4 +2572,4 @@ tomli = {version = ">=1.1.0", markers = "python_version < \"3.11\""}
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "2aebfdba388d4b96f4931bc305a763c27d42c65a3c0e5ed8f157f9f61254c13c"
+content-hash = "68eff26b6c8edf66eb7a0284bce96c9d3637786639b18f530d7fb700e560df2e"
