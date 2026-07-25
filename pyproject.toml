@@ -123,6 +123,56 @@ forbidden_modules = [
     "vekna.folio.coding",
 ]
 
+# Explanation: within a package, a layer may import the layers below it and
+# never the ones above. `_links` and `_mills` share a layer, joined by "|" --
+# import-linter's *independent* delimiter, so neither may import the other.
+# ":" would place them side by side and let them import freely, which is the
+# pair of violations these contracts were added to catch. The reflection
+# helpers (_dispatch, _graph, _loader) and the two doors (__init__, entry) are
+# deliberately unlisted: they sit across the model rather than in one layer.
+
+[[tool.importlinter.contracts]]
+name = "lexicon layers"
+type = "layers"
+layers = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._links | vekna.lexicon._mills",
+    "vekna.lexicon._specs",
+    "vekna.lexicon._pacts",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "wire layers"
+type = "layers"
+layers = ["vekna.wire._links", "vekna.wire._pacts"]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.shell layers"
+type = "layers"
+layers = ["vekna.folio.shell._links", "vekna.folio.shell._pacts"]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.coding layers"
+type = "layers"
+layers = [
+    "vekna.folio.coding._inits",
+    "vekna.folio.coding._mills",
+    "vekna.folio.coding._pacts",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio.coding_claude layers"
+type = "layers"
+layers = [
+    "vekna.folio.coding_claude._inits",
+    "vekna.folio.coding_claude._links",
+    "vekna.folio.coding_claude._pacts",
+]
+
 # MYPY
 
 [tool.mypy]
