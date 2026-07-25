@@ -12,7 +12,7 @@ from claude_agent_sdk import (
 )
 from pydantic import JsonValue
 
-from vekna.lexicon import AskFn, CodingCall, FocusReply, GateFn, register_focus
+from vekna.lexicon import AskFn, CodingCall, FocusReply, GateFn
 
 from ._pacts import ClaudeOptions
 
@@ -181,7 +181,3 @@ class ClaudeCodingFocus:
             num_turns=num_turns,
             cost_usd=cost_usd,
         )
-
-
-def register() -> None:
-    register_focus("coding", ClaudeCodingFocus())

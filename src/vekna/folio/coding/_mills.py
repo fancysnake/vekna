@@ -10,9 +10,7 @@ from vekna.lexicon import (
     GateFn,
     current_rite,
     emit_delta,
-    expect_focus,
     medium,
-    offer_prompt,
     record_result,
     resolve_focus,
 )
@@ -24,8 +22,8 @@ if TYPE_CHECKING:
 
 _OutputT = TypeVar("_OutputT")
 
-_MEDIUM = "coding"
-_INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
+MEDIUM = "coding"
+INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
 
 
 def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | None:
@@ -91,7 +89,7 @@ async def coding(
     gate_tools: Sequence[str] | None = None,
     focus_options: object | None = None,
 ) -> CodingResult | _OutputT:
-    focus = cast("CodingFocusProtocol", resolve_focus(_MEDIUM))
+    focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
     schema: dict[str, JsonValue] | None = None
     if output is not None:
@@ -131,8 +129,3 @@ async def coding(
 # no import of its own — and no structural type for the result.
 async def one_shot(prompt: str) -> str:
     return (await coding(prompt)).text
-
-
-def register() -> None:
-    expect_focus(_MEDIUM, hint=_INSTALL_HINT)
-    offer_prompt(_MEDIUM, one_shot)

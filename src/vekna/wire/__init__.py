@@ -1,5 +1,4 @@
 from ._links import read_frames
-from ._mills import decode_frame, encode_frame
 from ._pacts import (
     CastGoodbye,
     CastHello,
@@ -15,6 +14,8 @@ from ._pacts import (
     RiteFinished,
     RiteStarted,
     WireMessage,
+    decode_frame,
+    encode_frame,
 )
 
 __all__ = [

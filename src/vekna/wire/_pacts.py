@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Discriminator, JsonValue, TypeAdapter
 
 # --- cast lifecycle ---
 
@@ -129,3 +129,22 @@ WireMessage = (
     | LockDenied
     | LockReleased
 )
+
+
+# --- framing ---
+
+# The codec sits with the messages it encodes: it is the serialised form of
+# these DTOs, not logic about them. Keeping it here leaves the reader in
+# `_links` importing only this module.
+
+_MESSAGE_ADAPTER: TypeAdapter[WireMessage] = TypeAdapter(
+    Annotated[WireMessage, Discriminator("kind")]
+)
+
+
+def encode_frame(message: WireMessage) -> bytes:
+    return _MESSAGE_ADAPTER.dump_json(message) + b"\n"
+
+
+def decode_frame(frame: str | bytes) -> WireMessage:
+    return _MESSAGE_ADAPTER.validate_json(frame)

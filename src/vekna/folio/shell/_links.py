@@ -2,6 +2,10 @@ import asyncio
 import codecs
 from collections.abc import Callable
 
+from vekna.lexicon import emit_delta, medium
+
+from ._pacts import ShellResult
+
 _CHUNK = 1 << 16
 
 
@@ -72,3 +76,16 @@ async def run_bash(
         _pump(stream=process.stderr, sink=err, on_line=on_line),
     )
     return "".join(out), "".join(err), await process.wait()
+
+
+# Lives beside run_bash rather than in a _mills of its own: three lines, no
+# branches, and nothing here is business logic — it is the I/O call plus the
+# shape it returns. A mills/inits pair injecting a run_bash that will never
+# have a second implementation would be ceremony around a wrapper.
+@medium
+async def shell(
+    command: str, *, cwd: str | None = None, stream: bool = True
+) -> ShellResult:
+    on_line = emit_delta if stream else None
+    stdout, stderr, exit_code = await run_bash(command, cwd=cwd, on_line=on_line)
+    return ShellResult(stdout=stdout, stderr=stderr, exit_code=exit_code)

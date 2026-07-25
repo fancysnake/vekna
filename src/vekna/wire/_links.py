@@ -1,8 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 
-from ._mills import decode_frame
-from ._pacts import WireMessage
+from ._pacts import WireMessage, decode_frame
 
 
 async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage]:
