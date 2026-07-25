@@ -9,6 +9,8 @@ from vekna.lexicon.entry import Grimoire, Ritual, StandaloneRenderer, run_cast
 from vekna.wire import RiteDelta
 
 _FAILURE_EXIT = 3
+# Comfortably past the 1 MiB readline limit that used to crash the cast here.
+_LONG_LINE = 2_000_000
 
 
 class State(BaseModel):
@@ -30,6 +32,20 @@ async def run_quiet(_state: State) -> Transition:
     return done(await shell("echo hush", stream=False))
 
 
+@step
+async def run_long_line(_state: State) -> Transition:
+    return done(
+        await shell(f"python3 -c \"print('x' * {_LONG_LINE}); print('after')\"")
+    )
+
+
+@step
+async def run_multibyte(_state: State) -> Transition:
+    # Split across chunk boundaries, so an incremental decoder is the only way
+    # these survive intact.
+    return done(await shell(f"python3 -c \"print('☃' * {_LONG_LINE})\""))
+
+
 @ritual("echoer")
 async def echoer() -> Transition:
     await asyncio.sleep(0)
@@ -46,6 +62,18 @@ async def failing() -> Transition:
 async def quiet() -> Transition:
     await asyncio.sleep(0)
     return goto(run_quiet, State())
+
+
+@ritual("long_line")
+async def long_line() -> Transition:
+    await asyncio.sleep(0)
+    return goto(run_long_line, State())
+
+
+@ritual("multibyte")
+async def multibyte() -> Transition:
+    await asyncio.sleep(0)
+    return goto(run_multibyte, State())
 
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
@@ -105,6 +133,21 @@ class TestShellStreaming:
 
         assert _deltas(grimoire) == ["oops"]
         assert "oops" in out.getvalue()
+
+    @staticmethod
+    def test_a_line_past_the_old_limit_does_not_crash_the_cast():
+        result, grimoire, _ = _run(long_line)
+
+        assert not result.exit_code
+        assert result.stdout == f"{'x' * _LONG_LINE}\nafter\n"
+        assert _deltas(grimoire) == ["x" * _LONG_LINE, "after"]
+
+    @staticmethod
+    def test_multibyte_output_survives_chunk_boundaries():
+        result = _cast(multibyte)
+
+        assert not result.exit_code
+        assert result.stdout == f"{'☃' * _LONG_LINE}\n"
 
     @staticmethod
     def test_stream_false_stays_silent():

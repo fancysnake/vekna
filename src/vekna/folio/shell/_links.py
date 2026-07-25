@@ -1,8 +1,28 @@
 import asyncio
+import codecs
 from collections.abc import Callable
 
-# Lines longer than this raise rather than growing the buffer without bound.
-_LINE_LIMIT = 1 << 20
+_CHUNK = 1 << 16
+
+
+# A StreamReader iterates itself by *lines*, which is the very thing that
+# breaks here: readline raises once a line passes its limit, and clears its
+# buffer doing so — losing the output as well as crashing the cast. A
+# single-line blob (minified bundle, base64, one-line JSON) is ordinary for a
+# coding agent. read() has no such limit, so iterating chunks removes the
+# failure mode rather than merely reporting it. The line cap was guarding
+# nothing either way: `sink` keeps the whole output wherever the newlines fall.
+class _Chunks:
+    def __init__(self, stream: asyncio.StreamReader) -> None:
+        self._stream = stream
+
+    def __aiter__(self) -> "_Chunks":
+        return self
+
+    async def __anext__(self) -> bytes:
+        if chunk := await self._stream.read(_CHUNK):
+            return chunk
+        raise StopAsyncIteration
 
 
 async def _pump(
@@ -13,11 +33,20 @@ async def _pump(
 ) -> None:
     if stream is None:
         return  # pragma: no cover
-    async for raw in stream:
-        line = raw.decode()
-        sink.append(line)
+    # Incremental, because a chunk boundary splits multi-byte UTF-8 — something
+    # decoding whole lines never had to survive.
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    pending = ""
+    async for chunk in _Chunks(stream):
+        *lines, pending = (pending + decoder.decode(chunk)).split("\n")
+        for line in lines:
+            sink.append(line + "\n")
+            if on_line is not None:
+                on_line(line)
+    if pending:
+        sink.append(pending)
         if on_line is not None:
-            on_line(line.rstrip("\n"))
+            on_line(pending)
 
 
 async def run_bash(
@@ -33,7 +62,6 @@ async def run_bash(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
-        limit=_LINE_LIMIT,
     )
     out: list[str] = []
     err: list[str] = []
