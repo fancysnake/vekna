@@ -267,6 +267,12 @@ def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
     return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))
 
 
+# A cast returns a model or nothing, so its result renders as JSON rather than
+# as whatever repr the model happens to carry.
+def _rendered(result: BaseModel | None) -> str:
+    return "null" if result is None else result.model_dump_json()
+
+
 async def _drive(argv: list[str]) -> int:
     if argv and argv[0] in _HELP_FLAGS:
         sys.stdout.write(_help_text(Path.cwd()))
@@ -302,7 +308,7 @@ async def _drive(argv: list[str]) -> int:
     except RitualError as error:
         sys.stderr.write(f"cast failed: {error}\n")
         return 1
-    sys.stdout.write(f"result: {result}\n")
+    sys.stdout.write(f"result: {_rendered(result)}\n")
     return 0
 
 

@@ -1,7 +1,8 @@
 import inspect
 import textwrap
 from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar, get_type_hints
+from types import NoneType, UnionType
+from typing import ParamSpec, TypeGuard, TypeVar, get_args, get_type_hints
 
 from pydantic import BaseModel
 
@@ -21,17 +22,33 @@ _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
 
 
-def _get_param_annotation(
-    *, func: Callable[_P, Awaitable[_MediumT]], name: str, msg: str
-) -> type[BaseModel]:
-    annotation = get_type_hints(func).get(name)  # type: ignore [misc]
-
-    if not isinstance(annotation, type) or not issubclass(  # type: ignore [misc]
-        annotation, BaseModel  # type: ignore [misc]
-    ):
+def _sole_annotation(
+    func: Callable[[BaseModel], Awaitable[Transition]], *, decorator: str, noun: str
+) -> object:
+    parameters = list(inspect.signature(func).parameters.values())
+    if len(parameters) != 1:
+        msg = f"@{decorator} {func.__name__!r} must take exactly one {noun} parameter"
         raise RitualDefinitionError(msg)
+    return get_type_hints(func).get(parameters[0].name)  # type: ignore [misc]
 
-    return annotation
+
+# The one place a runtime annotation is narrowed, so the reflection boundary's
+# exemptions stay at two lines rather than spreading through every caller.
+def _as_model(annotation: object) -> type[BaseModel] | None:
+    if not isinstance(annotation, type):  # type: ignore [misc]
+        return None
+    if issubclass(annotation, BaseModel):  # type: ignore [misc]
+        return annotation
+    return None
+
+
+def _is_model_union(annotation: object) -> TypeGuard[UnionType]:
+    if not isinstance(annotation, UnionType):
+        return False
+    members: tuple[object, ...] = get_args(annotation)
+    return all(
+        _as_model(member) is not None or member is NoneType for member in members
+    )
 
 
 # Signature-forwarding via ParamSpec is Any-tainted the same way the rest of
@@ -56,19 +73,22 @@ def medium(
     return wrapped
 
 
+# A step may admit more than one payload shape — `Lint | Coverage` for a step
+# two others transition into — so a union is legal here where a ritual's
+# components, being one CLI interface, are not.
 def _payload_type(
     func: Callable[[BaseModel], Awaitable[Transition]],
-) -> type[BaseModel]:
-    name = func.__name__
-    parameters = list(inspect.signature(func).parameters.values())
-    if len(parameters) != 1:
-        msg = f"@step {name!r} must take exactly one payload parameter"
-        raise RitualDefinitionError(msg)
-    return _get_param_annotation(
-        func=func,
-        name=parameters[0].name,
-        msg=f"@step {name!r} needs a concrete payload type annotation",
+) -> type[BaseModel] | UnionType:
+    annotation = _sole_annotation(func, decorator="step", noun="payload")
+    if (model := _as_model(annotation)) is not None:
+        return model
+    if _is_model_union(annotation):
+        return annotation
+    msg = (
+        f"@step {func.__name__!r} needs a pydantic model, or a union of them, "
+        "as its payload type"
     )
+    raise RitualDefinitionError(msg)
 
 
 def source_text(func: Callable[[BaseModel], Awaitable[Transition]]) -> str | None:
@@ -94,16 +114,11 @@ def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
 def _components_model(
     func: Callable[[BaseModel], Awaitable[Transition]],
 ) -> type[BaseModel]:
-    name = func.__name__
-    parameters = list(inspect.signature(func).parameters.values())
-    if len(parameters) != 1:
-        msg = f"@ritual {name!r} must take exactly one components parameter"
-        raise RitualDefinitionError(msg)
-    return _get_param_annotation(
-        func=func,
-        name=parameters[0].name,
-        msg=f"@ritual {name!r} needs a pydantic model as its components type",
-    )
+    annotation = _sole_annotation(func, decorator="ritual", noun="components")
+    if (model := _as_model(annotation)) is not None:
+        return model
+    msg = f"@ritual {func.__name__!r} needs a pydantic model as its components type"
+    raise RitualDefinitionError(msg)
 
 
 def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:

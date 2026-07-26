@@ -35,12 +35,18 @@ _RITUALS = textwrap.dedent("""
 
 
 _EXTRA = textwrap.dedent("""
+    from pydantic import BaseModel
+
     from vekna.lexicon import NoComponents, Transition, done, ritual
+
+
+    class Pong(BaseModel):
+        said: str
 
 
     @ritual("ping")
     async def ping(_: NoComponents) -> Transition:
-        return done("pong")
+        return done(Pong(said="pong"))
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"
@@ -57,7 +63,7 @@ _DASHED = textwrap.dedent("""
 
     @ritual("echo")
     async def echo(components: Echo) -> Transition:
-        return done(components.text)
+        return done(components)
     """)
 
 _BUDGET = textwrap.dedent("""
@@ -154,7 +160,7 @@ class TestCast:
         exit_code = main(["echo", "--text=--verbatim"])
 
         assert exit_code == 0
-        assert "result: --verbatim" in capsys.readouterr().out
+        assert 'result: {"text":"--verbatim"}' in capsys.readouterr().out
 
     @staticmethod
     def test_ritual_error_exits_one(tmp_path, monkeypatch, capsys):

@@ -69,7 +69,7 @@ async def spinner(components: Start) -> Transition:
 @step
 async def finish(state: Tick) -> Transition:
     await asyncio.sleep(0)
-    return done(state.left)
+    return done(state)
 
 
 _SPRINT_START = 7
@@ -195,7 +195,7 @@ class TestRunCast:
             )
         )
 
-        assert result == _SPRINT_START
+        assert result == Tick(left=_SPRINT_START)
 
     @staticmethod
     def test_budget_exceeded_raises():

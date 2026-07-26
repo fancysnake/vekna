@@ -174,7 +174,7 @@ class Done:
 class Step:
     name: str
     run: Callable[[BaseModel | None], Awaitable["Transition"]]
-    input_type: type[BaseModel | None] | UnionType
+    input_type: type[BaseModel] | UnionType
     source: str | None = None
 
 
@@ -203,12 +203,22 @@ class Ritual:
     source: str | None = None
 
 
+# A transition carries a pydantic model or nothing. The annotations alone would
+# not hold: mypy sees `src/`, and a transition is written in the author's
+# rituals.py, which it never reads.
+def _checked(value: object, *, kind: str) -> BaseModel | None:
+    if value is None or isinstance(value, BaseModel):  # type: ignore [misc]
+        return value
+    msg = f"{kind} takes a pydantic model or nothing, got {type(value).__name__}"
+    raise RitualBoundaryError(msg)
+
+
 def goto(target: Step, payload: BaseModel | None = None) -> Goto:
-    return Goto(target=target, payload=payload)
+    return Goto(target=target, payload=_checked(payload, kind="goto"))
 
 
 def done(result: BaseModel | None = None) -> Done:
-    return Done(result=result)
+    return Done(result=_checked(result, kind="done"))
 
 
 # Unknown keys are an error: a misspelt `module = [...]` would otherwise load

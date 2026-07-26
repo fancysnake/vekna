@@ -22,6 +22,10 @@ _RITUALS = textwrap.dedent("""
         label: str = "run"
 
 
+    class Pong(BaseModel):
+        said: str
+
+
     @step
     async def tick(state: Tick) -> Transition:
         if not state.left:
@@ -36,7 +40,7 @@ _RITUALS = textwrap.dedent("""
 
     @ritual("ping")
     async def ping(_: NoComponents) -> Transition:
-        return done("pong")
+        return done(Pong(said="pong"))
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"

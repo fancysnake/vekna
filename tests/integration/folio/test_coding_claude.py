@@ -32,8 +32,7 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
 
         @step
         async def work(task: Task) -> Transition:
-            result = await {call}
-            return done(result.text)
+            return done(await {call})
 
 
         @ritual("{name}")
@@ -76,7 +75,7 @@ _TYPED_RITUALS = textwrap.dedent("""
                 effort="high",
             ),
         )
-        return done(plan.steps)
+        return done(plan)
 
 
     @ritual("planned")
@@ -352,7 +351,7 @@ class TestFocusOptions:
         exit_code = main(["planned", "--text", "plan the work"])
 
         assert exit_code == 0
-        assert "result: 3" in capsys.readouterr().out
+        assert 'result: {"steps":3}' in capsys.readouterr().out
         options = captured["options"]
         assert options.permission_mode == "plan"
         assert options.allowed_tools == ["Read", "mcp__vekna__ask_human"]
@@ -387,7 +386,7 @@ class TestPromptSugar:
         out = capsys.readouterr().out
         assert exit_code == 0
         assert "drafting the haiku" in out
-        assert "result: output='haiku done" in out
+        assert 'result: {"output":"haiku done"}' in out
         assert captured["prompt"] == "write a haiku"
 
     @staticmethod
@@ -400,7 +399,7 @@ class TestPromptSugar:
 
         assert exit_code == 0
         assert captured["prompt"] == "write a haiku"
-        assert "result: output='haiku done" in capsys.readouterr().out
+        assert 'result: {"output":"haiku done"}' in capsys.readouterr().out
 
     @staticmethod
     def test_inline_prompt_form_is_equivalent(tmp_path, monkeypatch, capsys):
@@ -412,7 +411,7 @@ class TestPromptSugar:
 
         assert exit_code == 0
         assert captured["prompt"] == "write a haiku"
-        assert "result: output='haiku done" in capsys.readouterr().out
+        assert 'result: {"output":"haiku done"}' in capsys.readouterr().out
 
     @staticmethod
     def test_inline_prompt_with_trailing_words_is_a_usage_error(

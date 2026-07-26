@@ -34,13 +34,17 @@ class Attempt(BaseModel):
     left: int
 
 
+class Verdict(BaseModel):
+    outcome: str
+
+
 @step
 async def fix(state: Attempt) -> Transition:
     result = await shell("mise run test")
     if result.exit_code == 0:
-        return done("green")
+        return done(Verdict(outcome="green"))
     if not state.left:
-        return done("gave up")
+        return done(Verdict(outcome="gave up"))
     await coding(f"The test suite fails:\n{result.stdout}\nFix it.")
     return goto(fix, Attempt(left=state.left - 1))
 
