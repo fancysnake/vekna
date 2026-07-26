@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
-    SdkMcpTool,
     TextBlock,
     create_sdk_mcp_server,
     query,
@@ -31,6 +30,8 @@ from ._pacts import ClaudeOptions
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from claude_agent_sdk import SdkMcpTool
+
 _DENY_MESSAGE = "denied by the vekna decide gate"
 
 _SERVER = "vekna"
@@ -42,7 +43,7 @@ _ASK_DESCRIPTION = (
     "valid approaches to take, anything you would otherwise have to guess at."
 )
 _ASK_SCHEMA: dict[str, JsonValue] = {
-    "type": "BaseModel | None",
+    "type": "object",
     "properties": {
         "question": {"type": "string", "description": "The question to ask."},
         "options": {
@@ -82,15 +83,6 @@ class _ResultLike(Protocol):
     def result(self) -> str | None: ...
 
 
-_PermissionResult = PermissionResultAllow | PermissionResultDeny
-_CanUseTool = Callable[
-    [str, dict[str, BaseModel | None], BaseModel | None], Awaitable[_PermissionResult]
-]
-_ToolHandler = Callable[
-    [dict[str, BaseModel | None]], Awaitable[dict[str, dict[str, list[dict[str, str]]]]]
-]
-_ToolFactory = Callable[[_ToolHandler], dict[str, list[dict[str, str]]] | None]
-
 
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
     if isinstance(focus_options, ClaudeOptions):
@@ -105,7 +97,6 @@ def _permission_handler(
         [str, dict[str, Any], ToolPermissionContext],
         Awaitable[PermissionResultAllow | PermissionResultDeny],
     ]
-    | None
 ):
     async def can_use_tool(
         tool_name: str, input_data: dict[str, Any], _context: ToolPermissionContext

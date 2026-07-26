@@ -1,4 +1,5 @@
 import asyncio
+from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 import io
 import sys
 import textwrap
@@ -257,9 +258,9 @@ class TestToolGate:
         assert exit_code == 0
         assert captured["options"].permission_mode == "default"
         denied, allowed = captured["permissions"]
-        assert isinstance(denied, stub.PermissionResultDeny)
+        assert isinstance(denied, PermissionResultDeny)
         assert denied.message == "denied by the vekna decide gate"
-        assert isinstance(allowed, stub.PermissionResultAllow)
+        assert isinstance(allowed, PermissionResultAllow)
         assert allowed.updated_input == {"tool": "Read"}
         assert "allow tool 'Bash'?" in capsys.readouterr().out
 
@@ -278,7 +279,7 @@ class TestToolGate:
 
         assert exit_code == 0
         (allowed,) = captured["permissions"]
-        assert isinstance(allowed, stub.PermissionResultAllow)
+        assert isinstance(allowed, PermissionResultAllow)
         assert allowed.updated_input == {"tool": "Bash"}
         assert "haiku done" in capsys.readouterr().out
 
