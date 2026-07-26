@@ -26,6 +26,10 @@ from vekna.folio.shell import shell
 from vekna.lexicon import Transition, done, goto, ritual, step
 
 
+class FixTests(BaseModel):
+    bound: int = 3
+
+
 class Attempt(BaseModel):
     left: int
 
@@ -42,8 +46,8 @@ async def fix(state: Attempt) -> Transition:
 
 
 @ritual("fix_tests")
-async def fix_tests(bound: int = 3) -> Transition:
-    return goto(fix, Attempt(left=bound))
+async def fix_tests(components: FixTests) -> Transition:
+    return goto(fix, Attempt(left=components.bound))
 ```
 
 Then cast it:
@@ -66,7 +70,11 @@ it per medium call, with the agent's own output indented beneath.
 
 ## Concepts
 
-- **Ritual** — a named program. Its parameters become `--options`.
+- **Ritual** — a named program. Its components become `--options`.
+- **Component** — what a ritual needs before it can be cast, the way a spell
+  needs its material components. Typed values on the ritual's external
+  interface — `File`, `Directory`, `Text`, `Url`, `GitRef` — declared as fields
+  on one pydantic model, the ritual's only parameter.
 - **Step** — one deterministic hop. Takes a typed payload, returns `goto(...)`
   or `done(...)`. A ritual is a trampoline over steps, bounded by `max_steps`.
 - **Medium** — what a step reaches out to: `coding` (an agent), `shell`,

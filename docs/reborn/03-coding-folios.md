@@ -90,8 +90,8 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is v0.4.0.)
 
   ```python
   @ritual("cover_diff")
-  async def cover_diff(bound: int = 3) -> Transition:
-      return goto(measure, Uncovered(budget=bound))
+  async def cover_diff(components: CoverDiff) -> Transition:
+      return goto(measure, Uncovered(budget=components.bound))
 
   @step
   async def measure(state: Uncovered) -> Transition:

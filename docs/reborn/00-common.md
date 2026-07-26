@@ -42,7 +42,7 @@ named `vekna`.
 | **Rite**   | One **executed node** in the grimoire — a step or medium invocation. (`step`/`medium` are authored units; a rite is one run of one.) |
 | **Medium** | Kind of effect a step calls — typed call shape, declared value shape, `run()` body. ≈ port. (`shell`, `coding`, `decide`.) |
 | **Focus**  | Swappable backend a Medium channels. ≈ adapter (Claude SDK, pylint, bash). |
-| **Component** | Typed value on a ritual's external interface (CLI in / final out). `File`, `Directory`, `Text`. |
+| **Component** | What a ritual needs before it can be cast, the way a spell needs its material components. Typed value on its external interface (CLI in). `File`, `Directory`, `Text`. Declared as one field of the ritual's components model. |
 | **Folio**  | Bound bundle of Mediums and/or Foci, shaped like a future stand-alone dist. |
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
@@ -75,12 +75,13 @@ from vekna.lexicon import ritual, step, goto, done, Transition
 from vekna.folio.shell import shell
 from vekna.folio.coding import coding
 
+class FixDemo(BaseModel): bound: int             # the ritual's components
 class Attempt(BaseModel): failures: str; budget: int
 class Report(BaseModel):  fixed: bool
 
 @ritual("fix_demo")                                # boundary: CLI in, final out
-async def fix_demo(bound: int) -> Transition:
-    return goto(run_tests, Attempt(failures="", budget=bound))
+async def fix_demo(components: FixDemo) -> Transition:
+    return goto(run_tests, Attempt(failures="", budget=components.bound))
 
 @step
 async def run_tests(a: Attempt) -> Transition:
@@ -139,8 +140,8 @@ rituals.py            ◄────── imports                          ┌
 
 1. `vekna cast write-tests --testdir=./tests`.
 2. The cast process loads `./rituals.py` (+ config modules), finds
-   `@ritual('write-tests')`, validates Components against the entrypoint
-   signature, and registers its `@step`s + mediums in the compendium.
+   `@ritual('write-tests')`, validates Components against the entrypoint's
+   components model, and registers its `@step`s + mediums in the compendium.
 3. It probes `/tmp/vekna-<uid>.sock`. Reachable → attach + `CastHello`.
    Not → standalone (stdout events, stdin prompts).
 4. It runs the ritual: the engine fires the opening transition and trampolines
@@ -250,14 +251,20 @@ surfaces the conflict, does not undo past damage.
 
 ## Components (typed interface values)
 
-`@ritual` inspects the **entrypoint** signature, builds a Pydantic model from
-Component annotations. CLI flags derive from the model; TUI/web render forms
-from its JSON schema; the journal stores validated values. Step payloads are
-separate **defined value types** (plain Pydantic models) validated at each step
-boundary — Components are specifically the ritual's external, CLI-facing
-interface.
+The **entrypoint** takes exactly one parameter: a Pydantic model whose fields
+are its Components, declared in the author's own source. CLI flags derive from
+that model; TUI/web render forms from its JSON schema; the journal stores
+validated values. A ritual that needs nothing takes `NoComponents`. Step
+payloads are separate **defined value types** (plain Pydantic models) validated
+at each step boundary — Components are specifically the ritual's external,
+CLI-facing interface, and both boundaries reject a value of the wrong model.
 
-`vekna.lexicon.components`:
+(Until 0.4.0 `@ritual` reflected loose parameters into a model via
+`create_model`. A declared model is the same interface with the synthesis
+removed: defaults, validators and `Field(description=...)` are now the
+author's to write.)
+
+`vekna.lexicon`:
 
 - `File` — existing readable path. CLI tab-completes; journal stores `path + sha256`.
 - `Directory` — existing path; same.
@@ -265,8 +272,11 @@ interface.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
 - `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value).
 
-**Output direction.** Inputs and outputs both Components on one interface.
-Output shape declared at call site, not baked into Medium variants:
+**Output direction — deferred.** "Inputs and outputs are both Components on one
+interface" is unbuilt, and reads badly against the word: an output is not
+something the ritual needed in order to run. `done(result)` takes any value and
+a cast returns it unvalidated. What does ship is an output shape declared at
+the medium call site, not baked into Medium variants:
 
 ```python
 r = await coding(prompt="...")                          # default agent telemetry
@@ -364,9 +374,9 @@ run …` commands.
    Promote files to packages on growth.
 4. Wire DTOs in own package (`vekna.wire`), versioned independently. No
    daemon-side mirror.
-5. Inputs + outputs both Components on one interface. Input via signature →
-   Pydantic; output declared per call site (`output=`). Telemetry in grimoire,
-   not return value.
+5. Components are the ritual's inputs, declared as one Pydantic model it takes
+   as its only parameter. Output declared per call site (`output=`); an
+   output-side Component is deferred. Telemetry in grimoire, not return value.
 6. Locks hierarchical colon-keyed. Cast holds, release token authorises.
    Standalone modes allow/warn/deny. Default `warn` at 0.5.0; flips to `deny`
    when the daemon lands (0.6.0).

@@ -1,64 +1,62 @@
 # Current Task
 
-**Task:** lexicon refactor — shrink to the SDK, satisfy the new contracts
-**Plan:** [`PLAN.md`](PLAN.md) — approved, complete (commit `d09823e`)
+**Task:** `@ritual` takes a declared components model, just as `@step` does
+**Plan:** [`PLAN.md`](PLAN.md) — approved, complete
 **Branch:** `vekna-reborn`
 **Phase:** IMPLEMENT complete — awaiting review
 
+(The lexicon refactor that came before it — shrink to the SDK, satisfy the new
+contracts — is complete through commit `0ef0149`; its record is in that
+commit's version of this file.)
+
 ## Context
 
-The import contracts were rewritten to a strict per-layer model: every layer
-imports only `pacts` (plus `specs` for mills), `inits` binds them, and no root
-module may import the lexicon. Two contracts broke on the old shape, and behind
-them sat the real problem — five of lexicon's ten modules were exempt from every
-contract because their names matched no layer.
+The entrypoint was the one place in the lexicon that reflected a signature into
+a synthesized type: loose parameters stitched into a model by `create_model`
+that the author never saw. `@step` had always declared its payload as a model
+and validated against it; `@ritual` now does the same with its components.
 
 ## Progress against PLAN.md
 
 | Step | State | Commit |
 | --- | --- | --- |
-| 1+4 — Cast runtime leaves the author's door; CLI to root | done | `13ac4c8` |
-| 2 — The grimoire stops speaking the wire protocol | done | `e51f6d2` |
-| 3 — Every lexicon module sits in a layer | done | `08f8f07` |
-| 5 — Reconcile the record | done | this commit |
+| 1 — the decorator, and every call site with it | done | `b81a39b` |
+| 2 — the record | done | this commit |
 
-Gates after each step: 128 tests, **31 import-linter contracts**, pylint 10.00,
-mypy clean, vulture clean.
+Gates after each step: 139 tests, 31 import-linter contracts, pylint 10.00,
+mypy clean, vulture clean. `vekna rituals show cover_diff` prints what it
+printed before the change.
+
+## Decisions
+
+Both came out of the review conversation, and both reversed a first answer:
+
+1. **The vocabulary stays "components".** A component is what a ritual needs
+   before it can be cast, the way a spell needs its material components — so
+   the model class is the ingredient list, an instance is the ingredients
+   brought, and one field is one ingredient. That rationale was nowhere in the
+   repo, which is what made the word read as five unrelated things. It now
+   lives in README's Concepts and the `docs/reborn` glossary.
+2. **Exactly one parameter, always** — the rule `@step` has. `NoComponents`
+   ships in the lexicon so a ritual needing nothing does not open with an empty
+   class of its own.
 
 ## Where the plan was wrong
 
-Recorded because each cost a round trip:
+Nowhere. Both steps landed as written.
 
-1. **Step 2 as written was void.** It moved `_links` to root on the grounds that
-   only the CLI used it — but Step 1+4 put the CLI *inside* lexicon, so `_links`
-   gained an in-package consumer. Replaced with the wire decoupling.
-2. **Step 1 could not go green alone.** Deleting `entry.py` left `inits/cli.py`
-   importing `vekna.lexicon._gates`, which ruff rejects. Steps 1 and 4 had to
-   land together; the sequencing was the only real blocker.
-3. **The CLI does not go to root `gates/`.** Root `gates` may import only root
-   `pacts`, and may not import root `inits` — so a click command there could not
-   reach the runtime. The click tree lives in `inits/cli.py`; root `gates` stays
-   empty until 0.6.0 gives it daemon commands.
-4. **The dynamic import needs no mypy override.** `importlib.import_module`
-   returns `ModuleType`, so `cast()` against a `Protocol` typechecks under
-   `disallow_any_expr`. The old `inits/cast.py` needed one because it used bare
-   `getattr`.
+## Open from this task
 
-## Friction
-
-- **import-linter's layer delimiters are the opposite of the intuitive
-  reading.** `:` means "same layer, may import each other"; `|` is the
-  *independent* one. A contract written with `:` passed while a deliberately
-  reintroduced violation sat in the tree. (Moot now — the `layers` contracts
-  were replaced by per-layer `forbidden` ones — but the lesson stands: verify a
-  new contract by breaking it on purpose.)
-- **A `forbidden` contract does not catch descendant-to-descendant imports.**
-  `mills` forbidding `vekna.mills` stayed KEPT while a sibling import sat there;
-  only the `independence` contract caught it.
-- **Private nested packages have no legal sibling import.** `from .._pacts`
-  trips ruff's `TID252`, `from vekna.lexicon._pacts` trips `PLC2701`. Setting
-  `src = ["src"]` does not help. Resolved with a `PLC2701` per-file-ignore
-  scoped to `src/vekna/lexicon/**`.
+- **Fan-in** came up and was set aside: the trampoline is sequential, so a step
+  merging two measurements just takes a payload carrying both halves. A real
+  join — two steps concurrent, a third waiting — is a runtime feature, not a
+  signature one. Deliberately not in `TODO.md`.
+- Where a ritual's components and its first step's payload had the same shape,
+  the test migration reused one model rather than declaring a near-duplicate
+  (`Task` in `test_coding_claude.py`, `State` in `test_graph.py`).
+- `docs/reborn/00-common.md`'s "inputs and outputs are both Components" is now
+  marked deferred rather than deleted: nothing implements an output-side
+  Component, and an output is not something a ritual needed in order to run.
 
 ## Remaining
 
@@ -82,9 +80,3 @@ Recorded because each cost a round trip:
 ## Notes
 
 - Stay on `vekna-reborn`; commit after each green step.
-- `mise run test` / `mise run check` / `mise run il` for verification.
-  Check the exit code — mise reports failures as `ERROR task failed` while
-  pylint still prints `10.00/10` above it.
-- `CLAUDE.md`'s layer list still describes `gates → links → mills → specs →
-  pacts` as an ordering; the contracts now make `gates` pacts-only. Worth a
-  look next time it is edited.

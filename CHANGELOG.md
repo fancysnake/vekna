@@ -41,6 +41,29 @@ and this project adheres to [Semantic Versioning].
 
 ### Changed
 
+- **`@ritual` takes a declared components model.** The entrypoint's parameters
+  used to be reflected into a Pydantic model by `create_model`, a type the
+  author never saw. It now takes exactly one parameter, a model written in the
+  ritual's own source — the same rule `@step` has always had for its payload:
+
+  ```python
+  class FixTests(BaseModel):
+      bound: int = 3
+
+
+  @ritual("fix_tests")
+  async def fix_tests(components: FixTests) -> Transition:
+      return goto(fix, Attempt(left=components.bound))
+  ```
+
+  Flags, `rituals list` and `rituals show` are unchanged — they read the
+  model's fields either way — but defaults, validators and
+  `Field(description=...)` are the author's to write now. A ritual needing
+  nothing takes the new `NoComponents`. Zero parameters, two parameters, or an
+  annotation that is not a `BaseModel` subclass raise `RitualDefinitionError`
+  when the ritual is defined; components that do not match the declared model
+  raise the new `RitualBoundaryError` at the cast's entry boundary, the
+  counterpart to the step boundary's check.
 - **The GLIMPSE layering inside a package is enforced, not just documented.**
   The six `forbidden` contracts only ever governed the top-level packages, so
   the layer table in `docs/architecture.md` was a convention nothing checked —
