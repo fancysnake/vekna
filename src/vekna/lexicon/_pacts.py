@@ -209,3 +209,12 @@ def goto(target: Step, payload: object = None) -> Goto:
 
 def done(result: object = None) -> Done:
     return Done(result=result)
+
+
+class RitualsConfig(BaseModel):
+    files: list[str] | None = None
+    modules: list[str] | None = None
+
+
+class Config(BaseModel):
+    rituals: RitualsConfig | None = None

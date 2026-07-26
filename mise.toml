@@ -104,5 +104,5 @@ diff-cover coverage.xml --compare-branch=main
 
 # OTHER
 
-[tasks.shitcheck]
-run = "git diff main|grep -E '^\\+.*(noqa|type: ignore|Any|ANY|pylint|pragma|cast\\()'"
+[tasks.tingle]
+run = "tingle check"

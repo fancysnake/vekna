@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, TypeVar, cast, overload
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from vekna.lexicon import (
     AskFn,
@@ -65,7 +65,7 @@ async def coding(
     *,
     opts: CodingOpts | None = None,
     gate_tools: Sequence[str] | None = None,
-    focus_options: object | None = None,
+    focus_options: BaseModel | None = None,
 ) -> CodingResult: ...
 
 
@@ -76,7 +76,7 @@ async def coding(
     output: type[_OutputT],
     opts: CodingOpts | None = None,
     gate_tools: Sequence[str] | None = None,
-    focus_options: object | None = None,
+    focus_options: BaseModel | None = None,
 ) -> _OutputT: ...
 
 
@@ -87,7 +87,7 @@ async def coding(
     output: type[_OutputT] | None = None,
     opts: CodingOpts | None = None,
     gate_tools: Sequence[str] | None = None,
-    focus_options: object | None = None,
+    focus_options: BaseModel | None = None,
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()

@@ -139,7 +139,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("bare")
-            async def bare() -> Transition:  # pragma: no cover
+            async def bare() -> Transition:
                 await asyncio.sleep(0)
                 return done()
 
@@ -148,9 +148,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("pair")
-            async def pair(  # pragma: no cover
-                components: Start, extra: Tick
-            ) -> Transition:
+            async def pair(components: Start, extra: Tick) -> Transition:
                 await asyncio.sleep(0)
                 return done(components.start + extra.left)
 
@@ -159,7 +157,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="pydantic model"):
 
             @ritual("loose")
-            async def loose(bound: int) -> Transition:  # pragma: no cover
+            async def loose(bound: int) -> Transition:
                 await asyncio.sleep(0)
                 return done(bound)
 

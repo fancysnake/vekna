@@ -1,7 +1,6 @@
 import inspect
 import textwrap
 from collections.abc import Awaitable, Callable
-from types import UnionType
 from typing import ParamSpec, TypeVar, get_type_hints
 
 from pydantic import BaseModel
@@ -22,13 +21,26 @@ _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
 
 
+def _get_param_annotation(
+    *, func: Callable[_P, Awaitable[_MediumT]], name: str, msg: str
+) -> type[BaseModel]:
+    annotation = get_type_hints(func).get(name)  # type: ignore [misc]
+
+    if not isinstance(annotation, type) or not issubclass(  # type: ignore [misc]
+        annotation, BaseModel  # type: ignore [misc]
+    ):
+        raise RitualDefinitionError(msg)
+
+    return annotation
+
+
 # Signature-forwarding via ParamSpec is Any-tainted the same way the rest of
 # this module is, so `medium` stays here rather than next to `medium_rite` in
 # the engine — _mills keeps its strictness.
 def medium(
     func: Callable[_P, Awaitable[_MediumT]],
 ) -> Callable[_P, Awaitable[_MediumT]]:
-    name = getattr(func, "__name__", "medium")
+    name = func.__name__
 
     async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
         async with medium_rite(name):
@@ -45,29 +57,29 @@ def medium(
 
 
 def _payload_type(
-    func: Callable[..., Awaitable[Transition]],
-) -> type[object] | UnionType:
-    name = getattr(func, "__name__", "<step>")
+    func: Callable[[BaseModel], Awaitable[Transition]],
+) -> type[BaseModel]:
+    name = func.__name__
     parameters = list(inspect.signature(func).parameters.values())
     if len(parameters) != 1:
         msg = f"@step {name!r} must take exactly one payload parameter"
         raise RitualDefinitionError(msg)
-    annotation = get_type_hints(func).get(parameters[0].name)
-    if not isinstance(annotation, type | UnionType):
-        msg = f"@step {name!r} needs a concrete payload type annotation"
-        raise RitualDefinitionError(msg)
-    return annotation
+    return _get_param_annotation(
+        func=func,
+        name=parameters[0].name,
+        msg=f"@step {name!r} needs a concrete payload type annotation",
+    )
 
 
-def source_text(func: Callable[..., Awaitable[Transition]]) -> str | None:
+def source_text(func: Callable[[BaseModel], Awaitable[Transition]]) -> str | None:
     try:
         return textwrap.dedent(inspect.getsource(func))
     except (OSError, TypeError):
         return None
 
 
-def step(func: Callable[..., Awaitable[Transition]]) -> Step:
-    name = getattr(func, "__name__", "<step>")
+def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
+    name = func.__name__
     payload_type = _payload_type(func)
 
     async def run(payload: object) -> Transition:
@@ -79,29 +91,33 @@ def step(func: Callable[..., Awaitable[Transition]]) -> Step:
     return Step(name=name, run=run, input_type=payload_type, source=source_text(func))
 
 
-def _components_model(func: Callable[..., Awaitable[Transition]]) -> type[BaseModel]:
-    name = getattr(func, "__name__", "<ritual>")
+def _components_model(
+    func: Callable[[BaseModel], Awaitable[Transition]],
+) -> type[BaseModel]:
+    name = func.__name__
     parameters = list(inspect.signature(func).parameters.values())
     if len(parameters) != 1:
         msg = f"@ritual {name!r} must take exactly one components parameter"
         raise RitualDefinitionError(msg)
-    annotation = get_type_hints(func).get(parameters[0].name)
-    if not (isinstance(annotation, type) and issubclass(annotation, BaseModel)):
-        msg = f"@ritual {name!r} needs a pydantic model as its components type"
-        raise RitualDefinitionError(msg)
-    return annotation
+    return _get_param_annotation(
+        func=func,
+        name=parameters[0].name,
+        msg=f"@ritual {name!r} needs a pydantic model as its components type",
+    )
 
 
 def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:
     flags: list[tuple[str, str, bool]] = []
     for name, field in components.model_fields.items():
-        type_name: str = getattr(field.annotation, "__name__", "value")
+        type_name = field.annotation.__name__ if field.annotation else "value"  # type: ignore [misc]
         flags.append((name, type_name, field.is_required()))
     return flags
 
 
-def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> Callable[..., Ritual]:
-    def wrap(func: Callable[..., Awaitable[Transition]]) -> Ritual:
+def ritual(
+    name: str, *, max_steps: int = DEFAULT_MAX_STEPS
+) -> Callable[[Callable[[BaseModel], Awaitable[Transition]]], Ritual]:
+    def wrap(func: Callable[[BaseModel], Awaitable[Transition]]) -> Ritual:
         model = _components_model(func)
 
         # The cast's entry boundary, and the counterpart to the step's: nothing

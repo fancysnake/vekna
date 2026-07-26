@@ -4,7 +4,15 @@ import importlib.util
 import tomllib
 from pathlib import Path
 
-from vekna.lexicon._pacts import Ritual, RitualDefinitionError, RitualSource, Step
+from pydantic import ValidationError
+
+from vekna.lexicon._pacts import (
+    Config,
+    Ritual,
+    RitualDefinitionError,
+    RitualSource,
+    Step,
+)
 
 
 def _found(namespace: dict[str, object]) -> RitualSource:
@@ -27,19 +35,18 @@ def load_rituals_file(path: Path) -> RitualSource:
         raise RitualDefinitionError(msg)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return _found(vars(module))
+    return _found(vars(module))  # type: ignore [misc]
 
 
 def load_rituals_module(name: str) -> RitualSource:
-    return _found(vars(importlib.import_module(name)))
+    return _found(vars(importlib.import_module(name)))  # type: ignore [misc]
 
 
-def read_config(path: Path) -> tuple[list[str], list[str]]:
+def read_config(path: Path) -> Config | None:
     with path.open("rb") as handle:
-        data = tomllib.load(handle)
-    section = data.get("rituals", {})
-    if not isinstance(section, dict):
-        return [], []
-    modules = [m for m in section.get("modules", []) if isinstance(m, str)]
-    files = [f for f in section.get("files", []) if isinstance(f, str)]
-    return modules, files
+        data = tomllib.load(handle)  # type: ignore [misc]
+
+    try:
+        return Config.model_validate(data)  # type: ignore [misc]
+    except ValidationError:
+        return None
