@@ -12,12 +12,14 @@ starts, and the number is attached at the tag.
 |------|---------|-------|-------|
 | **Reborn** | `1.0.0` | [`reborn/`](reborn/README.md) | in progress |
 | **Eye** | `2.0.0` | [`eye/`](eye/README.md) | parked |
+| **Hand** | `3.0.0` | [`hand/`](hand/README.md) | parked |
 
 Names come from the Vecna lore the project is named for, and each says what its
 release is about: **Reborn**, the pivot from a tmux focus-switcher to rituals
-and casts; **Eye**, the surfaces that watch. `hand` — the acting half of the
-[Hand and Eye](reborn/00-common.md) easter egg — is unspoken for, and is the
-name waiting for a release about doing rather than seeing.
+and casts; **Eye**, the surfaces that watch; **Hand**, the acting half — what a
+ritual can do when things go wrong, and what it can be held to. Eye and Hand are
+the two halves of the [Hand and Eye](reborn/00-common.md) easter egg, doing the
+job that easter egg was always describing.
 
 Rules, such as they are:
 
@@ -36,3 +38,5 @@ Rules, such as they are:
   knowledge every feature doc in it assumes
 - [`eye/`](eye/README.md) — Eye (2.0.0): the visual surfaces, parked until
   Reborn ships
+- [`hand/`](hand/README.md) — Hand (3.0.0): failure paths, bounds, budgets,
+  loadable procedures, replay

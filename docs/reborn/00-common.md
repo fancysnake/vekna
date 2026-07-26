@@ -388,8 +388,10 @@ unflavored surface. The exact flavor (output styling, verb choices, where the
 skin diverges from the plain path) is **to be shaped** — treat this as the
 intent, not a spec.
 
-The same lore names the parked visual track [`../eye/`](../eye/README.md): those
-are surfaces that watch. `vekna lich` needs no skin — it is already the word.
+The same lore names both parked tracks: [`../eye/`](../eye/README.md), the
+surfaces that watch, and [`../hand/`](../hand/README.md), the engine's acting
+half — failure paths, bounds, budgets, loadable procedures. `vekna lich` needs
+no skin — it is already the word.
 
 ## Dependency policy
 
@@ -464,3 +466,6 @@ run …` commands.
 - A bot per lich. Not possible on any platform, and not needed — a channel per
   lich carries the addressing.
 - Visual surfaces. Parked past 1.0, not abandoned: [`../eye/`](../eye/README.md).
+- Sandboxed agent execution. Out of scope for the project, not just for 1.0 —
+  the agent edits your repo on purpose. Scope the token and fence the whole
+  process instead; [08-hardening.md](08-hardening.md) says how.

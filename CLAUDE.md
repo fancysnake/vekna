@@ -141,4 +141,6 @@ code.
 - [`docs/reborn/`](docs/reborn/README.md) — Reborn (`1.0.0`), the plan from
   0.3.0 onward
 - [`docs/eye/`](docs/eye/README.md) — Eye (`2.0.0`), parked until Reborn ships
+- [`docs/hand/`](docs/hand/README.md) — Hand (`3.0.0`), the acting half: failure
+  paths, bounds, budgets, skills, replay
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight

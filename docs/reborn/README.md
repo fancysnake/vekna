@@ -22,7 +22,8 @@ and casts on command, from a terminal or from Discord.
 - [03-coding-folios.md](03-coding-folios.md) — `0.3.0` `folio/coding` +
   `folio/coding_claude`; `vekna cast "<prompt>"`.
 - [04-process-folio.md](04-process-folio.md) — `0.4.0` `folio/process`
-  (dev-server use case).
+  (dev-server use case); plus `coding`'s session declaration, filed in
+  [03-coding-folios.md](03-coding-folios.md) with the Medium it changes.
 - [05-locks.md](05-locks.md) — `0.5.0` locks API, `warn` default (no
   coordination yet).
 - [06-vekna-daemon.md](06-vekna-daemon.md) — `0.6.0` daemon, lock coordination,
@@ -34,7 +35,14 @@ and casts on command, from a terminal or from Discord.
 
 ## Parked
 
-[`../eye/`](../eye/README.md) — **Eye** (`2.0.0`), the visual surfaces: Textual
-TUI, web view, the lich's web page. Same wire, same events, another consumer, so
-they park without blocking anything here. WhatsApp notifications were dropped
-outright: Discord ships at 0.7.0 and does that job better.
+[`../eye/`](../eye/README.md) — **Eye** (`2.0.0`), the surfaces that watch:
+Textual TUI, web view, the lich's web page, the workflow graph drawn, and the
+lich's channels reshaped into adapters. Same wire, same events, another
+consumer, so they park without blocking anything here. WhatsApp notifications
+were dropped outright: Discord ships at 0.7.0 and does that job better.
+
+[`../hand/`](../hand/README.md) — **Hand** (`3.0.0`), the acting half: failure
+as a transition, `timeout`/`race`, cast budgets, loadable skills, and replaying
+a recorded cast to check the ritual still walks its path. Engine work, filed
+past 1.0 so a second syntax does not land halfway through getting the first
+story finished.

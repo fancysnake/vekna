@@ -31,10 +31,42 @@ enough that a second person can use it.
 - Removal of any transitional shims left from earlier releases.
 - `deptry`, `pip-audit`, `mypy --strict`, `vulture` all clean.
 
+## Blast radius, and what vekna does not sandbox
+
+Vekna does not sandbox agents, and 1.0 says so in writing rather than leaving a
+second user to work it out. The agent edits your repo and runs your commands —
+that is the job, and a sandbox around it would defeat the point. What the
+process split buys is containment of *failure*: a broken ritual or a misbehaving
+SDK kills one cast process, not the daemon and not its siblings.
+
+Where a boundary is genuinely wanted, two things work, and neither is vekna's
+to build:
+
+- **Scope the credentials, not the process.** A ritual that triages PRs needs a
+  token that can read pull requests and comment on them — not one that can push
+  to `main` or read every repository in the organisation. Fine-grained GitHub
+  tokens, one per ritual, least privilege. The example library ships rituals
+  that state the exact permission set each one needs, because a recommendation
+  nobody can act on is not a recommendation.
+- **Fence the whole thing if you want a fence.** If a cast must not reach the
+  host, run *vekna* inside the container — devcontainer, VM, whatever the
+  project already uses — rather than expecting vekna to grow one inwards. A cast
+  process is an ordinary Python process with a working directory and
+  containerises like anything else, and a lich raised inside the fence keeps its
+  channel, because the bot dials out.
+
+What vekna does own stays small and stated: the daemon socket is `0600` and
+user-scoped, the lich's allowlist is explicit, and `07-lich.md` carries the
+warning that reaching a lich's channel means running agents in that directory on
+that machine.
+
 ## Out of scope
 
 Anything that doesn't move the product from "works for me" to "works for a
 second user." New surfaces, new folios, network exposure.
+
+**Sandboxed agent execution** — out of scope for the project, not merely for
+this release. See above for the two things to do instead.
 
 ## Acceptance
 

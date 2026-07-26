@@ -57,6 +57,36 @@ Non-deterministic inside a step, deterministic between them.
   ritual with the flags its Components take; `show` adds `max_steps`, the
   Component flags, and a step graph.
 
+## Session continuity is the author's — follow-on (`0.4.0`)
+
+Two `coding` rites in one cast either share the agent's context or they do not,
+and today that is an implementation detail of the Focus. It should be a
+declaration at the call site, because the right answer differs per ritual and
+the wrong one is invisible:
+
+```python
+await coding(prompt=..., session="new")        # fresh context
+await coding(prompt=..., session="continue")   # the cast's running session
+await coding(prompt=..., session="lint-loop")  # a named session, resumed by name
+```
+
+A retry after a failed attempt usually wants `continue` — the agent remembering
+what it already tried is the whole value. A review step usually wants `new`: an
+agent that helped write the code is not a reviewer of it, and silent sharing
+makes that step quietly worthless while looking like it ran.
+
+**Default `new`.** A step is a task boundary, and carrying context across one by
+default contradicts what the boundary is for. Resume (0.6.0) reusing the prior
+SDK session when re-entering an interrupted rite is unaffected — that is the
+*same* rite continuing, not a new one inheriting.
+
+Named sessions give a loop its own thread of memory without pinning the whole
+cast to one context: a lint-fix loop remembers its own attempts while a review
+rite in the same cast starts clean.
+
+The grimoire records which session a rite used, so the journal, the daemon and
+the Eye can all show it — and replay can reproduce it.
+
 ## Scope
 
 - `vekna.folio.coding/{_pacts,_mills}.py` — `CodingOpts`, `CodingResult`,
