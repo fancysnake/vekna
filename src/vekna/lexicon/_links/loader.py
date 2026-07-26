@@ -15,7 +15,7 @@ from vekna.lexicon._pacts import (
 )
 
 
-def _found(namespace: dict[str, object]) -> RitualSource:
+def _found(namespace: dict[str, type]) -> RitualSource:
     return RitualSource(
         rituals=[v for v in namespace.values() if isinstance(v, Ritual)],
         steps=[v for v in namespace.values() if isinstance(v, Step)],

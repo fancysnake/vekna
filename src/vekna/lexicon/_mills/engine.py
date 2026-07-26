@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon._pacts import (
+    BaseFocus,
     Channel,
     Done,
     FocusMissingError,
@@ -20,6 +21,7 @@ from vekna.lexicon._pacts import (
     RitualError,
     Step,
     StepBudgetExceededError,
+    StringOutput,
 )
 
 
@@ -131,22 +133,22 @@ class Compendium:
 # What a medium package offers the lexicon, which may not import it: the Focus
 # it needs (and how to obtain one), plus an optional one-shot entry so `cast
 # --prompt` can reach the medium without a second dynamic-import mechanism.
-PromptRunner = Callable[[str], Awaitable[str]]
+PromptRunner = Callable[[str], Awaitable[StringOutput]]
 
 
 class MediumRegistry:
     def __init__(self) -> None:
-        self._foci: dict[str, object] = {}
+        self._foci: dict[str, BaseFocus] = {}
         self._hints: dict[str, str] = {}
         self._prompts: dict[str, PromptRunner] = {}
 
     def expect(self, medium_name: str, *, hint: str) -> None:
         self._hints[medium_name] = hint
 
-    def register(self, medium_name: str, focus: object) -> None:
+    def register(self, medium_name: str, focus: BaseFocus) -> None:
         self._foci[medium_name] = focus
 
-    def resolve(self, medium_name: str) -> object:
+    def resolve(self, medium_name: str) -> BaseFocus:
         if (focus := self._foci.get(medium_name)) is not None:
             return focus
         msg = f"no Focus registered for medium {medium_name!r}"
@@ -175,11 +177,11 @@ def expect_focus(medium_name: str, *, hint: str) -> None:
     _registry.expect(medium_name, hint=hint)
 
 
-def register_focus(medium_name: str, focus: object) -> None:
+def register_focus(medium_name: str, focus: BaseFocus) -> None:
     _registry.register(medium_name, focus)
 
 
-def resolve_focus(medium_name: str) -> object:
+def resolve_focus(medium_name: str) -> BaseFocus:
     return _registry.resolve(medium_name)
 
 
@@ -269,7 +271,7 @@ def medium_rite(name: str) -> contextlib.AbstractAsyncContextManager[None]:
 
 async def run_cast(
     *, ritual: Ritual, components: BaseModel, grimoire: Grimoire, channel: Channel
-) -> object:
+) -> BaseModel | None:
     token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
     try:
         transition = await ritual.run(components)

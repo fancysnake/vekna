@@ -14,6 +14,7 @@ from vekna.lexicon import (
     record_result,
     resolve_focus,
 )
+from vekna.lexicon._pacts import StringOutput
 
 from ._pacts import CodingOpts, CodingOutputError, CodingResult
 
@@ -127,5 +128,5 @@ async def coding(
 
 # `vekna cast --prompt` reaches the medium through this, so the lexicon needs
 # no import of its own — and no structural type for the result.
-async def one_shot(prompt: str) -> str:
-    return (await coding(prompt)).text
+async def one_shot(prompt: str) -> StringOutput:
+    return StringOutput(output=(await coding(prompt)).text)

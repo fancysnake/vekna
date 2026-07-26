@@ -1,5 +1,5 @@
-from collections.abc import Awaitable, Callable, Sequence
-from typing import Protocol, cast, runtime_checkable
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -10,11 +10,13 @@ from claude_agent_sdk import (
     query,
     tool,
 )
-from pydantic import JsonValue
+from claude_agent_sdk.types import ContentBlock
+from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon import AskFn, CodingCall, FocusReply, GateFn
+from vekna.lexicon._pacts import BaseFocus
 
-from ._pacts import ClaudeOptions
+from ._pacts import ClaudeOptions, EffortLevel, PermissionMode
 
 _DENY_MESSAGE = "denied by the vekna decide gate"
 
@@ -27,7 +29,7 @@ _ASK_DESCRIPTION = (
     "valid approaches to take, anything you would otherwise have to guess at."
 )
 _ASK_SCHEMA: dict[str, JsonValue] = {
-    "type": "object",
+    "type": "BaseModel | None",
     "properties": {
         "question": {"type": "string", "description": "The question to ask."},
         "options": {
@@ -50,7 +52,7 @@ _ASK_INSTRUCTION = (
 @runtime_checkable
 class _AssistantLike(Protocol):
     @property
-    def content(self) -> Sequence[object]: ...
+    def content(self) -> str | list[ContentBlock]: ...
     @property
     def model(self) -> str: ...
 
@@ -68,22 +70,47 @@ class _ResultLike(Protocol):
 
 
 _PermissionResult = PermissionResultAllow | PermissionResultDeny
-_CanUseTool = Callable[[str, dict[str, object], object], Awaitable[_PermissionResult]]
-_ToolHandler = Callable[[dict[str, object]], Awaitable[dict[str, object]]]
-_ToolFactory = Callable[[_ToolHandler], object]
+_CanUseTool = Callable[
+    [str, dict[str, BaseModel | None], BaseModel | None], Awaitable[_PermissionResult]
+]
+_ToolHandler = Callable[
+    [dict[str, BaseModel | None]], Awaitable[dict[str, dict[str, list[dict[str, str]]]]]
+]
+_ToolFactory = Callable[[_ToolHandler], dict[str, list[dict[str, str]]] | None]
 
 
 # The SDK's server and option types are `Any`-tainted, so both constructors are
 # reached through signatures of our own rather than naming them.
 class _ServerFactory(Protocol):
-    def __call__(self, name: str, *, tools: list[object]) -> object: ...
+    def __call__(
+        self, name: str, *, tools: list[dict[str, list[dict[str, str]]] | None]
+    ) -> dict[str, list[dict[str, str]]] | None: ...
 
 
 class _OptionsFactory(Protocol):
-    def __call__(self, **knobs: object) -> ClaudeAgentOptions: ...
+    def __call__(  # ruff: ignore[too-many-arguments]
+        self,
+        *,
+        model: str | None,
+        system_prompt: str | dict[str, str],
+        cwd: str | None,
+        permission_mode: PermissionMode,
+        can_use_tool: (
+            Callable[
+                [str, dict[str, BaseModel | None], BaseModel | None],
+                Awaitable[PermissionResultAllow | PermissionResultDeny],
+            ]
+            | None
+        ),
+        allowed_tools: list[str],
+        mcp_servers: dict[str, dict[str, list[dict[str, str]]] | None],
+        max_turns: int | None,
+        effort: EffortLevel | None,
+        output_format: dict[str, str | dict[str, JsonValue]] | None,
+    ) -> ClaudeAgentOptions: ...
 
 
-def _claude_options(focus_options: object | None) -> ClaudeOptions:
+def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
     if isinstance(focus_options, ClaudeOptions):
         return focus_options
     return ClaudeOptions()
@@ -91,7 +118,9 @@ def _claude_options(focus_options: object | None) -> ClaudeOptions:
 
 def _permission_handler(gate: GateFn) -> _CanUseTool:
     async def can_use_tool(
-        tool_name: str, input_data: dict[str, object], _context: object
+        tool_name: str,
+        input_data: dict[str, BaseModel | None],
+        _context: BaseModel | None,
     ) -> _PermissionResult:
         if await gate(tool_name):
             return PermissionResultAllow(updated_input=input_data)
@@ -102,16 +131,18 @@ def _permission_handler(gate: GateFn) -> _CanUseTool:
 
 # The tool runs in *this* process — the CLI subprocess calls back over the
 # SDK's control protocol and the agent blocks until the operator answers.
-def _ask_server(ask: AskFn) -> object:
-    async def answer(args: dict[str, object]) -> dict[str, object]:
-        raw = args.get("options")
-        offered = [str(item) for item in raw] if isinstance(raw, list) and raw else None
-        reply = await ask(str(args.get("question", "")), offered)
+def _ask_server(ask: AskFn) -> dict[str, list[dict[str, str]]] | None:
+    async def answer(  # type: ignore [explicit-any]
+        args: Any,  # ruff: ignore [any-type]   # type: ignore [explicit-any]
+    ) -> dict[str, Any]:
+        raw = args.get("options")  # type: ignore [misc]
+        offered = [str(item) for item in raw] if isinstance(raw, list) and raw else None  # type: ignore [misc]
+        reply = await ask(str(args.get("question", "")), offered)  # type: ignore [misc]
         return {"content": [{"type": "text", "text": reply}]}
 
     build = cast("_ToolFactory", tool(_ASK, _ASK_DESCRIPTION, _ASK_SCHEMA))
     serve = cast("_ServerFactory", create_sdk_mcp_server)
-    tools: list[object] = [build(answer)]
+    tools: list[dict[str, list[dict[str, str]]] | None] = [build(answer)]  # type: ignore [misc]
     return serve(_SERVER, tools=tools)
 
 
@@ -129,11 +160,13 @@ def _agent_options(
     knobs = _claude_options(call.focus_options)
     if (permission_mode := knobs.permission_mode) is None:
         permission_mode = "default" if gate is not None else "bypassPermissions"
-    output_format: dict[str, object] | None = None
+    output_format: dict[str, str | dict[str, JsonValue]] | None = None
     if call.output_schema is not None:
         output_format = {"type": "json_schema", "schema": call.output_schema}
     allowed: list[str] = [*(knobs.allowed_tools or []), _ASK_TOOL]
-    servers: dict[str, object] = {_SERVER: _ask_server(ask)}
+    servers: dict[str, dict[str, list[dict[str, str]]] | None] = {
+        _SERVER: _ask_server(ask)
+    }
     build = cast("_OptionsFactory", ClaudeAgentOptions)
     return build(
         model=call.model,
@@ -149,7 +182,7 @@ def _agent_options(
     )
 
 
-class ClaudeCodingFocus:
+class ClaudeCodingFocus(BaseFocus):
     @staticmethod
     async def run(
         call: CodingCall,

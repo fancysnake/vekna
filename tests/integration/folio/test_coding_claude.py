@@ -396,7 +396,7 @@ class TestPromptSugar:
         out = capsys.readouterr().out
         assert exit_code == 0
         assert "drafting the haiku" in out
-        assert "result: haiku done" in out
+        assert "result: output='haiku done" in out
         assert captured["prompt"] == "write a haiku"
 
     @staticmethod
@@ -409,7 +409,7 @@ class TestPromptSugar:
 
         assert exit_code == 0
         assert captured["prompt"] == "write a haiku"
-        assert "result: haiku done" in capsys.readouterr().out
+        assert "result: output='haiku done" in capsys.readouterr().out
 
     @staticmethod
     def test_inline_prompt_form_is_equivalent(tmp_path, monkeypatch, capsys):
@@ -421,7 +421,7 @@ class TestPromptSugar:
 
         assert exit_code == 0
         assert captured["prompt"] == "write a haiku"
-        assert "result: haiku done" in capsys.readouterr().out
+        assert "result: output='haiku done" in capsys.readouterr().out
 
     @staticmethod
     def test_inline_prompt_with_trailing_words_is_a_usage_error(

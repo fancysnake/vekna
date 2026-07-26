@@ -109,7 +109,7 @@ class CodingCall:
     system: str | None
     cwd: str | None
     output_schema: dict[str, JsonValue] | None
-    focus_options: object | None
+    focus_options: BaseModel | None
 
 
 # Typed and closed, not a loose telemetry dict: a focus that spelled a key
@@ -164,7 +164,7 @@ class FocusMissingError(RitualError):
 
 @dataclass(frozen=True)
 class Done:
-    result: object = None
+    result: BaseModel | None = None
 
 
 # `source` is the decorated function's own source text, captured at definition
@@ -173,15 +173,15 @@ class Done:
 @dataclass(frozen=True)
 class Step:
     name: str
-    run: Callable[[object], Awaitable["Transition"]]
-    input_type: type[object] | UnionType
+    run: Callable[[BaseModel | None], Awaitable["Transition"]]
+    input_type: type[BaseModel | None] | UnionType
     source: str | None = None
 
 
 @dataclass(frozen=True)
 class Goto:
     target: Step
-    payload: object = None
+    payload: BaseModel | None = None
 
 
 Transition = Goto | Done
@@ -203,11 +203,11 @@ class Ritual:
     source: str | None = None
 
 
-def goto(target: Step, payload: object = None) -> Goto:
+def goto(target: Step, payload: BaseModel | None = None) -> Goto:
     return Goto(target=target, payload=payload)
 
 
-def done(result: object = None) -> Done:
+def done(result: BaseModel | None = None) -> Done:
     return Done(result=result)
 
 
@@ -218,3 +218,11 @@ class RitualsConfig(BaseModel):
 
 class Config(BaseModel):
     rituals: RitualsConfig | None = None
+
+
+class StringOutput(BaseModel):
+    output: str
+
+
+class BaseFocus:
+    pass

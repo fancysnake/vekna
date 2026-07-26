@@ -82,7 +82,7 @@ def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
     name = func.__name__
     payload_type = _payload_type(func)
 
-    async def run(payload: object) -> Transition:
+    async def run(payload: BaseModel | None) -> Transition:
         if not isinstance(payload, payload_type):
             msg = f"step {name!r} expected {payload_type}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
