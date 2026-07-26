@@ -35,6 +35,14 @@ surface and sees the same view. Lock default flips to `deny`.
 - **Attention surfacing** across casts — a cast blocked on a `decide` is
   raised to the operator wherever they are looking. The idea vekna started
   with, expressed in casts and rites rather than tmux panes.
+- **Debug mode** — `vekna --debug` (and `[daemon] debug` in config) logs every
+  event the daemon processes: kind, cast, direction, and what it did with it,
+  including the ones it dropped or could not route. The daemon is the one place
+  where every message passes, so it is the one place worth instrumenting; a
+  wire protocol with no view of itself makes "the event never arrived" and "the
+  handler ignored it" indistinguishable. Off by default, and never on the
+  rendered view — it writes to stderr or a file, so it does not fight the
+  Grimoire for the terminal.
 - Clean disconnect: a cast process closing the socket marks the cast ended; an
   unclean exit surfaces as "cast disconnected", not a traceback.
 - `vekna casts` (list active + recent), `vekna locks` (current locks +
@@ -58,7 +66,8 @@ surface and sees the same view. Lock default flips to `deny`.
 
 ## Out of scope
 
-TUI (0.7.0). Web (0.8.0). WhatsApp (0.9.0). Cross-machine peers.
+Originating casts — the daemon observes and coordinates; the lich casts
+(0.7.0). Visual surfaces ([`../eye/`](../eye/README.md)). Cross-machine peers.
 Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 
 ## Acceptance
@@ -72,4 +81,7 @@ Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 - Interrupt a cast mid-rite, `vekna casts resume <cast_id>` — picks up at that
   rite; completed rites aren't re-run; agent rites reuse the prior SDK session
   (validate with a context-dependent question across resume).
+- `vekna --debug` logs every event of a full cast — hello, rites, a decide
+  round-trip, goodbye — and an event addressed to a cast that has gone shows up
+  as dropped rather than vanishing. Without the flag, nothing extra is printed.
 - `mise run check` and `mise run test` pass.

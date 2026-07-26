@@ -4,18 +4,24 @@ Shared context for every feature. Read once; each feature doc assumes it.
 
 ## Premise
 
-One binary, `vekna`, two roles with separate lifetimes:
+One binary, `vekna`, three roles with separate lifetimes:
 
 - **cast process** — spawned by `vekna cast <ritual>`. Imports lexicon,
   folios, and the user's `rituals.py`. Runs one cast to completion, streams
   events to the daemon when attached, exits. Always fresh; never pooled. A
   crash kills one cast.
+- **lich** (0.7.0) — long-running, named, bound to one project directory (a
+  directory may hold several). Started by `vekna lich`. Runs one cast at a time
+  in its directory and takes orders from
+  any surface — its terminal, another shell, its own Discord channel. Spawns
+  cast processes; never loads them, so it sits inside the same import rule as
+  the daemon.
 - **vekna daemon** — long-running, one per machine/user. Started by bare
   `vekna`. Coordinates locks, owns the durable journal, surfaces attention
-  across casts. Never imports user code, lexicon, or folios — only the wire
-  schema. The import boundary is enforced by import-linter on packages: the
-  daemon's GLIMPSE layers may not import lexicon or folios, so the daemon
-  process never loads them.
+  across casts, routes commands to liches. Never imports user code, lexicon, or
+  folios — only the wire schema. The import boundary is enforced by
+  import-linter on packages: the daemon's GLIMPSE layers may not import lexicon
+  or folios, so the daemon process never loads them.
 
 Split is structural, not policy. A misbehaving ritual or compromised SDK kills
 one cast process, not the daemon or sibling casts. Blast radius = one cast. The
@@ -24,8 +30,10 @@ original soul (cross-attention surfacing) is the daemon's job, across casts.
 **Staging.** 0.x builds features up. The daemon (`vekna` dashboard + real lock
 coordination) arrives at **0.6.0**; before that, casts run standalone. Lock
 APIs ship at **0.5.0** with a permissive default; the daemon adds coordination
-and flips the default to `deny` at 0.6.0. **1.0 ships when all features are
-ready** (hardening), not when the daemon lands.
+and flips the default to `deny` at 0.6.0. The lich lands at **0.7.0** and is the
+first release that can start work remotely. **1.0 ships when all features are
+ready** (hardening), not when the daemon lands. The visual surfaces are parked
+past 1.0 in [`../eye/`](../eye/README.md).
 
 **Config namespace** is `~/.config/vekna/`, `.vekna.toml`. Package on disk is
 named `vekna`.
@@ -47,6 +55,8 @@ named `vekna`.
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
+| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. (0.7.0.) |
+| **Phylactery** | A lich's row in the daemon's registry, beside `runs/`: name, root, created, last cast, Discord channel id. Outlives the process — a lich whose process died is dormant, not gone. Anything larger (session log, cast history) is the journal's already. |
 
 `cast` is the verb: `vekna cast write-tests`.
 
@@ -126,14 +136,25 @@ ritual library                cast process                     vekna daemon (0.6
 ──────────────                ────────────                     ─────────────────────
 rituals.py            ◄────── imports                          ┌──── CLI
 @ritual decorators                                             │
-                              wire client     ────────────────►├──── TUI
+                              wire client     ────────────────►├──── locks (project, system)
                               standalone fallback              │
-                              cast event log                   ├──── web (later)
+                              cast event log                   ├──── runs/ on disk
                               acquires/releases locks          │
-                              renders prompts on stdin         ├──── WhatsApp (later)
+                              renders prompts on stdin         ├──── lich routing (0.7.0)
                               when no daemon                   │
-                                                               ├──── locks (project, system)
-                                                               └──── runs/ on disk
+                                                               └──── eye surfaces (post-1.0)
+```
+
+A lich (0.7.0) hangs off the same daemon, bound to one project directory —
+though a directory may hold several:
+
+```
+lich "hollow-vesper"                       ┌── the terminal that raised it
+one directory            ◄── commands ─────┼── shells that attached later
+one cast at a time                         └── #lich-hollow-vesper on discord
+phylactery: one registry row
+      │                    (the daemon routes them, keyed by lich name)
+      └── spawns ──► cast process ──► reports itself to the daemon, as always
 ```
 
 **Lifecycle:**
@@ -241,6 +262,8 @@ protocol with no consumer yet, which is deliberate.
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
+| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | 0.7.0: name, project root, pid, idle-or-casting |
+| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | 0.7.0: the daemon routes by lich name |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on
@@ -338,8 +361,17 @@ vekna casts                                   # list active + recent casts — 0
 vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
 vekna locks                                   # current locks + holders — 0.6.0
 vekna unlock <key>                            # admin override (confirmation) — 0.6.0
+vekna --debug                                 # daemon: log every event it processes — 0.6.0
+vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.7.0
+vekna lich attach [<name>]                    # attach a shell to a lich's session — 0.7.0
+vekna lich dismiss <name>                     # end it; archive the channel, drop the row — 0.7.0
+vekna liches                                  # liches live and dormant, their roots and state — 0.7.0
 vekna --help
 ```
+
+Inside a lich's session — terminal, attached shell, or Discord channel — the
+vocabulary is the same: `cast`, `prompt`, `status`, `log`, `rituals`, `kill`.
+Only `cast` and `prompt` are refused while a cast is running.
 
 ### Hand and Eye (easter egg)
 
@@ -356,6 +388,9 @@ unflavored surface. The exact flavor (output styling, verb choices, where the
 skin diverges from the plain path) is **to be shaped** — treat this as the
 intent, not a spec.
 
+The same lore names the parked visual track [`../eye/`](../eye/README.md): those
+are surfaces that watch. `vekna lich` needs no skin — it is already the word.
+
 ## Dependency policy
 
 Runtime deps: lower bounds only (`>=X.Y`), capped at next major (`<X+1`). Raise
@@ -368,9 +403,9 @@ run …` commands.
 
 ## Resolved decisions
 
-1. One `vekna` binary, two roles: the `vekna cast` process (imports
-   lexicon/folios/user code) and the long-running daemon (imports neither).
-   Blast radius = one cast.
+1. One `vekna` binary, three roles: the `vekna cast` process (imports
+   lexicon/folios/user code), the lich (spawns casts, loads none), and the
+   long-running daemon (imports neither). Blast radius = one cast.
 2. Vocabulary: ritual (workflow entrypoint) / step (task) / transition
    (`goto`/`done`) / cast (invocation) / rite (one executed step-or-medium
    node). "cast" = verb. A workflow is a graph of steps wired by transitions,
@@ -392,14 +427,40 @@ run …` commands.
 10. Daemon arrives at 0.6.0; 1.0 ships when all features are ready.
 11. Standalone is a feature. Every primitive works (locks degrade per setting).
 12. `folio/process` owns Process + Executable as mediums, not values.
+13. A lich runs **one cast at a time and refuses a second** — no queue. Control
+    commands (`status`, `log`, `kill`, decide answers) stay available while a
+    cast runs and while it is blocked, so its command loop is independent of
+    the cast it supervises.
+14. A lich's identity lives in its phylactery — a row in the daemon's registry,
+    not a store of its own — keyed by **name**, since a project root may hold
+    several liches. It carries only what nothing else has: root (a dormant lich
+    has no connection to learn it from, and raising one means spawning casts
+    there) and Discord channel id. History stays a query over the journal,
+    which costs one field on the cast record. Because a directory does not
+    identify a lich, `vekna lich` where one sleeps **asks** which to raise,
+    listing only the rows rooted there; `--name` and `--new` answer up front,
+    so nothing scripted waits on the question.
+15. Remote control arrives over **Discord**, one bot with a channel per lich —
+    outbound only. Bots cannot be created programmatically; channels can. The
+    platform authenticates and vekna checks an allowlist, so the daemon still
+    binds nothing but its Unix socket.
+16. Visual surfaces (TUI, web) are parked past 1.0 in [`../eye/`](../eye/README.md).
+    They consume the same events and change no engine, so they block nothing.
+    WhatsApp was dropped: it cannot give a lich a channel of its own.
 
 ## Not planned (1.0)
 
 - Multi-Focus-per-Medium in one cast (Claude + OpenAI side-by-side). Focus swap
   supported, parallelism not.
-- Network-exposed daemon (TCP, auth tokens, TLS). Unix socket on local host only.
+- Network-exposed daemon (TCP, auth tokens, TLS). Unix socket on local host
+  only — and Discord does not change this: the bot dials out.
 - Cross-machine peer-attach.
 - Graphical workflow editor. Rituals are Python.
 - Pooled cast processes. Always-fresh; pool later only if cold-start hurts.
-- "Block duplicate cast" mechanism. Locks already express exclusivity.
+- "Block duplicate cast" mechanism. Locks already express exclusivity. (A lich
+  refusing a second cast is a different thing: one station, one job.)
 - Cloud-hosted runs / SaaS control plane.
+- Two casts in one lich, or one lich over several project roots.
+- A bot per lich. Not possible on any platform, and not needed — a channel per
+  lich carries the addressing.
+- Visual surfaces. Parked past 1.0, not abandoned: [`../eye/`](../eye/README.md).

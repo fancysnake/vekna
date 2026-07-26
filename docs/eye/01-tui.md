@@ -1,9 +1,12 @@
 # Feature — Textual TUI
 
-**Version:** `0.7.0`
+**Version:** after 1.0, unscheduled. (Was `0.7.0` while it sat in the reborn
+roadmap; the lich took that slot.)
 
-See [00-common.md](00-common.md) and [06-vekna-daemon.md](06-vekna-daemon.md).
-Same wire protocol, richer surface.
+See [`../reborn/00-common.md`](../reborn/00-common.md) and
+[`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same wire
+protocol, richer surface. Liches render here too — a station in the sidebar
+with the cast it is running underneath it.
 
 ## Goal
 
@@ -39,7 +42,7 @@ multi-grimoire UI.
 
 ## Out of scope
 
-Persistence (shipped 0.6.0). Web (0.8.0). Cross-machine peers.
+Persistence (shipped 0.6.0). Web ([02-web.md](02-web.md)). Cross-machine peers.
 
 ## Acceptance
 

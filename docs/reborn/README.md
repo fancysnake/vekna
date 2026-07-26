@@ -1,9 +1,10 @@
 # Reborn
 
 The roadmap for vekna's pivot to overseeing many concurrent rituals. Common
-knowledge lives once; each feature doc assumes it. One `vekna` binary, two
+knowledge lives once; each feature doc assumes it. One `vekna` binary, three
 roles: the `vekna cast` process runs one ritual; the `vekna` daemon observes
-casts, coordinates locks, owns the journal.
+casts, coordinates locks, owns the journal; a **lich** stands in one directory
+and casts on command, from a terminal or from Discord.
 
 - [00-common.md](00-common.md) — premise, vocabulary, process model, package
   layout, layering, wire protocol, Components, config, standalone, CLI (incl.
@@ -26,8 +27,14 @@ casts, coordinates locks, owns the journal.
   coordination yet).
 - [06-vekna-daemon.md](06-vekna-daemon.md) — `0.6.0` daemon, lock coordination,
   journal, attach/replay, resume; lock default → `deny`.
-- [07-tui.md](07-tui.md) — `0.7.0` Textual dashboard, multi-grimoire UI.
-- [08-web.md](08-web.md) — `0.8.0` local web view (read-only → interactive).
-- [09-whatsapp.md](09-whatsapp.md) — `0.9.0` WhatsApp notifications + approvals.
-- [10-hardening.md](10-hardening.md) — `1.0.0` robustness, docs, example
+- [07-lich.md](07-lich.md) — `0.7.0` the lich: a named, directory-scoped station
+  that casts on command; Discord channel per lich.
+- [08-hardening.md](08-hardening.md) — `1.0.0` robustness, docs, PyPI, example
   library, clean audits.
+
+## Parked
+
+[`../eye/`](../eye/README.md) — the visual surfaces (Textual TUI, web view, the
+lich's web page), after 1.0. Same wire, same events, another consumer, so they
+park without blocking anything. WhatsApp notifications were dropped outright:
+Discord ships at 0.7.0 and does that job better.

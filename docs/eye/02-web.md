@@ -1,9 +1,13 @@
 # Feature — Web view
 
-**Version:** `0.8.0`
+**Version:** after 1.0, unscheduled. (Was `0.8.0` while it sat in the reborn
+roadmap.)
 
-See [00-common.md](00-common.md) and [06-vekna-daemon.md](06-vekna-daemon.md).
-Same events, different surface. Another bus consumer — no engine changes.
+See [`../reborn/00-common.md`](../reborn/00-common.md) and
+[`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same events,
+different surface. Another bus consumer — no engine changes. The per-lich page
+is [03-lich-web.md](03-lich-web.md); the auth question is settled there, since
+that is the surface that would need it.
 
 ## Goal
 
