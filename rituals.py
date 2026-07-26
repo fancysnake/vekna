@@ -12,13 +12,15 @@ attempt budget runs out. That is the whole bargain: agents are
 non-deterministic inside a step, deterministic between them.
 """
 
+import asyncio
 from typing import Literal
 
 from pydantic import BaseModel
 
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.coding_claude import ClaudeOptions
-from vekna.folio.shell import shell
+from vekna.folio.flow import decide
+from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import (
     File,
     GitRef,
@@ -206,3 +208,112 @@ async def judge(diff: Diff) -> Transition:
             pinned=diff.pinned,
         )
     )
+
+
+# merge_ready — run both gates at once, and babysit them to green.
+
+_REPAIR = """\
+`mise run prcheck` and `mise run test` are this project's gates, and what
+follows is what they said. Make them green.
+
+Fix the cause, not the symptom: do not disable a lint rule, add a noqa or a
+type: ignore, skip or delete a test, or lower a threshold. Ask me rather than
+guessing when the choice is mine — a failing assertion that may be the test's
+fault rather than the code's, for one.
+
+"""
+
+
+class MergeReady(BaseModel):
+    bound: int = 3
+
+
+class Attempt(BaseModel):
+    budget: int
+
+
+class LintFailure(BaseModel):
+    budget: int
+    lint: str
+
+
+class SuiteFailure(BaseModel):
+    budget: int
+    suite: str
+
+
+class BothRed(BaseModel):
+    budget: int
+    lint: str
+    suite: str
+
+
+class MergeReport(BaseModel):
+    green: bool
+    remaining: int
+
+
+Red = LintFailure | SuiteFailure | BothRed
+
+_HEADLINE = {
+    LintFailure: "the linters are red",
+    SuiteFailure: "the suite is red",
+    BothRed: "the linters and the suite are red",
+}
+
+
+def _red(*, budget: int, lint: ShellResult, suite: ShellResult) -> Red:
+    if lint.exit_code and suite.exit_code:
+        return BothRed(budget=budget, lint=lint.stdout, suite=suite.stdout)
+    if lint.exit_code:
+        return LintFailure(budget=budget, lint=lint.stdout)
+    return SuiteFailure(budget=budget, suite=suite.stdout)
+
+
+def _complaint(failure: Red) -> str:
+    if isinstance(failure, BothRed):
+        return f"The linters said:\n\n{failure.lint}\n\nThe suite said:\n\n{failure.suite}"
+    if isinstance(failure, LintFailure):
+        return f"The linters said:\n\n{failure.lint}"
+    return f"The suite said:\n\n{failure.suite}"
+
+
+# max_steps is the backstop, not the control — the bound is. It sits well above
+# a plausible bound, so tripping it means a ritual that will not settle.
+@ritual("merge_ready", max_steps=32)
+async def merge_ready(components: MergeReady) -> Transition:
+    return goto(gates, Attempt(budget=components.bound))
+
+
+@step
+async def gates(state: Attempt) -> Transition:
+    # Both gates take minutes, and neither reads the other's output. Running
+    # them at once is not only faster: one cast then tells you everything that
+    # is red, rather than the first thing that is red.
+    async with asyncio.TaskGroup() as group:
+        linting = group.create_task(shell("mise run prcheck"))
+        suite = group.create_task(shell("mise run test"))
+    lint, tests = linting.result(), suite.result()
+    if not lint.exit_code and not tests.exit_code:
+        return done(MergeReport(green=True, remaining=state.budget))
+    if state.budget == 0:
+        return done(MergeReport(green=False, remaining=0))
+    failure = _red(budget=state.budget, lint=lint, suite=tests)
+    # The agent's time is yours to spend, so the decision to spend it is a step
+    # boundary, not something the agent decides for itself.
+    attempts = "attempt" if state.budget == 1 else "attempts"
+    spend = await decide(
+        f"{_HEADLINE[type(failure)]}, {state.budget} {attempts} left"
+        " — hand it to the agent?"
+    )
+    if not spend:
+        return done(MergeReport(green=False, remaining=state.budget))
+    return goto(repair, failure)
+
+
+# Three payload shapes, one step: whichever gate went red, this is where it is
+# repaired, and the prompt says only what actually failed.
+@step
+async def repair(failure: Red) -> Transition:
+    await coding(_REPAIR + _complaint(failure))
+    return goto(gates, Attempt(budget=failure.budget - 1))
