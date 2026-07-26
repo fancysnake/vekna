@@ -17,6 +17,10 @@ _RITUALS = textwrap.dedent("""
         left: int
 
 
+    class Countdown(BaseModel):
+        start: int
+
+
     @step
     async def tick(state: Tick) -> Transition:
         if not state.left:
@@ -25,35 +29,41 @@ _RITUALS = textwrap.dedent("""
 
 
     @ritual("countdown")
-    async def countdown(start: int) -> Transition:
-        return goto(tick, Tick(left=start))
+    async def countdown(components: Countdown) -> Transition:
+        return goto(tick, Tick(left=components.start))
     """)
 
 
 _EXTRA = textwrap.dedent("""
-    from vekna.lexicon import Transition, done, ritual
+    from vekna.lexicon import NoComponents, Transition, done, ritual
 
 
     @ritual("ping")
-    async def ping() -> Transition:
+    async def ping(_: NoComponents) -> Transition:
         return done("pong")
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"
 
 _DASHED = textwrap.dedent("""
+    from pydantic import BaseModel
+
     from vekna.lexicon import Transition, done, ritual
 
 
+    class Echo(BaseModel):
+        text: str
+
+
     @ritual("echo")
-    async def echo(text: str) -> Transition:
-        return done(text)
+    async def echo(components: Echo) -> Transition:
+        return done(components.text)
     """)
 
 _BUDGET = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, goto, ritual, step
+    from vekna.lexicon import NoComponents, Transition, goto, ritual, step
 
 
     class Spin(BaseModel):
@@ -66,7 +76,7 @@ _BUDGET = textwrap.dedent("""
 
 
     @ritual("spinner", max_steps=2)
-    async def spinner() -> Transition:
+    async def spinner(_: NoComponents) -> Transition:
         return goto(spin, Spin())
     """)
 

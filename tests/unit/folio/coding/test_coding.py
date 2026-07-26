@@ -9,6 +9,7 @@ from vekna.folio.coding import CodingOpts, CodingOutputError, CodingResult, codi
 from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
+    NoComponents,
     Transition,
     done,
     goto,
@@ -91,7 +92,7 @@ class TestCodingMedium:
             return done(await coding("fix it", opts=opts))
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -121,7 +122,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -145,7 +146,7 @@ class TestCodingMedium:
             return done(await coding("start server", output=Answer))
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -163,7 +164,7 @@ class TestCodingMedium:
             return done(await coding("start server", output=Answer))
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -181,7 +182,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -202,7 +203,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -221,7 +222,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 
@@ -245,7 +246,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r() -> Transition:
+        async def r(_: NoComponents) -> Transition:
             await asyncio.sleep(0)
             return goto(work, Answer(port=1))
 

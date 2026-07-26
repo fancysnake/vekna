@@ -14,6 +14,7 @@ from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
 from ._mills.graph import step_graph
 from ._pacts import (
     FocusMissingError,
+    NoComponents,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -215,17 +216,13 @@ def rituals_show(name: str) -> int:
     return _show(compendium, name)
 
 
-class _NoComponents(BaseModel):
-    pass
-
-
 def _prompt_ritual(prompt: str) -> Ritual:
     run_prompt = prompt_runner(_PROMPT_MEDIUM)
 
     async def ask(_: BaseModel) -> Transition:
         return done(await run_prompt(prompt))
 
-    return Ritual(name=_PROMPT_NAME, components=_NoComponents, run=ask, max_steps=1)
+    return Ritual(name=_PROMPT_NAME, components=NoComponents, run=ask, max_steps=1)
 
 
 def _prompt_text(argv: list[str]) -> str | None:
@@ -264,7 +261,7 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
 
 def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
     if (prompt := _prompt_text(argv)) is not None:
-        return _prompt_ritual(prompt), _NoComponents()
+        return _prompt_ritual(prompt), NoComponents()
     name, *flags = argv
     the_ritual = _build_compendium(Path.cwd()).ritual(name)
     return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))

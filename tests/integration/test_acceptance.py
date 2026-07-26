@@ -13,6 +13,10 @@ _RITUALS = textwrap.dedent("""
     from vekna.lexicon import Transition, done, goto, ritual, step
 
 
+    class FixDemo(BaseModel):
+        bound: int
+
+
     class Attempt(BaseModel):
         budget: int
 
@@ -23,8 +27,8 @@ _RITUALS = textwrap.dedent("""
 
 
     @ritual("fix_demo")
-    async def fix_demo(bound: int) -> Transition:
-        return goto(check, Attempt(budget=bound))
+    async def fix_demo(components: FixDemo) -> Transition:
+        return goto(check, Attempt(budget=components.bound))
 
 
     @step

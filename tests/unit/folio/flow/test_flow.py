@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel
 
 from vekna.folio.flow import decide
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 
@@ -33,7 +33,7 @@ async def gather(_state: State) -> Transition:
 
 
 @ritual("survey")
-async def survey() -> Transition:
+async def survey(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(gather, State())
 

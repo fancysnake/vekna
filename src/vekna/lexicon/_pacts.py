@@ -150,6 +150,10 @@ class StepBoundaryError(RitualError):
     pass
 
 
+class RitualBoundaryError(RitualError):
+    pass
+
+
 class StandalonePromptError(RitualError):
     pass
 
@@ -181,6 +185,13 @@ class Goto:
 
 
 Transition = Goto | Done
+
+
+# A ritual declares its components as a model, so one that needs nothing would
+# otherwise open with an empty class of its own. This is that class, written
+# once.
+class NoComponents(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 @dataclass(frozen=True)

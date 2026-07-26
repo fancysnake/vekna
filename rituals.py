@@ -37,6 +37,10 @@ edit the coverage configuration, or delete the offending code.
 """
 
 
+class CoverDiff(BaseModel):
+    bound: int = 3
+
+
 class Uncovered(BaseModel):
     budget: int
     report: str = ""
@@ -48,9 +52,9 @@ class CoverReport(BaseModel):
 
 
 @ritual("cover_diff")
-async def cover_diff(bound: int = 3) -> Transition:
-    # The entrypoint: map the CLI Component into the first step's payload.
-    return goto(measure, Uncovered(budget=bound))
+async def cover_diff(components: CoverDiff) -> Transition:
+    # The entrypoint: map the CLI Components into the first step's payload.
+    return goto(measure, Uncovered(budget=components.bound))
 
 
 @step

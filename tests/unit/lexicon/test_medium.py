@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
+    NoComponents,
     RitualError,
     Transition,
     current_rite,
@@ -45,7 +46,7 @@ async def choose(_state: Start) -> Transition:
 
 
 @ritual("chooser")
-async def chooser() -> Transition:
+async def chooser(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(choose, Start())
 
@@ -63,14 +64,14 @@ async def identify(_state: Start) -> Transition:
 
 
 @ritual("identifier")
-async def identifier() -> Transition:
+async def identifier(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(identify, Start())
 
 
 # The ritual body itself runs at the cast root, outside any rite.
 @ritual("rootless")
-async def rootless() -> Transition:
+async def rootless(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     emit_delta("nowhere to hang")
     return done(None)

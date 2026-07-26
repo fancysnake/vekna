@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 from vekna.lexicon import (
     Goto,
+    NoComponents,
+    RitualBoundaryError,
+    RitualDefinitionError,
     RitualError,
     StepBudgetExceededError,
     Transition,
@@ -33,6 +36,10 @@ class Tick(BaseModel):
     left: int
 
 
+class Start(BaseModel):
+    start: int
+
+
 @step
 async def tick(state: Tick) -> Transition:
     await asyncio.sleep(0)
@@ -42,9 +49,9 @@ async def tick(state: Tick) -> Transition:
 
 
 @ritual("countdown")
-async def countdown(start: int) -> Transition:
+async def countdown(components: Start) -> Transition:
     await asyncio.sleep(0)
-    return goto(tick, Tick(left=start))
+    return goto(tick, Tick(left=components.start))
 
 
 @step
@@ -54,9 +61,9 @@ async def spin(state: Tick) -> Transition:
 
 
 @ritual("spinner", max_steps=5)
-async def spinner(start: int) -> Transition:
+async def spinner(components: Start) -> Transition:
     await asyncio.sleep(0)
-    return goto(spin, Tick(left=start))
+    return goto(spin, Tick(left=components.start))
 
 
 @step
@@ -69,9 +76,9 @@ _SPRINT_START = 7
 
 
 @ritual("sprint", max_steps=1)
-async def sprint(start: int) -> Transition:
+async def sprint(components: Start) -> Transition:
     await asyncio.sleep(0)
-    return goto(finish, Tick(left=start))
+    return goto(finish, Tick(left=components.start))
 
 
 class BoomError(RuntimeError):
@@ -85,7 +92,7 @@ async def explode(_state: Tick) -> Transition:
 
 
 @ritual("detonate")
-async def detonate() -> Transition:
+async def detonate(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(explode, Tick(left=0))
 
@@ -103,15 +110,15 @@ async def light_fuse(_state: Tick) -> Transition:
 
 
 @ritual("smoulder")
-async def smoulder() -> Transition:
+async def smoulder(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(light_fuse, Tick(left=0))
 
 
 class TestRitual:
     @staticmethod
-    def test_builds_component_model_from_signature():
-        assert "start" in countdown.components.model_fields
+    def test_takes_the_declared_components_model():
+        assert countdown.components is Start
 
     @staticmethod
     def test_fires_opening_transition_to_first_step():
@@ -119,6 +126,42 @@ class TestRitual:
 
         assert isinstance(opening, Goto)
         assert opening.target is tick
+
+    @staticmethod
+    def test_components_of_another_ritual_do_not_pass_the_boundary():
+        with pytest.raises(RitualBoundaryError, match="expected Start, got Tick"):
+            asyncio.run(countdown.run(Tick(left=2)))
+
+
+class TestRitualDefinition:
+    @staticmethod
+    def test_a_ritual_without_components_is_rejected():
+        with pytest.raises(RitualDefinitionError, match="exactly one"):
+
+            @ritual("bare")
+            async def bare() -> Transition:  # pragma: no cover
+                await asyncio.sleep(0)
+                return done()
+
+    @staticmethod
+    def test_a_ritual_with_two_parameters_is_rejected():
+        with pytest.raises(RitualDefinitionError, match="exactly one"):
+
+            @ritual("pair")
+            async def pair(  # pragma: no cover
+                components: Start, extra: Tick
+            ) -> Transition:
+                await asyncio.sleep(0)
+                return done(components.start + extra.left)
+
+    @staticmethod
+    def test_components_must_be_a_pydantic_model():
+        with pytest.raises(RitualDefinitionError, match="pydantic model"):
+
+            @ritual("loose")
+            async def loose(bound: int) -> Transition:  # pragma: no cover
+                await asyncio.sleep(0)
+                return done(bound)
 
 
 class TestRunCast:

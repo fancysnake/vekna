@@ -4,7 +4,7 @@ import io
 from pydantic import BaseModel
 
 from vekna.folio.shell import ShellResult, shell
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteStreamed, Ritual
@@ -53,37 +53,37 @@ async def run_multibyte(_state: State) -> Transition:
 
 
 @ritual("echoer")
-async def echoer() -> Transition:
+async def echoer(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_echo, State())
 
 
 @ritual("failing")
-async def failing() -> Transition:
+async def failing(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_fail, State())
 
 
 @ritual("quiet")
-async def quiet() -> Transition:
+async def quiet(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_quiet, State())
 
 
 @ritual("long_line")
-async def long_line() -> Transition:
+async def long_line(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_long_line, State())
 
 
 @ritual("partial_line")
-async def partial_line() -> Transition:
+async def partial_line(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_partial_line, State())
 
 
 @ritual("multibyte")
-async def multibyte() -> Transition:
+async def multibyte(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_multibyte, State())
 

@@ -3,7 +3,7 @@ from functools import partial
 
 from pydantic import BaseModel
 
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
 from vekna.lexicon._mills.dispatch import source_text
 from vekna.lexicon._mills.engine import Compendium
 from vekna.lexicon._mills.graph import ENDS, START, step_graph
@@ -12,10 +12,6 @@ from vekna.lexicon._pacts import Ritual, Step
 
 class State(BaseModel):
     x: int
-
-
-class NoComponents(BaseModel):
-    pass
 
 
 @step
@@ -47,13 +43,13 @@ async def spin(state: State) -> Transition:
 
 
 @ritual("countdown")
-async def countdown(x: int) -> Transition:
+async def countdown(components: State) -> Transition:
     await asyncio.sleep(0)
-    return goto(tick, State(x=x))
+    return goto(tick, State(x=components.x))
 
 
 @ritual("spinner")
-async def spinner() -> Transition:
+async def spinner(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(spin, State(x=0))
 

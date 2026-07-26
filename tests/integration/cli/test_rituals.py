@@ -10,11 +10,16 @@ _USAGE_EXIT = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
 
 
     class Tick(BaseModel):
         left: int
+
+
+    class Countdown(BaseModel):
+        start: int
+        label: str = "run"
 
 
     @step
@@ -25,12 +30,12 @@ _RITUALS = textwrap.dedent("""
 
 
     @ritual("countdown")
-    async def countdown(start: int, label: str = "run") -> Transition:
-        return goto(tick, Tick(left=start))
+    async def countdown(components: Countdown) -> Transition:
+        return goto(tick, Tick(left=components.start))
 
 
     @ritual("ping")
-    async def ping() -> Transition:
+    async def ping(_: NoComponents) -> Transition:
         return done("pong")
     """)
 

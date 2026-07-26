@@ -36,8 +36,8 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
 
 
         @ritual("{name}")
-        async def {name}(text: str) -> Transition:
-            return goto(work, Task(text=text))
+        async def {name}(components: Task) -> Transition:
+            return goto(work, Task(text=components.text))
         """)
 
 
@@ -79,8 +79,8 @@ _TYPED_RITUALS = textwrap.dedent("""
 
 
     @ritual("planned")
-    async def planned(text: str) -> Transition:
-        return goto(work, Task(text=text))
+    async def planned(components: Task) -> Transition:
+        return goto(work, Task(text=components.text))
     """)
 
 

@@ -1,164 +1,126 @@
-# PLAN — lexicon refactor: shrink to the SDK, satisfy the new contracts
+# PLAN — `@ritual` takes a declared components model, just as `@step` does
 
-Source: the rewritten `[tool.importlinter]` contracts (2026-07-26) and the two
-they break. Target shape: `docs/reborn/00-common.md:158-206`.
+Source: the entrypoint is the one place in the lexicon where a signature is
+reflected into a synthesized type. `@step` declares its payload as a pydantic
+model and the engine validates against it; `@ritual` instead spreads loose
+parameters that `create_model` stitches into a model the author never sees.
 
 ## Outcome
 
-`vekna.lexicon` contains what a `rituals.py` or a folio imports, and the cast
-runtime they need — nothing else. Everything CLI-shaped moves to the root
-project. `mise run il` goes green without relaxing a single new rule.
+```python
+class CoverDiff(BaseModel):
+    bound: int = 3
 
-## The rules, as rewritten
 
-Derived from the forbidden lists; the same shape applies at root, in
-`lexicon/_*`, and in each `folio/*/_*`:
+@ritual("cover_diff")
+async def cover_diff(settings: CoverDiff) -> Transition:
+    return goto(measure, Uncovered(budget=settings.bound))
+```
 
-| layer | may import |
-| --- | --- |
-| `pacts`, `specs`, `edges` | nothing internal |
-| `mills` | `pacts`, `specs`, own submodules |
-| `links`, `gates` | `pacts` |
-| `inits` | everything except `edges`, `folio`, `lexicon` |
-
-Root additionally carries `inside-*` independence contracts, so a root layer's
-submodules may not import each other. Lexicon has no `inside-lexicon-*`
-contract, so `lexicon/_mills` may be a package whose submodules cooperate —
-verified, and Step 3 depends on it.
-
-Two consequences drive this plan:
-
-1. **No root module may import `lexicon`.** Not `gates`, not `inits`. So root
-   cannot name a `Ritual` or a `Step`, and the CLI cannot call `run_cast`.
-2. **`inits` is the only binding layer.** `lexicon-inits` forbids only
-   `_edges`, so `lexicon/_inits.py` may import every other lexicon layer. That
-   is where the cast runtime's wiring belongs.
+`Ritual.components` is the author's own class. CLI flags, `rituals list`,
+`rituals show` and journal values all read off a model that exists in the
+source, so an author can give a component a default, a validator, a
+`Field(description=...)` or one of the `File`/`Directory`/`Text` annotations
+without the decorator having to learn about it.
 
 ## Approved decisions
 
-1. **Gates are pacts-only** — confirmed. Everything binds in `inits`.
-2. **`vekna.wire` stays unconstrained** — confirmed, revisit at 0.6.0.
-3. **Root reaches the cast runtime by dynamic import.** One `importlib` call in
-   root `inits`, which is the mechanism the contracts require and what
-   `inits/cast.py` did before Step 10 deleted it. Static imports cannot express
-   this without breaking rule 1.
-4. **The CLI never sees a ritual object.** Lexicon exposes string-returning
-   entry points (`list_text()`, `show_text(name)`, `cast(argv)`); root's CLI
-   parses argv, calls one of them, prints, exits. This is what keeps rule 1
-   satisfiable without moving ritual types to root.
+1. **Exactly one parameter, always** — mirrors `@step`'s rule literally. A
+   ritual with no options declares an empty model; zero parameters is a
+   `RitualDefinitionError`.
+2. **The vocabulary stays "components"** — `Ritual.components`,
+   `component_flags`, `components:` in `rituals show`, and the Component
+   concept in `docs/reborn/` are unchanged. Only the shape changes.
+3. **The word gets written down.** A component is what a ritual needs before
+   it can be cast, the way a D&D spell needs its material components. That
+   rationale lives nowhere in the repo, so the same word reads as five things
+   — a value type (`File`), the model class (`Ritual.components`), one
+   instance of it (`run_cast(components=...)`), one field (`--<component>`).
+   Under the ingredient reading those are the ingredient kinds, the ingredient
+   list, the ingredients brought, and one ingredient — one concept. README's
+   Concepts list gains the entry that says so.
 
----
+## Decisions this plan makes (flag any you disagree with)
 
-## Step 1 — Delete what nothing imports
+4. **`NoComponents` ships in the lexicon.** Decision 1 means every
+   option-less ritual would otherwise open with an empty class of its own —
+   that is the caller being tortured for a rule's convenience. `_inits`
+   already carries a private `_NoComponents` for `cast --prompt`; it becomes
+   public in `_pacts` and both the prompt ritual and the tests use it.
 
-Pure subtraction, no moves. Establishes the real surface before anything is
-rearranged.
+   ```python
+   @ritual("ping")
+   async def ping(_: NoComponents) -> Transition:
+       return done("pong")
+   ```
 
-- **`entry.py` — delete.** It exports nine names. Six (`run_cast`,
-  `Compendium`, `Grimoire`, `StandaloneRenderer`, `probe_daemon`,
-  `default_socket_path`) have no consumer anywhere in `src/`, `tests/` or
-  `rituals.py`. The other three are re-exports for one importer.
-  `inits/cli.py` imports `vekna.lexicon._gates` directly until Step 4 moves it.
-- **`reset_foci` — remove from the public API.** Used only by tests. The
-  registry keeps a reset; tests reach it as a private seam rather than the
-  ritual author's door advertising a test hook.
-- **`Channel.emit` — delete.** Dead since it was written; its own comment says
-  so. `StandaloneRenderer.emit` goes with it.
+5. **The entry boundary is guarded, like the step boundary.** `Ritual.run` is
+   typed `Callable[[BaseModel], ...]`, so nothing connects the instance
+   `_resolve_cast` builds to the model the ritual declared — mypy cannot see
+   through that pair. `run` gets the same `isinstance` check `step` has,
+   raising a new `RitualBoundaryError(RitualError)`. (`StepBoundaryError` is
+   not reused: the message would name a ritual under a step's exception.)
 
-**Verify.** `mise run test && mise run check`. `vekna.lexicon.__all__` drops
-from 29 to 28; `entry.py` and its 9-name surface are gone.
+## Steps
 
-## Step 2 — The grimoire stops speaking the wire protocol
+### Step 1 — the decorator, and every call site with it
 
-*(Replaces the original Step 2, whose premise died with Step 1+4: the CLI path
-is now `lexicon/_inits.py`, inside lexicon, so `_links` has an in-package
-consumer and cannot move to root — `lexicon-not-use-root` forbids the edge.)*
+`create_model` and its `Any`-typed field dict leave `_mills/dispatch.py`.
 
-`Grimoire` is a domain concept with no model of its own: it constructs
-transport DTOs directly and stores them, `StandaloneRenderer` dispatches on
-them, and `RiteStarted` carries a `cast_id` correlation key that means nothing
-in a single process. The consequence is that `vekna.wire` cannot version
-independently of the engine, which is the property `00-common.md:212` claims
-for it.
+- `_pacts.py` — add `NoComponents` (empty `BaseModel`) and
+  `RitualBoundaryError`.
+- `_mills/dispatch.py` — `_component_model` becomes `_components_model`: one
+  parameter or `RitualDefinitionError`; annotation must be a `BaseModel`
+  subclass or `RitualDefinitionError`. `wrap.run` passes the instance straight
+  to `func` after the isinstance guard. `component_flags` is untouched — it
+  already reads any model's fields.
+- `__init__.py` — export `NoComponents`, `RitualBoundaryError`.
+- `_inits.py` — drop the private `_NoComponents` for the shared one.
+- `rituals.py` — `cover_diff` declares `CoverDiff(bound: int = 3)`.
+- Migrate every `@ritual` in `tests/` (11 files; the option-less ones take
+  `NoComponents`, `countdown`/`echo`/`fix_demo`/`write_haiku` and friends get
+  a small model each).
+- New unit tests in `tests/unit/lexicon/test_engine.py`: zero parameters
+  raises; two parameters raises; a non-model annotation (`bound: int`) raises;
+  a mismatched instance at `run` raises `RitualBoundaryError`. The happy path
+  and `components.model_fields` assertions stay, now reading the declared
+  class.
 
-- `lexicon/_pacts.py` gains `RiteBegan` / `RiteStreamed` / `RiteEnded` and the
-  `RiteEvent` union — frozen dataclasses, no `cast_id`.
-- `Grimoire` emits `RiteEvent`; `on_event` and `events` are typed in terms of
-  it. It keeps `cast_id` as its own identity, for the projection.
-- `StandaloneRenderer` consumes `RiteEvent`. Its `· {kind}` fallback goes: the
-  union is closed, so the branch is unreachable.
-- `vekna.wire` keeps its DTOs and framing and becomes **dormant** — zero
-  importers until 0.6.0 adds the `RiteEvent → WireMessage` projection at the
-  socket edge. That is the accepted cost: a protocol awaiting its consumer is a
-  clearer thing to maintain than an engine model that is also half a protocol.
+Verify: `mise run test` and `mise run check` green (the check task covers
+format, lint, mypy, import-linter, vulture — `mise tasks` is the authority).
 
-Only two modules import wire today, so this is the cheapest it will ever be; at
-0.6.0 a daemon, journal, replay and TUI all read these events.
+### Step 2 — the record
 
-**Verify.** `mise run test && mise run check`. No module under `src/vekna/`
-imports `vekna.wire`.
+- `README.md` — the `fix_tests` example gains its model; `vekna cast
+  fix_tests --bound 5` is unchanged, which is the point worth showing.
+  **Concepts** gains a Component entry, and Ritual's line stops saying
+  "parameters":
 
-## Step 3 — Give the unlayered modules a layer
+  ```markdown
+  - **Ritual** — a named program. Its components become `--options`.
+  - **Component** — what a ritual needs before it can be cast, the way a D&D
+    spell needs its material components. Typed values on its external
+    interface — `File`, `Directory`, `Text`, `Url`, `GitRef` — declared as
+    fields on one pydantic model and passed as `--options`.
+  ```
 
-The actual structural mess: `_dispatch.py`, `_graph.py`, `_loader.py`,
-`components.py` and `entry.py` are five of lexicon's ten modules and are exempt
-from every contract purely because their names do not match a layer. That is
-how `_gates` was reaching `_mills` — through `_dispatch`, `_graph` and
-`_loader`, which import-linter only caught as a transitive chain.
+- `docs/reborn/00-common.md` — the `fix_demo` example (~line 81) and the
+  Components section (~line 253: "inspects the entrypoint signature, builds a
+  Pydantic model from Component annotations" is exactly what stops being
+  true). Line 268's "inputs and outputs both Components on one interface" is
+  marked deferred rather than patched: `done(result)` takes `object` and
+  `run_cast` returns `object`, so no output-side component exists, and under
+  the ingredient reading an output is not a component at all.
+- `docs/reborn/03-coding-folios.md:92` — the `cover_diff` sketch.
+- `CHANGELOG.md` — under Unreleased; a breaking-shape note for `@ritual`.
 
-- `components.py` → `_pacts` (public component types; imports nothing internal).
-- `_graph.py` → `_mills` (pure AST logic over `Ritual`).
-- `_loader.py` → `_links` (file import, TOML read — I/O).
-  Requires the split below: `_loader` returns loaded `Ritual`/`Step` objects
-  and `_inits` registers them, so `_links` needs `_pacts` only.
-- `_dispatch.py` → `_mills`. Lexicon has **no** `inside-lexicon-mills`
-  independence contract, so `_mills` may become a package whose submodules
-  cooperate. This keeps `_dispatch`'s mypy `disallow_any_expr` exemption
-  scoped to one submodule instead of spreading it to the engine, and lets it
-  keep reading `DEFAULT_MAX_STEPS` from `_specs` directly (`mills → specs` is
-  permitted).
-
-Proposed shape:
-
-```
-lexicon/
-  _pacts.py      # contracts + component types
-  _specs.py      # (pending the open question)
-  _mills/        # __init__.py, engine.py, grimoire.py, compendium.py,
-                 # registry.py, dispatch.py, graph.py
-  _links.py      # ritual file / module / TOML loading
-  _inits.py      # the binding layer: folio loading, cast runtime, CLI texts
-```
-
-**Verify.** `mise run il` — `lexicon-*` all KEPT, including `lexicon-gates`
-(there is no longer a `_gates` in lexicon). `mise run test`.
-
-## Step 4 — Move the CLI to the root project
-
-- `lexicon/_gates.py` **dies**. Its argv parsing and help/list/show formatting
-  go to `vekna/gates/cli/click/`; its ritual-typed work (`_build_compendium`,
-  `_drive`) goes to `lexicon/_inits.py` behind the three string-returning entry
-  points from decision 4.
-- `vekna/inits/cli.py` keeps the click tree and gains the single dynamic import
-  of `vekna.lexicon._inits`. Root `gates` stays pacts-only; root `inits` binds.
-
-**Verify.** `mise run il` — 31 kept, 0 broken, with **no rule relaxed**. Then
-confirm the contracts still bite: reintroduce a static
-`from vekna.lexicon import ...` in root `inits` and see `inits` break.
-
-## Step 5 — Reconcile
-
-`docs/architecture.md` (the layer table now says gates are pacts-only; the
-layout section), `CLAUDE.md` if its layer list disagrees, `CHANGELOG.md`,
-`CURRENT_TASK.md`. `00-common.md:211-213` also needs the correction agreed
-earlier — the "only place either side imports from" sentence.
-
----
+Verify: `mise run check` green; `vekna rituals show cover_diff` prints the
+same component line as before the change.
 
 ## Not in scope
 
-- The **grimoire-vs-wire coupling** (lexicon's event model *is* the transport
-  schema). Discussed, still open, deliberately not bundled — it touches the
-  same files and would make this unreviewable.
-- Restoring a `wire` contract — decided against for now.
-- The five P3s carried in `CURRENT_TASK.md`.
+- Renaming components to settings (decision 2).
+- `@step(max_visits=N)`, annotation-gated dispatch, or anything else deferred
+  in `docs/reborn/00-common.md`.
+- Changing how flags parse (`_parse_flags`) or how `model_validate` coerces
+  them — a declared model validates through exactly the same call.

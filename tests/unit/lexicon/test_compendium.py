@@ -18,15 +18,15 @@ async def noop(state: State) -> Transition:
 
 
 @ritual("alpha")
-async def alpha(x: int) -> Transition:
+async def alpha(components: State) -> Transition:
     await asyncio.sleep(0)
-    return goto(noop, State(x=x))
+    return goto(noop, State(x=components.x))
 
 
 @ritual("beta")
-async def beta(x: int) -> Transition:
+async def beta(components: State) -> Transition:
     await asyncio.sleep(0)
-    return goto(noop, State(x=x))
+    return goto(noop, State(x=components.x))
 
 
 class TestCompendium:
