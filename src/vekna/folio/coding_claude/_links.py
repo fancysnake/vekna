@@ -83,7 +83,6 @@ class _ResultLike(Protocol):
     def result(self) -> str | None: ...
 
 
-
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
     if isinstance(focus_options, ClaudeOptions):
         return focus_options
@@ -92,12 +91,10 @@ def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
 
 def _permission_handler(
     gate: GateFn,
-) -> (
-    Callable[
-        [str, dict[str, Any], ToolPermissionContext],
-        Awaitable[PermissionResultAllow | PermissionResultDeny],
-    ]
-):
+) -> Callable[
+    [str, dict[str, Any], ToolPermissionContext],
+    Awaitable[PermissionResultAllow | PermissionResultDeny],
+]:
     async def can_use_tool(
         tool_name: str, input_data: dict[str, Any], _context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:

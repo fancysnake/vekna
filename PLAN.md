@@ -1,126 +1,135 @@
-# PLAN — `@ritual` takes a declared components model, just as `@step` does
+# PLAN — finish the typing pass: fail loudly, and make the narrowings true
 
-Source: the entrypoint is the one place in the lexicon where a signature is
-reflected into a synthesized type. `@step` declares its payload as a pydantic
-model and the engine validates against it; `@ritual` instead spreads loose
-parameters that `create_model` stitches into a model the author never sees.
+Source: the review of `f19588b`, `4b7b354`, `18e7374`, `eec61a8` and your
+answers to it. Two of the thirteen findings were mine to concede (`# ruff:
+ignore` is a real format under `preview = true`; tingle's baseline is `main`,
+so the +19 is the whole branch, not those commits). What is left is a red
+quality gate, two half-landed behaviour changes, and a set of annotations the
+codebase contradicts.
 
 ## Outcome
 
-```python
-class CoverDiff(BaseModel):
-    bound: int = 3
+`done`/`goto` take pydantic models or nothing, and say so at runtime rather
+than in a comment mypy never checks outside `src/`. A malformed `.vekna.toml`
+stops the command instead of quietly loading no rituals. A cast's result
+prints as JSON. Nothing in the lexicon is typed `BaseFocus` or
+`dict[str, type]` to avoid writing `Any` or `object` honestly.
 
+## Answers this plan implements
 
-@ritual("cover_diff")
-async def cover_diff(settings: CoverDiff) -> Transition:
-    return goto(measure, Uncovered(budget=settings.bound))
-```
+1. **Config: fail the command.** Vekna doesn't forgive.
+2. **Result: JSON for every ritual**, not only `--prompt`.
+3. **Union payloads for `@step` are restored** — `A | B` is legal again.
+4. **`done()`/`goto()` guard at runtime**, since mypy sees neither `tests/`
+   nor `rituals.py` nor anyone's `rituals.py`.
+5. **`object` where it is honest, `Any` where it is honest** — `BaseFocus`
+   goes, `dict[str, type]` becomes `Any`.
+6. **Suppressions stay.** None are removed by overruling you; one disappears
+   in step 5 because the import that needed it stops existing.
 
-`Ritual.components` is the author's own class. CLI flags, `rituals list`,
-`rituals show` and journal values all read off a model that exists in the
-source, so an author can give a component a default, a validator, a
-`Field(description=...)` or one of the `File`/`Directory`/`Text` annotations
-without the decorator having to learn about it.
+## Assumptions — correct me and I will change them
 
-## Approved decisions
-
-1. **Exactly one parameter, always** — mirrors `@step`'s rule literally. A
-   ritual with no options declares an empty model; zero parameters is a
-   `RitualDefinitionError`.
-2. **The vocabulary stays "components"** — `Ritual.components`,
-   `component_flags`, `components:` in `rituals show`, and the Component
-   concept in `docs/reborn/` are unchanged. Only the shape changes.
-3. **The word gets written down.** A component is what a ritual needs before
-   it can be cast, the way a D&D spell needs its material components. That
-   rationale lives nowhere in the repo, so the same word reads as five things
-   — a value type (`File`), the model class (`Ritual.components`), one
-   instance of it (`run_cast(components=...)`), one field (`--<component>`).
-   Under the ingredient reading those are the ingredient kinds, the ingredient
-   list, the ingredients brought, and one ingredient — one concept. README's
-   Concepts list gains the entry that says so.
-
-## Decisions this plan makes (flag any you disagree with)
-
-4. **`NoComponents` ships in the lexicon.** Decision 1 means every
-   option-less ritual would otherwise open with an empty class of its own —
-   that is the caller being tortured for a rule's convenience. `_inits`
-   already carries a private `_NoComponents` for `cast --prompt`; it becomes
-   public in `_pacts` and both the prompt ritual and the tests use it.
-
-   ```python
-   @ritual("ping")
-   async def ping(_: NoComponents) -> Transition:
-       return done("pong")
-   ```
-
-5. **The entry boundary is guarded, like the step boundary.** `Ritual.run` is
-   typed `Callable[[BaseModel], ...]`, so nothing connects the instance
-   `_resolve_cast` builds to the model the ritual declared — mypy cannot see
-   through that pair. `run` gets the same `isinstance` check `step` has,
-   raising a new `RitualBoundaryError(RitualError)`. (`StepBoundaryError` is
-   not reused: the message would name a ritual under a step's exception.)
+- **`[rituals]` forbids unknown keys; the top-level table does not.** Your note
+  was that tolerating a typo buys nothing when the next `vekna cast` fails
+  anyway. Top-level extras stay legal because `[locks]` is specified for 0.5.0
+  and would otherwise start failing every config that carries it.
+- **A cast with no result prints `result: null`** — JSON all the way rather
+  than a bare `None`.
+- **`ClaudeCodingFocus` declares `CodingFocusProtocol` as a base.** The
+  CLAUDE.md rule asks for it, and with `BaseFocus` gone it is the only thing
+  type-checking that the focus still fits the medium.
+- **`# ruff: ignore [any-type]` at `_links.py:127` stays**, though `"ANN"` is
+  in ruff's global ignore list, so it suppresses a rule that cannot fire.
 
 ## Steps
 
-### Step 1 — the decorator, and every call site with it
+### Step 1 — green the gate
 
-`create_model` and its `Any`-typed field dict leave `_mills/dispatch.py`.
+`mise run check` fails at `eec61a8`: pylint 9.99, `W0621` twice.
 
-- `_pacts.py` — add `NoComponents` (empty `BaseModel`) and
-  `RitualBoundaryError`.
-- `_mills/dispatch.py` — `_component_model` becomes `_components_model`: one
-  parameter or `RitualDefinitionError`; annotation must be a `BaseModel`
-  subclass or `RitualDefinitionError`. `wrap.run` passes the instance straight
-  to `func` after the isinstance guard. `component_flags` is untouched — it
-  already reads any model's fields.
-- `__init__.py` — export `NoComponents`, `RitualBoundaryError`.
-- `_inits.py` — drop the private `_NoComponents` for the shared one.
-- `rituals.py` — `cover_diff` declares `CoverDiff(bound: int = 3)`.
-- Migrate every `@ritual` in `tests/` (11 files; the option-less ones take
-  `NoComponents`, `countdown`/`echo`/`fix_demo`/`write_haiku` and friends get
-  a small model each).
-- New unit tests in `tests/unit/lexicon/test_engine.py`: zero parameters
-  raises; two parameters raises; a non-model annotation (`bound: int`) raises;
-  a mismatched instance at `run` raises `RitualBoundaryError`. The happy path
-  and `components.model_fields` assertions stay, now reading the declared
-  class.
+- Delete `PermissionResultAllow` / `PermissionResultDeny` from `_sdk_stub`
+  (`test_coding_claude.py:125-131`) and their two `stub.` assignments. They
+  are dead: `_links.py` imports both from `claude_agent_sdk.types`, and the
+  test module's own top-level import of the real submodule populates
+  `sys.modules` before any test replaces the parent — so the folio already
+  gets the real classes.
+- Commit ruff's pending `--fix` edits to `_links.py` and the test.
 
-Verify: `mise run test` and `mise run check` green (the check task covers
-format, lint, mypy, import-linter, vulture — `mise tasks` is the authority).
+Verify: `mise run test`, `mise run check` — both green, pylint back to 10.00.
 
-### Step 2 — the record
+### Step 2 — a bad config stops the command
 
-- `README.md` — the `fix_tests` example gains its model; `vekna cast
-  fix_tests --bound 5` is unchanged, which is the point worth showing.
-  **Concepts** gains a Component entry, and Ritual's line stops saying
-  "parameters":
+- `_pacts.py` — `RitualsConfig` gains `model_config = ConfigDict(extra="forbid")`
+  and its fields become `list[str] = []` rather than `list[str] | None = None`,
+  which is what forces the `or []` dance at the call site.
+- `_links/loader.py` — `read_config` returns `Config`, never `None`. A
+  `ValidationError` is re-raised as `RitualDefinitionError(f"{path}: {error}")`
+  so the message names the file. `RitualError` is already in `_LOAD_ERRORS`, so
+  `_drive` and `_compendium_or_usage` turn it into exit 2 on stderr for free.
+- `_links/loader.py` — `_found(namespace: dict[str, Any])`, owning the `Any`
+  that `vars(module)` actually returns.
+- `_inits.py:103-107` — back to three lines, no `None` dance.
+- `tests/unit/lexicon/test_config.py` — the two "reads as empty" cases become
+  "raises", keeping one case for a config with no `[rituals]` table at all
+  (still legal, still empty). Plus a CLI test in
+  `tests/integration/cli/test_rituals.py`: a malformed `.vekna.toml` exits 2
+  and names the file.
 
-  ```markdown
-  - **Ritual** — a named program. Its components become `--options`.
-  - **Component** — what a ritual needs before it can be cast, the way a D&D
-    spell needs its material components. Typed values on its external
-    interface — `File`, `Directory`, `Text`, `Url`, `GitRef` — declared as
-    fields on one pydantic model and passed as `--options`.
-  ```
+Verify: `mise run test`, `mise run check`.
 
-- `docs/reborn/00-common.md` — the `fix_demo` example (~line 81) and the
-  Components section (~line 253: "inspects the entrypoint signature, builds a
-  Pydantic model from Component annotations" is exactly what stops being
-  true). Line 268's "inputs and outputs both Components on one interface" is
-  marked deferred rather than patched: `done(result)` takes `object` and
-  `run_cast` returns `object`, so no output-side component exists, and under
-  the ingredient reading an output is not a component at all.
-- `docs/reborn/03-coding-folios.md:92` — the `cover_diff` sketch.
-- `CHANGELOG.md` — under Unreleased; a breaking-shape note for `@ritual`.
+### Step 3 — results print as JSON
 
-Verify: `mise run check` green; `vekna rituals show cover_diff` prints the
-same component line as before the change.
+- `_inits.py:308` — `result: {model.model_dump_json()}`, `result: null` when
+  there is none.
+- Assertions follow: `test_cast.py:157`, `test_coding_claude.py:365,400,413,425`,
+  `test_acceptance.py`.
+
+Verify: `mise run test`; `vekna cast -p` prints `result: {"output":"haiku done"}`.
+
+### Step 4 — transitions carry models or nothing, and enforce it
+
+- `_mills/dispatch.py` — `_get_param_annotation` splits in two. A `@ritual`
+  still requires exactly one `BaseModel` subclass. A `@step` accepts that or a
+  `UnionType` whose every member is a `BaseModel` subclass or `NoneType`;
+  anything else stays a `RitualDefinitionError`. `Step.input_type` keeps its
+  `type[BaseModel] | UnionType`, which stops being dead.
+- `_pacts.py` — `done()` and `goto()` raise `RitualBoundaryError` for a value
+  that is neither a `BaseModel` nor `None`. `Done.result` and `Goto.payload`
+  keep their annotations, which the guard now makes true.
+- Call sites that the guard would break, all of them today's counter-examples:
+  `README.md:41,43` (`done("green")`, `done("gave up")`),
+  `test_engine.py:72,162`, `test_coding_claude.py:35,78`, and `echo` in
+  `test_cast.py`.
+- New tests: a union-payload step routed both ways; `done("x")` and
+  `goto(step, "x")` each raise.
+
+Verify: `mise run test`, `mise run check`.
+
+### Step 5 — the focus boundary, and the door
+
+- `_pacts.py` — delete `BaseFocus`. `engine.py`'s registry returns to `object`
+  in its three signatures; `coding/_mills.py:93` keeps its
+  `cast("CodingFocusProtocol", ...)`, which was the necessary one all along.
+- `coding_claude/_links.py` — `ClaudeCodingFocus(CodingFocusProtocol)`.
+- `lexicon/__init__.py` — export `StringOutput`. `coding/_mills.py` then
+  imports it from `vekna.lexicon` instead of reaching into another package's
+  `_pacts`, and `CodingFocusProtocol` goes back behind `TYPE_CHECKING` where a
+  `cast("...")` needs nothing at runtime — which is what removes the
+  `# pylint: disable=unused-import`, rather than any judgement about it.
+
+Verify: `mise run test`, `mise run check`, and `mise run tingle` reported
+(not gated — its baseline is `main`, so its number reflects the branch).
+
+### Step 6 — the record
+
+- `CHANGELOG.md` — the config failure mode, the JSON result, models-only
+  transitions.
+- `README.md` — Concepts line for transitions if the example changes shape.
+- `CURRENT_TASK.md`.
 
 ## Not in scope
 
-- Renaming components to settings (decision 2).
-- `@step(max_visits=N)`, annotation-gated dispatch, or anything else deferred
-  in `docs/reborn/00-common.md`.
-- Changing how flags parse (`_parse_flags`) or how `model_validate` coerces
-  them — a declared model validates through exactly the same call.
+- Rewriting the SDK stub as patches on the real module (`CURRENT_TASK.md`
+  Remaining 3). Step 1 leaves the stub healthy; the drift risk stays.
+- Extending mypy over `tests/` — you chose the runtime guard instead.
+- Removing any suppression by argument.

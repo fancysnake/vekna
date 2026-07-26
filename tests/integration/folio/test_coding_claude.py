@@ -1,5 +1,4 @@
 import asyncio
-from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 import io
 import sys
 import textwrap
@@ -7,6 +6,7 @@ import types
 from dataclasses import dataclass
 
 import pytest
+from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
 from vekna.lexicon._inits import main
 from vekna.lexicon._mills.engine import reset_foci
@@ -123,14 +123,6 @@ def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
-    @dataclass
-    class PermissionResultAllow:
-        updated_input: dict | None = None
-
-    @dataclass
-    class PermissionResultDeny:
-        message: str = ""
-
     def tool(name, description, input_schema):
         # Mirrors the SDK decorator: it returns the tool, it does not call it.
         def register(handler):
@@ -176,8 +168,6 @@ def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
     stub.AssistantMessage = AssistantMessage
     stub.ResultMessage = ResultMessage
     stub.ClaudeAgentOptions = ClaudeAgentOptions
-    stub.PermissionResultAllow = PermissionResultAllow
-    stub.PermissionResultDeny = PermissionResultDeny
     stub.create_sdk_mcp_server = create_sdk_mcp_server
     stub.tool = tool
     stub.query = query
