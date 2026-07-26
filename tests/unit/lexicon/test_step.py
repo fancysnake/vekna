@@ -14,7 +14,7 @@ from vekna.lexicon import (
     goto,
     step,
 )
-from vekna.lexicon._mills.dispatch import _type_name, component_flags
+from vekna.lexicon._mills.dispatch import _is_union, _type_name, component_flags
 
 
 class Ping(BaseModel):
@@ -184,3 +184,10 @@ class TestComponentFlags:
     @staticmethod
     def test_falls_back_when_an_annotation_is_not_a_type_at_all():
         assert _type_name(object()) == "value"
+
+    @staticmethod
+    def test_reads_an_optional_annotated_as_a_union_on_every_python():
+        # A UnionType on 3.14, a typing union on 3.11 — the same annotation, and
+        # the reason `--only` rendered `<Optional>` before the matrix was fixed.
+        assert _is_union(Directory | None)
+        assert not _is_union(list[str])

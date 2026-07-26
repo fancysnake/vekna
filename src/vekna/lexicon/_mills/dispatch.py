@@ -2,7 +2,7 @@ import inspect
 import textwrap
 from collections.abc import Awaitable, Callable
 from types import NoneType, UnionType
-from typing import ParamSpec, TypeGuard, TypeVar, get_args, get_type_hints
+from typing import Annotated, ParamSpec, TypeGuard, TypeVar, get_args, get_type_hints
 
 from pydantic import BaseModel
 
@@ -132,14 +132,31 @@ def _plain_name(annotation: object) -> str:
     return name if isinstance(name, str) else _NAMELESS
 
 
+# 3.14 merged `typing.Union` into `types.UnionType`. Before it, `|` yields the
+# typing union whenever a member is an Annotated alias — so `File | None` is a
+# `UnionType` on 3.14 but a `_UnionGenericAlias` on 3.11, where an isinstance
+# check misses it and the flag rendered `<Optional>`. What both spellings share
+# is `__origin__`, and the sentinel is taken from an example rather than named:
+# the name is the very thing 3.14 merged away and the linters ask you to drop.
+_UNION_ORIGIN: object = getattr(Annotated[int, "example"] | None, "__origin__", None)
+
+
+def _is_union(annotation: object) -> bool:
+    if isinstance(annotation, UnionType):
+        return True
+    origin: object = getattr(annotation, "__origin__", None)
+    return origin is not None and origin is _UNION_ORIGIN
+
+
 # Two wrappers hide the name a flag should print, and both arrive by way of an
-# optional component. `X | None` has no `__name__` before 3.14 — it rendered
-# `<Union>` there and raised AttributeError on 3.11. And pydantic unwraps a bare
+# optional component. A union has no `__name__` worth printing — `str | None`
+# rendered `<Union>` on 3.14 and raised AttributeError on 3.11, and
+# `File | None` called itself `<Optional>`. And pydantic unwraps a bare
 # `Annotated[Path, ...]` into metadata, but inside a union it does not, so
 # `File | None` rendered `<Annotated>`. An optional `--only` takes a Path;
 # saying so is the whole point of printing a type at all.
 def _type_name(annotation: object) -> str:
-    if isinstance(annotation, UnionType):
+    if _is_union(annotation):
         members: tuple[object, ...] = get_args(annotation)
         named = [_type_name(member) for member in members if member is not NoneType]
         return "|".join(named) or _NAMELESS
