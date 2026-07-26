@@ -198,6 +198,19 @@ class TestCastHelp:
         assert exit_code == 0
         assert "no rituals found" in capsys.readouterr().out
 
+    @staticmethod
+    def test_lists_available_rituals_with_their_options(tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--help"])
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "available rituals:\n" in out
+        assert "  countdown  --start <int>\n" in out
+
 
 class TestCastConfig:
     @staticmethod

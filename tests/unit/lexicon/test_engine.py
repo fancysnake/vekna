@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from vekna.lexicon import (
     Goto,
+    RitualError,
     StepBudgetExceededError,
     Transition,
     done,
@@ -16,7 +17,7 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, run_cast
+from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
@@ -221,6 +222,27 @@ class TestFailedRiteIsJournaled:
             )
 
         assert "✗ explode" in out.getvalue()
+
+
+class TestMediumRegistry:
+    @staticmethod
+    def test_offered_prompt_comes_back():
+        registry = MediumRegistry()
+
+        async def run(_prompt: str) -> str:
+            await asyncio.sleep(0)
+            return "answered"
+
+        registry.offer_prompt("coding", run)
+
+        assert registry.prompt_runner("coding") is run
+
+    @staticmethod
+    def test_a_medium_offering_no_prompt_is_an_error():
+        registry = MediumRegistry()
+
+        with pytest.raises(RitualError, match="offers no one-shot prompt"):
+            registry.prompt_runner("coding")
 
 
 class TestGrimoire:

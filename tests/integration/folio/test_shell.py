@@ -41,6 +41,11 @@ async def run_long_line(_state: State) -> Transition:
 
 
 @step
+async def run_partial_line(_state: State) -> Transition:
+    return done(await shell("printf 'no newline'"))
+
+
+@step
 async def run_multibyte(_state: State) -> Transition:
     # Split across chunk boundaries, so an incremental decoder is the only way
     # these survive intact.
@@ -69,6 +74,12 @@ async def quiet() -> Transition:
 async def long_line() -> Transition:
     await asyncio.sleep(0)
     return goto(run_long_line, State())
+
+
+@ritual("partial_line")
+async def partial_line() -> Transition:
+    await asyncio.sleep(0)
+    return goto(run_partial_line, State())
 
 
 @ritual("multibyte")
@@ -142,6 +153,14 @@ class TestShellStreaming:
         assert not result.exit_code
         assert result.stdout == f"{'x' * _LONG_LINE}\nafter\n"
         assert _deltas(grimoire) == ["x" * _LONG_LINE, "after"]
+
+    @staticmethod
+    def test_output_without_a_trailing_newline_is_kept_and_streamed():
+        result, grimoire, out = _run(partial_line)
+
+        assert result.stdout == "no newline"
+        assert _deltas(grimoire) == ["no newline"]
+        assert "no newline" in out.getvalue()
 
     @staticmethod
     def test_multibyte_output_survives_chunk_boundaries():

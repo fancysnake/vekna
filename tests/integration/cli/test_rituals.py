@@ -198,3 +198,15 @@ class TestRitualsUsage:
 
         assert exit_code == _USAGE_EXIT
         assert "a_module_that_does_not_exist" in capsys.readouterr().err
+
+    @staticmethod
+    def test_showing_a_ritual_that_cannot_be_loaded_is_a_usage_error(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_BROKEN)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        assert exit_code == _USAGE_EXIT
+        assert "a_module_that_does_not_exist" in capsys.readouterr().err
