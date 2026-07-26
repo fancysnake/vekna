@@ -22,8 +22,7 @@ from claude_agent_sdk.types import (
 )
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon import AskFn, CodingCall, FocusReply, GateFn
-from vekna.lexicon._pacts import BaseFocus
+from vekna.lexicon import AskFn, CodingCall, CodingFocusProtocol, FocusReply, GateFn
 
 from ._pacts import ClaudeOptions
 
@@ -169,7 +168,7 @@ def _agent_options(
     )
 
 
-class ClaudeCodingFocus(BaseFocus):
+class ClaudeCodingFocus(CodingFocusProtocol):
     @staticmethod
     async def run(
         call: CodingCall,

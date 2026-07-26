@@ -18,7 +18,3 @@ class CodingResult(BaseModel):
     session_id: str | None = None
     num_turns: int | None = None
     cost_usd: float | None = None
-
-
-class PromptOutput(BaseModel):
-    output: str

@@ -8,7 +8,6 @@ from typing import Literal
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon._pacts import (
-    BaseFocus,
     Channel,
     Done,
     FocusMissingError,
@@ -138,17 +137,19 @@ PromptRunner = Callable[[str], Awaitable[StringOutput]]
 
 class MediumRegistry:
     def __init__(self) -> None:
-        self._foci: dict[str, BaseFocus] = {}
+        self._foci: dict[str, object] = {}
         self._hints: dict[str, str] = {}
         self._prompts: dict[str, PromptRunner] = {}
 
     def expect(self, medium_name: str, *, hint: str) -> None:
         self._hints[medium_name] = hint
 
-    def register(self, medium_name: str, focus: BaseFocus) -> None:
+    def register(self, medium_name: str, focus: object) -> None:
         self._foci[medium_name] = focus
 
-    def resolve(self, medium_name: str) -> BaseFocus:
+    # `object`, not a marker base class: the lexicon may not name a folio's
+    # Focus protocol, and a medium narrows what it resolved to its own.
+    def resolve(self, medium_name: str) -> object:
         if (focus := self._foci.get(medium_name)) is not None:
             return focus
         msg = f"no Focus registered for medium {medium_name!r}"
@@ -177,11 +178,11 @@ def expect_focus(medium_name: str, *, hint: str) -> None:
     _registry.expect(medium_name, hint=hint)
 
 
-def register_focus(medium_name: str, focus: BaseFocus) -> None:
+def register_focus(medium_name: str, focus: object) -> None:
     _registry.register(medium_name, focus)
 
 
-def resolve_focus(medium_name: str) -> BaseFocus:
+def resolve_focus(medium_name: str) -> object:
     return _registry.resolve(medium_name)
 
 

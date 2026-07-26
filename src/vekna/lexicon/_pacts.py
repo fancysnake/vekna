@@ -124,8 +124,10 @@ class FocusReply(BaseModel):
 
 
 class CodingFocusProtocol(Protocol):
+    # Static on both sides: a focus carries no per-call state, and an instance
+    # method would leave `self` unused in every implementation.
+    @staticmethod
     async def run(
-        self,
         call: CodingCall,
         *,
         on_delta: Callable[[str], None],
@@ -237,7 +239,3 @@ class Config(BaseModel):
 
 class StringOutput(BaseModel):
     output: str
-
-
-class BaseFocus:
-    pass

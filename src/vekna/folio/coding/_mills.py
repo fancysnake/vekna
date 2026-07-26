@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import TypeVar, cast, overload
+from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
@@ -8,18 +8,18 @@ from vekna.lexicon import (
     Channel,
     CodingCall,
     GateFn,
+    StringOutput,
     current_rite,
     emit_delta,
     medium,
     record_result,
     resolve_focus,
 )
-from vekna.lexicon._pacts import (  # pylint: disable=unused-import
-    CodingFocusProtocol,
-    StringOutput,
-)
 
 from ._pacts import CodingOpts, CodingOutputError, CodingResult
+
+if TYPE_CHECKING:
+    from vekna.lexicon import CodingFocusProtocol
 
 _OutputT = TypeVar("_OutputT")
 
