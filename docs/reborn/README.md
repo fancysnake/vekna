@@ -1,4 +1,4 @@
-# Reborn
+# Reborn — `1.0.0`
 
 The roadmap for vekna's pivot to overseeing many concurrent rituals. Common
 knowledge lives once; each feature doc assumes it. One `vekna` binary, three
@@ -34,7 +34,7 @@ and casts on command, from a terminal or from Discord.
 
 ## Parked
 
-[`../eye/`](../eye/README.md) — the visual surfaces (Textual TUI, web view, the
-lich's web page), after 1.0. Same wire, same events, another consumer, so they
-park without blocking anything. WhatsApp notifications were dropped outright:
-Discord ships at 0.7.0 and does that job better.
+[`../eye/`](../eye/README.md) — **Eye** (`2.0.0`), the visual surfaces: Textual
+TUI, web view, the lich's web page. Same wire, same events, another consumer, so
+they park without blocking anything here. WhatsApp notifications were dropped
+outright: Discord ships at 0.7.0 and does that job better.

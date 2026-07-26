@@ -1,7 +1,7 @@
 # Feature — Web view
 
-**Version:** after 1.0, unscheduled. (Was `0.8.0` while it sat in the reborn
-roadmap.)
+**Version:** Eye (`2.x`), unscheduled within it. (Was `0.8.0` while it sat in
+the reborn roadmap.)
 
 See [`../reborn/00-common.md`](../reborn/00-common.md) and
 [`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same events,

@@ -1,7 +1,7 @@
 # Feature — Textual TUI
 
-**Version:** after 1.0, unscheduled. (Was `0.7.0` while it sat in the reborn
-roadmap; the lich took that slot.)
+**Version:** Eye (`2.x`), unscheduled within it. (Was `0.7.0` while it sat in
+the reborn roadmap; the lich took that slot.)
 
 See [`../reborn/00-common.md`](../reborn/00-common.md) and
 [`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same wire

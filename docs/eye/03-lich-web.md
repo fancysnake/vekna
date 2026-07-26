@@ -1,6 +1,6 @@
 # Feature — The lich's web surface
 
-**Version:** after 1.0, unscheduled.
+**Version:** Eye (`2.x`), unscheduled within it.
 
 See [`../reborn/07-lich.md`](../reborn/07-lich.md) and [02-web.md](02-web.md).
 A lich is a route on the daemon's web view, not a server of its own.

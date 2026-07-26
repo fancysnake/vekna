@@ -26,6 +26,9 @@ mise run check      # format + lint
   steps, a prompt with one possible answer — cut it.
 - Don't ignore lint rules globally.
 - No single-line files.
+- Every major release carries a name before it carries a number — Reborn
+  (`1.0.0`), Eye (`2.0.0`). Name a track when work on it starts; attach the
+  number at the tag. [`docs/README.md`](docs/README.md).
 - Hit friction (retried command, flaky tool, stale cache, bad error, gotcha)?
   Log it now, one or two sentences: what you did → what got in the way.
 
@@ -133,6 +136,9 @@ code.
 
 ## Details
 
+- [`docs/README.md`](docs/README.md) — docs index, release names
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
-- [`docs/reborn/`](docs/reborn/README.md) — the plan from 0.3.0 onward
+- [`docs/reborn/`](docs/reborn/README.md) — Reborn (`1.0.0`), the plan from
+  0.3.0 onward
+- [`docs/eye/`](docs/eye/README.md) — Eye (`2.0.0`), parked until Reborn ships
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight
