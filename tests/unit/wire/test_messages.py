@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from vekna.wire import (
     CastHello,
@@ -19,7 +19,7 @@ class TestRoundTrip:
             project_root="/proj",
             ritual="fix_demo",
             components={"bound": 3, "path": "x.py"},
-            started_at=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
         )
 
         restored = decode_frame(encode_frame(message))
@@ -35,7 +35,7 @@ class TestRoundTrip:
             parent_id=None,
             name="run_tests",
             category="step",
-            started_at=datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
         )
 
         restored = decode_frame(encode_frame(message))

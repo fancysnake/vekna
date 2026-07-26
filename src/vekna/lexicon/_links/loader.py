@@ -1,15 +1,10 @@
 import hashlib
 import importlib
 import importlib.util
-import sys
+import tomllib
 from pathlib import Path
 
 from vekna.lexicon._pacts import Ritual, RitualDefinitionError, RitualSource, Step
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 
 def _found(namespace: dict[str, object]) -> RitualSource:

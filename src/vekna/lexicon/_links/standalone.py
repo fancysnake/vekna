@@ -22,20 +22,23 @@ def default_socket_path() -> str:
     return str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
 
 
-def _socket_alive(socket_path: str, timeout: float) -> bool:
+def _socket_alive(socket_path: str, connect_timeout: float) -> bool:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.settimeout(timeout)
+            sock.settimeout(connect_timeout)
             sock.connect(socket_path)
     except OSError:
         return False
     return True
 
 
+# `connect_timeout` is the socket's own blocking timeout, not a deadline on this
+# coroutine — `asyncio.to_thread` cannot be cancelled, so `asyncio.timeout()`
+# around it would return early and leave the thread connecting.
 async def probe_daemon(
-    *, socket_path: str, timeout: float = _PROBE_TIMEOUT_SECONDS
+    *, socket_path: str, connect_timeout: float = _PROBE_TIMEOUT_SECONDS
 ) -> bool:
-    return await asyncio.to_thread(_socket_alive, socket_path, timeout)
+    return await asyncio.to_thread(_socket_alive, socket_path, connect_timeout)
 
 
 class StandaloneRenderer:

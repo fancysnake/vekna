@@ -1,6 +1,6 @@
 import asyncio
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel
 
@@ -11,7 +11,7 @@ from vekna.lexicon._mills.engine import Grimoire, run_cast
 
 
 def _fixed_clock() -> datetime:
-    return datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class State(BaseModel):

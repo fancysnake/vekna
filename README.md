@@ -6,7 +6,7 @@ permissively *within* a step; determinism lives at the step boundaries.
 
 ## Requires
 
-- Python 3.10+
+- Python 3.11+
 
 ## Install
 

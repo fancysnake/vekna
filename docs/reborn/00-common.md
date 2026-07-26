@@ -347,7 +347,7 @@ Runtime deps: lower bounds only (`>=X.Y`), capped at next major (`<X+1`). Raise
 floors only on security advisory / upstream EOL. Keeps vekna installable
 alongside arbitrary project dep sets. `claude-agent-sdk` tracks latest as a
 plain runtime dependency — the `coding-claude` extra was dropped in 0.3.0, so
-the base wheel does pull it. Python floor 3.10 —
+the base wheel does pull it. Python floor 3.11 —
 permissive because vekna is a dev dep elsewhere. Tooling: poetry deps, `mise
 run …` commands.
 

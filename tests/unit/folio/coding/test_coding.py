@@ -1,6 +1,6 @@
 import asyncio
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -22,7 +22,7 @@ from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
-    return datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class FakeFocus:

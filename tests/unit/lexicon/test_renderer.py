@@ -1,6 +1,6 @@
 import asyncio
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -23,7 +23,7 @@ class TestRender:
             parent_id=None,
             name="run_tests",
             category="step",
-            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            started_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         renderer.render(event)
@@ -38,7 +38,7 @@ class TestRender:
             parent_id=None,
             name="fix",
             category="medium",
-            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            started_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         delta = RiteStreamed(rite_id="r1", delta="one\ntwo")
 
@@ -54,7 +54,7 @@ class TestRender:
             rite_id="r9",
             status="error",
             result=None,
-            finished_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         renderer.render(ended)

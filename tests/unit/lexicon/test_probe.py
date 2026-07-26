@@ -18,7 +18,7 @@ class TestProbe:
     def test_absent_socket_is_false_and_does_not_hang(tmp_path):
         missing = str(tmp_path / "nobody-here.sock")
 
-        result = asyncio.run(probe_daemon(socket_path=missing, timeout=0.2))
+        result = asyncio.run(probe_daemon(socket_path=missing, connect_timeout=0.2))
 
         assert result is False
 
@@ -29,7 +29,7 @@ class TestProbe:
         async def run() -> bool:
             server = await asyncio.start_unix_server(_accept, path=socket_path)
             try:
-                return await probe_daemon(socket_path=socket_path, timeout=0.5)
+                return await probe_daemon(socket_path=socket_path, connect_timeout=0.5)
             finally:
                 server.close()
                 await server.wait_closed()
