@@ -41,6 +41,21 @@ and this project adheres to [Semantic Versioning].
 
 ### Changed
 
+- **A transition carries a pydantic model or nothing.** `goto(target, payload)`
+  and `done(result)` raise `RitualBoundaryError` for anything else, checked
+  where the transition is built — mypy reads `src/`, and a transition is
+  written in the author's `rituals.py`, which it never sees. A `@step` may
+  still admit several shapes (`Lint | Coverage`) as long as every member is a
+  model; a ritual's components stay a single model, being one CLI interface.
+- **A cast's result prints as JSON.** `result: {"covered":true,"remaining":3}`
+  rather than a pydantic repr, and `result: null` when a ritual finishes with
+  nothing.
+- **A malformed `.vekna.toml` stops the command.** It used to be swallowed:
+  every validation failure read as "no modules, no files", so a typo loaded
+  nothing and left the next cast to fail with `no ritual named ...`, naming
+  neither the file nor the mistake. It now exits 2 with the path and pydantic's
+  complaint. `[rituals]` rejects unknown keys for the same reason; the
+  top-level table still accepts others.
 - **`@ritual` takes a declared components model.** The entrypoint's parameters
   used to be reflected into a Pydantic model by `create_model`, a type the
   author never saw. It now takes exactly one parameter, a model written in the

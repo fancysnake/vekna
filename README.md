@@ -61,7 +61,12 @@ vekna cast fix_tests --bound 5
 ```
 
 Output streams live as a tree of rites — one node per step, one nested under
-it per medium call, with the agent's own output indented beneath.
+it per medium call, with the agent's own output indented beneath. The last
+line is the cast's result, as JSON:
+
+```
+result: {"outcome":"green"}
+```
 
 ## Commands
 
@@ -81,6 +86,10 @@ it per medium call, with the agent's own output indented beneath.
   on one pydantic model, the ritual's only parameter.
 - **Step** — one deterministic hop. Takes a typed payload, returns `goto(...)`
   or `done(...)`. A ritual is a trampoline over steps, bounded by `max_steps`.
+- **Transition** — what a step returns. Both carry a pydantic model or nothing,
+  checked as they are built: `goto(next_step, payload)` continues, `done(result)`
+  finishes. A step may admit several payload shapes (`Lint | Coverage`); a
+  ritual's components are one model, being one CLI interface.
 - **Medium** — what a step reaches out to: `coding` (an agent), `shell`,
   `decide` (ask the operator). Each call opens a rite of its own.
 - **Focus** — the backend behind a medium. `vekna.folio.coding_claude` is the

@@ -1,62 +1,84 @@
 # Current Task
 
-**Task:** `@ritual` takes a declared components model, just as `@step` does
+**Task:** finish the typing pass — fail loudly, and make the narrowings true
 **Plan:** [`PLAN.md`](PLAN.md) — approved, complete
 **Branch:** `vekna-reborn`
 **Phase:** IMPLEMENT complete — awaiting review
 
-(The lexicon refactor that came before it — shrink to the SDK, satisfy the new
-contracts — is complete through commit `0ef0149`; its record is in that
-commit's version of this file.)
+(Before it: `@ritual` takes a declared components model, complete through
+`9e6b87e`. Its record is in that commit's version of this file.)
 
 ## Context
 
-The entrypoint was the one place in the lexicon that reflected a signature into
-a synthesized type: loose parameters stitched into a model by `create_model`
-that the author never saw. `@step` had always declared its payload as a model
-and validated against it; `@ritual` now does the same with its components.
+A review of `f19588b`, `4b7b354`, `18e7374`, `eec61a8` — three commits
+strengthening types, plus their fix. Thirteen findings. Two were mine to
+concede: `# ruff: ignore [rule]` is a real format under `preview = true`, and
+tingle's baseline is `main`, so its number covers the whole branch rather than
+those commits. The rest were a red quality gate, two half-landed behaviour
+changes, and annotations the codebase contradicted.
 
 ## Progress against PLAN.md
 
 | Step | State | Commit |
 | --- | --- | --- |
-| 1 — the decorator, and every call site with it | done | `b81a39b` |
-| 2 — the record | done | this commit |
+| 1 — green the gate | done | `f8e3ce9` |
+| 2 — a bad config stops the command | done | `0401811` |
+| 3+4 — transitions carry models; results print as JSON | done | `b379a21` |
+| 5 — the focus boundary, and the door | done | `9288c54` |
+| 6 — the record | done | this commit |
 
-Gates after each step: 139 tests, 31 import-linter contracts, pylint 10.00,
-mypy clean, vulture clean. `vekna rituals show cover_diff` prints what it
-printed before the change.
+Gates after each step: 149 tests, 31 import-linter contracts, pylint 10.00,
+mypy clean, vulture clean.
 
 ## Decisions
 
-Both came out of the review conversation, and both reversed a first answer:
-
-1. **The vocabulary stays "components".** A component is what a ritual needs
-   before it can be cast, the way a spell needs its material components — so
-   the model class is the ingredient list, an instance is the ingredients
-   brought, and one field is one ingredient. That rationale was nowhere in the
-   repo, which is what made the word read as five unrelated things. It now
-   lives in README's Concepts and the `docs/reborn` glossary.
-2. **Exactly one parameter, always** — the rule `@step` has. `NoComponents`
-   ships in the lexicon so a ritual needing nothing does not open with an empty
-   class of its own.
+1. **A malformed config stops the command.** Vekna doesn't forgive. `[rituals]`
+   rejects unknown keys too: tolerating a typo buys nothing when the cast that
+   needed the file fails a moment later.
+2. **Results print as JSON**, every ritual, not only `--prompt`.
+3. **Union payloads for `@step` restored** — a merging step admits
+   `Lint | Coverage`. The three commits had made them illegal while
+   `Step.input_type` kept a `UnionType` arm nothing could reach.
+4. **`done`/`goto` guard at runtime**, since mypy sees neither `tests/` nor any
+   author's `rituals.py`.
+5. **`object` where it is honest** — the focus registry and the reflection
+   boundary — rather than `BaseFocus`, an empty marker the use site had to cast
+   away regardless.
 
 ## Where the plan was wrong
 
-Nowhere. Both steps landed as written.
+1. **Steps 3 and 4 could not go green apart.** Rendering a result as JSON
+   assumes every ritual returns a model; making them return models leaves
+   assertions sitting on a repr the render replaces. Swapped, then merged.
+2. **The `Any` in `_found` cost more than the `object` it replaced** — three
+   new suppressions for a signature whose values are narrowed by `isinstance`
+   on the next line. Kept `object`.
+3. **A protocol base class deadlocked the two linters.** `@staticmethod` drew
+   pylint's W0221, an instance method drew ruff's `no-self-use`. Making
+   `CodingFocusProtocol.run` static on both sides satisfied both with no
+   suppression.
 
-## Open from this task
+## Suppressions
 
-- **Fan-in** came up and was set aside: the trampoline is sequential, so a step
-  merging two measurements just takes a payload carrying both halves. A real
-  join — two steps concurrent, a third waiting — is a runtime feature, not a
-  signature one. Deliberately not in `TODO.md`.
-- Where a ritual's components and its first step's payload had the same shape,
-  the test migration reused one model rather than declaring a near-duplicate
-  (`Task` in `test_coding_claude.py`, `State` in `test_graph.py`).
-- `docs/reborn/00-common.md`'s "inputs and outputs are both Components" is now
-  marked deferred rather than deleted: nothing implements an output-side
-  Component, and an output is not something a ritual needed in order to run.
+10 before this task, 10 after: one `# type: ignore` added in `_pacts.py` (no
+`isinstance` against `BaseModel` typechecks under `disallow_any_expr`), one
+`# pylint: disable=unused-import` removed by exporting `StringOutput` from the
+lexicon's door. `object` went from 1 occurrence to 12 — the focus registry
+(5), the reflection boundary (4), the loader (1), the transition guard (1),
+and one JSON Schema string that is not a symbol use.
+
+`mise run tingle` reports +30 against `main`; it was +19 before this task. The
+growth is `type-object`, deliberate per decision 5.
+
+## Open
+
+- `# ruff: ignore [any-type]` at `coding_claude/_links.py:114` suppresses
+  ANN401, which cannot fire: `"ANN"` sits in ruff's global ignore list. Left in
+  place.
+- The SDK stub's independence rests on import order — the test module imports
+  the real `claude_agent_sdk.types` before any test replaces the parent, so the
+  folio gets the real permission classes. Rewriting the stub as patches on the
+  real module is Remaining 3 below.
 
 ## Remaining
 

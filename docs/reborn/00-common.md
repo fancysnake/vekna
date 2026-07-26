@@ -37,7 +37,7 @@ named `vekna`.
 | **Ritual** | Workflow **entrypoint** — `@ritual` in `rituals.py`. Owns the external Component interface (CLI in, final out) and fires the opening transition into the first step. Not a step; never a `goto` target. |
 | **Step**   | One **task** in a workflow — `@step` async function. Typed input value → returns a `Transition`. Enforces its input/output type hints at runtime. Calls mediums in its body. |
 | **Workflow** | The graph of steps a ritual drives, connected by transitions. Shaped at runtime by `goto`/`done`, not declared up front. |
-| **Transition** | What a step returns: `goto(next_step, payload)` to continue, `done(result)` to finish. Routing lives in the value; target named by direct function reference. |
+| **Transition** | What a step returns: `goto(next_step, payload)` to continue, `done(result)` to finish. Both carry a pydantic model or nothing, checked as the transition is built. Routing lives in the value; target named by direct function reference. |
 | **Cast**   | One invocation of a ritual. Unit of execution. Owns locks, has a journal. Runs in a cast process. |
 | **Rite**   | One **executed node** in the grimoire — a step or medium invocation. (`step`/`medium` are authored units; a rite is one run of one.) |
 | **Medium** | Kind of effect a step calls — typed call shape, declared value shape, `run()` body. ≈ port. (`shell`, `coding`, `decide`.) |
@@ -306,6 +306,11 @@ files   = ["scripts/rituals.py", "ops/rituals.py"]
 [locks]
 standalone = "warn"   # 0.5.0 default; flips to "deny" when the daemon lands (0.6.0)
 ```
+
+A config that does not validate stops the command with the path and the
+complaint — `[rituals]` rejects unknown keys, since a misspelt one would load
+nothing and leave the next cast to fail with `no ritual named ...`. Tables
+vekna does not know yet are left alone.
 
 ## Standalone mode
 
