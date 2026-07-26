@@ -15,7 +15,7 @@ from vekna.lexicon._pacts import (
 )
 
 
-def _found(namespace: dict[str, type]) -> RitualSource:
+def _found(namespace: dict[str, object]) -> RitualSource:
     return RitualSource(
         rituals=[v for v in namespace.values() if isinstance(v, Ritual)],
         steps=[v for v in namespace.values() if isinstance(v, Step)],
@@ -42,11 +42,15 @@ def load_rituals_module(name: str) -> RitualSource:
     return _found(vars(importlib.import_module(name)))  # type: ignore [misc]
 
 
-def read_config(path: Path) -> Config | None:
+# A config that does not parse stops the command: loading no rituals from it
+# would surface later as "no ritual named ...", which names neither the file
+# nor the mistake.
+def read_config(path: Path) -> Config:
     with path.open("rb") as handle:
         data = tomllib.load(handle)  # type: ignore [misc]
 
     try:
         return Config.model_validate(data)  # type: ignore [misc]
-    except ValidationError:
-        return None
+    except ValidationError as error:
+        msg = f"{path}: {error}"
+        raise RitualDefinitionError(msg) from error

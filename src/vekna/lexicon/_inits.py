@@ -100,18 +100,14 @@ def _build_compendium(cwd: Path) -> Compendium:
     if (implicit := _find_rituals_file(cwd)) is not None:
         load_file(implicit)
     for config in _config_files(cwd):
-        config_model = read_config(config)
-        modules, files = [], []
-        if config_model and config_model.rituals:
-            modules = config_model.rituals.modules or []
-            files = config_model.rituals.files or []
+        rituals = read_config(config).rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
         # found by walking parents, and a global one is shared by every
         # directory — resolving against the cwd would mean a different file
         # each time.
-        for relative in files:
+        for relative in rituals.files:
             load_file(config.parent / relative)
-        for module in modules:
+        for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
                 _register(

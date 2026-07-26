@@ -211,13 +211,18 @@ def done(result: BaseModel | None = None) -> Done:
     return Done(result=result)
 
 
+# Unknown keys are an error: a misspelt `module = [...]` would otherwise load
+# nothing and leave the next cast to fail with "no ritual named ...". The
+# top-level table stays open — `[locks]` lands at 0.5.0.
 class RitualsConfig(BaseModel):
-    files: list[str] | None = None
-    modules: list[str] | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    files: list[str] = []
+    modules: list[str] = []
 
 
 class Config(BaseModel):
-    rituals: RitualsConfig | None = None
+    rituals: RitualsConfig = RitualsConfig()
 
 
 class StringOutput(BaseModel):

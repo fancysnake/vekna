@@ -260,13 +260,20 @@ class TestCastConfig:
         assert main(["ping"]) == 0
 
     @staticmethod
-    def test_ignores_a_rituals_key_that_is_not_a_table(tmp_path, monkeypatch):
+    def test_a_rituals_key_that_is_not_a_table_stops_the_cast(
+        tmp_path, monkeypatch, capsys
+    ):
+        # The rituals.py beside it is loadable, and deliberately does not save
+        # the cast: a config that cannot be read is not a fallback situation.
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "rituals.py").write_text(_RITUALS)
         (tmp_path / ".vekna.toml").write_text('rituals = "nope"\n')
         monkeypatch.chdir(tmp_path)
 
-        assert main(["countdown", "--start", "1"]) == 0
+        exit_code = main(["countdown", "--start", "1"])
+
+        assert exit_code == _USAGE_EXIT
+        assert ".vekna.toml" in capsys.readouterr().err
 
     @staticmethod
     def test_unimportable_rituals_file_is_a_usage_error(tmp_path, monkeypatch, capsys):

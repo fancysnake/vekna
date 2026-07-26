@@ -1,3 +1,6 @@
+import pytest
+
+from vekna.lexicon import RitualDefinitionError
 from vekna.lexicon._links.loader import read_config
 from vekna.lexicon._pacts import Config, RitualsConfig
 
@@ -19,18 +22,28 @@ class TestReadConfig:
         config = tmp_path / ".vekna.toml"
         config.write_text("[other]\nkey = 1\n")
 
-        assert read_config(config) == Config(rituals=None)
+        assert read_config(config) == Config(rituals=RitualsConfig())
 
     @staticmethod
-    def test_a_rituals_key_that_is_not_a_table_is_ignored(tmp_path):
+    def test_a_rituals_key_that_is_not_a_table_is_an_error(tmp_path):
         config = tmp_path / ".vekna.toml"
         config.write_text('rituals = "nope"\n')
 
-        assert read_config(config) is None
+        with pytest.raises(RitualDefinitionError, match=r"\.vekna\.toml"):
+            read_config(config)
 
     @staticmethod
-    def test_non_string_entries_fail_parse(tmp_path):
+    def test_a_non_string_entry_is_an_error(tmp_path):
         config = tmp_path / ".vekna.toml"
-        config.write_text('[rituals]\nmodules = ["ok", 3]\nfiles = [true, "r.py"]\n')
+        config.write_text('[rituals]\nmodules = ["ok", 3]\n')
 
-        assert read_config(config) is None
+        with pytest.raises(RitualDefinitionError, match="modules"):
+            read_config(config)
+
+    @staticmethod
+    def test_a_misspelt_key_is_an_error(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text('[rituals]\nmodule = ["pkg.rites"]\n')
+
+        with pytest.raises(RitualDefinitionError, match="extra"):
+            read_config(config)

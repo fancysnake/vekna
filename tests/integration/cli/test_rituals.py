@@ -129,6 +129,19 @@ class TestRitualsShow:
 @pytest.mark.usefixtures("_home")
 class TestRitualSources:
     @staticmethod
+    def test_a_malformed_config_stops_the_command(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodule = ["pkg.rites"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert ".vekna.toml" in err
+        assert "module" in err
+
+    @staticmethod
     def test_config_may_name_the_discovered_rituals_file(tmp_path, monkeypatch, capsys):
         (tmp_path / "rituals.py").write_text(_RITUALS)
         (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["rituals.py"]\n')
