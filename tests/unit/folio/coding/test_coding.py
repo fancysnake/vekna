@@ -18,7 +18,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links import StandaloneRenderer
 from vekna.lexicon._mills import Grimoire, reset_foci, run_cast
-from vekna.wire import RiteDelta, RiteFinished
+from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
@@ -108,7 +108,7 @@ class TestCodingMedium:
         assert call.cwd == "/tmp/x"
         assert call.output_schema is None
         assert call.focus_options is None
-        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteDelta)]
+        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
         assert deltas == ["thinking", "editing"]
 
     @staticmethod
@@ -127,7 +127,7 @@ class TestCodingMedium:
 
         _, grimoire = _cast(r)
 
-        finished = [e for e in grimoire.events if isinstance(e, RiteFinished)]
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         medium_finish = finished[0]
         assert medium_finish.result == {
             "session_id": "s1",

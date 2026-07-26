@@ -18,7 +18,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links import StandaloneRenderer
 from vekna.lexicon._mills import Grimoire, run_cast
-from vekna.wire import RiteDelta, RiteStarted
+from vekna.lexicon._pacts import RiteBegan, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
@@ -107,7 +107,7 @@ class TestMedium:
             )
         )
 
-        started = [e for e in grimoire.events if isinstance(e, RiteStarted)]
+        started = [e for e in grimoire.events if isinstance(e, RiteBegan)]
         step_rite = next(e for e in started if e.name == "choose")
         medium_rite = next(e for e in started if e.name == "pick")
         assert medium_rite.category == "medium"
@@ -138,9 +138,9 @@ class TestEmitDelta:
             )
         )
 
-        started = [e for e in grimoire.events if isinstance(e, RiteStarted)]
+        started = [e for e in grimoire.events if isinstance(e, RiteBegan)]
         medium_rite = next(e for e in started if e.name == "whoami")
-        delta = next(e for e in grimoire.events if isinstance(e, RiteDelta))
+        delta = next(e for e in grimoire.events if isinstance(e, RiteStreamed))
         assert (delta.rite_id, delta.delta) == (medium_rite.rite_id, "here")
 
     @staticmethod

@@ -7,9 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
-from vekna.wire import RiteDelta, RiteFinished, RiteStarted, WireMessage
-
-from ._pacts import StandalonePromptError
+from ._pacts import RiteBegan, RiteEvent, RiteStreamed, StandalonePromptError
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
@@ -48,8 +46,10 @@ class StandaloneRenderer:
     async def _readline(self) -> str:
         return (await asyncio.to_thread(self._inp.readline)).strip()
 
-    def _format(self, event: WireMessage) -> str:
-        if isinstance(event, RiteStarted):
+    # RiteEvent is closed, so the three branches are exhaustive — there is no
+    # unknown-event fallback to write.
+    def _format(self, event: RiteEvent) -> str:
+        if isinstance(event, RiteBegan):
             depth = (
                 0
                 if event.parent_id is None
@@ -58,18 +58,16 @@ class StandaloneRenderer:
             self._rites[event.rite_id] = (event.name, depth)
             mark = "▶" if event.category == "step" else "↳"
             return f"{'  ' * depth}{mark} {event.name}"
-        if isinstance(event, RiteDelta):
+        if isinstance(event, RiteStreamed):
             _, depth = self._rites.get(event.rite_id, ("", 0))
             pad = "  " * (depth + 1)
             lines = event.delta.splitlines() or [""]
             return "\n".join(f"{pad}{line}" for line in lines)
-        if isinstance(event, RiteFinished):
-            name, depth = self._rites.get(event.rite_id, (event.rite_id, 0))
-            mark = "✓" if event.status == "ok" else "✗"
-            return f"{'  ' * depth}{mark} {name}"
-        return f"· {event.kind}"
+        name, depth = self._rites.get(event.rite_id, (event.rite_id, 0))
+        mark = "✓" if event.status == "ok" else "✗"
+        return f"{'  ' * depth}{mark} {name}"
 
-    def render(self, event: WireMessage) -> None:
+    def render(self, event: RiteEvent) -> None:
         self._say(self._format(event) + "\n")
 
     async def decide(

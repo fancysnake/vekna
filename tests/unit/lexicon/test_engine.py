@@ -17,7 +17,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links import StandaloneRenderer
 from vekna.lexicon._mills import Grimoire, run_cast
-from vekna.wire import RiteDelta, RiteFinished, RiteStarted
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
@@ -136,7 +136,7 @@ class TestRunCast:
         )
 
         assert result == Tick(left=0)
-        started = [event for event in grimoire.events if isinstance(event, RiteStarted)]
+        started = [event for event in grimoire.events if isinstance(event, RiteBegan)]
         assert len(started) == start + 1
         assert {event.name for event in started} == {"tick"}
 
@@ -186,8 +186,8 @@ class TestFailedRiteIsJournaled:
         return grimoire
 
     @staticmethod
-    def _finished(grimoire: Grimoire) -> list[RiteFinished]:
-        return [e for e in grimoire.events if isinstance(e, RiteFinished)]
+    def _finished(grimoire: Grimoire) -> list[RiteEnded]:
+        return [e for e in grimoire.events if isinstance(e, RiteEnded)]
 
     @classmethod
     def test_a_step_that_raises_still_closes_its_rite(cls):
@@ -233,7 +233,7 @@ class TestGrimoire:
         grimoire.rite_delta(rite_id, "working...")
         grimoire.rite_finished(rite_id, result={"session_id": "s1"})
 
-        assert [type(event) for event in seen] == [RiteStarted, RiteDelta, RiteFinished]
+        assert [type(event) for event in seen] == [RiteBegan, RiteStreamed, RiteEnded]
         assert seen == grimoire.events
 
     @staticmethod
@@ -244,5 +244,5 @@ class TestGrimoire:
         grimoire.rite_finished(rite_id, result={"cost": 1})
 
         finished = grimoire.events[-1]
-        assert isinstance(finished, RiteFinished)
+        assert isinstance(finished, RiteEnded)
         assert finished.result == {"cost": 1}

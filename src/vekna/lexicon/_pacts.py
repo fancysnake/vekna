@@ -1,9 +1,42 @@
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from types import UnionType
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue
+
+
+# The grimoire's own vocabulary, not the daemon's. These carry no `cast_id`:
+# correlating events to a cast is a transport concern, and in one process there
+# is one cast. `vekna.wire` projects these onto the socket at 0.6.0; keeping the
+# two apart is what lets either change without the other.
+@dataclass(frozen=True)
+class RiteBegan:
+    rite_id: str
+    parent_id: str | None
+    name: str
+    category: Literal["step", "medium"]
+    started_at: datetime
+
+
+@dataclass(frozen=True)
+class RiteStreamed:
+    rite_id: str
+    delta: str
+
+
+# `result` is JSON-shaped because 0.6.0 persists the grimoire to a durable
+# journal — a real requirement, not the transport leaking back in.
+@dataclass(frozen=True)
+class RiteEnded:
+    rite_id: str
+    status: Literal["ok", "error"]
+    result: JsonValue | None
+    finished_at: datetime
+
+
+RiteEvent = RiteBegan | RiteStreamed | RiteEnded
 
 
 class Channel(Protocol):

@@ -7,12 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, JsonValue
 
-from vekna.wire import RiteDelta, RiteFinished, RiteStarted, WireMessage
-
 from ._pacts import (
     Channel,
     Done,
     FocusMissingError,
+    RiteBegan,
+    RiteEnded,
+    RiteEvent,
+    RiteStreamed,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -31,15 +33,15 @@ class Grimoire:
         *,
         cast_id: str,
         clock: Callable[[], datetime] = _now,
-        on_event: Callable[[WireMessage], None] | None = None,
+        on_event: Callable[[RiteEvent], None] | None = None,
     ) -> None:
-        self._cast_id = cast_id
+        self.cast_id = cast_id
         self._clock = clock
         self._on_event = on_event
-        self._events: list[WireMessage] = []
+        self._events: list[RiteEvent] = []
         self._counter = 0
 
-    def _append(self, event: WireMessage) -> None:
+    def _append(self, event: RiteEvent) -> None:
         self._events.append(event)
         if self._on_event is not None:
             self._on_event(event)
@@ -54,8 +56,7 @@ class Grimoire:
         self._counter += 1
         rite_id = f"r{self._counter}"
         self._append(
-            RiteStarted(
-                cast_id=self._cast_id,
+            RiteBegan(
                 rite_id=rite_id,
                 parent_id=parent_id,
                 name=name,
@@ -66,7 +67,7 @@ class Grimoire:
         return rite_id
 
     def rite_delta(self, rite_id: str, delta: str) -> None:
-        self._append(RiteDelta(cast_id=self._cast_id, rite_id=rite_id, delta=delta))
+        self._append(RiteStreamed(rite_id=rite_id, delta=delta))
 
     def rite_finished(
         self,
@@ -76,17 +77,13 @@ class Grimoire:
         result: JsonValue | None = None,
     ) -> None:
         self._append(
-            RiteFinished(
-                cast_id=self._cast_id,
-                rite_id=rite_id,
-                status=status,
-                result=result,
-                finished_at=self._clock(),
+            RiteEnded(
+                rite_id=rite_id, status=status, result=result, finished_at=self._clock()
             )
         )
 
     @property
-    def events(self) -> list[WireMessage]:
+    def events(self) -> list[RiteEvent]:
         return list(self._events)
 
 

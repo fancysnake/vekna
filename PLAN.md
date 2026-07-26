@@ -68,18 +68,35 @@ rearranged.
 **Verify.** `mise run test && mise run check`. `vekna.lexicon.__all__` drops
 from 29 to 28; `entry.py` and its 9-name surface are gone.
 
-## Step 2 — Move the standalone surface out of lexicon
+## Step 2 — The grimoire stops speaking the wire protocol
 
-Nothing in `lexicon` or `folio` imports these; only the CLI path does.
+*(Replaces the original Step 2, whose premise died with Step 1+4: the CLI path
+is now `lexicon/_inits.py`, inside lexicon, so `_links` has an in-package
+consumer and cannot move to root — `lexicon-not-use-root` forbids the edge.)*
 
-- `_links.py` (`StandaloneRenderer`, `probe_daemon`, `default_socket_path`)
-  → `vekna/links/`. Root `links` may import root `pacts` only — and it needs
-  `WireMessage`, which is `vekna.wire`, unconstrained. Clean.
-- `Channel` moves to root `pacts` **only if** nothing in folio needs it.
-  `folio/coding/_mills.py` imports `Channel`, so it **stays** in
-  `lexicon/_pacts.py` and root `links` depends on `vekna.wire` alone.
+`Grimoire` is a domain concept with no model of its own: it constructs
+transport DTOs directly and stores them, `StandaloneRenderer` dispatches on
+them, and `RiteStarted` carries a `cast_id` correlation key that means nothing
+in a single process. The consequence is that `vekna.wire` cannot version
+independently of the engine, which is the property `00-common.md:212` claims
+for it.
 
-**Verify.** `mise run il` — the `links` contract stays KEPT. `mise run test`.
+- `lexicon/_pacts.py` gains `RiteBegan` / `RiteStreamed` / `RiteEnded` and the
+  `RiteEvent` union — frozen dataclasses, no `cast_id`.
+- `Grimoire` emits `RiteEvent`; `on_event` and `events` are typed in terms of
+  it. It keeps `cast_id` as its own identity, for the projection.
+- `StandaloneRenderer` consumes `RiteEvent`. Its `· {kind}` fallback goes: the
+  union is closed, so the branch is unreachable.
+- `vekna.wire` keeps its DTOs and framing and becomes **dormant** — zero
+  importers until 0.6.0 adds the `RiteEvent → WireMessage` projection at the
+  socket edge. That is the accepted cost: a protocol awaiting its consumer is a
+  clearer thing to maintain than an engine model that is also half a protocol.
+
+Only two modules import wire today, so this is the cheapest it will ever be; at
+0.6.0 a daemon, journal, replay and TUI all read these events.
+
+**Verify.** `mise run test && mise run check`. No module under `src/vekna/`
+imports `vekna.wire`.
 
 ## Step 3 — Give the unlayered modules a layer
 

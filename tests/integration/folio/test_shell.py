@@ -7,8 +7,7 @@ from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import Transition, done, goto, ritual, step
 from vekna.lexicon._links import StandaloneRenderer
 from vekna.lexicon._mills import Grimoire, run_cast
-from vekna.lexicon._pacts import Ritual
-from vekna.wire import RiteDelta
+from vekna.lexicon._pacts import RiteStreamed, Ritual
 
 _FAILURE_EXIT = 3
 # Comfortably past the 1 MiB readline limit that used to crash the cast here.
@@ -100,7 +99,7 @@ def _cast(the_ritual: Ritual) -> ShellResult:
 
 
 def _deltas(grimoire: Grimoire) -> list[str]:
-    return [event.delta for event in grimoire.events if isinstance(event, RiteDelta)]
+    return [event.delta for event in grimoire.events if isinstance(event, RiteStreamed)]
 
 
 class TestShell:

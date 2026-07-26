@@ -6,7 +6,7 @@ import pytest
 
 from vekna.lexicon import StandalonePromptError
 from vekna.lexicon._links import StandaloneRenderer
-from vekna.wire import GrimoireBegin, RiteDelta, RiteStarted
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
 def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
@@ -18,8 +18,7 @@ class TestRender:
     @staticmethod
     def test_writes_rite_name_to_output():
         renderer, out = _renderer("")
-        event = RiteStarted(
-            cast_id="c1",
+        event = RiteBegan(
             rite_id="r1",
             parent_id=None,
             name="run_tests",
@@ -34,15 +33,14 @@ class TestRender:
     @staticmethod
     def test_renders_delta_indented_under_its_rite():
         renderer, out = _renderer("")
-        started = RiteStarted(
-            cast_id="c1",
+        started = RiteBegan(
             rite_id="r1",
             parent_id=None,
             name="fix",
             category="medium",
             started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        delta = RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo")
+        delta = RiteStreamed(rite_id="r1", delta="one\ntwo")
 
         renderer.render(started)
         renderer.render(delta)
@@ -50,12 +48,18 @@ class TestRender:
         assert "  one\n  two\n" in out.getvalue()
 
     @staticmethod
-    def test_falls_back_to_the_kind_for_other_events():
+    def test_marks_a_failed_rite_and_names_an_unseen_one_by_id():
         renderer, out = _renderer("")
+        ended = RiteEnded(
+            rite_id="r9",
+            status="error",
+            result=None,
+            finished_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
 
-        renderer.render(GrimoireBegin(cast_id="c1"))
+        renderer.render(ended)
 
-        assert out.getvalue() == "· grimoire_begin\n"
+        assert out.getvalue() == "✗ r9\n"
 
 
 class TestDecide:
