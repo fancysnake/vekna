@@ -99,7 +99,7 @@ async def combust() -> None:
 @step
 async def light_fuse(_state: Tick) -> Transition:
     await combust()
-    return done(None)  # pragma: no cover
+    return done(None)
 
 
 @ritual("smoulder")

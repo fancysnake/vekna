@@ -34,6 +34,7 @@ dev = [
     "diff-cover (>=10.2.0,<11.0.0)",
     "pytest-asyncio (>=1.3.0,<2.0.0)",
     "pre-commit (>=4.6.0,<5.0.0)",
+    "tingle (>=0.4.0,<0.5.0)",
 ]
 
 # BLACK
@@ -471,6 +472,7 @@ ignore = [
     "COM812", # Trailing comma missing
     "CPY",    # Missing copyright notice at top of file
     "D1",     # Missing docstring
+    "PLC2701", # Private name import
 ]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -485,16 +487,9 @@ convention = "pep257"
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = [
     "ANN",     # flake8-annotations
-    "PLC2701", # Private name import
     "S",
 ]
-# Every lexicon layer is a private module, so a layer that grows into a package
-# has no legal way to reach its siblings: `from .._pacts import` trips TID252
-# (relative-imports) and `from vekna.lexicon._pacts import` trips this rule.
-# Scoped to lexicon, so a folio still may not reach past the public door.
-"src/vekna/lexicon/**.py" = [
-    "PLC2701", # Private name import
-]
+
 
 # VULTURE
 
