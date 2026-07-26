@@ -1,192 +1,147 @@
-# PLAN — post-reborn review remediation
+# PLAN — lexicon refactor: shrink to the SDK, satisfy the new contracts
 
-Source: PR [#50](https://github.com/fancysnake/vekna/pull/50) review comment of
-2026-07-25 (the GLIMPSE-lens review), items P1×2, P2, P3.
-Shared context: [`docs/architecture.md`](docs/architecture.md)
+Source: the rewritten `[tool.importlinter]` contracts (2026-07-26) and the two
+they break. Target shape: `docs/reborn/00-common.md:158-206`.
 
 ## Outcome
 
-Two crashes a normal user can hit are gone, and the layer table in
-`docs/architecture.md` stops being a fiction: the two violations on the branch
-are fixed and an `import-linter` `layers` contract makes the table defend
-itself. After this, "import boundaries enforced by import-linter" is a true
-sentence rather than an aspiration.
+`vekna.lexicon` contains what a `rituals.py` or a folio imports, and the cast
+runtime they need — nothing else. Everything CLI-shaped moves to the root
+project. `mise run il` goes green without relaxing a single new rule.
+
+## The rules, as rewritten
+
+Derived from the forbidden lists; the same shape applies at root, in
+`lexicon/_*`, and in each `folio/*/_*`:
+
+| layer | may import |
+| --- | --- |
+| `pacts`, `specs`, `edges` | nothing internal |
+| `mills` | `pacts`, `specs`, own submodules |
+| `links`, `gates` | `pacts` |
+| `inits` | everything except `edges`, `folio`, `lexicon` |
+
+Root additionally carries `inside-*` independence contracts, so a root layer's
+submodules may not import each other. Lexicon has no `inside-lexicon-*`
+contract, so `lexicon/_mills` may be a package whose submodules cooperate —
+verified, and Step 3 depends on it.
+
+Two consequences drive this plan:
+
+1. **No root module may import `lexicon`.** Not `gates`, not `inits`. So root
+   cannot name a `Ritual` or a `Step`, and the CLI cannot call `run_cast`.
+2. **`inits` is the only binding layer.** `lexicon-inits` forbids only
+   `_edges`, so `lexicon/_inits.py` may import every other lexicon layer. That
+   is where the cast runtime's wiring belongs.
 
 ## Approved decisions
 
-1. **Ritual file dedupe is silent, not an error.** `[rituals] files` reads as
-   additive — the name would be `extra_ritual_files` if naming an
-   already-discovered `rituals.py` were a mistake. A path already loaded is
-   skipped without complaint. The `already registered` error stays for the case
-   it was written for: two *genuinely different* sources declaring one ritual
-   name.
-2. **Dedupe, not "skip implicit discovery when config names files."** The skip
-   rule breaks a global `~/.config/vekna/config.toml`, which would suppress
-   every project's own `rituals.py`.
-3. **The shell pump reads chunks, not lines.** The 1 MiB line limit guarded
-   nothing — `ShellResult.stdout` retains the full output regardless — and its
-   only effect was to crash. `read()` cannot raise `LimitOverrunError`, so the
-   failure mode disappears rather than being converted.
-4. **`folio/shell` collapses into `_links`.** `shell()` is three lines and no
-   branches; it is I/O orchestration, not business logic. The ceremony of a
-   `_mills` + `_inits` pair to inject a `run_bash` that will never have a second
-   implementation is not worth it here.
-5. **The `register()` functions move to `_inits.py`.** They register handlers,
-   which is what `docs/architecture.md` defines the inits layer to be. This is
-   the ceremony worth keeping.
-6. **`wire`'s codec moves to `_pacts`.** `encode_frame`/`decode_frame` are a
-   codec over the DTOs beside them; this leaves `_links` importing only
-   `_pacts`.
-
-## Open approval — required before Step 4
-
-Step 4 edits `pyproject.toml`. Per `CLAUDE.md`, configuration files are not
-touched without explicit per-case approval. **Step 4 does not start until that
-approval is given**; Steps 1–3 are unaffected and stand on their own.
+1. **Gates are pacts-only** — confirmed. Everything binds in `inits`.
+2. **`vekna.wire` stays unconstrained** — confirmed, revisit at 0.6.0.
+3. **Root reaches the cast runtime by dynamic import.** One `importlib` call in
+   root `inits`, which is the mechanism the contracts require and what
+   `inits/cast.py` did before Step 10 deleted it. Static imports cannot express
+   this without breaking rule 1.
+4. **The CLI never sees a ritual object.** Lexicon exposes string-returning
+   entry points (`list_text()`, `show_text(name)`, `cast(argv)`); root's CLI
+   parses argv, calls one of them, prints, exits. This is what keeps rule 1
+   satisfiable without moving ritual types to root.
 
 ---
 
-## Step 1 — Loading the same rituals file twice is not an error
+## Step 1 — Delete what nothing imports
 
-**Problem.** `_build_compendium` (`lexicon/_gates.py:69`) loads the discovered
-`rituals.py`, then everything named in config, deduping nothing. A `.vekna.toml`
-containing `files = ["rituals.py"]` beside that file makes `cast`, `rituals
-list`, `rituals show` and `--help` all fail with `ritual 'demo' is already
-registered` — a message naming neither source. Two config files listing one
-module do the same.
+Pure subtraction, no moves. Establishes the real surface before anything is
+rearranged.
 
-**Change.** In `lexicon/_gates.py`, track loaded sources and skip repeats:
+- **`entry.py` — delete.** It exports nine names. Six (`run_cast`,
+  `Compendium`, `Grimoire`, `StandaloneRenderer`, `probe_daemon`,
+  `default_socket_path`) have no consumer anywhere in `src/`, `tests/` or
+  `rituals.py`. The other three are re-exports for one importer.
+  `inits/cli.py` imports `vekna.lexicon._gates` directly until Step 4 moves it.
+- **`reset_foci` — remove from the public API.** Used only by tests. The
+  registry keeps a reset; tests reach it as a private seam rather than the
+  ritual author's door advertising a test hook.
+- **`Channel.emit` — delete.** Dead since it was written; its own comment says
+  so. `StandaloneRenderer.emit` goes with it.
 
-- `seen_files: set[Path]` keyed on `path.resolve()` — normalises `..` and
-  symlinks so a config-relative path and a discovered one collapse to one entry.
-- `seen_modules: set[str]` for `[rituals] modules`.
+**Verify.** `mise run test && mise run check`. `vekna.lexicon.__all__` drops
+from 29 to 28; `entry.py` and its 9-name surface are gone.
 
-In `lexicon/_loader.py`, derive the `spec_from_file_location` module name from
-the path instead of hardcoding `"vekna_rituals"` for every file, so two distinct
-ritual files stop claiming one name.
+## Step 2 — Move the standalone surface out of lexicon
 
-Thread the source path into `Compendium.register` so the surviving conflict
-error names both files. *(Droppable if it grows past a few lines — the dedupe is
-the fix; this only improves a message.)*
+Nothing in `lexicon` or `folio` imports these; only the CLI path does.
 
-**Tests.** `tests/integration/cli/` — gates are integration-tested per
-`CLAUDE.md`. A `.vekna.toml` naming the discovered `rituals.py` loads one ritual
-and exits 0; one module in two config files does the same; two different files
-declaring one name still raise.
+- `_links.py` (`StandaloneRenderer`, `probe_daemon`, `default_socket_path`)
+  → `vekna/links/`. Root `links` may import root `pacts` only — and it needs
+  `WireMessage`, which is `vekna.wire`, unconstrained. Clean.
+- `Channel` moves to root `pacts` **only if** nothing in folio needs it.
+  `folio/coding/_mills.py` imports `Channel`, so it **stays** in
+  `lexicon/_pacts.py` and root `links` depends on `vekna.wire` alone.
 
-**Verify.** `mise run test && mise run check`, plus: a temp dir with
-`rituals.py` + `.vekna.toml` naming it runs `vekna rituals list` clean.
+**Verify.** `mise run il` — the `links` contract stays KEPT. `mise run test`.
 
-## Step 2 — A long output line no longer crashes the cast
+## Step 3 — Give the unlayered modules a layer
 
-**Problem.** `folio/shell/_links.py:5` caps lines at 1 MiB; exceeding it raises a
-bare `ValueError` from asyncio (`Separator is not found, and chunk exceed the
-limit`). `_drive` catches only `FocusMissingError` and `RitualError`
-(`_gates.py:268-273`), so it escapes `asyncio.run` as an unhandled traceback.
-Triggered by any single-line blob: a minified bundle, base64, one-line JSON.
+The actual structural mess: `_dispatch.py`, `_graph.py`, `_loader.py`,
+`components.py` and `entry.py` are five of lexicon's ten modules and are exempt
+from every contract purely because their names do not match a layer. That is
+how `_gates` was reaching `_mills` — through `_dispatch`, `_graph` and
+`_loader`, which import-linter only caught as a transitive chain.
 
-**Change.** Rewrite `_pump` to read fixed chunks and split lines itself:
+- `components.py` → `_pacts` (public component types; imports nothing internal).
+- `_graph.py` → `_mills` (pure AST logic over `Ritual`).
+- `_loader.py` → `_links` (file import, TOML read — I/O).
+  Requires the split below: `_loader` returns loaded `Ritual`/`Step` objects
+  and `_inits` registers them, so `_links` needs `_pacts` only.
+- `_dispatch.py` → `_mills`. Lexicon has **no** `inside-lexicon-mills`
+  independence contract, so `_mills` may become a package whose submodules
+  cooperate. This keeps `_dispatch`'s mypy `disallow_any_expr` exemption
+  scoped to one submodule instead of spreading it to the engine, and lets it
+  keep reading `DEFAULT_MAX_STEPS` from `_specs` directly (`mills → specs` is
+  permitted).
 
-- `await stream.read(_CHUNK)` in place of `async for raw in stream`.
-- `codecs.getincrementaldecoder("utf-8")(errors="replace")` — load-bearing, as
-  chunk boundaries split multi-byte UTF-8 that per-line `decode()` never met.
-- Carry the trailing partial line between chunks; flush it at EOF.
-- Drop `_LINE_LIMIT` and the `limit=` argument to `create_subprocess_exec`; the
-  name no longer describes anything real.
+Proposed shape:
 
-**Tests.** `tests/integration/folio/test_shell.py` — a 2 MB single line is
-captured whole, a following line arrives intact, exit code is 0. Verified
-working against a real subprocess during review.
-
-**Verify.** `mise run test && mise run check`.
-
-## Step 3 — The layer table becomes true
-
-Three independent moves. Every test imports through a package facade
-(`vekna.wire`, `vekna.folio.shell`, `vekna.folio.coding`), so none of this is
-visible to the suite.
-
-**3a — `folio/shell` collapses.** Move `shell()` from `_mills.py` into
-`_links.py`; delete `_mills.py`; point `__init__.py` at `_links`. Removes
-`mills → links` (`shell/_mills.py:3`). The folio becomes `_links.py` +
-`_pacts.py`.
-
-**3b — `wire`'s codec moves inward.** Move `encode_frame`/`decode_frame` from
-`_mills.py` into `_pacts.py`; delete `_mills.py`; `_links.py` imports `_pacts`.
-Removes `links → mills` (`wire/_links.py:4`).
-
-**3c — `register()` moves to the inits layer.** New `folio/coding/_inits.py`
-(from `_mills.py:136`) and `folio/coding_claude/_inits.py` (from
-`_links.py:186`); both `__init__.py` re-export from `_inits`. `_load_folios`
-calls `register()` off the package, so its call site does not change.
-
-**Verify.** `mise run test && mise run check`. Then by inspection: no
-`_mills → _links` or `_links → _mills` import remains anywhere in `src/`.
-
-## Step 4 — The contract that keeps it true *(gated on config approval)*
-
-**Problem.** `CLAUDE.md:26` and `docs/architecture.md:3-4` both claim
-import-linter enforces the boundaries. All six contracts are `type = "forbidden"`
-between top-level packages; there is no `layers` contract, so the intra-package
-model is documentation only. That is why the Step 3 violations survived a
-thirteen-step remediation.
-
-**Change.** One `layers` contract per package in `pyproject.toml`, listing only
-the layers that package actually has. import-linter 2.12 (installed) supports
-same-layer siblings via `:`, which expresses the table exactly — `links` and
-`mills` are peers that may not import each other:
-
-```toml
-[[tool.importlinter.contracts]]
-name = "lexicon layers"
-type = "layers"
-layers = [
-    "vekna.lexicon._gates",
-    "vekna.lexicon._links : vekna.lexicon._mills",
-    "vekna.lexicon._specs",
-    "vekna.lexicon._pacts",
-]
+```
+lexicon/
+  _pacts.py      # contracts + component types
+  _specs.py      # (pending the open question)
+  _mills/        # __init__.py, engine.py, grimoire.py, compendium.py,
+                 # registry.py, dispatch.py, graph.py
+  _links.py      # ritual file / module / TOML loading
+  _inits.py      # the binding layer: folio loading, cast runtime, CLI texts
 ```
 
-Note for review: a `layers` contract permits `_gates → _links`, which is exactly
-the exception `docs/architecture.md:59-62` already documents for the lexicon, so
-the two agree. It does not express "gates may not import links" for a package
-that has no such exception — `lexicon` is the only package with a gates layer,
-so nothing is lost today.
+**Verify.** `mise run il` — `lexicon-*` all KEPT, including `lexicon-gates`
+(there is no longer a `_gates` in lexicon). `mise run test`.
 
-If the reflection helpers (`_dispatch`, `_graph`, `_loader`) resist placement,
-they stay unlisted rather than forcing a layer that misdescribes them.
+## Step 4 — Move the CLI to the root project
 
-**Verify.** `mise run check` reports 10 contracts kept, 0 broken. Then confirm
-the contract bites: reintroduce `from ._links import run_bash` in a scratch
-copy, see it break, revert.
+- `lexicon/_gates.py` **dies**. Its argv parsing and help/list/show formatting
+  go to `vekna/gates/cli/click/`; its ritual-typed work (`_build_compendium`,
+  `_drive`) goes to `lexicon/_inits.py` behind the three string-returning entry
+  points from decision 4.
+- `vekna/inits/cli.py` keeps the click tree and gains the single dynamic import
+  of `vekna.lexicon._inits`. Root `gates` stays pacts-only; root `inits` binds.
 
-## Step 5 — Reconcile the record
+**Verify.** `mise run il` — 31 kept, 0 broken, with **no rule relaxed**. Then
+confirm the contracts still bite: reintroduce a static
+`from vekna.lexicon import ...` in root `inits` and see `inits` break.
 
-Update `docs/architecture.md` (layout section: `folio/shell` and `wire` lose
-`_mills`, two folios gain `_inits`) and `CHANGELOG.md` `[Unreleased]`. Refresh
-`CURRENT_TASK.md`.
+## Step 5 — Reconcile
 
-If Step 4 is declined, this step instead **softens the enforcement claim** in
-`CLAUDE.md:26` and `docs/architecture.md:3-4` to say the layer table is a
-convention — leaving a false claim in the docs is not an option either way.
+`docs/architecture.md` (the layer table now says gates are pacts-only; the
+layout section), `CLAUDE.md` if its layer list disagrees, `CHANGELOG.md`,
+`CURRENT_TASK.md`. `00-common.md:211-213` also needs the correction agreed
+earlier — the "only place either side imports from" sentence.
 
 ---
 
 ## Not in scope
 
-Carried from the review, deliberately deferred:
-
-- **`_parse_flags` trailing flag** (`_gates.py:223`) — `vekna cast r --name`
-  silently yields `{'name': ''}`. Real, but a separate cut.
-- **`Grimoire._events` unbounded** — nothing in `src/` reads `.events`; only
-  tests do. Wants a decision about whether the grimoire is a live journal or a
-  buffer, which belongs with the 0.6.0 daemon.
-- **`test_probe.py` binds a real unix socket under `tests/unit/`** — should move
-  to integration.
-- **`_validate_output` catches `(ValidationError, ValueError)`** — the former
-  subclasses the latter.
-- **Real-SDK smoke test for `coding_claude`.** Structural `runtime_checkable`
-  dispatch checks attribute presence only, and every test uses a stub. Still the
-  one place the suite can be green while the integration is wrong; owed before
-  any 0.3.0 tag, as `CURRENT_TASK.md` already records.
+- The **grimoire-vs-wire coupling** (lexicon's event model *is* the transport
+  schema). Discussed, still open, deliberately not bundled — it touches the
+  same files and would make this unreviewable.
+- Restoring a `wire` contract — decided against for now.
+- The five P3s carried in `CURRENT_TASK.md`.
