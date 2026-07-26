@@ -439,6 +439,11 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+[[tool.mypy.overrides]]
+module = "vekna.folio.coding_claude._links"
+disallow_any_expr = false
+disallow_any_explicit = false
+
 # RUFF
 
 [tool.ruff]

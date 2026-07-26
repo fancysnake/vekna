@@ -1,22 +1,35 @@
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
-    PermissionResultAllow,
-    PermissionResultDeny,
+    SdkMcpTool,
     TextBlock,
     create_sdk_mcp_server,
     query,
     tool,
 )
-from claude_agent_sdk.types import ContentBlock
+from claude_agent_sdk.types import (
+    ContentBlock,
+    McpHttpServerConfig,
+    McpSdkServerConfig,
+    McpSSEServerConfig,
+    McpStdioServerConfig,
+    PermissionResultAllow,
+    PermissionResultDeny,
+    SystemPromptFile,
+    SystemPromptPreset,
+    ToolPermissionContext,
+)
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon import AskFn, CodingCall, FocusReply, GateFn
 from vekna.lexicon._pacts import BaseFocus
 
-from ._pacts import ClaudeOptions, EffortLevel, PermissionMode
+from ._pacts import ClaudeOptions
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _DENY_MESSAGE = "denied by the vekna decide gate"
 
@@ -79,49 +92,24 @@ _ToolHandler = Callable[
 _ToolFactory = Callable[[_ToolHandler], dict[str, list[dict[str, str]]] | None]
 
 
-# The SDK's server and option types are `Any`-tainted, so both constructors are
-# reached through signatures of our own rather than naming them.
-class _ServerFactory(Protocol):
-    def __call__(
-        self, name: str, *, tools: list[dict[str, list[dict[str, str]]] | None]
-    ) -> dict[str, list[dict[str, str]]] | None: ...
-
-
-class _OptionsFactory(Protocol):
-    def __call__(  # ruff: ignore[too-many-arguments]
-        self,
-        *,
-        model: str | None,
-        system_prompt: str | dict[str, str],
-        cwd: str | None,
-        permission_mode: PermissionMode,
-        can_use_tool: (
-            Callable[
-                [str, dict[str, BaseModel | None], BaseModel | None],
-                Awaitable[PermissionResultAllow | PermissionResultDeny],
-            ]
-            | None
-        ),
-        allowed_tools: list[str],
-        mcp_servers: dict[str, dict[str, list[dict[str, str]]] | None],
-        max_turns: int | None,
-        effort: EffortLevel | None,
-        output_format: dict[str, str | dict[str, JsonValue]] | None,
-    ) -> ClaudeAgentOptions: ...
-
-
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
     if isinstance(focus_options, ClaudeOptions):
         return focus_options
     return ClaudeOptions()
 
 
-def _permission_handler(gate: GateFn) -> _CanUseTool:
+def _permission_handler(
+    gate: GateFn,
+) -> (
+    Callable[
+        [str, dict[str, Any], ToolPermissionContext],
+        Awaitable[PermissionResultAllow | PermissionResultDeny],
+    ]
+    | None
+):
     async def can_use_tool(
-        tool_name: str,
-        input_data: dict[str, BaseModel | None],
-        _context: BaseModel | None,
-    ) -> _PermissionResult:
+        tool_name: str, input_data: dict[str, Any], _context: ToolPermissionContext
+    ) -> PermissionResultAllow | PermissionResultDeny:
         if await gate(tool_name):
             return PermissionResultAllow(updated_input=input_data)
         return PermissionResultDeny(message=_DENY_MESSAGE)
@@ -131,22 +119,26 @@ def _permission_handler(gate: GateFn) -> _CanUseTool:
 
 # The tool runs in *this* process — the CLI subprocess calls back over the
 # SDK's control protocol and the agent blocks until the operator answers.
-def _ask_server(ask: AskFn) -> dict[str, list[dict[str, str]]] | None:
-    async def answer(  # type: ignore [explicit-any]
-        args: Any,  # ruff: ignore [any-type]   # type: ignore [explicit-any]
-    ) -> dict[str, Any]:
-        raw = args.get("options")  # type: ignore [misc]
-        offered = [str(item) for item in raw] if isinstance(raw, list) and raw else None  # type: ignore [misc]
-        reply = await ask(str(args.get("question", "")), offered)  # type: ignore [misc]
+def _ask_server(
+    ask: AskFn,
+) -> (
+    McpStdioServerConfig | McpSSEServerConfig | McpHttpServerConfig | McpSdkServerConfig
+):
+    async def answer(args: Any) -> dict[str, Any]:  # ruff: ignore [any-type]
+        raw = args.get("options")
+        offered = [str(item) for item in raw] if isinstance(raw, list) and raw else None
+        reply = await ask(str(args.get("question", "")), offered)
         return {"content": [{"type": "text", "text": reply}]}
 
-    build = cast("_ToolFactory", tool(_ASK, _ASK_DESCRIPTION, _ASK_SCHEMA))
-    serve = cast("_ServerFactory", create_sdk_mcp_server)
-    tools: list[dict[str, list[dict[str, str]]] | None] = [build(answer)]  # type: ignore [misc]
+    build = tool(_ASK, _ASK_DESCRIPTION, _ASK_SCHEMA)
+    serve = create_sdk_mcp_server
+    tools: list[SdkMcpTool[Any]] | None = [build(answer)]
     return serve(_SERVER, tools=tools)
 
 
-def _system_prompt(system: str | None) -> str | dict[str, str]:
+def _system_prompt(
+    system: str | None,
+) -> str | SystemPromptPreset | SystemPromptFile | None:
     # Appending to the preset keeps Claude Code's own system prompt; a plain
     # string would replace it.
     if system is None:
@@ -164,11 +156,18 @@ def _agent_options(
     if call.output_schema is not None:
         output_format = {"type": "json_schema", "schema": call.output_schema}
     allowed: list[str] = [*(knobs.allowed_tools or []), _ASK_TOOL]
-    servers: dict[str, dict[str, list[dict[str, str]]] | None] = {
-        _SERVER: _ask_server(ask)
-    }
-    build = cast("_OptionsFactory", ClaudeAgentOptions)
-    return build(
+    servers: (
+        dict[
+            str,
+            McpStdioServerConfig
+            | McpSSEServerConfig
+            | McpHttpServerConfig
+            | McpSdkServerConfig,
+        ]
+        | str
+        | Path
+    ) = {_SERVER: _ask_server(ask)}
+    return ClaudeAgentOptions(
         model=call.model,
         system_prompt=_system_prompt(call.system),
         cwd=call.cwd,

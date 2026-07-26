@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, TypeVar, cast, overload
+from typing import TypeVar, cast, overload
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
@@ -14,12 +14,12 @@ from vekna.lexicon import (
     record_result,
     resolve_focus,
 )
-from vekna.lexicon._pacts import StringOutput
+from vekna.lexicon._pacts import (  # pylint: disable=unused-import
+    CodingFocusProtocol,
+    StringOutput,
+)
 
 from ._pacts import CodingOpts, CodingOutputError, CodingResult
-
-if TYPE_CHECKING:
-    from vekna.lexicon import CodingFocusProtocol
 
 _OutputT = TypeVar("_OutputT")
 
@@ -94,7 +94,7 @@ async def coding(
     context = current_rite()
     schema: dict[str, JsonValue] | None = None
     if output is not None:
-        schema = cast("dict[str, JsonValue]", TypeAdapter(output).json_schema())
+        schema = TypeAdapter(output).json_schema()
     resolved = opts if opts is not None else CodingOpts()
     call = CodingCall(
         prompt=prompt,
