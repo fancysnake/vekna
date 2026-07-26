@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from vekna.folio.flow import decide
 from vekna.lexicon import Transition, done, goto, ritual, step
-from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
+from vekna.lexicon._links import StandaloneRenderer
+from vekna.lexicon._mills import Grimoire, run_cast
 
 
 def _fixed_clock() -> datetime:

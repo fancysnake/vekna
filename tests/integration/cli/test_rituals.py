@@ -3,7 +3,7 @@ import textwrap
 
 import pytest
 
-from vekna.lexicon.entry import rituals_list, rituals_show
+from vekna.lexicon._inits import rituals_list, rituals_show
 
 _USAGE_EXIT = 2
 

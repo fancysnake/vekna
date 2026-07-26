@@ -13,11 +13,11 @@ from vekna.lexicon import (
     done,
     goto,
     register_focus,
-    reset_foci,
     ritual,
     step,
 )
-from vekna.lexicon.entry import Grimoire, StandaloneRenderer, run_cast
+from vekna.lexicon._links import StandaloneRenderer
+from vekna.lexicon._mills import Grimoire, reset_foci, run_cast
 from vekna.wire import RiteDelta, RiteFinished
 
 

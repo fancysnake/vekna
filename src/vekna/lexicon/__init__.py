@@ -1,7 +1,8 @@
 """The ritual author's door.
 
 Everything here is what a rituals.py — or a folio implementing a medium —
-reaches for. CLI and cast-runtime plumbing lives in `vekna.lexicon.entry`.
+reaches for, and nothing else. The CLI lives in the root project; the cast
+runtime is reached through `vekna.lexicon._inits`.
 """
 
 from ._dispatch import medium, ritual, step
@@ -13,7 +14,6 @@ from ._mills import (
     offer_prompt,
     record_result,
     register_focus,
-    reset_foci,
     resolve_focus,
 )
 from ._pacts import (
@@ -62,7 +62,6 @@ __all__ = [
     "offer_prompt",
     "record_result",
     "register_focus",
-    "reset_foci",
     "resolve_focus",
     "ritual",
     "step",

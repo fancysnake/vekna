@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from vekna.lexicon import reset_foci
-from vekna.lexicon.entry import main
+from vekna.lexicon._inits import main
+from vekna.lexicon._mills import reset_foci
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
@@ -230,7 +230,7 @@ class TestCastWithClaudeFocus:
     def test_missing_focus_reports_install_hint(tmp_path, monkeypatch, capsys):
         # What a missing SDK looks like: folio.coding imports and declares what
         # it needs, folio.coding_claude is simply not there.
-        monkeypatch.setattr("vekna.lexicon._gates._FOLIOS", ("vekna.folio.coding",))
+        monkeypatch.setattr("vekna.lexicon._inits._FOLIOS", ("vekna.folio.coding",))
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 

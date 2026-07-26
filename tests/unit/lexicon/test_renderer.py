@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from vekna.lexicon import StandalonePromptError
-from vekna.lexicon.entry import StandaloneRenderer
+from vekna.lexicon._links import StandaloneRenderer
 from vekna.wire import GrimoireBegin, RiteDelta, RiteStarted
 
 
@@ -14,7 +14,7 @@ def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
     return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
 
 
-class TestEmit:
+class TestRender:
     @staticmethod
     def test_writes_rite_name_to_output():
         renderer, out = _renderer("")
@@ -27,7 +27,7 @@ class TestEmit:
             started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 
-        asyncio.run(renderer.emit(event))
+        renderer.render(event)
 
         assert "run_tests" in out.getvalue()
 

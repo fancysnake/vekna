@@ -1,9 +1,29 @@
+import importlib
+from typing import Protocol, cast
+
 import click
 from click import Group
 
-from vekna.lexicon.entry import main, rituals_list, rituals_show
-
 _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
+_RUNTIME = "vekna.lexicon._inits"
+
+
+# The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
+# are one binary, so importing the CLI must never pull ritual code, folios or
+# the agent SDK into the daemon's process. The cast runtime is reached by name
+# at call time, and typed through this Protocol rather than by attribute access
+# on an untyped module.
+class _Runtime(Protocol):
+    @staticmethod
+    def main(argv: list[str]) -> int: ...
+    @staticmethod
+    def rituals_list() -> int: ...
+    @staticmethod
+    def rituals_show(name: str) -> int: ...
+
+
+def _runtime() -> _Runtime:
+    return cast("_Runtime", importlib.import_module(_RUNTIME))
 
 
 @click.command(
@@ -14,18 +34,18 @@ _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
 )
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
 def _cast(ritual_args: tuple[str, ...]) -> None:
-    raise SystemExit(main(list(ritual_args)))
+    raise SystemExit(_runtime().main(list(ritual_args)))
 
 
 @click.command("list", help="List rituals and the options each one takes.")
 def _rituals_list() -> None:
-    raise SystemExit(rituals_list())
+    raise SystemExit(_runtime().rituals_list())
 
 
 @click.command("show", help="Show a ritual's components and step graph.")
 @click.argument("name")
 def _rituals_show(name: str) -> None:
-    raise SystemExit(rituals_show(name))
+    raise SystemExit(_runtime().rituals_show(name))
 
 
 @click.group("rituals", help="Inspect the ritual library.")

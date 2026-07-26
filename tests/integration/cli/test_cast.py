@@ -1,7 +1,7 @@
 import textwrap
 
-from vekna.lexicon import _gates
-from vekna.lexicon.entry import main
+from vekna.lexicon import _inits
+from vekna.lexicon._inits import main
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
@@ -163,13 +163,13 @@ class TestCastId:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
         seen: list[str] = []
-        real = _gates.Grimoire
+        real = _inits.Grimoire
 
         def _record(*, cast_id: str, **kwargs):
             seen.append(cast_id)
             return real(cast_id=cast_id, **kwargs)
 
-        monkeypatch.setattr(_gates, "Grimoire", _record)
+        monkeypatch.setattr(_inits, "Grimoire", _record)
 
         assert main(["countdown", "--start", "0"]) == 0
         assert main(["countdown", "--start", "0"]) == 0

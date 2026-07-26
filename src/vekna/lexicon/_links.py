@@ -72,9 +72,6 @@ class StandaloneRenderer:
     def render(self, event: WireMessage) -> None:
         self._say(self._format(event) + "\n")
 
-    async def emit(self, event: WireMessage) -> None:
-        self.render(event)
-
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:

@@ -1,7 +1,7 @@
 import io
 import textwrap
 
-from vekna.lexicon.entry import main
+from vekna.lexicon._inits import main
 
 # A fixture of its own: the project's rituals.py drives a coding agent, which
 # an acceptance test must not.
