@@ -1,7 +1,8 @@
 import ast
 
-from ._mills import Compendium
-from ._pacts import Ritual
+from vekna.lexicon._pacts import Ritual
+
+from .engine import Compendium
 
 _GOTO = "goto"
 _DONE = "done"

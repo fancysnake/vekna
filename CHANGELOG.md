@@ -45,12 +45,42 @@ and this project adheres to [Semantic Versioning].
   The six `forbidden` contracts only ever governed the top-level packages, so
   the layer table in `docs/architecture.md` was a convention nothing checked —
   and two modules had inverted against it: `folio/shell/_mills` imported
-  `_links`, and `wire/_links` imported `_mills`. A `layers` contract per package
-  now holds the table up, with `_links` and `_mills` joined by import-linter's
-  independent delimiter so neither may import the other.
+  `_links`, and `wire/_links` imported `_mills`. There are now 31 contracts,
+  one per layer per package, and every module sits in a layer.
+- **`gates` may import only `pacts`.** Stricter than textbook GLIMPSE: every
+  layer knows the contracts and `inits` binds them, rather than a gate reaching
+  for a service. `links` and `mills` are peers — neither imports the other.
+- **The root project may not import the lexicon.** `vekna` (daemon) and `vekna
+  cast` are one binary, so importing the CLI must never pull ritual code,
+  folios or the agent SDK into the daemon process. `inits/cli.py` reaches the
+  cast runtime by name at call time, typed through a `Protocol` and `cast()` —
+  no mypy override, unlike the `getattr`-based indirection this restores.
+- **`vekna.lexicon.entry` is gone.** Six of its nine exports had no consumer
+  anywhere; the other three were CLI entry points a `rituals.py` can never use.
+  Deleting it made the whole cast runtime — `run_cast`, `Grimoire`,
+  `Compendium`, `StandaloneRenderer` — private. `lexicon/_gates.py` became
+  `_inits.py`: its entry points need `_mills` and `_links`, and `inits` is the
+  only layer permitted to bind them.
+- **The grimoire no longer speaks the wire protocol.** It has its own
+  vocabulary — `RiteBegan` / `RiteStreamed` / `RiteEnded` in `lexicon/_pacts`,
+  carrying no `cast_id` — so `vekna.wire` can version independently of the
+  engine, which is the property the spec always claimed for it. `vekna.wire` is
+  consequently dormant until 0.6.0 adds the projection at the socket edge.
+- **Every lexicon module now sits in a layer.** `_dispatch`, `_graph`, `_loader`
+  and `components` were exempt from every contract because their names matched
+  no layer — which is how `_gates` reached `_mills` unnoticed. `_mills` and
+  `_links` became packages so the two typing exemptions stay scoped to
+  `_mills/dispatch.py` and `_links/loader.py` instead of covering the engine.
+- **Component types moved to `vekna.lexicon`.** `from vekna.lexicon import File`
+  replaces `from vekna.lexicon.components import File`; the `components` module
+  is gone. One door for the ritual author instead of two.
 - **`folio/shell` and `wire` lost their `_mills`.** `shell()` moved in beside
   `run_bash` — three lines, no branches, no business logic. `wire`'s frame codec
   moved into `_pacts`, beside the DTOs it serialises.
+- **`reset_foci` and `Channel.emit` left the public API.** The first was used
+  only by tests; the second had been dead since it was written. Removing `emit`
+  left `WireMessage` unused in `lexicon/_pacts`, which began the wire unpicking
+  above.
 - **Each folio registers through an `_inits.py`.** `register()` was living in
   `_mills` (`coding`) and `_links` (`coding_claude`); registering handlers is
   what the inits layer is for. `_load_folios` calls `register()` on the package,

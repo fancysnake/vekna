@@ -199,18 +199,37 @@ infra boundary).
 
 - `vekna.{pacts,specs,mills,links,gates,inits,edges}` MUST NOT import
   `vekna.lexicon`, `vekna.folio.*`, or user code. MAY import `vekna.wire`.
-- `vekna.lexicon` MAY import `vekna.wire`, `vekna.folio.flow`,
-  `vekna.folio.shell`. MUST NOT import any other folio or vekna's GLIMPSE layers.
-- `vekna.folio.<X>` MUST NOT import `vekna.folio.<Y>` (Y≠X). MAY import
-  `vekna.lexicon` public surface + `vekna.wire`.
-- Within a folio: `_pacts → _specs → _mills → _links / _gates`.
+  The CLI therefore reaches the cast runtime by dynamic import, not statically.
+- `vekna.lexicon` MUST NOT import any folio or vekna's GLIMPSE layers. MAY
+  import `vekna.wire`. (It once could import `folio.flow` / `folio.shell`; it
+  no longer may, and does not.)
+- `vekna.folio.<X>` MUST NOT import `vekna.folio.<Y>` (Y≠X) or vekna's GLIMPSE
+  layers. MAY import `vekna.lexicon` public surface + `vekna.wire`.
+- Within any package, per layer: `pacts` and `specs` import nothing internal;
+  `mills` imports `pacts` + `specs`; `links` and `gates` import `pacts` only;
+  `inits` binds them all. `links` and `mills` are peers — neither imports the
+  other.
+
+Enforced by 31 `import-linter` contracts; see
+[`../architecture.md`](../architecture.md) for the full table.
 
 ## Wire protocol
 
 Newline-framed JSON over Unix domain socket. Default `/tmp/vekna-<uid>.sock`
-(one per user, cross-project; configurable). Pydantic DTOs in `vekna.wire` —
-only place either side imports from. `wire` versioned independently so a 0.x
-cast process and a later daemon share compatible message kinds.
+(one per user, cross-project; configurable). Pydantic DTOs live in `vekna.wire`,
+defined once: both sides import them from there and neither mirrors the schema.
+
+That is a rule about the *schema*, not about either process's imports — the
+daemon's layers import `vekna.wire` and nothing else of vekna's, while a cast
+process imports the lexicon, folios and the user's `rituals.py`. A `rituals.py`
+never imports `vekna.wire` at all.
+
+`wire` is versioned independently so a 0.x cast process and a later daemon share
+compatible message kinds. That only holds because nothing else is built out of
+these types: the grimoire has its own vocabulary (`RiteBegan` / `RiteStreamed` /
+`RiteEnded` in `lexicon/_pacts`) and is projected onto the wire at the socket
+edge. Until 0.6.0 writes that projection, `vekna.wire` is dormant — a designed
+protocol with no consumer yet, which is deliberate.
 
 | Kind | Direction | Notes |
 |------|-----------|-------|
