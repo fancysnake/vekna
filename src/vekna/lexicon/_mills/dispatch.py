@@ -121,12 +121,41 @@ def _components_model(
     raise RitualDefinitionError(msg)
 
 
+_NAMELESS = "value"
+
+
+# Naming an annotation means reading an attribute off whatever the author wrote.
+# `name: object` is what keeps that untyped read from spreading: everything below
+# narrows by isinstance, as the rest of this module does.
+def _plain_name(annotation: object) -> str:
+    name: object = getattr(annotation, "__name__", None)
+    return name if isinstance(name, str) else _NAMELESS
+
+
+# Two wrappers hide the name a flag should print, and both arrive by way of an
+# optional component. `X | None` has no `__name__` before 3.14 — it rendered
+# `<Union>` there and raised AttributeError on 3.11. And pydantic unwraps a bare
+# `Annotated[Path, ...]` into metadata, but inside a union it does not, so
+# `File | None` rendered `<Annotated>`. An optional `--only` takes a Path;
+# saying so is the whole point of printing a type at all.
+def _type_name(annotation: object) -> str:
+    if isinstance(annotation, UnionType):
+        members: tuple[object, ...] = get_args(annotation)
+        named = [_type_name(member) for member in members if member is not NoneType]
+        return "|".join(named) or _NAMELESS
+    # `__metadata__` is what makes an alias Annotated; its first arg is the type
+    # underneath.
+    if hasattr(annotation, "__metadata__"):
+        wrapped: tuple[object, ...] = get_args(annotation)
+        return _type_name(wrapped[0])
+    return _plain_name(annotation)
+
+
 def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:
-    flags: list[tuple[str, str, bool]] = []
-    for name, field in components.model_fields.items():
-        type_name = field.annotation.__name__ if field.annotation else "value"  # type: ignore [misc]
-        flags.append((name, type_name, field.is_required()))
-    return flags
+    return [
+        (name, _type_name(field.annotation), field.is_required())  # type: ignore [misc]
+        for name, field in components.model_fields.items()
+    ]
 
 
 def ritual(

@@ -20,6 +20,7 @@ _RITUALS = textwrap.dedent("""
     class Countdown(BaseModel):
         start: int
         label: str = "run"
+        note: str | None = None
 
 
     class Pong(BaseModel):
@@ -77,7 +78,7 @@ class TestRitualsList:
 
         out = capsys.readouterr().out
         assert exit_code == 0
-        assert "countdown  --start <int> [--label <str>]\n" in out
+        assert "countdown  --start <int> [--label <str>] [--note <str>]\n" in out
         assert "ping\n" in out
 
     @staticmethod
@@ -104,6 +105,7 @@ class TestRitualsShow:
         assert "countdown\nmax steps: " in out
         assert "  --start <int>\n" in out
         assert "  --label <str>  (optional)\n" in out
+        assert "  --note <str>  (optional)\n" in out
         assert "  (start) → tick\n" in out
         assert "  tick → tick, (done)\n" in out
 

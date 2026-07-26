@@ -1,9 +1,11 @@
 import asyncio
+from typing import Literal
 
 import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
+    Directory,
     Done,
     RitualBoundaryError,
     RitualDefinitionError,
@@ -12,6 +14,7 @@ from vekna.lexicon import (
     goto,
     step,
 )
+from vekna.lexicon._mills.dispatch import _type_name, component_flags
 
 
 class Ping(BaseModel):
@@ -133,3 +136,51 @@ class TestTransitionValues:
     def test_nothing_is_a_transition_value():
         assert done().result is None
         assert goto(step(_emit)).payload is None
+
+
+class TestComponentFlags:
+    @staticmethod
+    def test_names_a_plain_type():
+        class Plain(BaseModel):
+            count: int
+
+        assert component_flags(Plain) == [("count", "int", True)]
+
+    @staticmethod
+    def test_drops_the_none_arm_of_an_optional_component():
+        class Note(BaseModel):
+            note: str | None = None
+
+        assert component_flags(Note) == [("note", "str", False)]
+
+    @staticmethod
+    def test_joins_the_members_of_a_union():
+        class Either(BaseModel):
+            value: int | str
+
+        assert component_flags(Either) == [("value", "int|str", True)]
+
+    @staticmethod
+    def test_names_an_annotated_component_by_the_type_it_validates():
+        class Where(BaseModel):
+            root: Directory | None = None
+
+        assert component_flags(Where) == [("root", "Path", False)]
+
+    @staticmethod
+    def test_names_a_generic_alias_by_its_origin():
+        class Tags(BaseModel):
+            tags: list[str] = []
+
+        assert component_flags(Tags) == [("tags", "list", False)]
+
+    @staticmethod
+    def test_names_a_literal_by_its_construct():
+        class Mode(BaseModel):
+            mode: Literal["fast", "slow"] = "fast"
+
+        assert component_flags(Mode) == [("mode", "Literal", False)]
+
+    @staticmethod
+    def test_falls_back_when_an_annotation_is_not_a_type_at_all():
+        assert _type_name(object()) == "value"

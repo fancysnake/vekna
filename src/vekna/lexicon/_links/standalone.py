@@ -4,11 +4,13 @@ import socket
 import sys
 import tempfile
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
 from vekna.lexicon._pacts import (
     RiteBegan,
+    RiteEnded,
     RiteEvent,
     RiteStreamed,
     StandalonePromptError,
@@ -41,11 +43,31 @@ async def probe_daemon(
     return await asyncio.to_thread(_socket_alive, socket_path, connect_timeout)
 
 
+@dataclass
+class _Rite:
+    name: str
+    depth: int
+    parent_id: str | None
+    # Where this rite's lines go: None to print live, otherwise the rite whose
+    # buffer collects them until it ends.
+    sink: str | None = None
+    buffer: list[str] = field(default_factory=list)
+
+
+# A step may hold two mediums at once, and this sink is a plain stream — no
+# cursor, no re-render. Interleaving two rites' output into it would leave no way
+# to tell which said what, since indentation is all a line carries. So a rite
+# with a live sibling keeps its output until it finishes, and then emits it in
+# one block just before its own ✓. A rite running alone streams as it always
+# did, which is every rite in a ritual that holds nothing concurrently. A
+# surface that *can* re-render — the TUI — wants the opposite and will say so
+# itself; that decision belongs to the sink, not here.
 class StandaloneRenderer:
     def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin
-        self._rites: dict[str, tuple[str, int]] = {}
+        self._rites: dict[str, _Rite] = {}
+        self._open: set[str] = set()
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -54,29 +76,77 @@ class StandaloneRenderer:
     async def _readline(self) -> str:
         return (await asyncio.to_thread(self._inp.readline)).strip()
 
+    def _emit(self, sink: str | None, block: str) -> None:
+        if sink is None:
+            self._say(block + "\n")
+        else:
+            self._rites[sink].buffer.append(block)
+
+    def _depth(self, parent_id: str | None) -> int:
+        if parent_id is None:
+            return 0
+        parent = self._rites.get(parent_id)
+        return 1 if parent is None else parent.depth + 1
+
+    def _open_siblings(self, rite_id: str, parent_id: str | None) -> list[str]:
+        return [
+            other
+            for other in self._open
+            if other != rite_id and self._rites[other].parent_id == parent_id
+        ]
+
+    # A subtree under a buffering rite buffers with it, so the whole thing stays
+    # contiguous; a rite that is itself the top of one still announces live, so
+    # both gates are visibly under way.
+    def _began(self, event: RiteBegan) -> None:
+        depth = self._depth(event.parent_id)
+        rite = _Rite(name=event.name, depth=depth, parent_id=event.parent_id)
+        self._rites[event.rite_id] = rite
+        self._open.add(event.rite_id)
+        mark = "▶" if event.category == "step" else "↳"
+        line = f"{'  ' * depth}{mark} {event.name}"
+        parent = self._rites.get(event.parent_id) if event.parent_id else None
+        if parent is not None and parent.sink is not None:
+            rite.sink = parent.sink
+            self._emit(rite.sink, line)
+            return
+        # Retroactive, because the first sibling had no company when it began.
+        for sibling in self._open_siblings(event.rite_id, event.parent_id):
+            self._rites[sibling].sink = sibling
+            rite.sink = event.rite_id
+        self._say(line + "\n")
+
+    def _streamed(self, event: RiteStreamed) -> None:
+        rite = self._rites.get(event.rite_id)
+        pad = "  " * ((0 if rite is None else rite.depth) + 1)
+        lines = event.delta.splitlines() or [""]
+        block = "\n".join(f"{pad}{line}" for line in lines)
+        self._emit(None if rite is None else rite.sink, block)
+
+    def _ended(self, event: RiteEnded) -> None:
+        self._open.discard(event.rite_id)
+        mark = "✓" if event.status == "ok" else "✗"
+        if (rite := self._rites.get(event.rite_id)) is None:
+            self._say(f"{mark} {event.rite_id}\n")
+            return
+        line = f"{'  ' * rite.depth}{mark} {rite.name}"
+        if rite.sink != event.rite_id:
+            self._emit(rite.sink, line)
+            return
+        for block in rite.buffer:
+            self._say(block + "\n")
+        rite.buffer.clear()
+        self._say(line + "\n")
+
     # RiteEvent is closed, so the three branches are exhaustive — there is no
     # unknown-event fallback to write.
-    def _format(self, event: RiteEvent) -> str:
-        if isinstance(event, RiteBegan):
-            depth = (
-                0
-                if event.parent_id is None
-                else self._rites.get(event.parent_id, ("", 0))[1] + 1
-            )
-            self._rites[event.rite_id] = (event.name, depth)
-            mark = "▶" if event.category == "step" else "↳"
-            return f"{'  ' * depth}{mark} {event.name}"
-        if isinstance(event, RiteStreamed):
-            _, depth = self._rites.get(event.rite_id, ("", 0))
-            pad = "  " * (depth + 1)
-            lines = event.delta.splitlines() or [""]
-            return "\n".join(f"{pad}{line}" for line in lines)
-        name, depth = self._rites.get(event.rite_id, (event.rite_id, 0))
-        mark = "✓" if event.status == "ok" else "✗"
-        return f"{'  ' * depth}{mark} {name}"
-
     def render(self, event: RiteEvent) -> None:
-        self._say(self._format(event) + "\n")
+        if isinstance(event, RiteBegan):
+            self._began(event)
+        elif isinstance(event, RiteStreamed):
+            self._streamed(event)
+        else:
+            self._ended(event)
 
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
