@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, JsonValue
 
-from ._pacts import (
+from vekna.lexicon._pacts import (
     Channel,
     Done,
     FocusMissingError,

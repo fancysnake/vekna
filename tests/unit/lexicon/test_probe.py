@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 
-from vekna.lexicon._links import default_socket_path, probe_daemon
+from vekna.lexicon._links.standalone import default_socket_path, probe_daemon
 
 
 # The probe connects from a worker thread and drops the socket, so the close

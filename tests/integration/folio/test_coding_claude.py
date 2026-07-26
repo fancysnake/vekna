@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import pytest
 
 from vekna.lexicon._inits import main
-from vekna.lexicon._mills import reset_foci
+from vekna.lexicon._mills.engine import reset_foci
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1

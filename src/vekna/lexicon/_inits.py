@@ -7,16 +7,17 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ._dispatch import component_flags
-from ._graph import step_graph
-from ._links import StandaloneRenderer, default_socket_path, probe_daemon
-from ._loader import load_rituals_file, load_rituals_module, read_config
-from ._mills import Compendium, Grimoire, prompt_runner, run_cast
+from ._links.loader import load_rituals_file, load_rituals_module, read_config
+from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
+from ._mills.dispatch import component_flags
+from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
+from ._mills.graph import step_graph
 from ._pacts import (
     FocusMissingError,
     Ritual,
     RitualDefinitionError,
     RitualError,
+    RitualSource,
     Transition,
     done,
 )
@@ -70,6 +71,15 @@ def _config_files(cwd: Path) -> list[Path]:
 # naming that same file is how an author is explicit about it, so a source
 # already loaded is skipped rather than colliding with itself. Two *different*
 # sources claiming one ritual name is still an error.
+# The loader reaches the filesystem and so may not touch the compendium in
+# _mills: it hands back what it found, and binding the two is this layer's job.
+def _register(*, compendium: Compendium, found: RitualSource, source: str) -> None:
+    for the_ritual in found.rituals:
+        compendium.register(the_ritual, source=source)
+    for the_step in found.steps:
+        compendium.register_step(the_step)
+
+
 def _build_compendium(cwd: Path) -> Compendium:
     compendium = Compendium()
     seen_files: set[Path] = set()
@@ -80,7 +90,11 @@ def _build_compendium(cwd: Path) -> Compendium:
         # discovered file all collapse to one entry.
         if (resolved := path.resolve()) not in seen_files:
             seen_files.add(resolved)
-            load_rituals_file(compendium, resolved)
+            _register(
+                compendium=compendium,
+                found=load_rituals_file(resolved),
+                source=str(resolved),
+            )
 
     if (implicit := _find_rituals_file(cwd)) is not None:
         load_file(implicit)
@@ -95,7 +109,11 @@ def _build_compendium(cwd: Path) -> Compendium:
         for module in modules:
             if module not in seen_modules:
                 seen_modules.add(module)
-                load_rituals_module(compendium, module)
+                _register(
+                    compendium=compendium,
+                    found=load_rituals_module(module),
+                    source=f"module {module}",
+                )
     return compendium
 
 

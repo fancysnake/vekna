@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from vekna.lexicon import StandalonePromptError
-from vekna.lexicon._links import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 

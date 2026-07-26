@@ -16,8 +16,8 @@ from vekna.lexicon import (
     ritual,
     step,
 )
-from vekna.lexicon._links import StandaloneRenderer
-from vekna.lexicon._mills import Grimoire, reset_foci, run_cast
+from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._mills.engine import Grimoire, reset_foci, run_cast
 from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
 

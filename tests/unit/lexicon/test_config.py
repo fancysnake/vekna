@@ -5,9 +5,9 @@ from types import ModuleType
 
 import pytest
 
-from vekna.lexicon import _loader
+from vekna.lexicon._links import loader
 
-_LOADER_PATH = Path(_loader.__file__)
+_LOADER_PATH = Path(loader.__file__)
 
 
 def _load_loader(name: str) -> ModuleType:
@@ -25,7 +25,7 @@ class TestTomlBackend:
     def test_uses_stdlib_tomllib_on_modern_python(monkeypatch):
         monkeypatch.setattr(sys, "version_info", (3, 11, 0, "final", 0))
 
-        module = _load_loader("vekna.lexicon._loader_modern")
+        module = _load_loader("vekna.lexicon._links.loader_modern")
 
         assert module.tomllib.__name__ == "tomllib"
 
@@ -42,7 +42,7 @@ class TestTomlBackend:
         monkeypatch.setitem(sys.modules, "tomli", stub)
         monkeypatch.setattr(sys, "version_info", (3, 10, 12, "final", 0))
 
-        module = _load_loader("vekna.lexicon._loader_py310")
+        module = _load_loader("vekna.lexicon._links.loader_py310")
 
         assert module.tomllib is stub
 

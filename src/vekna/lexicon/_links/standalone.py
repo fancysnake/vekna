@@ -7,7 +7,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
-from ._pacts import RiteBegan, RiteEvent, RiteStreamed, StandalonePromptError
+from vekna.lexicon._pacts import (
+    RiteBegan,
+    RiteEvent,
+    RiteStreamed,
+    StandalonePromptError,
+)
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3

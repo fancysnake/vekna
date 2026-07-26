@@ -5,8 +5,8 @@ reaches for, and nothing else. The CLI lives in the root project; the cast
 runtime is reached through `vekna.lexicon._inits`.
 """
 
-from ._dispatch import medium, ritual, step
-from ._mills import (
+from ._mills.dispatch import medium, ritual, step
+from ._mills.engine import (
     RiteContext,
     current_rite,
     emit_delta,
@@ -21,19 +21,26 @@ from ._pacts import (
     Channel,
     CodingCall,
     CodingFocusProtocol,
+    Directory,
     Done,
+    File,
     FocusMissingError,
     FocusReply,
     GateFn,
+    GitRef,
     Goto,
     RitualDefinitionError,
     RitualError,
     StandalonePromptError,
     StepBoundaryError,
     StepBudgetExceededError,
+    Text,
+    TextSpec,
     Transition,
+    Url,
     done,
     goto,
+    sha256_of,
 )
 
 __all__ = [
@@ -41,10 +48,13 @@ __all__ = [
     "Channel",
     "CodingCall",
     "CodingFocusProtocol",
+    "Directory",
     "Done",
+    "File",
     "FocusMissingError",
     "FocusReply",
     "GateFn",
+    "GitRef",
     "Goto",
     "RiteContext",
     "RitualDefinitionError",
@@ -52,7 +62,10 @@ __all__ = [
     "StandalonePromptError",
     "StepBoundaryError",
     "StepBudgetExceededError",
+    "Text",
+    "TextSpec",
     "Transition",
+    "Url",
     "current_rite",
     "done",
     "emit_delta",
@@ -64,5 +77,6 @@ __all__ = [
     "register_focus",
     "resolve_focus",
     "ritual",
+    "sha256_of",
     "step",
 ]

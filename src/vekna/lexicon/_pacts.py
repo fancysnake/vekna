@@ -1,10 +1,52 @@
+import hashlib
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from types import UnionType
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, JsonValue
+
+
+# Component types — the typed values on a ritual's external interface. They are
+# boundary contracts, so they live here; that their validators touch the
+# filesystem is inherent to what `File` and `Directory` mean.
+def _existing_file(path: Path) -> Path:
+    if not path.is_file():
+        msg = f"not a readable file: {path}"
+        raise ValueError(msg)
+    return path
+
+
+def _existing_directory(path: Path) -> Path:
+    if not path.is_dir():
+        msg = f"not a directory: {path}"
+        raise ValueError(msg)
+    return path
+
+
+def _nonempty_git_ref(value: str) -> str:
+    if not value.strip():
+        msg = "git ref must be non-empty"
+        raise ValueError(msg)
+    return value
+
+
+def sha256_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@dataclass(frozen=True)
+class TextSpec:
+    multiline: bool = False
+
+
+File = Annotated[Path, AfterValidator(_existing_file)]
+Directory = Annotated[Path, AfterValidator(_existing_directory)]
+Text = Annotated[str, TextSpec()]
+Url = AnyUrl
+GitRef = Annotated[str, AfterValidator(_nonempty_git_ref)]
 
 
 # The grimoire's own vocabulary, not the daemon's. These carry no `cast_id`:
@@ -37,6 +79,15 @@ class RiteEnded:
 
 
 RiteEvent = RiteBegan | RiteStreamed | RiteEnded
+
+
+# What loading a ritual source yields. The loader reaches the filesystem, so it
+# lives in `_links`, which may not import the compendium in `_mills` — it hands
+# back what it found and `_inits` registers it.
+@dataclass(frozen=True)
+class RitualSource:
+    rituals: list["Ritual"]
+    steps: list["Step"]
 
 
 class Channel(Protocol):

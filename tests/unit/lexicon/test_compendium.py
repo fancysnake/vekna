@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import RitualDefinitionError, Transition, done, goto, ritual, step
-from vekna.lexicon._mills import Compendium
+from vekna.lexicon._mills.engine import Compendium
 
 
 class State(BaseModel):

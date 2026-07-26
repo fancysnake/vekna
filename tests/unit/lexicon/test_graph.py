@@ -4,9 +4,9 @@ from functools import partial
 from pydantic import BaseModel
 
 from vekna.lexicon import Transition, done, goto, ritual, step
-from vekna.lexicon._dispatch import source_text
-from vekna.lexicon._graph import ENDS, START, step_graph
-from vekna.lexicon._mills import Compendium
+from vekna.lexicon._mills.dispatch import source_text
+from vekna.lexicon._mills.engine import Compendium
+from vekna.lexicon._mills.graph import ENDS, START, step_graph
 from vekna.lexicon._pacts import Ritual, Step
 
 

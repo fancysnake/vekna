@@ -4,15 +4,7 @@ from typing import get_args
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from vekna.lexicon.components import (
-    Directory,
-    File,
-    GitRef,
-    Text,
-    TextSpec,
-    Url,
-    sha256_of,
-)
+from vekna.lexicon import Directory, File, GitRef, Text, TextSpec, Url, sha256_of
 
 
 class TestFile:

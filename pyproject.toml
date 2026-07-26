@@ -56,121 +56,353 @@ known_first_party = ["vekna"]
 include_external_packages = "True"
 root_package = "vekna"
 
+
 # Explanation <source_modules> can't import <forbidden_modules>
 
+# Root project
+
+
 [[tool.importlinter.contracts]]
-name = "wire"
+name = "gates"
 type = "forbidden"
-source_modules = ["vekna.wire"]
-forbidden_modules = ["vekna.inits", "vekna.lexicon", "vekna.folio"]
+source_modules = ["vekna.gates"]
+forbidden_modules = [
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.specs",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+[[tool.importlinter.contracts]]
+name = "links"
+type = "forbidden"
+source_modules = ["vekna.links"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.specs",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+[[tool.importlinter.contracts]]
+name = "inits"
+type = "forbidden"
+source_modules = ["vekna.inits"]
+forbidden_modules = [
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+[[tool.importlinter.contracts]]
+name = "mills"
+type = "forbidden"
+source_modules = ["vekna.mills"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
 
 
 [[tool.importlinter.contracts]]
-name = "lexicon"
+name = "pacts"
+type = "forbidden"
+source_modules = ["vekna.pacts"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.specs",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "specs"
+type = "forbidden"
+source_modules = ["vekna.specs"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+[[tool.importlinter.contracts]]
+name = "edges"
+type = "forbidden"
+source_modules = ["vekna.edges"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.edges",
+    "vekna.folio",
+    "vekna.lexicon",
+]
+
+[[tool.importlinter.contracts]]
+name = "inside-gates"
+type = "independence"
+modules = ["vekna.gates.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-links"
+type = "independence"
+modules = ["vekna.links.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-inits"
+type = "independence"
+modules = ["vekna.inits.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-mills"
+type = "independence"
+modules = ["vekna.mills.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-pacts"
+type = "independence"
+modules = ["vekna.pacts.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-specs"
+type = "independence"
+modules = ["vekna.specs.*"]
+
+[[tool.importlinter.contracts]]
+name = "inside-edges"
+type = "independence"
+modules = ["vekna.edges.*"]
+
+# Folios
+
+[[tool.importlinter.contracts]]
+name = "folio-gates"
+type = "forbidden"
+source_modules = ["vekna.folio.*._gates"]
+forbidden_modules = [
+    "vekna.folio.*._links",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._mills",
+    "vekna.folio.*._specs",
+    "vekna.folio.*._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "folio-links"
+type = "forbidden"
+source_modules = ["vekna.folio.*._links"]
+forbidden_modules = [
+    "vekna.folio.*._gates",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._mills",
+    "vekna.folio.*._specs",
+    "vekna.folio.*._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "folio-inits"
+type = "forbidden"
+source_modules = ["vekna.folio.*._inits"]
+forbidden_modules = [
+    "vekna.folio.*._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "folio-mills"
+type = "forbidden"
+source_modules = ["vekna.folio.*._mills"]
+forbidden_modules = [
+    "vekna.folio.*._gates",
+    "vekna.folio.*._links",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._edges",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio-pacts"
+type = "forbidden"
+source_modules = ["vekna.folio.*._pacts"]
+forbidden_modules = [
+    "vekna.folio.*._gates",
+    "vekna.folio.*._links",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._mills",
+    "vekna.folio.*._specs",
+    "vekna.folio.*._edges",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "folio-specs"
+type = "forbidden"
+source_modules = ["vekna.folio.*._specs"]
+forbidden_modules = [
+    "vekna.folio.*._gates",
+    "vekna.folio.*._links",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._mills",
+    "vekna.folio.*._pacts",
+    "vekna.folio.*._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "folio-edges"
+type = "forbidden"
+source_modules = ["vekna.folio.*._edges"]
+forbidden_modules = [
+    "vekna.folio.*._gates",
+    "vekna.folio.*._links",
+    "vekna.folio.*._inits",
+    "vekna.folio.*._mills",
+    "vekna.folio.*._pacts",
+    "vekna.folio.*._specs",
+    "vekna.folio.*._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "inside-folios"
+type = "independence"
+modules = ["vekna.folio.*"]
+
+[[tool.importlinter.contracts]]
+name = "folio-not-use-root"
+type = "forbidden"
+source_modules = ["vekna.folio.**"]
+forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.edges",
+]
+
+# Lexicon
+
+[[tool.importlinter.contracts]]
+name = "lexicon-gates"
+type = "forbidden"
+source_modules = ["vekna.lexicon._gates"]
+forbidden_modules = [
+    "vekna.lexicon._links",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._mills",
+    "vekna.lexicon._specs",
+    "vekna.lexicon._edges",
+    "vekna.folio"
+]
+
+[[tool.importlinter.contracts]]
+name = "lexicon-links"
+type = "forbidden"
+source_modules = ["vekna.lexicon._links"]
+forbidden_modules = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._mills",
+    "vekna.lexicon._specs",
+    "vekna.lexicon._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "lexicon-inits"
+type = "forbidden"
+source_modules = ["vekna.lexicon._inits"]
+forbidden_modules = [
+    "vekna.lexicon._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "lexicon-mills"
+type = "forbidden"
+source_modules = ["vekna.lexicon._mills"]
+forbidden_modules = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._links",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._edges",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "lexicon-pacts"
+type = "forbidden"
+source_modules = ["vekna.lexicon._pacts"]
+forbidden_modules = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._links",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._mills",
+    "vekna.lexicon._specs",
+    "vekna.lexicon._edges",
+]
+
+
+[[tool.importlinter.contracts]]
+name = "lexicon-specs"
+type = "forbidden"
+source_modules = ["vekna.lexicon._specs"]
+forbidden_modules = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._links",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._mills",
+    "vekna.lexicon._pacts",
+    "vekna.lexicon._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "lexicon-edges"
+type = "forbidden"
+source_modules = ["vekna.lexicon._edges"]
+forbidden_modules = [
+    "vekna.lexicon._gates",
+    "vekna.lexicon._links",
+    "vekna.lexicon._inits",
+    "vekna.lexicon._mills",
+    "vekna.lexicon._pacts",
+    "vekna.lexicon._specs",
+    "vekna.lexicon._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "lexicon-not-use-root"
 type = "forbidden"
 source_modules = ["vekna.lexicon"]
 forbidden_modules = [
+    "vekna.gates",
+    "vekna.links",
     "vekna.inits",
-    "vekna.folio.coding",
-    "vekna.folio.coding_claude",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.flow"
-type = "forbidden"
-source_modules = ["vekna.folio.flow"]
-forbidden_modules = [
-    "vekna.inits",
-    "vekna.folio.shell",
-    "vekna.folio.coding",
-    "vekna.folio.coding_claude",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.shell"
-type = "forbidden"
-source_modules = ["vekna.folio.shell"]
-forbidden_modules = [
-    "vekna.inits",
-    "vekna.folio.flow",
-    "vekna.folio.coding",
-    "vekna.folio.coding_claude",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.coding"
-type = "forbidden"
-source_modules = ["vekna.folio.coding"]
-forbidden_modules = [
-    "vekna.inits",
-    "vekna.folio.flow",
-    "vekna.folio.shell",
-    "vekna.folio.coding_claude",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.coding_claude"
-type = "forbidden"
-source_modules = ["vekna.folio.coding_claude"]
-forbidden_modules = [
-    "vekna.inits",
-    "vekna.folio.flow",
-    "vekna.folio.shell",
-    "vekna.folio.coding",
-]
-
-# Explanation: within a package, a layer may import the layers below it and
-# never the ones above. `_links` and `_mills` share a layer, joined by "|" --
-# import-linter's *independent* delimiter, so neither may import the other.
-# ":" would place them side by side and let them import freely, which is the
-# pair of violations these contracts were added to catch. The reflection
-# helpers (_dispatch, _graph, _loader) and the two doors (__init__, entry) are
-# deliberately unlisted: they sit across the model rather than in one layer.
-
-[[tool.importlinter.contracts]]
-name = "lexicon layers"
-type = "layers"
-layers = [
-    "vekna.lexicon._gates",
-    "vekna.lexicon._links | vekna.lexicon._mills",
-    "vekna.lexicon._specs",
-    "vekna.lexicon._pacts",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "wire layers"
-type = "layers"
-layers = ["vekna.wire._links", "vekna.wire._pacts"]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.shell layers"
-type = "layers"
-layers = ["vekna.folio.shell._links", "vekna.folio.shell._pacts"]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.coding layers"
-type = "layers"
-layers = [
-    "vekna.folio.coding._inits",
-    "vekna.folio.coding._mills",
-    "vekna.folio.coding._pacts",
-]
-
-
-[[tool.importlinter.contracts]]
-name = "folio.coding_claude layers"
-type = "layers"
-layers = [
-    "vekna.folio.coding_claude._inits",
-    "vekna.folio.coding_claude._links",
-    "vekna.folio.coding_claude._pacts",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.edges",
+    "vekna.folio",
 ]
 
 # MYPY
@@ -207,23 +439,23 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
-# vekna.lexicon._dispatch is the reflection boundary and nothing else: it reads
+# vekna.lexicon._mills.dispatch is the reflection boundary and nothing else: it reads
 # runtime annotations and invokes heterogeneously-typed steps uniformly, which
 # cannot be expressed under disallow_any_expr/explicit. The AST reader (_graph)
 # and the file/TOML loaders (_loader) used to share this exemption for free;
 # they are strict now.
 [[tool.mypy.overrides]]
-module = "vekna.lexicon._dispatch"
+module = "vekna.lexicon._mills.dispatch"
 disallow_any_expr = false
 disallow_any_explicit = false
 warn_return_any = false
 
-# vekna.lexicon._loader is the dynamic-loading boundary: importlib's
+# vekna.lexicon._links.loader is the dynamic-loading boundary: importlib's
 # exec_module, vars(module) and tomllib.load all hand back dict[str, Any] by
 # nature. Narrower than the exemption it was carved out of -- the AST reader
 # it used to sit beside (_graph) is strict.
 [[tool.mypy.overrides]]
-module = "vekna.lexicon._loader"
+module = "vekna.lexicon._links.loader"
 disallow_any_expr = false
 
 # RUFF
@@ -256,6 +488,13 @@ convention = "pep257"
     "ANN",     # flake8-annotations
     "PLC2701", # Private name import
     "S",
+]
+# Every lexicon layer is a private module, so a layer that grows into a package
+# has no legal way to reach its siblings: `from .._pacts import` trips TID252
+# (relative-imports) and `from vekna.lexicon._pacts import` trips this rule.
+# Scoped to lexicon, so a folio still may not reach past the public door.
+"src/vekna/lexicon/**.py" = [
+    "PLC2701", # Private name import
 ]
 
 # VULTURE
