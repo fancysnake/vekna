@@ -19,7 +19,9 @@ pip install .
 Put a `rituals.py` in your project:
 
 ```python
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field
 
 from vekna.folio.coding import coding
 from vekna.folio.shell import shell
@@ -27,7 +29,9 @@ from vekna.lexicon import Transition, done, goto, ritual, step
 
 
 class FixTests(BaseModel):
-    bound: int = 3
+    # A retry budget counts down to zero, so the CLI rejects a negative one
+    # rather than letting `--bound -1` run until the step backstop.
+    bound: Annotated[int, Field(ge=0)] = 3
 
 
 class Attempt(BaseModel):
@@ -43,7 +47,7 @@ async def fix(state: Attempt) -> Transition:
     result = await shell("mise run test")
     if result.exit_code == 0:
         return done(Verdict(outcome="green"))
-    if not state.left:
+    if state.left <= 0:
         return done(Verdict(outcome="gave up"))
     await coding(f"The test suite fails:\n{result.stdout}\nFix it.")
     return goto(fix, Attempt(left=state.left - 1))
