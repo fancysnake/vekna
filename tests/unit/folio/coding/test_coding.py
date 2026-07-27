@@ -288,7 +288,7 @@ class TestSessionDeclaration:
         @step
         async def work(_: Answer) -> Transition:
             for index, session in enumerate(declarations):
-                await coding(f"call {index}", opts=CodingOpts(session=session))
+                await coding(f"call {index}", session=session)
             return done(None)
 
         @ritual("r")
@@ -327,8 +327,8 @@ class TestSessionDeclaration:
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", opts=CodingOpts(session="repair"))
-            await coding("fix it again", opts=CodingOpts(session=Session.CONTINUE))
+            await coding("fix it", session="repair")
+            await coding("fix it again", session=Session.CONTINUE)
             return done(None)
 
         @ritual("r")
@@ -353,7 +353,7 @@ class TestSessionDeclaration:
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", opts=CodingOpts(session="  "))
+            await coding("fix it", session="  ")
             return done(None)
 
         @ritual("r")
@@ -365,12 +365,20 @@ class TestSessionDeclaration:
             _cast(r)
 
     @staticmethod
+    def test_the_thread_is_not_a_knob_on_opts():
+        # `session` is per-call identity, not configuration, so a shared
+        # `CodingOpts` cannot carry one. `forbid` is what keeps the old spelling
+        # from being dropped onto whatever thread the call defaults to.
+        with pytest.raises(ValidationError, match="session"):
+            CodingOpts(session="repair")
+
+    @staticmethod
     def test_telemetry_names_the_thread_the_author_declared():
         register_focus("coding", FakeFocus())
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", opts=CodingOpts(session="repair"))
+            await coding("fix it", session="repair")
             return done(None)
 
         @ritual("r")

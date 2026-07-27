@@ -104,6 +104,7 @@ async def coding(
     *,
     opts: CodingOpts | None = None,
     focus_options: BaseModel | None = None,
+    session: Session | str = Session.NEW,
 ) -> CodingResult: ...
 
 
@@ -114,6 +115,7 @@ async def coding(
     output: type[_OutputT],
     opts: CodingOpts | None = None,
     focus_options: BaseModel | None = None,
+    session: Session | str = Session.NEW,
 ) -> _OutputT: ...
 
 
@@ -124,11 +126,12 @@ async def coding(
     output: type[_OutputT] | None = None,
     opts: CodingOpts | None = None,
     focus_options: BaseModel | None = None,
+    session: Session | str = Session.NEW,
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
-    thread = _checked_session(resolved.session)
+    thread = _checked_session(session)
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = TypeAdapter(output).json_schema()

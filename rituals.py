@@ -363,7 +363,7 @@ async def gates(state: Attempt) -> Transition:
 # being the same the moment a second one is added.
 @step
 async def repair(failure: Red) -> Transition:
-    await coding(_REPAIR + _complaint(failure), opts=CodingOpts(session="repair"))
+    await coding(_REPAIR + _complaint(failure), session="repair")
     return goto(gates, Attempt(budget=failure.budget - 1))
 
 

@@ -89,7 +89,7 @@ _TYPED_RITUALS = textwrap.dedent("""
 _THREADED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.folio.coding import CodingOpts, Session, coding
+    from vekna.folio.coding import Session, coding
     from vekna.lexicon import Transition, done, goto, ritual, step
 
 
@@ -100,7 +100,7 @@ _THREADED_RITUALS = textwrap.dedent("""
     @step
     async def work(task: Task) -> Transition:
         await coding(task.text)
-        await coding(task.text, opts=CodingOpts(session=Session.CONTINUE))
+        await coding(task.text, session=Session.CONTINUE)
         return done(None)
 
 
