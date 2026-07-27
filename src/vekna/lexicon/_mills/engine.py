@@ -208,12 +208,34 @@ class RiteOutcome:
     result: JsonValue | None = None
 
 
+# A cast's threads of agent memory, by name. The vocabulary that decides which
+# name a call means — and that some names are reserved — belongs to the medium;
+# this only remembers. `latest` is what "carry on from the last call" resolves
+# to, and every recorded reply moves it, named or not.
+@dataclass
+class SessionBook:
+    latest: str | None = None
+    _named: dict[str, str] = field(default_factory=dict)
+
+    def named(self, name: str) -> str | None:
+        return self._named.get(name)
+
+    def record(self, session_id: str, *, name: str | None = None) -> None:
+        self.latest = session_id
+        if name is not None:
+            self._named[name] = session_id
+
+
+# One book per cast: `_rite` rebuilds the context with `replace`, which copies
+# the reference, so every rite under a cast shares the book and no cast sees
+# another's.
 @dataclass(frozen=True, kw_only=True)
 class RiteContext:
     grimoire: Grimoire
     channel: Channel
     parent_id: str | None = None
     outcome: RiteOutcome = field(default_factory=RiteOutcome)
+    sessions: SessionBook = field(default_factory=SessionBook)
 
 
 def record_result(value: JsonValue) -> None:

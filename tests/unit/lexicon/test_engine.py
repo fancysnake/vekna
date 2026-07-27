@@ -13,6 +13,7 @@ from vekna.lexicon import (
     RitualError,
     StepBudgetExceededError,
     Transition,
+    current_rite,
     done,
     goto,
     medium,
@@ -20,7 +21,7 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, run_cast
+from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, SessionBook, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
@@ -284,6 +285,79 @@ class TestMediumRegistry:
 
         with pytest.raises(RitualError, match="offers no one-shot prompt"):
             registry.prompt_runner("coding")
+
+
+class TestSessionBook:
+    @staticmethod
+    def test_an_unrecorded_name_resolves_to_nothing():
+        book = SessionBook()
+
+        assert book.named("lint-loop") is None
+        assert book.latest is None
+
+    @staticmethod
+    def test_a_named_record_reads_back_by_name_and_moves_latest():
+        book = SessionBook()
+
+        book.record("s1", name="lint-loop")
+
+        assert book.named("lint-loop") == "s1"
+        assert book.latest == "s1"
+
+    @staticmethod
+    def test_an_unnamed_record_moves_latest_and_names_nothing():
+        book = SessionBook()
+
+        book.record("s1")
+
+        assert book.latest == "s1"
+        assert book.named("s1") is None
+
+    @staticmethod
+    def test_two_threads_keep_their_own_ids():
+        book = SessionBook()
+
+        book.record("s1", name="review")
+        book.record("s2", name="repair")
+
+        assert book.named("review") == "s1"
+        assert book.named("repair") == "s2"
+        assert book.latest == "s2"
+
+    @staticmethod
+    def test_one_book_spans_every_rite_of_a_cast_and_no_further():
+        seen = []
+
+        @step
+        async def note(state: Tick) -> Transition:
+            await asyncio.sleep(0)
+            book = current_rite().sessions
+            seen.append((book, book.named("thread")))
+            book.record(f"s{state.left}", name="thread")
+            if not state.left:
+                return done(state)
+            return goto(note, Tick(left=state.left - 1))
+
+        @ritual("noting")
+        async def noting(components: Start) -> Transition:
+            await asyncio.sleep(0)
+            return goto(note, Tick(left=components.start))
+
+        for _ in range(2):
+            asyncio.run(
+                run_cast(
+                    ritual=noting,
+                    components=noting.components(start=1),
+                    grimoire=Grimoire(cast_id="c1", clock=_fixed_clock),
+                    channel=_channel(),
+                )
+            )
+
+        books = [book for book, _ in seen]
+        reads = [read for _, read in seen]
+        assert books[1] is books[0]
+        assert books[2] is not books[0]
+        assert reads == [None, "s1", None, "s1"]
 
 
 class TestGrimoire:
