@@ -9,7 +9,7 @@ from vekna.lexicon import (
     Channel,
     CodingCall,
     GateFn,
-    SessionBook,
+    RiteContext,
     StringOutput,
     current_rite,
     emit_delta,
@@ -76,7 +76,7 @@ class _Thread:
 # default records no thread of its own. Reading only its own kind would start
 # that retry fresh while looking like it resumed — the failure the declaration
 # exists to make visible.
-def _thread(*, book: SessionBook, session: Session | str) -> _Thread:
+def _thread(*, context: RiteContext, session: Session | str) -> _Thread:
     # Stripping once, here, is what makes it one classification: an unnamed
     # thread is a typo that would otherwise work — `session=""` resolves to
     # nothing, records under the empty string, and reads as a fresh session
@@ -85,6 +85,7 @@ def _thread(*, book: SessionBook, session: Session | str) -> _Thread:
     if not (declared := str(session).strip()):
         msg = "session takes 'new', 'continue', or a thread name — not a blank one"
         raise CodingSessionError(msg)
+    book = context.sessions
     if declared == Session.NEW:
         return _Thread(declared=declared, resume=None, name=None)
     if declared == Session.CONTINUE:
@@ -134,7 +135,7 @@ async def coding(
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
-    thread = _thread(book=context.sessions, session=session)
+    thread = _thread(context=context, session=session)
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = TypeAdapter(output).json_schema()
