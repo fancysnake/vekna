@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
@@ -58,6 +59,16 @@ def _make_ask(channel: Channel) -> AskFn:
     return ask
 
 
+# What the rest of the call needs off a declaration: which session to resume,
+# and which name to file the reply under. `name` is None for both reserved
+# words, because neither of them names anything.
+@dataclass(frozen=True)
+class _Thread:
+    declared: str
+    resume: str | None
+    name: str | None
+
+
 # `new` is the absence of a thread, so it resolves to nothing and starts fresh.
 # `continue` is the last session *any* coding rite produced, not the last
 # `continue` call: a retry that wants the agent to remember what it already tried
@@ -65,28 +76,20 @@ def _make_ask(channel: Channel) -> AskFn:
 # default records no thread of its own. Reading only its own kind would start
 # that retry fresh while looking like it resumed — the failure the declaration
 # exists to make visible.
-def _resume_id(*, book: SessionBook, session: str) -> str | None:
-    if session == Session.NEW:
-        return None
-    if session == Session.CONTINUE:
-        return book.latest
-    return book.named(session)
-
-
-def _remember(*, book: SessionBook, session: str, session_id: str | None) -> None:
-    if session_id is None:
-        return
-    reserved = session in {Session.NEW, Session.CONTINUE}
-    book.record(session_id, name=None if reserved else session)
-
-
-# An unnamed thread is a typo that would otherwise work: `session=""` resolves to
-# nothing, records under the empty string, and reads as a fresh session forever.
-def _checked_session(session: Session | str) -> str:
-    if not str(session).strip():
+def _thread(*, book: SessionBook, session: Session | str) -> _Thread:
+    # Stripping once, here, is what makes it one classification: an unnamed
+    # thread is a typo that would otherwise work — `session=""` resolves to
+    # nothing, records under the empty string, and reads as a fresh session
+    # forever — and `" repair"` is the same typo wearing the name of a real
+    # thread it would never join.
+    if not (declared := str(session).strip()):
         msg = "session takes 'new', 'continue', or a thread name — not a blank one"
         raise CodingSessionError(msg)
-    return str(session)
+    if declared == Session.NEW:
+        return _Thread(declared=declared, resume=None, name=None)
+    if declared == Session.CONTINUE:
+        return _Thread(declared=declared, resume=book.latest, name=None)
+    return _Thread(declared=declared, resume=book.named(declared), name=declared)
 
 
 def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
@@ -131,7 +134,7 @@ async def coding(
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
-    thread = _checked_session(session)
+    thread = _thread(book=context.sessions, session=session)
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = TypeAdapter(output).json_schema()
@@ -142,7 +145,7 @@ async def coding(
         cwd=resolved.cwd,
         output_schema=schema,
         focus_options=focus_options,
-        resume=_resume_id(book=context.sessions, session=thread),
+        resume=thread.resume,
     )
     reply = await focus.run(
         call,
@@ -150,11 +153,12 @@ async def coding(
         gate=_make_gate(context.channel, resolved.gate_tools),
         ask=_make_ask(context.channel),
     )
-    _remember(book=context.sessions, session=thread, session_id=reply.session_id)
+    if reply.session_id is not None:
+        context.sessions.record(reply.session_id, name=thread.name)
     # The declaration, not just the id: whether the author meant this rite to
     # carry context is the thing the journal cannot read off `session_id`.
     telemetry: dict[str, JsonValue] = {
-        "session": thread,
+        "session": thread.declared,
         "session_id": reply.session_id,
         "num_turns": reply.num_turns,
         "cost_usd": reply.cost_usd,

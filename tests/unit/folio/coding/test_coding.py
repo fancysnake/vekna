@@ -313,6 +313,25 @@ class TestSessionDeclaration:
         assert cls._resumes("repair", "review", "repair") == [None, None, "s1"]
 
     @classmethod
+    def test_padding_does_not_open_a_second_thread(cls):
+        # Two spellings of one name that would render identically in the
+        # journal, so a thread that silently forked would be invisible there.
+        assert cls._resumes("repair", " repair ") == [None, "s1"]
+
+    @classmethod
+    @pytest.mark.parametrize("spelling", [" new", "new "])
+    def test_a_padded_reserved_word_stays_reserved(cls, spelling):
+        # The near-miss that reads as a reserved word and behaves as a thread
+        # named after one: padding resolves, capitalisation deliberately does not.
+        assert cls._resumes("repair", spelling) == [None, None]
+
+    @classmethod
+    def test_capitalisation_names_a_thread_rather_than_reserving_one(cls):
+        # The second `"New"` resumes what the first one opened — `s2`, since the
+        # `new` before it took `s1` — rather than starting fresh a third time.
+        assert cls._resumes(Session.NEW, "New", "New") == [None, None, "s2"]
+
+    @classmethod
     def test_continue_follows_the_last_call_whatever_thread_it_was_on(cls):
         # The documented consequence of "the cast's running session": a named
         # rite moves it too, so `continue` after one resumes that name's id.

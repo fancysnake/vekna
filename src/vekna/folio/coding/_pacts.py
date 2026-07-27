@@ -17,6 +17,9 @@ class CodingSessionError(RitualError):
 # invents, which is why the parameter takes `Session | str`. StrEnum is what
 # makes the two spellings meet — `"continue" == Session.CONTINUE` — so an author
 # who types the string and one who reaches for the member land in one branch.
+# Reserved means these two exact spellings: `"New"` is a thread named "New", on
+# purpose. Folding case would take the capitalised forms out of an author's
+# hands to buy a rule harder to hold than a set of two literal strings.
 class Session(StrEnum):
     NEW = "new"
     CONTINUE = "continue"
