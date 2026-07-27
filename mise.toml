@@ -3,9 +3,9 @@
 jobs = 1
 
 [tools]
-pipx = "1.16.0"
+pipx = "1.16.2"
 "pipx:poetry" = "2.4.1"
-python = "3.14"
+python = "3.11"
 
 [hooks]
 enter = "poetry install"
@@ -26,7 +26,7 @@ poetry install
 
 [tasks.update]
 run = """
-mise upgrade --bump
+mise upgrade
 pre-commit autoupdate
 pip install -U pip
 poetry update
