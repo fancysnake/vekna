@@ -53,7 +53,7 @@ GitRef = Annotated[str, AfterValidator(_nonempty_git_ref)]
 # correlating events to a cast is a transport concern, and in one process there
 # is one cast. `vekna.wire` projects these onto the socket at 0.6.0; keeping the
 # two apart is what lets either change without the other.
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RiteBegan:
     rite_id: str
     parent_id: str | None
@@ -70,7 +70,7 @@ class RiteStreamed:
 
 # `result` is JSON-shaped because 0.6.0 persists the grimoire to a durable
 # journal — a real requirement, not the transport leaking back in.
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RiteEnded:
     rite_id: str
     status: Literal["ok", "error"]
@@ -102,7 +102,7 @@ GateFn = Callable[[str], Awaitable[bool]]
 AskFn = Callable[[str, Sequence[str] | None], Awaitable[str]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CodingCall:
     prompt: str
     model: str | None
@@ -172,7 +172,7 @@ class Done:
 # `source` is the decorated function's own source text, captured at definition
 # time so `rituals show` can read the step graph off it. None when the function
 # was built dynamically and has no source to read.
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
     run: Callable[[BaseModel | None], Awaitable["Transition"]]
@@ -196,7 +196,7 @@ class NoComponents(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Ritual:
     name: str
     components: type[BaseModel]

@@ -203,7 +203,7 @@ class RiteOutcome:
     result: JsonValue | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RiteContext:
     grimoire: Grimoire
     channel: Channel
