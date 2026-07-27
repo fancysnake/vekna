@@ -23,9 +23,11 @@ with it.
   is already there. Exceeding either raises `CastBudgetExceededError`, a sibling
   of `StepBudgetExceededError`.
 - **It arrives as a `Failure`** ([01-failure.md](01-failure.md)), so a ritual
-  can catch it at the step that overran and `done` with a partial report rather
-  than dying with the work unaccounted for. A migration babysitter that runs out
-  of budget should say which files it converted.
+  can catch it and `done` with a partial report rather than dying with the work
+  unaccounted for. A migration babysitter that runs out of budget should say
+  which files it converted. The overrun surfaces at the *next* step boundary,
+  not inside the step that spent the budget — so the `Failure` reaches the step
+  that was about to start, carrying the payload it was entered with.
 - **Read at step boundaries.** Determinism lives at the step boundary, so that
   is where the meter reads: on entry to each step, before the input validation.
   A single rite that overruns the whole budget by itself is

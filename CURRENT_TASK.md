@@ -38,6 +38,36 @@ Gates after each step: 167 tests, 31 import-linter contracts, pylint 10.00,
 mypy clean, vulture clean. The suite was also run under Python 3.11 from a
 throwaway venv, since the 3.11 bug in step 1 was invisible on 3.14.
 
+## Fixed in review, after step 7
+
+The review pass landed as one commit per thread, each green on its own:
+
+| Fix | Commit |
+| --- | --- |
+| the lexicon's dataclasses take their fields by keyword | `02d79c2` |
+| a str assistant reply streams instead of vanishing | `dda6eb6` |
+| a trailing flag with no value names the mistake | `3cf10a4` |
+| the install-hint test registers the hint it asserts on | `1d56d80` |
+| the shipped rituals hardened against what casting found | `40eaf3b` |
+| tests: assert the timing, cover the tail, drop the docstring | `a4fb978` |
+| three tingle metrics that cannot fire here, dropped | `8d30848` |
+
+The last Open item below is closed by the fourth. `mise run unittest` alone was
+red while `mise run test` was green:
+`test_coding.py::test_missing_focus_raises_with_install_hint` inherited the
+install hint from whichever integration test had last run `_load_folios()`, so
+it asserted on registration it never made. The test calls `register()` itself
+now. The reason it could hide is that `MediumRegistry.reset()` cleared `_foci`
+and left `_hints` and `_prompts` standing, so a reset between tests was a third
+of a reset; it clears all three now, and `reset_foci` is `reset_registry` to
+match what it does. Verified by pulling the `register()` call back out: the full
+suite fails on it now, where before only the unit suite did.
+
+Two of the others were bugs a user would have hit — a string-shaped assistant
+reply dropped from the stream, and `--text` with no value silently setting the
+field empty. Both had passing tests around them; neither test had been given
+the shape that fails.
+
 ## Decisions
 
 1. **Concurrency lives in a step body, not in the engine.** `asyncio.TaskGroup`
@@ -138,8 +168,8 @@ in `per-file-ignores` for `tests/**`. Removing the comment makes ruff report
    `cast -p`. `review`'s agent step and `triage`'s `fix`/`file` arms have not.
 4. **0.6.0 owes the `RiteEvent → WireMessage` projection.** `vekna.wire` stays
    dormant until then — zero importers in `src/`, by design.
-5. **Deferred, all deliberate:** `_parse_flags` accepts a trailing flag with no
-   value; `Grimoire._events` grows unbounded and only tests read it;
+5. **Deferred, all deliberate:** `Grimoire._events` grows unbounded and only
+   tests read it;
    `test_probe.py` binds a real unix socket under `tests/unit/`;
    `_validate_output` catches `(ValidationError, ValueError)` where the first
    subclasses the second; `probe_daemon`'s discarded result and the empty
@@ -148,6 +178,39 @@ in `per-file-ignores` for `tests/**`. Removing the comment makes ruff report
    is `Callable[[BaseModel], Awaitable[Transition]]`, which no concrete step
    satisfies. A `TypeVar` bound to `BaseModel` would fix the common case; a
    union-payload step is harder. Until then, `rituals.py` stays out of mypy.
+7. **Nothing bounds a running cast's memory or time** — four sites, one theme,
+   and the theme is Hand's. Parked together rather than patched one at a time:
+   - `folio/shell/_links.py` `run_bash` takes no timeout, accumulates `out` and
+     `err` without a cap, and reaps the child only on the success path — a
+     cancelled cast leaves the subprocess running. Wants
+     [`docs/hand/03-budgets.md`](docs/hand/03-budgets.md) and
+     [`02-timeout-race.md`](docs/hand/02-timeout-race.md) to land first, since
+     a timeout that is not the cancellation mechanism is a second one.
+   - `lexicon/_links/standalone.py` buffers a rite's whole output while a
+     sibling is live (`_emit`, no cap) and never drops the `_Rite` record after
+     `_ended`. Long casts grow by a record per rite; a noisy sibling grows
+     faster. Capping the buffer needs a truncation marker the sink can render,
+     which is the same decision as decision 3.
+   - `wire/_links.py` `read_frames` iterates the `StreamReader` by line, so a
+     frame past its limit raises and unwinds the stream — the exact failure
+     `folio/shell/_links.py` documents having designed away. Dormant until
+     0.6.0 (Remaining 4), and the projection should not land on top of it.
+8. **Nothing bounds *where* a read-only agent may read.** `triage` feeds a
+   GitHub issue body — written by anyone, on a public repo — to an agent
+   holding `Read`/`Grep`/`Glob` under `dontAsk`. The prompt now fences that
+   text as untrusted and tells the agent to stay inside the repository, which
+   is the cheap half. The other half is a real boundary: an allowlist that
+   names tools says nothing about paths, so `Read` still reaches `~/.ssh` or a
+   sibling checkout if it is talked into it. That belongs in the folio as a
+   root-scoping option on `ClaudeOptions`, not in every author's prompt — and
+   it wants the same design pass as the bounds in Remaining 7.
+9. **Unit tests drive mills through the real `StandaloneRenderer`.**
+   `test_engine`, `test_medium`, `test_coding` and `test_flow` use it as the
+   `Channel` for `run_cast`, so a mills test depends on links-layer formatting
+   and a threaded `readline`. `test_renderer.py` is *not* this — a renderer
+   formatting to a supplied stream is the injected-IO case the testing rules
+   allow. The fix is one small `Channel` double shared by the four; low value
+   until something in the renderer actually breaks one of them.
 
 ## Notes
 

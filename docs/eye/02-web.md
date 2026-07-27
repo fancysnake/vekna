@@ -6,8 +6,8 @@ the reborn roadmap.)
 See [`../reborn/00-common.md`](../reborn/00-common.md) and
 [`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same events,
 different surface. Another bus consumer — no engine changes. The per-lich page
-is [03-lich-web.md](03-lich-web.md); the auth question is settled there, since
-that is the surface that would need it.
+is [03-lich-web.md](03-lich-web.md), which owns the auth question — still open
+there, since that is the surface that would need it.
 
 ## Goal
 
@@ -22,8 +22,11 @@ cut) fielding decides.
   actionable.
 - Second cut, same release: decide buttons wired to the same `resolve()`
   mechanism as CLI/TUI.
-- Auth: localhost-only; short-lived token in the URL for `0.0.0.0` use (off by
-  default).
+- Auth: localhost-only, and that is the whole story here. Anything reachable
+  beyond loopback is **unresolved** — see below — so `0.0.0.0` does not ship
+  until it is settled. Not a URL token: a token in the URL leaks through
+  browser history, server logs, copied links and referrers, so whatever the
+  answer turns out to be, it carries in a header or a cookie.
 
 ## Scope
 

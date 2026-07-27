@@ -57,9 +57,10 @@ rituals that would trip them are written.
   rituals can be written naturally rather than around a bug.
 - **`merge_ready` reports; it does not push.** No ritual in this file performs
   an irreversible git action.
-- **Suppression count does not grow.** Step 1 relocates the existing
-  `# type: ignore [misc]` from `component_flags` into the helper that earns it;
-  10 before, 10 after.
+- **Suppression count does not grow.** 9 in `src/` before Step 1, 9 after. The
+  one in `component_flags` stays there rather than moving into `_type_name`:
+  `field.annotation` is what mypy sees as `Any`, so the suppression belongs at
+  the read, and the helper takes `object` and needs none of its own.
 - **The `typing.Optional[X]` spelling stays unsupported**, matching
   `_is_model_union`, which already accepts only `X | Y`.
 
@@ -70,9 +71,9 @@ rituals that would trip them are written.
 - `_mills/dispatch.py` — a `_type_name(annotation: object) -> str` helper.
   A `UnionType` drops `NoneType` and joins the rest with `|`, so `str | None`
   reads `<str>` and `File | None` reads `<Path>`; anything else falls back to
-  `__name__` via one `getattr` laundered through `name: object`, which is where
-  today's ignore moves; a missing name stays `value`. No `get_origin` — its
-  return is `Any` and would cost a second suppression.
+  `__name__` via one `getattr` laundered through `name: object`, so the helper
+  earns no suppression of its own; a missing name stays `value`. No
+  `get_origin` — its return is `Any` and would cost a second suppression.
 - `tests/unit/lexicon/test_step.py` — a `TestComponentFlags` class: optional
   union, multi-member union, plain type, generic alias, no annotation.
 - `tests/integration/cli/test_rituals.py` — the fixture ritual gains an

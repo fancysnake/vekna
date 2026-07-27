@@ -50,8 +50,8 @@ Four packages:
 - `wire` — the daemon protocol's DTOs and framing. Imports nothing.
 - `inits` — the click entry point.
 
-Within a package, GLIMPSE layering (outermost → innermost):
-`gates → links → mills → specs → pacts`
+Within a package, GLIMPSE layering names the roles (outermost → innermost:
+`gates → links → mills → specs → pacts`):
 
 - `gates` — CLIs, APIs, entry points
 - `links` — adapters that reach the outside (processes, sockets, filesystem)
@@ -59,6 +59,11 @@ Within a package, GLIMPSE layering (outermost → innermost):
 - `specs` — business invariants: pure constants, no IO, consumed only by mills
 - `pacts` — protocols, DTOs, aggregates
 - `inits` — DI, top of the stack, imported by nothing
+
+That arrow is the role ordering, **not** the import graph, which is stricter:
+`gates` and `links` may import only `pacts`, and `links` and `mills` are peers
+that may not import each other — `inits` joins them. `docs/architecture.md` has
+the matrix, and `import-linter` is what actually decides.
 
 Import boundaries enforced by `import-linter` (`pyproject.toml`). Full layer
 map, layout, patterns, and drift flags:

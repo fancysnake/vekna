@@ -73,9 +73,11 @@ Cross-cast graphs — one graph is one ritual.
 
 ## Acceptance
 
-- A step whose `goto` target is computed appears in `rituals show` when
-  `goes_to` is declared, and does not when it is inferred — and the output says
-  which case it is.
+- A step whose `goto` target is written literally in the source appears in
+  `rituals show` either way — that is today's inference, and it keeps working.
+  A step whose target is *computed* appears only when `goes_to` declares it,
+  since no source-text reading can find it — and the output says, per step,
+  whether its edges are declared or inferred.
 - A `goto` to a step not in `goes_to` raises, naming both steps.
 - The TUI draws the graph, lights the walked path, and marks the current step;
   a loop shows its visit count.

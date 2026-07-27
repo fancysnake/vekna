@@ -105,8 +105,8 @@ failure is not another's, and the daemon already surfaces both.
   `StepBudgetExceededError`, not by hanging.
 - A step failing while holding a lock releases it; the daemon shows the lock
   free before it shows the failure.
-- A failure inside the recovery step itself aborts the cast rather than looping
-  into itself.
+- A failure inside the recovery step itself routes to *its* `on_error` if it
+  declares one, and otherwise aborts the cast — never an implicit self-catch.
 - `rituals show` prints the `on_error` edge; a recovery step reachable only that
   way is not reported as unreachable.
 - `mise run check` and `mise run test` pass.

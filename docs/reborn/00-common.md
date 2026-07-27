@@ -297,8 +297,10 @@ author's to write.)
 
 **Output direction — deferred.** "Inputs and outputs are both Components on one
 interface" is unbuilt, and reads badly against the word: an output is not
-something the ritual needed in order to run. `done(result)` takes any value and
-a cast returns it unvalidated. What does ship is an output shape declared at
+something the ritual needed in order to run. `done(result)` takes a pydantic
+model or nothing — checked as the transition is built, like every other
+boundary — but the ritual declares no output *type*, so nothing says which
+model a given ritual ends with. What does ship is an output shape declared at
 the medium call site, not baked into Medium variants:
 
 ```python
