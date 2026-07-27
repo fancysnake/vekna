@@ -293,7 +293,8 @@ author's to write.)
 - `Directory` — existing path; same.
 - `Text` — string, `multiline=True/False`. `--text=-` reads stdin; multiline opens `$EDITOR`.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
-- `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value).
+- `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value),
+  which is Hand's — [`../hand/06-process.md`](../hand/06-process.md).
 
 **Output direction — deferred.** "Inputs and outputs are both Components on one
 interface" is unbuilt, and reads badly against the word: an output is not

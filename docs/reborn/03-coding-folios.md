@@ -25,15 +25,19 @@ Non-deterministic inside a step, deterministic between them.
   await coding(
       prompt,
       output=SomeModel,               # validated via TypeAdapter; failure raises
-      opts=CodingOpts(model, system, cwd),
-      gate_tools=["Bash"],            # opt in to a decide round-trip per tool
+      opts=CodingOpts(
+          model, system, cwd,
+          gate_tools=["Bash"],        # opt in to a decide round-trip per tool
+          session="new",              # which thread of memory this call is on
+      ),
       focus_options=ClaudeOptions(),  # Focus-specific knobs
   )
   ```
 
-  The portable knobs bundle into `CodingOpts` rather than spreading across the
-  signature (ruff PLR0913 stays strict). Default return is `CodingResult`
-  (text + telemetry); `output=T` returns `T`.
+  Every portable knob bundles into `CodingOpts` rather than spreading across the
+  signature (ruff PLR0913 stays strict) — portable meaning it says the same thing
+  whichever Focus answers. Default return is `CodingResult` (text + telemetry);
+  `output=T` returns `T`.
 - `vekna.folio.coding_claude` — `ClaudeCodingFocus` implementing
   `CodingFocusProtocol` via `claude-agent-sdk`, a plain runtime dependency.
   `_links.py` is the only place importing the SDK, and it matches the SDK's
@@ -57,17 +61,16 @@ Non-deterministic inside a step, deterministic between them.
   ritual with the flags its Components take; `show` adds `max_steps`, the
   Component flags, and a step graph.
 
-## Session continuity is the author's — follow-on (`0.4.0`)
+## Session continuity is the author's
 
 Two `coding` rites in one cast either share the agent's context or they do not,
-and today that is an implementation detail of the Focus. It should be a
-declaration at the call site, because the right answer differs per ritual and
-the wrong one is invisible:
+and that used to be an implementation detail of the Focus. It is a declaration
+now, because the right answer differs per ritual and the wrong one is invisible:
 
 ```python
-await coding(prompt=..., session="new")        # fresh context
-await coding(prompt=..., session="continue")   # the cast's running session
-await coding(prompt=..., session="lint-loop")  # a named session, resumed by name
+CodingOpts(session="new")        # fresh context
+CodingOpts(session="continue")   # the cast's running session
+CodingOpts(session="lint-loop")  # a named session, resumed by name
 ```
 
 A retry after a failed attempt usually wants `continue` — the agent remembering
@@ -82,15 +85,35 @@ SDK session when re-entering an interrupted rite is unaffected — that is the
 
 Named sessions give a loop its own thread of memory without pinning the whole
 cast to one context: a lint-fix loop remembers its own attempts while a review
-rite in the same cast starts clean.
+rite in the same cast starts clean. `merge_ready`'s `repair` step is the shipped
+example.
 
 The grimoire records which session a rite used, so the journal, the daemon and
 the Eye can all show it — and replay can reproduce it.
 
+Three things the implementation settled that the sketch above left open:
+
+- **`continue` is the last session *any* `coding` rite produced**, not the last
+  `continue` call. The motivating case — a retry that remembers what it tried —
+  follows a first attempt written as a plain `coding(...)`, which under the
+  default records no thread of its own. Reading only its own kind would start
+  that retry fresh while looking like it resumed.
+- **It rides `CodingOpts`, not its own parameter.** It is a portable knob like
+  `model` and `cwd`, and a sixth parameter is one more than PLR0913 allows. The
+  cost is that a `CodingOpts` shared between two calls puts both on one thread —
+  build a fresh one per call when the thread differs.
+- **Two concurrent `coding` rites both move "the last session".** A step body
+  running two mediums under a `TaskGroup` leaves `continue` after it
+  last-writer-wins. Named threads are unaffected, and a name is the answer when
+  it matters.
+
 ## Scope
 
 - `vekna.folio.coding/{_pacts,_mills}.py` — `CodingOpts`, `CodingResult`,
-  `CodingOutputError` and the Medium itself.
+  `Session`, `CodingOutputError`, `CodingSessionError` and the Medium itself.
+- `SessionBook` on the lexicon's `RiteContext` — one per cast, holding the
+  named threads and the last id any call recorded. It only remembers; which
+  name a call means is the medium's vocabulary.
 - `vekna.folio.coding_claude/{_pacts,_links}.py` + `register()`.
 - Medium↔Focus boundary types (`CodingCall`, `FocusReply`, `GateFn`, `AskFn`,
   `CodingFocusProtocol`) live in `vekna.lexicon`, so folio⊥folio stays absolute
@@ -108,7 +131,8 @@ the Eye can all show it — and replay can reproduce it.
 
 ## Out of scope
 
-TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is v0.4.0.)
+TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
+[`../hand/06-process.md`](../hand/06-process.md).)
 
 ## Acceptance
 
