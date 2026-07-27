@@ -42,8 +42,11 @@ class FakeFocus:
         deltas: tuple[str, ...] = (),
         gate_tools: tuple[str, ...] = (),
         questions: tuple[tuple[str, tuple[str, ...] | None], ...] = (),
+        session_id: str | None = "s1",
     ) -> None:
-        self._reply = FocusReply(text=text, session_id="s1", num_turns=2, cost_usd=0.5)
+        self._reply = FocusReply(
+            text=text, session_id=session_id, num_turns=2, cost_usd=0.5
+        )
         self._deltas = deltas
         self._gate_tools = gate_tools
         self._questions = questions
@@ -53,7 +56,9 @@ class FakeFocus:
 
     # What a real focus does: a call that resumes stays on its session, and one
     # that does not is handed a new id. `s1`, `s2`, `s3` by arrival.
-    def _session_id(self, call) -> str:
+    def _session_id(self, call) -> str | None:
+        if self._reply.session_id is None:
+            return None
         return call.resume if call.resume is not None else f"s{len(self.calls)}"
 
     async def run(self, call, *, on_delta, gate, ask):
@@ -312,6 +317,35 @@ class TestSessionDeclaration:
         # The documented consequence of "the cast's running session": a named
         # rite moves it too, so `continue` after one resumes that name's id.
         assert cls._resumes("repair", Session.CONTINUE) == [None, "s1"]
+
+    @staticmethod
+    def test_a_focus_that_reports_no_session_records_nothing():
+        # A reply without a session_id leaves the book untouched, so the
+        # `continue` after it starts fresh instead of resuming some older call.
+        focus = FakeFocus(session_id=None)
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", opts=CodingOpts(session="repair"))
+            await coding("fix it again", opts=CodingOpts(session=Session.CONTINUE))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _, grimoire = _cast(r)
+
+        assert [call.resume for call in focus.calls] == [None, None]
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "repair",
+            "session_id": None,
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }
 
     @staticmethod
     def test_a_blank_thread_name_is_refused():
