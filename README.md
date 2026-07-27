@@ -126,7 +126,10 @@ from vekna.folio.coding_claude import ClaudeOptions
 await coding("refactor this", opts=CodingOpts(model="opus", cwd="./svc"))
 
 # Ask before the agent runs a tool
-await coding("clean the build", gate_tools=["Bash"])
+await coding("clean the build", opts=CodingOpts(gate_tools=["Bash"]))
+
+# Which thread of agent memory this call is on
+await coding("try again", opts=CodingOpts(session="continue"))
 
 # Typed output, validated on return
 class Plan(BaseModel):
@@ -147,6 +150,29 @@ files you gave it `Read` for.
 
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
 tool; the cast blocks until you answer.
+
+### Sessions
+
+Two `coding` calls in one cast either share the agent's context or they do not,
+and `session` is where you say which:
+
+| `session=` | what the call gets |
+| --- | --- |
+| `"new"` (default) | a fresh context |
+| `"continue"` | the cast's last agent call, carried on |
+| any other string | a named thread, resumed by that name |
+
+A retry wants `continue` or a name — an agent remembering what it already tried
+is the whole value. A review step wants `new`: an agent that helped write the
+code is not a reviewer of it, and sharing silently makes that step worthless
+while looking like it ran. The default is `new` because a step is a task
+boundary, and carrying context across one by default contradicts what the
+boundary is for.
+
+Prefer a name over `continue` for a loop. They are the same thing while a
+ritual has one agent call, and stop being the same the moment it gains a
+second. One caution: `CodingOpts` is reusable and a thread is per-call, so
+build a fresh one when the thread differs.
 
 ## Architecture
 

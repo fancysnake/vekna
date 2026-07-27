@@ -7,14 +7,27 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
+## [0.3.0] - 2026-07-27
+
 ### Added
 
 - **`coding` medium** (`vekna.folio.coding`) — hand work to an agent from
-  inside a step. Portable knobs bundle into `CodingOpts(model, system, cwd)`;
-  `output=SomeModel` validates the agent's reply and returns it typed, raising
-  `CodingOutputError` when it does not fit. Permissive by default: tool use is
-  gated only when a call passes `gate_tools=[...]`, which turns each matching
-  tool into a `decide` round-trip.
+  inside a step. Every portable knob bundles into
+  `CodingOpts(model, system, cwd, gate_tools, session)` — portable meaning it
+  says the same thing whichever Focus answers. `output=SomeModel` validates the
+  agent's reply and returns it typed, raising `CodingOutputError` when it does
+  not fit. Permissive by default: tool use is gated only when a call passes
+  `gate_tools=[...]`, which turns each matching tool into a `decide`
+  round-trip.
+- **Session continuity is the author's** — `CodingOpts(session=...)` declares
+  which thread of agent memory a call is on. `"new"` is a fresh context and the
+  default, since a step is a task boundary and carrying context across one by
+  default contradicts what the boundary is for. `"continue"` carries on from
+  the cast's last agent call, and any other string is a named thread resumed by
+  that name — `merge_ready`'s repair loop uses one, so a second attempt knows
+  what the first already tried. The medium resolves the declaration against a
+  per-cast `SessionBook` and hands the Focus a plain session id; the rite's
+  telemetry records the declaration as well as the id.
 - **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
   `_links.py` is the only module importing `claude-agent-sdk`.
 - **`ask_human`** — the agent can put a question to the operator mid-rite,
@@ -443,7 +456,8 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/fancysnake/vekna/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fancysnake/vekna/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/fancysnake/vekna/compare/v0.0.3...v0.0.4
