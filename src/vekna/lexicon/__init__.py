@@ -8,6 +8,7 @@ runtime is reached through `vekna.lexicon._inits`.
 from ._mills.dispatch import medium, ritual, step
 from ._mills.engine import (
     RiteContext,
+    SessionBook,
     current_rite,
     emit_delta,
     expect_focus,
@@ -64,6 +65,7 @@ __all__ = [
     "RitualBoundaryError",
     "RitualDefinitionError",
     "RitualError",
+    "SessionBook",
     "StandalonePromptError",
     "StepBoundaryError",
     "StepBudgetExceededError",

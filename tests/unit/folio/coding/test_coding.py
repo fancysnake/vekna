@@ -9,6 +9,8 @@ from vekna.folio.coding import (
     CodingOpts,
     CodingOutputError,
     CodingResult,
+    CodingSessionError,
+    Session,
     coding,
     register,
 )
@@ -49,6 +51,11 @@ class FakeFocus:
         self.gate_answers = []
         self.answers = []
 
+    # What a real focus does: a call that resumes stays on its session, and one
+    # that does not is handed a new id. `s1`, `s2`, `s3` by arrival.
+    def _session_id(self, call) -> str:
+        return call.resume if call.resume is not None else f"s{len(self.calls)}"
+
     async def run(self, call, *, on_delta, gate, ask):
         self.calls.append(call)
         for delta in self._deltas:
@@ -58,7 +65,7 @@ class FakeFocus:
                 self.gate_answers.append(await gate(tool))
         for question, options in self._questions:
             self.answers.append(await ask(question, options))
-        return self._reply
+        return self._reply.model_copy(update={"session_id": self._session_id(call)})
 
 
 class Answer(BaseModel):
@@ -137,6 +144,7 @@ class TestCodingMedium:
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         medium_finish = finished[0]
         assert medium_finish.result == {
+            "session": "new",
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
@@ -184,7 +192,7 @@ class TestCodingMedium:
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", gate_tools=["bash"])
+            await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
             return done(None)
 
         @ritual("r")
@@ -262,3 +270,86 @@ class TestCodingMedium:
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
+
+
+class TestSessionDeclaration:
+    @staticmethod
+    def _resumes(*declarations) -> list[str | None]:
+        # One step, one coding call per declaration, so what a call resumes is
+        # read off the focus rather than inferred from the reply.
+        focus = FakeFocus()
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            for index, session in enumerate(declarations):
+                await coding(f"call {index}", opts=CodingOpts(session=session))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r)
+        return [call.resume for call in focus.calls]
+
+    @classmethod
+    def test_the_default_starts_a_fresh_session_every_time(cls):
+        assert cls._resumes(Session.NEW, Session.NEW) == [None, None]
+
+    @classmethod
+    @pytest.mark.parametrize("spelling", [Session.CONTINUE, "continue"])
+    def test_continue_picks_up_the_session_before_it(cls, spelling):
+        assert cls._resumes(Session.NEW, spelling) == [None, "s1"]
+
+    @classmethod
+    def test_two_named_threads_do_not_read_each_other(cls):
+        assert cls._resumes("repair", "review", "repair") == [None, None, "s1"]
+
+    @classmethod
+    def test_continue_follows_the_last_call_whatever_thread_it_was_on(cls):
+        # The documented consequence of "the cast's running session": a named
+        # rite moves it too, so `continue` after one resumes that name's id.
+        assert cls._resumes("repair", Session.CONTINUE) == [None, "s1"]
+
+    @staticmethod
+    def test_a_blank_thread_name_is_refused():
+        register_focus("coding", FakeFocus())
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", opts=CodingOpts(session="  "))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        with pytest.raises(CodingSessionError, match="not a blank one"):
+            _cast(r)
+
+    @staticmethod
+    def test_telemetry_names_the_thread_the_author_declared():
+        register_focus("coding", FakeFocus())
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", opts=CodingOpts(session="repair"))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _, grimoire = _cast(r)
+
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "repair",
+            "session_id": "s1",
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }

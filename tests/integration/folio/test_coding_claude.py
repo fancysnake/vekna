@@ -44,7 +44,9 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
 _RITUALS = _ritual_source(name="write_haiku", call="coding(task.text)")
 
 _GATED_RITUALS = _ritual_source(
-    name="gated", call='coding(task.text, gate_tools=["Bash"])'
+    name="gated",
+    call='coding(task.text, opts=CodingOpts(gate_tools=["Bash"]))',
+    imports=", CodingOpts",
 )
 
 _TYPED_RITUALS = textwrap.dedent("""

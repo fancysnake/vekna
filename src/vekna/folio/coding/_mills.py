@@ -8,6 +8,7 @@ from vekna.lexicon import (
     Channel,
     CodingCall,
     GateFn,
+    SessionBook,
     StringOutput,
     current_rite,
     emit_delta,
@@ -16,7 +17,13 @@ from vekna.lexicon import (
     resolve_focus,
 )
 
-from ._pacts import CodingOpts, CodingOutputError, CodingResult
+from ._pacts import (
+    CodingOpts,
+    CodingOutputError,
+    CodingResult,
+    CodingSessionError,
+    Session,
+)
 
 if TYPE_CHECKING:
     from vekna.lexicon import CodingFocusProtocol
@@ -51,6 +58,37 @@ def _make_ask(channel: Channel) -> AskFn:
     return ask
 
 
+# `new` is the absence of a thread, so it resolves to nothing and starts fresh.
+# `continue` is the last session *any* coding rite produced, not the last
+# `continue` call: a retry that wants the agent to remember what it already tried
+# follows a first attempt written as a plain `coding(...)`, which under the
+# default records no thread of its own. Reading only its own kind would start
+# that retry fresh while looking like it resumed — the failure the declaration
+# exists to make visible.
+def _resume_id(*, book: SessionBook, session: str) -> str | None:
+    if session == Session.NEW:
+        return None
+    if session == Session.CONTINUE:
+        return book.latest
+    return book.named(session)
+
+
+def _remember(*, book: SessionBook, session: str, session_id: str | None) -> None:
+    if session_id is None:
+        return
+    reserved = session in {Session.NEW, Session.CONTINUE}
+    book.record(session_id, name=None if reserved else session)
+
+
+# An unnamed thread is a typo that would otherwise work: `session=""` resolves to
+# nothing, records under the empty string, and reads as a fresh session forever.
+def _checked_session(session: Session | str) -> str:
+    if not str(session).strip():
+        msg = "session takes 'new', 'continue', or a thread name — not a blank one"
+        raise CodingSessionError(msg)
+    return str(session)
+
+
 def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
     adapter: TypeAdapter[_OutputT] = TypeAdapter(output)
     try:
@@ -65,7 +103,6 @@ async def coding(
     prompt: str,
     *,
     opts: CodingOpts | None = None,
-    gate_tools: Sequence[str] | None = None,
     focus_options: BaseModel | None = None,
 ) -> CodingResult: ...
 
@@ -76,7 +113,6 @@ async def coding(
     *,
     output: type[_OutputT],
     opts: CodingOpts | None = None,
-    gate_tools: Sequence[str] | None = None,
     focus_options: BaseModel | None = None,
 ) -> _OutputT: ...
 
@@ -87,15 +123,15 @@ async def coding(
     *,
     output: type[_OutputT] | None = None,
     opts: CodingOpts | None = None,
-    gate_tools: Sequence[str] | None = None,
     focus_options: BaseModel | None = None,
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
+    resolved = opts if opts is not None else CodingOpts()
+    thread = _checked_session(resolved.session)
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = TypeAdapter(output).json_schema()
-    resolved = opts if opts is not None else CodingOpts()
     call = CodingCall(
         prompt=prompt,
         model=resolved.model,
@@ -103,14 +139,19 @@ async def coding(
         cwd=resolved.cwd,
         output_schema=schema,
         focus_options=focus_options,
+        resume=_resume_id(book=context.sessions, session=thread),
     )
     reply = await focus.run(
         call,
         on_delta=emit_delta,
-        gate=_make_gate(context.channel, gate_tools),
+        gate=_make_gate(context.channel, resolved.gate_tools),
         ask=_make_ask(context.channel),
     )
+    _remember(book=context.sessions, session=thread, session_id=reply.session_id)
+    # The declaration, not just the id: whether the author meant this rite to
+    # carry context is the thing the journal cannot read off `session_id`.
     telemetry: dict[str, JsonValue] = {
+        "session": thread,
         "session_id": reply.session_id,
         "num_turns": reply.num_turns,
         "cost_usd": reply.cost_usd,

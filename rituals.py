@@ -496,6 +496,7 @@ async def route(verdict: Verdict) -> Transition:
     # The agent may run commands, and every one of them is gated: `gate_tools`
     # puts each Bash call to you before it happens.
     await coding(
-        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}", gate_tools=["Bash"]
+        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}",
+        opts=CodingOpts(gate_tools=["Bash"]),
     )
     return done(triaged)
