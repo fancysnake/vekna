@@ -1,0 +1,168 @@
+[ranges.python]
+include = ["src/**/*.py", "tests/**/*.py"]
+default = true
+
+[ranges.config]
+include = ["pyproject.toml"]
+
+[ranges.python-src]
+include = ["src/**/*.py"]
+
+[ranges.python-tests]
+include = ["tests/**/*.py"]
+
+[ranges.python-tests-int]
+include = ["tests/integration/**/*.py"]
+
+# A branch may take on debt in one metric if it pays off as much elsewhere.
+
+[check]
+policy = "sum"
+
+# Formatting
+
+[[metrics]]
+name = "fmt-comment"
+type = "regex_count"
+group = "formatting"
+pattern = '#\s*fmt'
+
+[[metrics]]
+name = "taplo-comment"
+type = "regex_count"
+group = "formatting"
+pattern = '#\s*taplo:'
+
+[[metrics]]
+name = "codespell-comment"
+type = "regex_count"
+group = "formatting"
+pattern = '#\s*codespell:ignore'
+
+[[metrics]]
+name = "noqa-comment"
+type = "regex_count"
+group = "linting"
+pattern = '#\s*noqa:'
+
+[[metrics]]
+name = "ruff-comment"
+type = "regex_count"
+group = "linting"
+pattern = '#\s*ruff:'
+
+[[metrics]]
+name = "ruff-ignores"
+type = "toml_list_length"
+group = "linting"
+key = "tool.ruff.lint.ignore"
+
+
+[[metrics]]
+name = "ruff-per-file-ignores"
+type = "toml_list_length"
+group = "linting"
+key = "tool.ruff.lint.per-file-ignores"
+
+
+[[metrics]]
+name = "pylint-comment"
+type = "regex_count"
+group = "linting"
+pattern = '#\s*pylint:'
+
+[[metrics]]
+name = "pylint-disables"
+type = "ini_list_length"
+group = "linting"
+file = ".pylintrc"
+section = "MESSAGES CONTROL"
+option = "disable"
+
+# testing
+
+[[metrics]]
+name = "pragma-comment"
+type = "regex_count"
+group = "testing"
+pattern = '#\s*pragma'
+ranges = ["python-tests"]
+
+
+[[metrics]]
+name = "mock-ANY"
+type = "regex_count"
+group = "testing"
+pattern = '^(?!.*(?:\b|_)(view|form|import)\b).*\bANY\b'
+flags = ["MULTILINE"]
+ranges = ["python-tests"]
+
+
+[[metrics]]
+name = "pytest-skip"
+type = "regex_count"
+group = "testing"
+pattern = 'mark\.skip'
+ranges = ["python-tests"]
+
+
+[[metrics]]
+name = "pytest-xfail"
+type = "regex_count"
+group = "testing"
+pattern = 'mark\.xfail'
+ranges = ["python-tests"]
+
+
+# typing
+
+[[metrics]]
+name = "type-ignores"
+type = "regex_count"
+group = "typing"
+pattern = '#\s*type:\s*ignore'
+ranges = ["python-src"]
+
+[[metrics]]
+name = "mypy-overrides"
+type = "toml_table_array"
+group = "typing"
+key = "tool.mypy.overrides"
+label = "module"
+
+[[metrics]]
+name = "type-any"
+type = "symbol_uses"
+group = "typing"
+symbol = 'Any'
+ranges = ["python-src"]
+
+[[metrics]]
+name = "type-object"
+type = "symbol_uses"
+group = "typing"
+symbol = "object"
+ranges = ["python-src"]
+
+[[metrics]]
+name = "type-cast"
+type = "symbol_uses"
+group = "typing"
+symbol = 'cast'
+ranges = ["python-src"]
+
+[[metrics]]
+name = "mypy-strictness-holes"
+type = "regex_count"
+group = "typing"
+pattern = 'disallow_\w+ = false'
+ranges = ["config"]
+
+# refactoring
+
+[[metrics]]
+name = "todo-comments"
+type = "regex_count"
+group = "refactoring"
+pattern = '#\s*(TODO|FIXME|XXX|HACK)'
+ranges = ["python-src"]

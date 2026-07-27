@@ -1,0 +1,311 @@
+import asyncio
+import io
+from datetime import UTC, datetime
+
+import pytest
+from pydantic import BaseModel
+
+from vekna.lexicon import (
+    Goto,
+    NoComponents,
+    RitualBoundaryError,
+    RitualDefinitionError,
+    RitualError,
+    StepBudgetExceededError,
+    Transition,
+    done,
+    goto,
+    medium,
+    ritual,
+    step,
+)
+from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, run_cast
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+
+
+def _fixed_clock() -> datetime:
+    return datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _channel() -> StandaloneRenderer:
+    return StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+
+
+class Tick(BaseModel):
+    left: int
+
+
+class Start(BaseModel):
+    start: int
+
+
+@step
+async def tick(state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    if not state.left:
+        return done(state)
+    return goto(tick, Tick(left=state.left - 1))
+
+
+@ritual("countdown")
+async def countdown(components: Start) -> Transition:
+    await asyncio.sleep(0)
+    return goto(tick, Tick(left=components.start))
+
+
+@step
+async def spin(state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    return goto(spin, state)
+
+
+@ritual("spinner", max_steps=5)
+async def spinner(components: Start) -> Transition:
+    await asyncio.sleep(0)
+    return goto(spin, Tick(left=components.start))
+
+
+@step
+async def finish(state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    return done(state)
+
+
+_SPRINT_START = 7
+
+
+@ritual("sprint", max_steps=1)
+async def sprint(components: Start) -> Transition:
+    await asyncio.sleep(0)
+    return goto(finish, Tick(left=components.start))
+
+
+class BoomError(RuntimeError):
+    pass
+
+
+@step
+async def explode(_state: Tick) -> Transition:
+    await asyncio.sleep(0)
+    raise BoomError
+
+
+@ritual("detonate")
+async def detonate(_: NoComponents) -> Transition:
+    await asyncio.sleep(0)
+    return goto(explode, Tick(left=0))
+
+
+@medium
+async def combust() -> None:
+    await asyncio.sleep(0)
+    raise BoomError
+
+
+@step
+async def light_fuse(_state: Tick) -> Transition:
+    await combust()
+    return done(None)
+
+
+@ritual("smoulder")
+async def smoulder(_: NoComponents) -> Transition:
+    await asyncio.sleep(0)
+    return goto(light_fuse, Tick(left=0))
+
+
+class TestRitual:
+    @staticmethod
+    def test_takes_the_declared_components_model():
+        assert countdown.components is Start
+
+    @staticmethod
+    def test_fires_opening_transition_to_first_step():
+        opening = asyncio.run(countdown.run(countdown.components(start=2)))
+
+        assert isinstance(opening, Goto)
+        assert opening.target is tick
+
+    @staticmethod
+    def test_components_of_another_ritual_do_not_pass_the_boundary():
+        with pytest.raises(RitualBoundaryError, match="expected Start, got Tick"):
+            asyncio.run(countdown.run(Tick(left=2)))
+
+
+class TestRitualDefinition:
+    @staticmethod
+    def test_a_ritual_without_components_is_rejected():
+        with pytest.raises(RitualDefinitionError, match="exactly one"):
+
+            @ritual("bare")
+            async def bare() -> Transition:
+                await asyncio.sleep(0)
+                return done()
+
+    @staticmethod
+    def test_a_ritual_with_two_parameters_is_rejected():
+        with pytest.raises(RitualDefinitionError, match="exactly one"):
+
+            @ritual("pair")
+            async def pair(components: Start, extra: Tick) -> Transition:
+                await asyncio.sleep(0)
+                return done(components.start + extra.left)
+
+    @staticmethod
+    def test_components_must_be_a_pydantic_model():
+        with pytest.raises(RitualDefinitionError, match="pydantic model"):
+
+            @ritual("loose")
+            async def loose(bound: int) -> Transition:
+                await asyncio.sleep(0)
+                return done(bound)
+
+
+class TestRunCast:
+    @staticmethod
+    def test_trampolines_until_done():
+        start = 3
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        result = asyncio.run(
+            run_cast(
+                ritual=countdown,
+                components=countdown.components(start=start),
+                grimoire=grimoire,
+                channel=_channel(),
+            )
+        )
+
+        assert result == Tick(left=0)
+        started = [event for event in grimoire.events if isinstance(event, RiteBegan)]
+        assert len(started) == start + 1
+        assert {event.name for event in started} == {"tick"}
+
+    @staticmethod
+    def test_returns_result_of_the_last_affordable_step():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        result = asyncio.run(
+            run_cast(
+                ritual=sprint,
+                components=sprint.components(start=_SPRINT_START),
+                grimoire=grimoire,
+                channel=_channel(),
+            )
+        )
+
+        assert result == Tick(left=_SPRINT_START)
+
+    @staticmethod
+    def test_budget_exceeded_raises():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        with pytest.raises(StepBudgetExceededError):
+            asyncio.run(
+                run_cast(
+                    ritual=spinner,
+                    components=spinner.components(start=1),
+                    grimoire=grimoire,
+                    channel=_channel(),
+                )
+            )
+
+
+class TestFailedRiteIsJournaled:
+    @staticmethod
+    def _cast(the_ritual) -> Grimoire:
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        with pytest.raises(BoomError):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=grimoire,
+                    channel=_channel(),
+                )
+            )
+        return grimoire
+
+    @staticmethod
+    def _finished(grimoire: Grimoire) -> list[RiteEnded]:
+        return [e for e in grimoire.events if isinstance(e, RiteEnded)]
+
+    @classmethod
+    def test_a_step_that_raises_still_closes_its_rite(cls):
+        finished = cls._finished(cls._cast(detonate))
+
+        assert [(e.rite_id, e.status) for e in finished] == [("r1", "error")]
+
+    @classmethod
+    def test_a_medium_that_raises_is_not_journaled_as_success(cls):
+        finished = cls._finished(cls._cast(smoulder))
+
+        # The medium closes first, then the step it brought down with it.
+        assert [(e.rite_id, e.status) for e in finished] == [
+            ("r2", "error"),
+            ("r1", "error"),
+        ]
+
+    @classmethod
+    def test_renderer_marks_a_failed_rite(cls):
+        out = io.StringIO()
+        renderer = StandaloneRenderer(out=out, inp=io.StringIO())
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=renderer.render)
+        with pytest.raises(BoomError):
+            asyncio.run(
+                run_cast(
+                    ritual=detonate,
+                    components=detonate.components(),
+                    grimoire=grimoire,
+                    channel=renderer,
+                )
+            )
+
+        assert "✗ explode" in out.getvalue()
+
+
+class TestMediumRegistry:
+    @staticmethod
+    def test_offered_prompt_comes_back():
+        registry = MediumRegistry()
+
+        async def run(_prompt: str) -> str:
+            await asyncio.sleep(0)
+            return "answered"
+
+        registry.offer_prompt("coding", run)
+
+        assert registry.prompt_runner("coding") is run
+
+    @staticmethod
+    def test_a_medium_offering_no_prompt_is_an_error():
+        registry = MediumRegistry()
+
+        with pytest.raises(RitualError, match="offers no one-shot prompt"):
+            registry.prompt_runner("coding")
+
+
+class TestGrimoire:
+    @staticmethod
+    def test_on_event_fires_live_in_order():
+        seen = []
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=seen.append)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_delta(rite_id, "working...")
+        grimoire.rite_finished(rite_id, result={"session_id": "s1"})
+
+        assert [type(event) for event in seen] == [RiteBegan, RiteStreamed, RiteEnded]
+        assert seen == grimoire.events
+
+    @staticmethod
+    def test_rite_finished_carries_result():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_finished(rite_id, result={"cost": 1})
+
+        finished = grimoire.events[-1]
+        assert isinstance(finished, RiteEnded)
+        assert finished.result == {"cost": 1}

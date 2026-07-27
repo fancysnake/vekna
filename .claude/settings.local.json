@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Skill(glimpse)"
+      "Skill(glimpse)",
+      "WebFetch(domain:eve.dev)",
+      "WebFetch(domain:barnum-circus.github.io)"
     ]
   }
 }

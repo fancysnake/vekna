@@ -1,12 +1,12 @@
 # vekna
 
-Overseer for multiple Claude Code (or any coding agent) instances running in
-tmux. One agent calls `vekna tmux notify` → tmux jumps to its pane.
+Run coding agents as **rituals**: small Python programs whose steps you
+control and whose agent calls happen inside those steps. Agents run
+permissively *within* a step; determinism lives at the step boundaries.
 
 ## Requires
 
-- Python 3.10+
-- `tmux` installed
+- Python 3.11+
 
 ## Install
 
@@ -14,140 +14,153 @@ tmux. One agent calls `vekna tmux notify` → tmux jumps to its pane.
 pip install .
 ```
 
-## Usage
+## A ritual
 
-### Starting a project session
+Put a `rituals.py` in your project:
 
-Run `vekna tmux` from any project directory:
+```python
+from typing import Annotated
+
+from pydantic import BaseModel, Field
+
+from vekna.folio.coding import coding
+from vekna.folio.shell import shell
+from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+class FixTests(BaseModel):
+    # A retry budget counts down to zero, so the CLI rejects a negative one
+    # rather than letting `--bound -1` run until the step backstop.
+    bound: Annotated[int, Field(ge=0)] = 3
+
+
+class Attempt(BaseModel):
+    left: int
+
+
+class Verdict(BaseModel):
+    outcome: str
+
+
+@step
+async def fix(state: Attempt) -> Transition:
+    result = await shell("mise run test")
+    if result.exit_code == 0:
+        return done(Verdict(outcome="green"))
+    if state.left <= 0:
+        return done(Verdict(outcome="gave up"))
+    await coding(f"The test suite fails:\n{result.stdout}\nFix it.")
+    return goto(fix, Attempt(left=state.left - 1))
+
+
+@ritual("fix_tests")
+async def fix_tests(components: FixTests) -> Transition:
+    return goto(fix, Attempt(left=components.bound))
+```
+
+Then cast it:
 
 ```bash
-cd ~/projects/myapp
-vekna tmux
+vekna cast fix_tests --bound 5
 ```
 
-This starts a background daemon (if not already running) and attaches you
-to a dedicated tmux session for that directory (`vekna-myapp-<hash>`). Open
-windows with `Ctrl-b c` and run a coding agent in each.
-
-Run `vekna tmux` from a second project in another terminal:
-
-```bash
-cd ~/projects/api
-vekna tmux
-```
-
-Both sessions share a single daemon — one socket, one process, all projects.
-
-### Switching between sessions
-
-| Keys | Action |
-|------|--------|
-| `Ctrl-b s` | Interactive session picker (all vekna sessions listed) |
-| `Ctrl-b )` / `Ctrl-b (` | Next / previous session |
-| `Ctrl-b d` | Detach — return to the terminal you launched `vekna tmux` from |
-
-After detaching, run `vekna tmux` again from the same directory to reattach.
-
-### Claude Code configuration
-
-Add a notification hook in Claude Code settings:
+Output streams live as a tree of rites — one node per step, one nested under
+it per medium call, with the agent's own output indented beneath. The last
+line is the cast's result, as JSON:
 
 ```
-echo "$CLAUDE_HOOK_DATA" | vekna tmux notify --app claude --hook Notification
+result: {"outcome":"green"}
 ```
 
-`--app` and `--hook` are required. The payload is read from stdin and the
-target pane is picked up from `$TMUX_PANE` automatically.
+## Commands
 
-### Status bar
+| Command | What it does |
+| --- | --- |
+| `vekna cast <ritual> [--<component> value …]` | Run a ritual from `rituals.py` |
+| `vekna cast --prompt "<text>"` | One-shot cast on the coding medium, no `rituals.py` needed |
+| `vekna rituals list` | Every ritual and the options it takes |
+| `vekna rituals show <ritual>` | A ritual's components and its step graph |
 
-To show pending notification counts across all sessions, add this to your
-`~/.tmux.conf`:
+## Concepts
 
-```
-set -g status-right '#(vekna tmux status-bar)'
-```
+- **Ritual** — a named program. Its components become `--options`.
+- **Component** — what a ritual needs before it can be cast, the way a spell
+  needs its material components. Typed values on the ritual's external
+  interface — `File`, `Directory`, `Text`, `Url`, `GitRef` — declared as fields
+  on one pydantic model, the ritual's only parameter.
+- **Step** — one deterministic hop. Takes a typed payload, returns `goto(...)`
+  or `done(...)`. A ritual is a trampoline over steps, bounded by `max_steps`.
+- **Transition** — what a step returns. Both carry a pydantic model or nothing,
+  checked as they are built: `goto(next_step, payload)` continues, `done(result)`
+  finishes. A step may admit several payload shapes (`Lint | Coverage`); a
+  ritual's components are one model, being one CLI interface.
+- **Medium** — what a step reaches out to: `coding` (an agent), `shell`,
+  `decide` (ask the operator). Each call opens a rite of its own. A step may
+  hold several at once — `asyncio.TaskGroup` over two `shell` calls runs both
+  and waits for both — and each still gets its own rite, so the grimoire records
+  what actually happened concurrently. Steps themselves stay sequential.
+- **Focus** — the backend behind a medium. `vekna.folio.coding_claude` is the
+  Claude Agent SDK focus for `coding`.
+- **Grimoire** — the event log of a cast: rites started, output deltas, rites
+  finished, each with its status.
 
-> **Note:** tmux runs status bar commands with a limited `PATH`. If `vekna`
-> is not installed globally (e.g. it lives in a virtualenv), use the full
-> path instead:
->
-> ```
-> set -g status-right '#(/path/to/vekna tmux status-bar)'
-> ```
->
-> Find the path with `which vekna`. To install globally, use
-> `pipx install .` from the repo root.
+## Where rituals come from
 
-Output looks like `myapp(2) api(1)` when agents in those sessions are
-waiting. The count resets when you run `vekna tmux` from that directory
-again (i.e. when you attach to the session).
+`rituals.py` in the current directory or any parent. A `.vekna.toml` (project)
+or `~/.config/vekna/config.toml` (global) can name more, resolved relative to
+the config file:
 
-### Commands
-
-| Command | Effect |
-|---------|--------|
-| `vekna` | Print help listing available command groups |
-| `vekna tmux` | Ensure daemon running, create session for current directory, attach |
-| `vekna tmux daemon` | Start the daemon explicitly (blocks; use for init systems or debugging) |
-| `vekna tmux notify --app <app> --hook <hook>` | Send a notification from the current pane; payload from stdin, pane from `$TMUX_PANE` |
-| `vekna tmux status-bar` | Print pending notification summary (empty if daemon not running) |
-
-## How it works
-
-```mermaid
-flowchart TD
-    A["agent pane\necho $CLAUDE_HOOK_DATA | vekna tmux notify --app claude --hook Notification"]
-    B["/tmp/vekna-&lt;uid&gt;.sock"]
-    C[ServerMill\ndaemon]
-    D[EventBus]
-    E[ClaudeNotificationHandler]
-    G["SelectPaneHandler\n(user idle ≥ 3s)\ntmux select-pane"]
-    H["SelectPaneHandler\n(user active &lt; 3s)\nwindow turns red"]
-
-    A -->|Unix socket| B
-    B --> C
-    C -->|"publish(claude, Notification)"| D
-    D --> E
-    E -->|"publish(vekna, SelectPane)"| G
-    E -->|"publish(vekna, SelectPane)"| H
+```toml
+[rituals]
+files = ["ops/release.py"]
+modules = ["mycompany.rites"]
 ```
 
-- One daemon owns `/tmp/vekna-<uid>.sock` and manages all sessions.
-  `vekna tmux` starts it automatically on first use via `os.fork()`.
-- `vekna tmux` sends an `EnsureSession{cwd}` request to the daemon, receives
-  back the session name, and calls `tmux attach-session` to hand control to
-  tmux.
-- `vekna tmux notify` sends a `(claude, Notification)` event to the daemon
-  socket. The daemon increments the pending count for that session and
-  publishes the event to the `EventBus`.
-- **ClaudeNotificationHandler** validates the payload and re-publishes a
-  `(vekna, SelectPane)` event carrying the pane ID.
-- **SelectPaneHandler** handles `SelectPane`:
-  - If the session has been idle for at least 3 s, calls `tmux select-pane`
-    to jump to the notifying pane immediately.
-  - Otherwise, highlights the notifying window red. A background loop
-    (`clear_marks_loop`) clears the mark once the user navigates to it.
-- `vekna tmux status-bar` sends a `(vekna, StatusBar)` request; the daemon
-  responds with a formatted summary of all sessions with pending counts.
+## Configuring the agent
 
-Session naming (`vekna-<basename>-<hash>`) lives in `src/vekna/specs/constants.py`.
+```python
+from vekna.folio.coding import CodingOpts, coding
+from vekna.folio.coding_claude import ClaudeOptions
+
+# Portable knobs
+await coding("refactor this", opts=CodingOpts(model="opus", cwd="./svc"))
+
+# Ask before the agent runs a tool
+await coding("clean the build", gate_tools=["Bash"])
+
+# Typed output, validated on return
+class Plan(BaseModel):
+    steps: int
+
+plan = await coding("plan the migration", output=Plan)
+
+# Focus-specific knobs
+await coding("survey the code", focus_options=ClaudeOptions(
+    permission_mode="dontAsk", allowed_tools=["Read", "Grep"], effort="high"
+))
+```
+
+`dontAsk` with an allowlist is how you get a read-only agent: everything
+outside the list is denied without stopping to ask you. Not `permission_mode=
+"plan"`, which executes no tools at all — an agent in plan mode cannot read the
+files you gave it `Read` for.
+
+An agent can hand a decision back to you mid-rite by calling the `ask_human`
+tool; the cast blocks until you answer.
 
 ## Architecture
 
-See [`docs/architecture.md`](docs/architecture.md).
+GLIMPSE layering, enforced by `import-linter`. See
+[`docs/architecture.md`](docs/architecture.md) and
+[`docs/reborn/`](docs/reborn/) for the release-by-release plan.
 
 ## Development
 
 ```bash
-mise run start      # dev server :8000
-mise run test       # all tests
-mise run check      # format + lint
+mise run test    # all tests
+mise run check   # format + lint + types + import contracts
 ```
 
-Tooling: black, ruff (`select = ["ALL"]`), mypy strict, import-linter,
-pytest, vulture, deptry, codespell.
+## Licence
 
-## License
-
-BSD-3-Clause. See `LICENSE`.
+BSD-3-Clause.
