@@ -151,6 +151,28 @@ class TestCast:
         assert "--start is missing a value" in capsys.readouterr().err
 
     @staticmethod
+    def test_a_trailing_flag_with_no_value_is_a_usage_error(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_DASHED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["echo", "--text"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "--text is missing a value" in capsys.readouterr().err
+
+    @staticmethod
+    def test_an_explicitly_empty_value_is_still_a_value(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_DASHED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["echo", "--text="])
+
+        assert exit_code == 0
+        assert 'result: {"text":""}' in capsys.readouterr().out
+
+    @staticmethod
     def test_a_value_starting_with_dashes_is_passed_with_equals(
         tmp_path, monkeypatch, capsys
     ):

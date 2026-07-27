@@ -250,11 +250,14 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
             value = inline
         else:
             # Without this, `--a --b` reads --b as the value of --a and never
-            # sets b at all.
-            value = next(tokens, "")
-            if value.startswith("--"):
+            # sets b at all. `None` is the sentinel because the tokens are
+            # strings: a default of "" would read a trailing `--a` as `--a=`
+            # and set the field to empty instead of naming the mistake.
+            following = next(tokens, None)
+            if following is None or following.startswith("--"):
                 msg = f"--{key} is missing a value (write --{key}=<value>)"
                 raise ValueError(msg)
+            value = following
         parsed[key.replace("-", "_")] = value
     return parsed
 
