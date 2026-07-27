@@ -35,9 +35,24 @@ and this project adheres to [Semantic Versioning].
 - **Live grimoire rendering** — `Grimoire(on_event=...)` fires on every append,
   replacing the post-hoc replay loop. Agent text and shell output both stream
   into the rite as `RiteDelta`; per-call telemetry rides `RiteFinished.result`.
-- **`rituals.py` at the repo root** — vekna's own rituals, cast on itself. It
-  ships `cover_diff`, a diff-coverage loop that measures with `shell`, hands
-  the uncovered lines to `coding`, and repeats under an attempt budget.
+- **`rituals.py` at the repo root** — vekna's own rituals, cast on itself:
+  - `cover_diff`, a diff-coverage loop that measures with `shell`, hands the
+    uncovered lines to `coding`, and repeats under an attempt budget.
+  - `review`, which reads this branch's diff and returns findings under a
+    schema, with a read-only agent.
+  - `merge_ready`, which runs `prcheck` and `test` **concurrently** and hands
+    whatever went red to an agent, under a budget and a `decide` per attempt.
+  - `triage`, which reads a GitHub issue or PR through `gh`, has an agent size
+    it against the codebase, and routes on your answer.
+
+  The file is now linted by `black`, `ruff`, `codespell` and `pylint`, and
+  `tests/integration/cli/test_project_rituals.py` drives it through
+  `rituals list` / `rituals show` so a broken ritual fails the suite rather
+  than the next cast.
+- **Concurrency inside a step** — a step may hold several medium calls at once
+  (`asyncio.TaskGroup` over two `shell` calls). Each opens its own rite, since a
+  Task copies the contextvar the runtime hangs rites from; the engine needed no
+  change and steps themselves stay sequential.
 
 ### Changed
 
@@ -167,6 +182,26 @@ and this project adheres to [Semantic Versioning].
 
 ### Fixed
 
+- **An optional component crashed `rituals list`, `rituals show` and `cast
+  --help` on Python 3.11–3.13.** Flag rendering read `field.annotation.__name__`,
+  and a union has none before 3.14 — `str | None` raised `AttributeError` there
+  and printed `<Union>` on 3.14. A second spelling hid behind the same line: 3.14
+  merged `typing.Union` into `types.UnionType`, so `File | None` is a `UnionType`
+  on 3.14 but a *typing* union on 3.11, where an isinstance check misses it and
+  the flag read `<Optional>`. Both are handled, `Annotated` is unwrapped, and an
+  optional `--only` now prints the type it takes: `<Path>`. CI ran the whole
+  3.11–3.14 matrix green throughout, because no ritual had such a component yet.
+- **Two concurrent rites' output was indistinguishable.** The standalone
+  renderer indents a delta by its rite's depth alone, so two mediums running at
+  once interleaved with nothing to say which said what. On an append-only stream
+  a rite with a live sibling now holds its output and emits it in one block
+  before its own `✓`; a rite running alone still streams live, unchanged. A
+  surface that can re-render wants the opposite, which is the sink's decision to
+  make when the TUI and IM sinks arrive.
+- **`cover_diff`'s prompt could crash on the report it was formatting.** It went
+  through `str.format`, and the substituted value is pytest's own output — where
+  an assertion diff over a dict carries braces that `format()` raises on. The
+  report is concatenated now, and reads last.
 - **A `.vekna.toml` naming the `rituals.py` beside it broke every command.**
   `files` is additive on top of the file found by walking up, and nothing
   deduped, so being explicit about your own rituals file made `cast`, `rituals

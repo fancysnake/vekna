@@ -91,7 +91,10 @@ result: {"outcome":"green"}
   finishes. A step may admit several payload shapes (`Lint | Coverage`); a
   ritual's components are one model, being one CLI interface.
 - **Medium** — what a step reaches out to: `coding` (an agent), `shell`,
-  `decide` (ask the operator). Each call opens a rite of its own.
+  `decide` (ask the operator). Each call opens a rite of its own. A step may
+  hold several at once — `asyncio.TaskGroup` over two `shell` calls runs both
+  and waits for both — and each still gets its own rite, so the grimoire records
+  what actually happened concurrently. Steps themselves stay sequential.
 - **Focus** — the backend behind a medium. `vekna.folio.coding_claude` is the
   Claude Agent SDK focus for `coding`.
 - **Grimoire** — the event log of a cast: rites started, output deltas, rites
@@ -129,9 +132,14 @@ plan = await coding("plan the migration", output=Plan)
 
 # Focus-specific knobs
 await coding("survey the code", focus_options=ClaudeOptions(
-    permission_mode="plan", allowed_tools=["Read"], effort="high"
+    permission_mode="dontAsk", allowed_tools=["Read", "Grep"], effort="high"
 ))
 ```
+
+`dontAsk` with an allowlist is how you get a read-only agent: everything
+outside the list is denied without stopping to ask you. Not `permission_mode=
+"plan"`, which executes no tools at all — an agent in plan mode cannot read the
+files you gave it `Read` for.
 
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
 tool; the cast blocks until you answer.
