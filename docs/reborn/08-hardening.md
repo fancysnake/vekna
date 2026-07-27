@@ -16,12 +16,16 @@ enough that a second person can use it.
   gets the lich's channel. Release is a `mise` task, not a remembered sequence:
   build, check the wheel imports clean in a bare venv, tag, publish, verify the
   install from the index. Publishing is the first thing that makes the version
-  numbers this roadmap has been spending mean anything to anyone else.
+  numbers this roadmap has been spending mean anything to anyone else. The tag
+  waits on `vekna.dev` being live and named in `[project.urls]`
+  ([09-site.md](09-site.md)), so the published page has somewhere to point.
 - **Documentation as a written thing, not a roadmap.** `README.md` around
   rituals and casts (done early, in 0.3.0, when the tmux subsystem was removed);
   a getting-started that ends in a working ritual; the lexicon's public surface
   documented per symbol; how to run a daemon and raise a lich; `docs/reborn/`
-  itself moved to history, since a shipped roadmap is not a manual.
+  itself moved to history, since a shipped roadmap is not a manual. This bullet
+  is the inventory — [09-site.md](09-site.md) publishes it and owns nothing of
+  what it says.
 - Example `rituals.py` library — at least: PR triage, test-and-fix loop,
   migration babysitter.
 - Error pathways audited — SDK disconnects, resume on a corrupt run dir,

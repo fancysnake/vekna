@@ -32,6 +32,8 @@ and casts on command, from a terminal or from Discord.
   that casts on command; Discord channel per lich.
 - [08-hardening.md](08-hardening.md) — `1.0.0` robustness, docs, PyPI, example
   library, clean audits.
+- [09-site.md](09-site.md) — `1.0.0` `vekna.dev`: landing page and user
+  documentation, Astro in `www/`, shipped with the tag, not after it.
 
 ## Parked
 
