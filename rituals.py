@@ -36,7 +36,6 @@ from vekna.lexicon import (
     step,
 )
 
-
 # cover_diff — close the coverage gap on this branch.
 
 # The report goes last, and is concatenated rather than substituted: it carries
@@ -272,12 +271,20 @@ def _red(*, budget: int, lint: ShellResult, suite: ShellResult) -> Red:
     return SuiteFailure(budget=budget, suite=suite.stdout)
 
 
+def _lint_said(failure: LintFailure | BothRed) -> str:
+    return f"The linters said:\n\n{failure.lint}"
+
+
+def _suite_said(failure: SuiteFailure | BothRed) -> str:
+    return f"The suite said:\n\n{failure.suite}"
+
+
 def _complaint(failure: Red) -> str:
     if isinstance(failure, BothRed):
-        return f"The linters said:\n\n{failure.lint}\n\nThe suite said:\n\n{failure.suite}"
+        return f"{_lint_said(failure)}\n\n{_suite_said(failure)}"
     if isinstance(failure, LintFailure):
-        return f"The linters said:\n\n{failure.lint}"
-    return f"The suite said:\n\n{failure.suite}"
+        return _lint_said(failure)
+    return _suite_said(failure)
 
 
 # max_steps is the backstop, not the control — the bound is. It sits well above
@@ -441,7 +448,6 @@ async def route(verdict: Verdict) -> Transition:
     # The agent may run commands, and every one of them is gated: `gate_tools`
     # puts each Bash call to you before it happens.
     await coding(
-        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}",
-        gate_tools=["Bash"],
+        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}", gate_tools=["Bash"]
     )
     return done(triaged)
