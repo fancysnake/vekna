@@ -119,9 +119,14 @@ class TestConcurrentRites:
             _began("r1", name="measure"),
             _began("r2", parent="r1"),
             RiteStreamed(rite_id="r2", delta="running"),
-            _ended("r2"),
         ):
             renderer.render(event)
+
+        # Before the rite ends, not merely by the time it has: a renderer that
+        # buffered until _ended would satisfy the final assertion alone.
+        assert out.getvalue() == "▶ measure\n  ↳ shell\n    running\n"
+
+        renderer.render(_ended("r2"))
 
         assert out.getvalue() == "▶ measure\n  ↳ shell\n    running\n  ✓ shell\n"
 

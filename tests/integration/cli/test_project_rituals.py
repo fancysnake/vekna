@@ -1,11 +1,9 @@
-"""The repo's own rituals.py, driven through the CLI that reads it.
-
-Every other test builds a rituals file of its own, so nothing checked the one
-this project ships. Loading it exercises what no unit test can: that the module
-imports, that every annotation resolves, that each `@ritual` declares a model
-the CLI can render flags from, and that every `goto` names a step the graph can
-find. Casting is out of scope here — three of the four rituals call an agent.
-"""
+# The repo's own rituals.py, driven through the CLI that reads it. Every other
+# test builds a rituals file of its own, so nothing checked the one this project
+# ships. Loading it exercises what no unit test can: that the module imports,
+# that every annotation resolves, that each `@ritual` declares a model the CLI
+# can render flags from, and that every `goto` names a step the graph can find.
+# Casting is out of scope here — three of the four rituals call an agent.
 
 from pathlib import Path
 

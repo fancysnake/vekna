@@ -34,6 +34,13 @@ async def run_quiet(_state: State) -> Transition:
 
 
 @step
+async def run_quiet_partial(_state: State) -> Transition:
+    # Silent *and* without a trailing newline: the tail of the last chunk has
+    # no `on_line` to reach, which is the one path the two apart never take.
+    return done(await shell("printf 'hushed'", stream=False))
+
+
+@step
 async def run_long_line(_state: State) -> Transition:
     return done(
         await shell(f"python3 -c \"print('x' * {_LONG_LINE}); print('after')\"")
@@ -68,6 +75,12 @@ async def failing(_: NoComponents) -> Transition:
 async def quiet(_: NoComponents) -> Transition:
     await asyncio.sleep(0)
     return goto(run_quiet, State())
+
+
+@ritual("quiet_partial")
+async def quiet_partial(_: NoComponents) -> Transition:
+    await asyncio.sleep(0)
+    return goto(run_quiet_partial, State())
 
 
 @ritual("long_line")
@@ -176,3 +189,11 @@ class TestShellStreaming:
         assert not _deltas(grimoire)
         assert "hush" not in out.getvalue()
         assert result.stdout.strip() == "hush"
+
+    @staticmethod
+    def test_stream_false_still_keeps_a_partial_last_line():
+        result, grimoire, out = _run(quiet_partial)
+
+        assert not _deltas(grimoire)
+        assert "hushed" not in out.getvalue()
+        assert result.stdout == "hushed"
