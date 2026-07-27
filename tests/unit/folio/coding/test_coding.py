@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from vekna.folio.coding import CodingOpts, CodingOutputError, CodingResult, coding
+from vekna.folio.coding import (
+    CodingOpts,
+    CodingOutputError,
+    CodingResult,
+    coding,
+    register,
+)
 from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
@@ -18,7 +24,7 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, reset_foci, run_cast
+from vekna.lexicon._mills.engine import Grimoire, reset_registry, run_cast
 from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
 
@@ -61,9 +67,9 @@ class Answer(BaseModel):
 
 @pytest.fixture(autouse=True)
 def _isolated_registry():
-    reset_foci()
+    reset_registry()
     yield
-    reset_foci()
+    reset_registry()
 
 
 def _cast(the_ritual, *, stdin: str = "") -> tuple[object, Grimoire]:
@@ -240,6 +246,10 @@ class TestCodingMedium:
 
     @staticmethod
     def test_missing_focus_raises_with_install_hint():
+        # The hint is the folio's own declaration, so the test makes it the way
+        # production does — the loader is an integration concern.
+        register()
+
         @step
         async def work(_: Answer) -> Transition:
             await coding("fix it")

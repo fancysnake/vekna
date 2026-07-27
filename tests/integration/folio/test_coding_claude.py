@@ -9,7 +9,7 @@ import pytest
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
 from vekna.lexicon._inits import main
-from vekna.lexicon._mills.engine import reset_foci
+from vekna.lexicon._mills.engine import reset_registry
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
@@ -196,10 +196,10 @@ def _purge_coding_claude():
 
 @pytest.fixture(autouse=True)
 def _isolated():
-    reset_foci()
+    reset_registry()
     _purge_coding_claude()
     yield
-    reset_foci()
+    reset_registry()
     _purge_coding_claude()
 
 

@@ -6,19 +6,21 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
+    FocusMissingError,
     NoComponents,
     RitualError,
     Transition,
     current_rite,
     done,
     emit_delta,
+    expect_focus,
     goto,
     medium,
     ritual,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, run_cast
+from vekna.lexicon._mills.engine import Grimoire, resolve_focus, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteStreamed
 
 
@@ -122,6 +124,23 @@ class TestMedium:
     def test_current_rite_outside_cast_raises():
         with pytest.raises(RitualError):
             current_rite()
+
+
+class TestResolveFocus:
+    @staticmethod
+    def test_an_unregistered_medium_names_itself():
+        with pytest.raises(FocusMissingError, match="unheard") as raised:
+            resolve_focus("unheard")
+
+        # No hint was ever expected for it, so the message is the bare one.
+        assert "—" not in str(raised.value)
+
+    @staticmethod
+    def test_an_expected_medium_carries_the_hint_it_registered():
+        expect_focus("unbound", hint="pip install something")
+
+        with pytest.raises(FocusMissingError, match="pip install something"):
+            resolve_focus("unbound")
 
 
 class TestEmitDelta:

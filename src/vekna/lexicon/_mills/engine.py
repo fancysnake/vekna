@@ -167,8 +167,13 @@ class MediumRegistry:
             msg = f"medium {medium_name!r} offers no one-shot prompt"
             raise RitualError(msg) from None
 
+    # Everything a folio registered, not just the foci: a hint or a prompt
+    # runner outliving the reset means a test inherits registration it never
+    # made, and passes only in the company of whichever test made it.
     def reset(self) -> None:
         self._foci.clear()
+        self._hints.clear()
+        self._prompts.clear()
 
 
 _registry = MediumRegistry()
@@ -194,7 +199,7 @@ def prompt_runner(medium_name: str) -> PromptRunner:
     return _registry.prompt_runner(medium_name)
 
 
-def reset_foci() -> None:
+def reset_registry() -> None:
     _registry.reset()
 
 
