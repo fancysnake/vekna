@@ -150,14 +150,26 @@ one real cast — the gates are this project's own and cost nothing but time.
 
 ### Step 5 — `triage`, an issue or PR read from a link
 
-Components `link: Url`, `bound: int = 2`.
+Components `link: Url`. Three steps: `read_link` → `size_up` → `route`.
 
-- `read` calls `coding(output=Triage, focus_options=ClaudeOptions(
-  allowed_tools=["WebFetch"], permission_mode="plan"))`.
-- `route` uses `decide(options=["fix", "file", "ignore"])`; the `fix` arm calls
+- `read_link` shells `gh pr view` / `gh issue view --json`. **Not `WebFetch`**,
+  as this plan first said. Cast against it and it was denied — with the tool
+  allowlisted, with the entry domain-scoped, and under `bypassPermissions` too,
+  so it is unavailable here rather than mis-wired. `Read` under the same
+  `dontAsk` allowlist works, which is what rules the folio out as the cause and
+  leaves `review` unaffected. And `gh` is the better instrument regardless: it
+  reads private repositories and returns JSON instead of HTML, and fetching
+  needs no judgement, so it belongs in a shell where it is deterministic and
+  free.
+- `size_up` calls `coding(output=Reading, focus_options=ClaudeOptions(
+  permission_mode="dontAsk", allowed_tools=["Read", "Grep", "Glob"],
+  max_turns=8))` — it judges what the issue touches by opening the code.
+- `route` uses `decide(options=["fix", "file", "ignore"])` on the reading's
+  one-sentence headline; the `fix` and `file` arms call
   `coding(gate_tools=["Bash"])`, so a shell command needs an answer from you.
 
-Covers: `Url`, `allowed_tools`, `decide(options=)`, `gate_tools`.
+Covers: `Url`, `allowed_tools`, `max_turns`, `decide(options=)`, `gate_tools`,
+and a second `stream=False` fetch.
 
 Verify: `mise run test`, `mise run check`, `vekna rituals show triage`.
 
