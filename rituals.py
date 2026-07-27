@@ -356,9 +356,14 @@ async def gates(state: Attempt) -> Transition:
 
 # Three payload shapes, one step: whichever gate went red, this is where it is
 # repaired, and the prompt says only what actually failed.
+# The loop is what the thread is for. Every pass through here meets a failure
+# the previous pass tried and failed to fix, and an agent starting fresh each
+# time will reach for the same idea again. A name rather than `continue`: they
+# are the same thing in a ritual whose only agent call this is, and they stop
+# being the same the moment a second one is added.
 @step
 async def repair(failure: Red) -> Transition:
-    await coding(_REPAIR + _complaint(failure))
+    await coding(_REPAIR + _complaint(failure), opts=CodingOpts(session="repair"))
     return goto(gates, Attempt(budget=failure.budget - 1))
 
 
