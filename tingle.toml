@@ -114,13 +114,6 @@ pattern = 'mark\.xfail'
 ranges = ["python-tests"]
 
 
-[[metrics]]
-name = "wrong-assert"
-type = "regex_count"
-group = "testing"
-pattern = 'assert response\.'
-ranges = ["python-tests-int"]
-
 # typing
 
 [[metrics]]
@@ -166,19 +159,6 @@ pattern = 'disallow_\w+ = false'
 ranges = ["config"]
 
 # refactoring
-
-[[metrics]]
-name = "request-di-uow"
-type = "regex_count"
-group = "refactoring"
-pattern = 'request\.di\.uow'
-
-[[metrics]]
-name = "context-data-not-typed"
-type = "regex_count"
-group = "typing"
-pattern = 'def get_context_data\(.*dict\[str, Any\]:'
-ranges = ["python-src"]
 
 [[metrics]]
 name = "todo-comments"
