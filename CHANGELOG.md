@@ -13,20 +13,23 @@ and this project adheres to [Semantic Versioning].
 
 - **`coding` medium** (`vekna.folio.coding`) — hand work to an agent from
   inside a step. Every portable knob bundles into
-  `CodingOpts(model, system, cwd, gate_tools, session)` — portable meaning it
-  says the same thing whichever Focus answers. `output=SomeModel` validates the
+  `CodingOpts(model=..., system=..., cwd=..., gate_tools=...)` — portable
+  meaning it says the same thing whichever Focus answers, and configuration
+  meaning one is safe to reuse. `output=SomeModel` validates the
   agent's reply and returns it typed, raising `CodingOutputError` when it does
   not fit. Permissive by default: tool use is gated only when a call passes
   `gate_tools=[...]`, which turns each matching tool into a `decide`
   round-trip.
-- **Session continuity is the author's** — `CodingOpts(session=...)` declares
-  which thread of agent memory a call is on. `"new"` is a fresh context and the
-  default, since a step is a task boundary and carrying context across one by
-  default contradicts what the boundary is for. `"continue"` carries on from
-  the cast's last agent call, and any other string is a named thread resumed by
-  that name — `merge_ready`'s repair loop uses one, so a second attempt knows
-  what the first already tried. The medium resolves the declaration against a
-  per-cast `SessionBook` and hands the Focus a plain session id; the rite's
+- **Session continuity is the author's** — `coding(prompt, session=...)`
+  declares which thread of agent memory a call is on. `"new"` is a fresh
+  context and the default, since a step is a task boundary and carrying context
+  across one by default contradicts what the boundary is for. `"continue"`
+  carries on from the cast's last agent call, and any other string is a named
+  thread resumed by that name — `merge_ready`'s repair loop uses one, so a
+  second attempt knows what the first already tried. It is a parameter rather
+  than a knob on `CodingOpts` because a thread is per-call identity, not
+  reusable configuration. The medium resolves the declaration against a
+  per-cast session book and hands the Focus a plain session id; the rite's
   telemetry records the declaration as well as the id.
 - **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
   `_links.py` is the only module importing `claude-agent-sdk`.

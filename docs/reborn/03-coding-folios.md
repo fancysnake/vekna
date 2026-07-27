@@ -25,10 +25,10 @@ Non-deterministic inside a step, deterministic between them.
   await coding(
       prompt,
       output=SomeModel,               # validated via TypeAdapter; failure raises
+      session="new",                  # which thread of memory this call is on
       opts=CodingOpts(
-          model, system, cwd,
+          model=model, system=system, cwd=cwd,
           gate_tools=["Bash"],        # opt in to a decide round-trip per tool
-          session="new",              # which thread of memory this call is on
       ),
       focus_options=ClaudeOptions(),  # Focus-specific knobs
   )
@@ -68,9 +68,9 @@ and that used to be an implementation detail of the Focus. It is a declaration
 now, because the right answer differs per ritual and the wrong one is invisible:
 
 ```python
-CodingOpts(session="new")        # fresh context
-CodingOpts(session="continue")   # the cast's running session
-CodingOpts(session="lint-loop")  # a named session, resumed by name
+coding(prompt, session="new")        # fresh context
+coding(prompt, session="continue")   # the cast's running session
+coding(prompt, session="lint-loop")  # a named session, resumed by name
 ```
 
 A retry after a failed attempt usually wants `continue` — the agent remembering
@@ -98,10 +98,20 @@ Three things the implementation settled that the sketch above left open:
   follows a first attempt written as a plain `coding(...)`, which under the
   default records no thread of its own. Reading only its own kind would start
   that retry fresh while looking like it resumed.
-- **It rides `CodingOpts`, not its own parameter.** It is a portable knob like
-  `model` and `cwd`, and a sixth parameter is one more than PLR0913 allows. The
-  cost is that a `CodingOpts` shared between two calls puts both on one thread —
-  build a fresh one per call when the thread differs.
+- **It is its own parameter, not a knob on `CodingOpts`.** Everything on
+  `CodingOpts` is configuration: reusing one across calls is harmless, which is
+  the point of bundling them. A thread is per-call identity instead, so a
+  shared `CodingOpts` carrying one would put two rites on a single agent's
+  memory without either call saying so — the invisible wrong answer this
+  declaration exists to remove, arriving through the door it came in. Folding
+  `gate_tools` into `CodingOpts` left `coding` at four parameters, so the fifth
+  costs nothing that PLR0913 charges for. `CodingOpts` forbids extras, so the
+  older spelling raises rather than being silently dropped.
+- **The blank check runs at call time, not construction time.** With `session`
+  off the model there is no boundary left to validate at, so a `CodingOpts`
+  field validator is no longer the alternative it once was — and a declaration
+  the medium refuses is a `CodingSessionError`, which is a `RitualError`, which
+  is what a ritual author already catches.
 - **Two concurrent `coding` rites both move "the last session".** A step body
   running two mediums under a `TaskGroup` leaves `continue` after it
   last-writer-wins. Named threads are unaffected, and a name is the answer when
@@ -113,7 +123,8 @@ Three things the implementation settled that the sketch above left open:
   `Session`, `CodingOutputError`, `CodingSessionError` and the Medium itself.
 - `SessionBook` on the lexicon's `RiteContext` — one per cast, holding the
   named threads and the last id any call recorded. It only remembers; which
-  name a call means is the medium's vocabulary.
+  name a call means is the medium's vocabulary. Reached through the context
+  rather than exported, since the context is what a medium already holds.
 - `vekna.folio.coding_claude/{_pacts,_links}.py` + `register()`.
 - Medium↔Focus boundary types (`CodingCall`, `FocusReply`, `GateFn`, `AskFn`,
   `CodingFocusProtocol`) live in `vekna.lexicon`, so folio⊥folio stays absolute

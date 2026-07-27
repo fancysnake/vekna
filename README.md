@@ -129,7 +129,7 @@ await coding("refactor this", opts=CodingOpts(model="opus", cwd="./svc"))
 await coding("clean the build", opts=CodingOpts(gate_tools=["Bash"]))
 
 # Which thread of agent memory this call is on
-await coding("try again", opts=CodingOpts(session="continue"))
+await coding("try again", session="continue")
 
 # Typed output, validated on return
 class Plan(BaseModel):
@@ -171,8 +171,7 @@ boundary is for.
 
 Prefer a name over `continue` for a loop. They are the same thing while a
 ritual has one agent call, and stop being the same the moment it gains a
-second. One caution: `CodingOpts` is reusable and a thread is per-call, so
-build a fresh one when the thread differs.
+second.
 
 ## Architecture
 
