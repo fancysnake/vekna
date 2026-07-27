@@ -68,9 +68,9 @@ and that used to be an implementation detail of the Focus. It is a declaration
 now, because the right answer differs per ritual and the wrong one is invisible:
 
 ```python
-coding(prompt, session="new")        # fresh context
-coding(prompt, session="continue")   # the cast's running session
-coding(prompt, session="lint-loop")  # a named session, resumed by name
+await coding(prompt, session="new")        # fresh context
+await coding(prompt, session="continue")   # the cast's running session
+await coding(prompt, session="lint-loop")  # a named session, resumed by name
 ```
 
 A retry after a failed attempt usually wants `continue` — the agent remembering
