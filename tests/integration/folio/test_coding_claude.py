@@ -86,6 +86,30 @@ _TYPED_RITUALS = textwrap.dedent("""
     """)
 
 
+_THREADED_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.coding import CodingOpts, Session, coding
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    @step
+    async def work(task: Task) -> Transition:
+        await coding(task.text)
+        await coding(task.text, opts=CodingOpts(session=Session.CONTINUE))
+        return done(None)
+
+
+    @ritual("threaded")
+    async def threaded(components: Task) -> Transition:
+        return goto(work, Task(text=components.text))
+    """)
+
+
 _SYSTEM_RITUALS = _ritual_source(
     name="poet",
     call='coding(task.text, opts=CodingOpts(system="you are a poet"))',
@@ -153,6 +177,8 @@ def _sdk_stub(
         await asyncio.sleep(0)
         captured["prompt"] = prompt
         captured["options"] = options
+        # Every call, not just the last: a thread is only visible across two.
+        captured.setdefault("every_options", []).append(options)
         yield SystemMessage(subtype="init")
         yield AssistantMessage(
             content=(
@@ -225,6 +251,7 @@ class TestCastWithClaudeFocus:
         assert options.can_use_tool is None
         assert options.model is None
         assert options.output_format is None
+        assert options.resume is None
 
     @staticmethod
     def test_assistant_content_given_as_a_string_still_streams(
@@ -254,6 +281,24 @@ class TestCastWithClaudeFocus:
 
         assert exit_code == _USAGE_EXIT
         assert "claude-agent-sdk" in capsys.readouterr().err
+
+
+class TestSessionThread:
+    @staticmethod
+    def test_a_continue_call_resumes_what_the_call_before_it_opened(
+        tmp_path, monkeypatch
+    ):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_THREADED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["threaded", "--text", "keep going"])
+
+        assert exit_code == 0
+        opened, carried_on = captured["every_options"]
+        assert opened.resume is None
+        assert carried_on.resume == "s-stub"
 
 
 class TestToolGate:

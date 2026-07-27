@@ -167,6 +167,10 @@ def _agent_options(
         model=call.model,
         system_prompt=_system_prompt(call.system),
         cwd=call.cwd,
+        # `resume`, not `continue_conversation`: the medium already resolved
+        # which thread this call is on, and the SDK's continue flag means the
+        # last conversation in the directory, which is not the same question.
+        resume=call.resume,
         permission_mode=permission_mode,
         can_use_tool=_permission_handler(gate) if gate is not None else None,
         allowed_tools=allowed,
