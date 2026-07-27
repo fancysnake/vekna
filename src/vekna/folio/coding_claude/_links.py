@@ -70,6 +70,15 @@ class _AssistantLike(Protocol):
     def model(self) -> str: ...
 
 
+# `content` is a union, and a `str` is iterable — so looping it directly walks
+# the message one character at a time and matches `TextBlock` on none of them,
+# silently dropping the whole reply from the stream.
+def _texts(content: str | list[ContentBlock]) -> list[str]:
+    if isinstance(content, str):
+        return [content]
+    return [block.text for block in content if isinstance(block, TextBlock)]
+
+
 @runtime_checkable
 class _ResultLike(Protocol):
     @property
@@ -185,10 +194,9 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         result_text: str | None = None
         async for message in query(prompt=call.prompt, options=options):
             if isinstance(message, _AssistantLike):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        parts.append(block.text)
-                        on_delta(block.text)
+                for text in _texts(message.content):
+                    parts.append(text)
+                    on_delta(text)
             elif isinstance(message, _ResultLike):
                 session_id = message.session_id
                 num_turns = message.num_turns

@@ -91,7 +91,9 @@ _SYSTEM_RITUALS = _ritual_source(
 )
 
 
-def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
+def _sdk_stub(
+    captured, *, result="haiku done", tools=(), questions=(), text_content=False
+):
     stub = types.ModuleType("claude_agent_sdk")
 
     @dataclass
@@ -108,7 +110,9 @@ def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
 
     @dataclass
     class AssistantMessage:
-        content: list
+        # `str | list`, exactly as the SDK types it — a str reply is the shape
+        # that used to be walked character by character and thrown away.
+        content: str | list
         model: str = "stub-model"
 
     @dataclass
@@ -149,7 +153,11 @@ def _sdk_stub(captured, *, result="haiku done", tools=(), questions=()):
         captured["options"] = options
         yield SystemMessage(subtype="init")
         yield AssistantMessage(
-            content=[TextBlock(text="drafting the haiku"), ToolUseBlock(name="Write")]
+            content=(
+                "drafting the haiku"
+                if text_content
+                else [TextBlock(text="drafting the haiku"), ToolUseBlock(name="Write")]
+            )
         )
         if tools:
             captured["permissions"] = [
@@ -215,6 +223,22 @@ class TestCastWithClaudeFocus:
         assert options.can_use_tool is None
         assert options.model is None
         assert options.output_format is None
+
+    @staticmethod
+    def test_assistant_content_given_as_a_string_still_streams(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {}
+        monkeypatch.setitem(
+            sys.modules, "claude_agent_sdk", _sdk_stub(captured, text_content=True)
+        )
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        assert exit_code == 0
+        assert "drafting the haiku" in capsys.readouterr().out
 
     @staticmethod
     def test_missing_focus_reports_install_hint(tmp_path, monkeypatch, capsys):
