@@ -22,6 +22,8 @@ getting in the way of it.
 
 - **`rituals/` discovered like `rituals.py`.** Walking up from the cwd finds a
   directory as readily as a file.
+- **`rituals.py` beside `rituals/` is an error**, not a precedence rule. Both
+  name a ritual source and neither says it is the one meant.
 - **Directory sources load as real packages** — `import_module`, not
   `spec_from_file_location`.
 - **The ritual root's parent goes on `sys.path`** before the import, so
@@ -45,7 +47,14 @@ rituals/
 
 **Discovery.** `_find_rituals_file` builds `directory / "rituals.py"` and asks
 `.is_file()`. A directory is never a candidate, so the layout is reachable only
-by naming it in `.vekna.toml`.
+by naming it in `.vekna.toml`. Once both are candidates one directory can hold
+both, and a precedence rule would answer that silently: a half-finished move
+into `rituals/` would keep casting the file it was moved out of, and the rituals
+the author is editing would simply not be there. That is the same shape as the
+truncated graph below, so it takes the same answer the step collision does — the
+cast stops, naming both paths, and the author deletes or renames one. Walking up
+is unaffected: a parent directory's source is still found when the nearer one
+holds neither.
 
 **Package identity.** The `files` route cannot load a package at all.
 `spec_from_file_location` gives the module a synthetic dotted-less name, so the
@@ -150,7 +159,8 @@ rituals/
   the recursive submodule sweep, routing a directory source to the module
   loader.
 - `lexicon/_inits.py` — `_find_rituals_file` returning a package as readily as
-  a file, and `_build_compendium` dispatching on which it got.
+  a file, refusing a directory that holds both, and `_build_compendium`
+  dispatching on which it got.
 - `lexicon/_mills/engine.py` — `register_step` keyed by source, collision an
   error naming both.
 
@@ -182,4 +192,6 @@ rituals/
 - A single-file `rituals.py` keeps working unchanged, and a `.vekna.toml`
   naming `files` or `modules` keeps working unchanged.
 - Two sources declaring a step of the same name fail with an error naming both.
+- A directory holding both `rituals.py` and `rituals/` fails with an error naming
+  both paths, and the walk up stops there rather than skipping to a parent.
 - `mise run check` and `mise run test` pass.

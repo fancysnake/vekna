@@ -230,7 +230,7 @@ class TestCodingMedium:
 
         _cast(r)
 
-        assert focus.calls[0].focus_options == knobs
+        assert focus.calls[0].focus_options is knobs
 
     @staticmethod
     def test_agent_question_with_options_routes_through_decide():
