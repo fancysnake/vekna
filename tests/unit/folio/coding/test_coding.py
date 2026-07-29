@@ -150,6 +150,7 @@ class TestCodingMedium:
         medium_finish = finished[0]
         assert medium_finish.result == {
             "session": "new",
+            "key": None,
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
@@ -299,18 +300,32 @@ class TestCodingMedium:
             _cast(r)
 
 
+def _one_call_ritual(**declaration):
+    @step
+    async def work(_: Answer) -> Transition:
+        await coding("fix it", **declaration)
+        return done(None)
+
+    @ritual("r")
+    async def r(_: NoComponents) -> Transition:
+        await asyncio.sleep(0)
+        return goto(work, Answer(port=1))
+
+    return r
+
+
 class TestSessionDeclaration:
     @staticmethod
     def _resumes(*declarations) -> list[str | None]:
-        # One step, one coding call per declaration, so what a call resumes is
-        # read off the focus rather than inferred from the reply.
+        # One step, one coding call per `(session, key)` declaration, so what a
+        # call resumes is read off the focus rather than inferred from the reply.
         focus = FakeFocus()
         register_focus("coding", focus)
 
         @step
         async def work(_: Answer) -> Transition:
-            for index, session in enumerate(declarations):
-                await coding(f"call {index}", session=session)
+            for index, (session, key) in enumerate(declarations):
+                await coding(f"call {index}", session=session, key=key)
             return done(None)
 
         @ritual("r")
@@ -323,41 +338,49 @@ class TestSessionDeclaration:
 
     @classmethod
     def test_the_default_starts_a_fresh_session_every_time(cls):
-        assert cls._resumes(Session.NEW, Session.NEW) == [None, None]
+        assert cls._resumes((Session.NEW, None), (Session.NEW, None)) == [None, None]
 
     @classmethod
     @pytest.mark.parametrize("spelling", [Session.CONTINUE, "continue"])
     def test_continue_picks_up_the_session_before_it(cls, spelling):
-        assert cls._resumes(Session.NEW, spelling) == [None, "s1"]
+        # The plain string still lands on the member, so an author who never
+        # imports `Session` declares the same thing.
+        assert cls._resumes((Session.NEW, None), (spelling, None)) == [None, "s1"]
 
     @classmethod
-    def test_two_named_threads_do_not_read_each_other(cls):
-        assert cls._resumes("repair", "review", "repair") == [None, None, "s1"]
+    def test_two_keyed_threads_do_not_read_each_other(cls):
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"),
+            (Session.CONTINUE, "review"),
+            (Session.CONTINUE, "repair"),
+        ) == [None, None, "s1"]
+
+    @classmethod
+    def test_a_keyed_new_restarts_the_thread_it_files_under(cls):
+        # `new` with a key is how a loop starts over: the third call resumes
+        # `s2`, what the restart opened, rather than the `s1` before it.
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"),
+            (Session.NEW, "repair"),
+            (Session.CONTINUE, "repair"),
+        ) == [None, None, "s2"]
 
     @classmethod
     def test_padding_does_not_open_a_second_thread(cls):
-        # Two spellings of one name that would render identically in the
+        # Two spellings of one key that would render identically in the
         # journal, so a thread that silently forked would be invisible there.
-        assert cls._resumes("repair", " repair ") == [None, "s1"]
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"), (Session.CONTINUE, " repair ")
+        ) == [None, "s1"]
 
     @classmethod
-    @pytest.mark.parametrize("spelling", [" new", "new "])
-    def test_a_padded_reserved_word_stays_reserved(cls, spelling):
-        # The near-miss that reads as a reserved word and behaves as a thread
-        # named after one: padding resolves, capitalisation deliberately does not.
-        assert cls._resumes("repair", spelling) == [None, None]
-
-    @classmethod
-    def test_capitalisation_names_a_thread_rather_than_reserving_one(cls):
-        # The second `"New"` resumes what the first one opened — `s2`, since the
-        # `new` before it took `s1` — rather than starting fresh a third time.
-        assert cls._resumes(Session.NEW, "New", "New") == [None, None, "s2"]
-
-    @classmethod
-    def test_continue_follows_the_last_call_whatever_thread_it_was_on(cls):
-        # The documented consequence of "the cast's running session": a named
-        # rite moves it too, so `continue` after one resumes that name's id.
-        assert cls._resumes("repair", Session.CONTINUE) == [None, "s1"]
+    def test_continue_without_a_key_follows_whatever_ran_last(cls):
+        # The documented consequence of "the cast's running session": a keyed
+        # rite moves it too, so an unkeyed `continue` after one resumes its id.
+        assert cls._resumes((Session.CONTINUE, "repair"), (Session.CONTINUE, None)) == [
+            None,
+            "s1",
+        ]
 
     @staticmethod
     def test_a_focus_that_reports_no_session_records_nothing():
@@ -368,7 +391,7 @@ class TestSessionDeclaration:
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", session="repair")
+            await coding("fix it", session=Session.CONTINUE, key="repair")
             await coding("fix it again", session=Session.CONTINUE)
             return done(None)
 
@@ -382,56 +405,67 @@ class TestSessionDeclaration:
         assert [call.resume for call in focus.calls] == [None, None]
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         assert finished[0].result == {
-            "session": "repair",
+            "session": "continue",
+            "key": "repair",
             "session_id": None,
             "num_turns": 2,
             "cost_usd": 0.5,
         }
 
     @staticmethod
-    def test_a_blank_thread_name_is_refused():
+    @pytest.mark.parametrize("key", ["", "  ", 3, ["repair"]])
+    def test_a_key_that_names_nothing_is_refused(key):
         register_focus("coding", FakeFocus())
 
-        @step
-        async def work(_: Answer) -> Transition:
-            await coding("fix it", session="  ")
-            return done(None)
-
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
-
-        with pytest.raises(CodingSessionError, match="not a blank one"):
-            _cast(r)
+        with pytest.raises(CodingSessionError, match="key names the thread"):
+            _cast(_one_call_ritual(session=Session.CONTINUE, key=key))
 
     @staticmethod
-    def test_the_thread_is_not_a_knob_on_opts():
-        # `session` is per-call identity, not configuration, so a shared
-        # `CodingOpts` cannot carry one. `forbid` is what keeps the old spelling
-        # from being dropped onto whatever thread the call defaults to.
-        with pytest.raises(ValidationError, match="session"):
-            CodingOpts(session="repair")
+    @pytest.mark.parametrize("session", [None, 3, "repair", " new", "New", ""])
+    def test_a_word_that_is_not_a_reserved_one_is_refused(session):
+        # `"repair"` among them on purpose: a thread name is a `key` now, and
+        # the older spelling has to say so rather than open a thread called
+        # after whatever it was handed. An author's `rituals.py` is never
+        # type-checked, so this is the only place the slip is caught.
+        register_focus("coding", FakeFocus())
+
+        with pytest.raises(CodingSessionError, match="session takes"):
+            _cast(_one_call_ritual(session=session))
+
+    @staticmethod
+    @pytest.mark.parametrize("knob", ["session", "key"])
+    def test_the_thread_is_not_a_knob_on_opts(knob):
+        # Per-call identity, not configuration, so a shared `CodingOpts` cannot
+        # carry it. `forbid` is what keeps the old spelling from being dropped
+        # onto whatever thread the call defaults to.
+        with pytest.raises(ValidationError, match=knob):
+            CodingOpts(**{knob: "repair"})
 
     @staticmethod
     def test_telemetry_names_the_thread_the_author_declared():
         register_focus("coding", FakeFocus())
 
-        @step
-        async def work(_: Answer) -> Transition:
-            await coding("fix it", session="repair")
-            return done(None)
-
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
-
-        _, grimoire = _cast(r)
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
 
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         assert finished[0].result == {
-            "session": "repair",
+            "session": "continue",
+            "key": "repair",
+            "session_id": "s1",
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }
+
+    @staticmethod
+    def test_telemetry_carries_a_null_key_when_none_was_declared():
+        register_focus("coding", FakeFocus())
+
+        _, grimoire = _cast(_one_call_ritual())
+
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "new",
+            "key": None,
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,

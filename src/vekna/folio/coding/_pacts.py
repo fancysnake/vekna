@@ -13,13 +13,12 @@ class CodingSessionError(RitualError):
     pass
 
 
-# Half-closed on purpose: two reserved words plus any thread name the author
-# invents, which is why the parameter takes `Session | str`. StrEnum is what
-# makes the two spellings meet — `"continue" == Session.CONTINUE` — so an author
-# who types the string and one who reaches for the member land in one branch.
-# Reserved means these two exact spellings: `"New"` is a thread named "New", on
-# purpose. Folding case would take the capitalised forms out of an author's
-# hands to buy a rule harder to hold than a set of two literal strings.
+# Closed, and only two words wide: whether this call resumes. *Which* thread it
+# resumes is `key`, a separate parameter, because a set that held both would be
+# a type no checker could close — the shape that let `session=None` through as a
+# thread named "None". StrEnum so the plain spelling still lands on the member:
+# `Session("continue")` is `Session.CONTINUE`, and `Session("New")` raises,
+# which is the same refusal an author gets for any other word.
 class Session(StrEnum):
     NEW = "new"
     CONTINUE = "continue"

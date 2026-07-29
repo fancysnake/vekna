@@ -60,37 +60,61 @@ def _make_ask(channel: Channel) -> AskFn:
 
 
 # What the rest of the call needs off a declaration: which session to resume,
-# and which name to file the reply under. `name` is None for both reserved
-# words, because neither of them names anything.
+# and which key to file the reply under. A key is the thread's identity and
+# outlives the call; `resume` is what this one call carries in.
 @dataclass(frozen=True)
 class _Thread:
-    declared: str
+    declared: Session
     resume: str | None
-    name: str | None
+    key: str | None
 
 
-# `new` is the absence of a thread, so it resolves to nothing and starts fresh.
-# `continue` is the last session *any* coding rite produced, not the last
-# `continue` call: a retry that wants the agent to remember what it already tried
-# follows a first attempt written as a plain `coding(...)`, which under the
-# default records no thread of its own. Reading only its own kind would start
+# Both checks take `object` rather than the parameter's own type, and that is
+# what lets them exist: an author's `rituals.py` is never type-checked, so the
+# runtime is the only place `session=None` or `key=3` is caught — and mypy,
+# reading the annotation, would call a guard against an already-narrowed type
+# unreachable.
+def _declared(session: object) -> Session:
+    # Compared rather than looked up with `Session(...)`, which takes a `str`
+    # and so would not see the arguments this check is here for.
+    for word in Session:
+        if session == word:
+            return word
+    wanted = f"{Session.NEW.value!r} or {Session.CONTINUE.value!r}"
+    msg = f"session takes {wanted} — not {session!r}"
+    raise CodingSessionError(msg)
+
+
+def _keyed(key: object) -> str | None:
+    if key is None:
+        return None
+    # Stripping once, here, is what makes it one classification: an unnamed
+    # thread is a typo that would otherwise work — `key=""` opens a thread
+    # under the empty string and reads as a fresh session forever — and
+    # `" repair"` is the same typo wearing the name of a real thread it would
+    # never join.
+    if isinstance(key, str) and (stripped := key.strip()):
+        return stripped
+    msg = f"key names the thread this call is on — not {key!r}"
+    raise CodingSessionError(msg)
+
+
+# `new` starts fresh whether or not the call is keyed: a key says which thread
+# the reply is filed under, and `new` deliberately restarts that thread.
+# Unkeyed `continue` is the last session *any* coding rite produced, not the
+# last `continue` call: a retry that wants the agent to remember what it already
+# tried follows a first attempt written as a plain `coding(...)`, which under
+# the default records no key of its own. Reading only its own kind would start
 # that retry fresh while looking like it resumed — the failure the declaration
 # exists to make visible.
-def _thread(*, context: RiteContext, session: Session | str) -> _Thread:
-    # Stripping once, here, is what makes it one classification: an unnamed
-    # thread is a typo that would otherwise work — `session=""` resolves to
-    # nothing, records under the empty string, and reads as a fresh session
-    # forever — and `" repair"` is the same typo wearing the name of a real
-    # thread it would never join.
-    if not (declared := str(session).strip()):
-        msg = "session takes 'new', 'continue', or a thread name — not a blank one"
-        raise CodingSessionError(msg)
-    book = context.sessions
+def _thread(*, context: RiteContext, session: object, key: object) -> _Thread:
+    declared = _declared(session)
+    keyed = _keyed(key)
     if declared == Session.NEW:
-        return _Thread(declared=declared, resume=None, name=None)
-    if declared == Session.CONTINUE:
-        return _Thread(declared=declared, resume=book.latest, name=None)
-    return _Thread(declared=declared, resume=book.named(declared), name=declared)
+        return _Thread(declared=declared, resume=None, key=keyed)
+    book = context.sessions
+    resume = book.named(keyed) if keyed is not None else book.latest
+    return _Thread(declared=declared, resume=resume, key=keyed)
 
 
 def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
@@ -104,7 +128,11 @@ def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
 
 @overload
 async def coding(
-    prompt: str, *, opts: CodingOpts | None = None, session: Session | str = Session.NEW
+    prompt: str,
+    *,
+    opts: CodingOpts | None = None,
+    session: Session = Session.NEW,
+    key: str | None = None,
 ) -> CodingResult: ...
 
 
@@ -114,7 +142,8 @@ async def coding(
     *,
     output: type[_OutputT],
     opts: CodingOpts | None = None,
-    session: Session | str = Session.NEW,
+    session: Session = Session.NEW,
+    key: str | None = None,
 ) -> _OutputT: ...
 
 
@@ -124,12 +153,13 @@ async def coding(
     *,
     output: type[_OutputT] | None = None,
     opts: CodingOpts | None = None,
-    session: Session | str = Session.NEW,
+    session: Session = Session.NEW,
+    key: str | None = None,
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
-    thread = _thread(context=context, session=session)
+    thread = _thread(context=context, session=session, key=key)
     schema: dict[str, JsonValue] | None = None
     if output is not None:
         schema = TypeAdapter(output).json_schema()
@@ -149,11 +179,12 @@ async def coding(
         ask=_make_ask(context.channel),
     )
     if reply.session_id is not None:
-        context.sessions.record(reply.session_id, name=thread.name)
+        context.sessions.record(reply.session_id, name=thread.key)
     # The declaration, not just the id: whether the author meant this rite to
     # carry context is the thing the journal cannot read off `session_id`.
     telemetry: dict[str, JsonValue] = {
-        "session": thread.declared,
+        "session": thread.declared.value,
+        "key": thread.key,
         "session_id": reply.session_id,
         "num_turns": reply.num_turns,
         "cost_usd": reply.cost_usd,
