@@ -175,4 +175,5 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
 
 - `vekna rituals list` shows registered rituals and their typed flags; `show`
   adds the Component schema and the step graph.
-- Import errors in `rituals.py` are reported clearly, not swallowed.
+- Import errors in `rituals.py` — or in any submodule of a `rituals/` package —
+  are reported clearly, not swallowed.

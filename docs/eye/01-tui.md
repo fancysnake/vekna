@@ -13,8 +13,10 @@ with the cast it is running underneath it.
 Promote the daemon's CLI Grimoire view to a Textual dashboard: running casts
 across all projects in a sidebar, drill-in to any one cast's live tree,
 `decide` modals, peer-attach friendly. The default observation
-surface. Concurrent casts (multiple cast processes, `parallel` rites) render
-cleanly — `parallel` already ships in `folio/flow` from 0.2.0, so this is the
+surface. Two kinds of concurrency have to render cleanly: several cast
+processes at once, and several rites at once *within* one cast — a step body
+running two mediums under an `asyncio.TaskGroup` opens a rite each, because a
+Task copies the contextvar the runtime hangs them from. So this is the
 multi-grimoire UI.
 
 ## What ships
@@ -25,7 +27,8 @@ multi-grimoire UI.
 - Layout: left = cast tree (pending / running / done) across projects; right =
   active rite's live output; bottom = status bar.
 - `decide` modals. Per-rite, with a queue when several arrive at
-  once (multiple concurrent casts or `parallel` rites).
+  once (several concurrent casts, or concurrent rites within one cast). The
+  queue is what standalone cannot do — there, `decide` reads one stdin.
 - Scrollback on finished rites.
 - Quit / cancel (`q` or Ctrl-C) stops the host's view gracefully; peers
   disconnect cleanly.

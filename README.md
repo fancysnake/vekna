@@ -16,7 +16,8 @@ pip install .
 
 ## A ritual
 
-Put a `rituals.py` in your project:
+Put a `rituals.py` in your project — or a `rituals/` package, split however you
+like, once one file stops being enough:
 
 ```python
 from typing import Annotated
@@ -106,9 +107,11 @@ result: {"outcome":"green"}
 
 ## Where rituals come from
 
-`rituals.py` in the current directory or any parent. A `.vekna.toml` (project)
-or `~/.config/vekna/config.toml` (global) can name more, resolved relative to
-the config file:
+`rituals.py` — or a `rituals/` package — in the current directory or any
+parent. A package is searched all the way down, so its `__init__.py` can stay
+empty and you can split it by ritual, by kind, or not at all. A `.vekna.toml`
+(project) or `~/.config/vekna/config.toml` (global) can name more, resolved
+relative to the config file:
 
 ```toml
 [rituals]

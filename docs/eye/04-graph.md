@@ -5,6 +5,15 @@
 See [`../reborn/00-common.md`](../reborn/00-common.md) — inferable graph — and
 [01-tui.md](01-tui.md) / [02-web.md](02-web.md), the two surfaces this lands in.
 
+> **Competing design.** The "declared edges" half below is one of two answers to
+> *how does the engine know a ritual's edges without guessing?* The other is
+> [`../reborn/11-steps-as-dto.md`](../reborn/11-steps-as-dto.md), where a step
+> returns the next step as a value and its return type *is* the declaration —
+> checked statically on every edge rather than at runtime on the path taken.
+> Exactly one should be built: if rituals ever enter mypy's scope, that one
+> subsumes `goes_to` entirely. The rendering work below is unaffected either way
+> and stands on whichever wins.
+
 ## Goal
 
 `vekna rituals show` dumps a step graph today, read off each function's source

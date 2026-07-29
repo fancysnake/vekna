@@ -38,6 +38,20 @@ and casts on command, from a terminal or from Discord.
   library, clean audits.
 - [09-site.md](09-site.md) — `1.0.0` `vekna.dev`: landing page and user
   documentation, Astro in `www/`, shipped with the tag, not after it.
+- [10-ritual-modules.md](10-ritual-modules.md) — `0.5.0` a ritual source may be
+  a package the author splits as they like; recursive submodule sweep, empty
+  `__init__.py`. Numbered after 09 because the slots below it are spoken for;
+  the version is what orders it.
+
+## Undecided
+
+- [11-steps-as-dto.md](11-steps-as-dto.md) — steps return the next step as a
+  value, so a return type declares a ritual's edges instead of a parser
+  inferring them. Competes directly with
+  [`../eye/04-graph.md`](../eye/04-graph.md)'s `@step(goes_to=[...])`; exactly
+  one should be built, and both wait on rituals entering mypy's scope. Filed
+  here rather than in the roadmap because it breaks the public ritual API, and
+  that is a decision to take before 1.0 fixes it — not a feature 1.0 waits for.
 
 ## Parked
 

@@ -3,8 +3,8 @@
 **Version:** Hand (`3.x`), unscheduled within it.
 
 See [`../reborn/02-lexicon-standalone.md`](../reborn/02-lexicon-standalone.md)
-— `folio/flow` and `parallel` — and [01-failure.md](01-failure.md), which is
-where a timeout lands.
+— `folio/flow` — and [01-failure.md](01-failure.md), which is where a timeout
+lands.
 
 ## Goal
 
@@ -13,8 +13,11 @@ Nothing in vekna bounds a single rite. `max_steps` bounds transitions and
 making progress hangs the cast, the daemon shows it running, and it shows it
 running all night.
 
-`parallel` has shipped in `folio/flow` since `0.2.0`. `timeout` and `race` are
-its siblings, and they are cheap.
+`folio/flow` ships `decide` and nothing else. `timeout` and `race` are the two
+primitives it is missing, and they are cheap. (`parallel` was filed alongside
+them once and dropped: concurrency inside a step body is plain `asyncio`, and
+steps never run concurrently. See
+[`../reborn/02-lexicon-standalone.md`](../reborn/02-lexicon-standalone.md).)
 
 ## What ships
 
@@ -44,8 +47,10 @@ its siblings, and they are cheap.
   else finished first is a rite the operator cannot account for.
 - **Cancellation reaches the process.** This is the part with actual work in it.
   A cancelled `shell` rite kills its subprocess and its children; a cancelled
-  `coding` rite interrupts the SDK session rather than abandoning it; a
-  cancelled `parallel` branch propagates to both. A timeout that returns
+  `coding` rite interrupts the SDK session rather than abandoning it.
+  Propagation across an `asyncio.TaskGroup` in a step body is Python's own, so
+  what vekna owes is per-medium cancellation, not a fan-out story. A timeout
+  that returns
   promptly while leaving a `claude` process chewing through the repo is worse
   than no timeout at all, because it lies to the operator and to the lock
   manager.
@@ -80,7 +85,8 @@ operations; the daemon is not the thing that hangs.
   trusting the return.
 - `race` returns the first result, marks the losers cancelled in the grimoire,
   and leaves nothing running.
-- A `timeout` around a `parallel` cancels every branch.
+- A `timeout` around an `asyncio.TaskGroup` in a step body cancels every task in
+  it, and each cancelled rite reaches its own process.
 - A Focus that cannot be interrupted rejects `timeout=` at the call with a clear
   message rather than accepting it silently.
 - A cast whose only rite times out exits non-zero with the rite named, not with

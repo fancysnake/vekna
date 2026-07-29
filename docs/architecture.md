@@ -99,7 +99,8 @@ lexicon/
     graph.py     # AST step-graph reader for `rituals show`
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
-    loader.py      # rituals.py / module loading, .vekna.toml reading
+    loader.py      # rituals.py / rituals/ package / module loading,
+                   # submodule sweep, .vekna.toml reading
   _inits.py      # main, rituals_list, rituals_show — binds the above
   _gates.py      # empty; the CLI is the root project's
   _edges.py      # empty
