@@ -217,14 +217,16 @@ async def judge(diff: Diff) -> Transition:
     judgement = await coding(
         f"{_REVIEW}{focus}base: {diff.base}\n\n{diff.text}",
         output=Judgement,
-        opts=CodingOpts(system=_REVIEW_SYSTEM),
         # Read-only, enforced rather than requested: `dontAsk` denies anything
         # outside the allowlist without stopping to prompt. Not `plan`, which
         # executes no tools at all — the reviewer could not read CLAUDE.md.
-        focus_options=ClaudeOptions(
-            permission_mode="dontAsk",
-            allowed_tools=["Read", "Grep", "Glob"],
-            effort="high",
+        opts=CodingOpts(
+            system=_REVIEW_SYSTEM,
+            focus_options=ClaudeOptions(
+                permission_mode="dontAsk",
+                allowed_tools=["Read", "Grep", "Glob"],
+                effort="high",
+            ),
         ),
     )
     return done(
@@ -475,10 +477,12 @@ async def size_up(fetched: Fetched) -> Transition:
     reading = await coding(
         f"{_READ_ISSUE}{fetched.body}{_END_ISSUE}",
         output=Reading,
-        focus_options=ClaudeOptions(
-            permission_mode="dontAsk",
-            allowed_tools=["Read", "Grep", "Glob"],
-            max_turns=8,
+        opts=CodingOpts(
+            focus_options=ClaudeOptions(
+                permission_mode="dontAsk",
+                allowed_tools=["Read", "Grep", "Glob"],
+                max_turns=8,
+            )
         ),
     )
     return goto(route, Verdict(link=fetched.link, reading=reading))

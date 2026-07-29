@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeVar, cast, overload
 
-from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from vekna.lexicon import (
     AskFn,
@@ -104,11 +104,7 @@ def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
 
 @overload
 async def coding(
-    prompt: str,
-    *,
-    opts: CodingOpts | None = None,
-    focus_options: BaseModel | None = None,
-    session: Session | str = Session.NEW,
+    prompt: str, *, opts: CodingOpts | None = None, session: Session | str = Session.NEW
 ) -> CodingResult: ...
 
 
@@ -118,7 +114,6 @@ async def coding(
     *,
     output: type[_OutputT],
     opts: CodingOpts | None = None,
-    focus_options: BaseModel | None = None,
     session: Session | str = Session.NEW,
 ) -> _OutputT: ...
 
@@ -129,7 +124,6 @@ async def coding(
     *,
     output: type[_OutputT] | None = None,
     opts: CodingOpts | None = None,
-    focus_options: BaseModel | None = None,
     session: Session | str = Session.NEW,
 ) -> CodingResult | _OutputT:
     focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
@@ -145,7 +139,7 @@ async def coding(
         system=resolved.system,
         cwd=resolved.cwd,
         output_schema=schema,
-        focus_options=focus_options,
+        focus_options=resolved.focus_options,
         resume=thread.resume,
     )
     reply = await focus.run(

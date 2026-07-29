@@ -210,6 +210,28 @@ class TestCodingMedium:
         assert focus.gate_answers == [False, True]
 
     @staticmethod
+    def test_focus_options_ride_the_bundle_intact():
+        # The bundle carries a Focus's own model, and pydantic hands the Focus
+        # back the instance it was given rather than a coerced BaseModel.
+        focus = FakeFocus()
+        register_focus("coding", focus)
+        knobs = Answer(port=8080)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", opts=CodingOpts(focus_options=knobs))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r)
+
+        assert focus.calls[0].focus_options == knobs
+
+    @staticmethod
     def test_agent_question_with_options_routes_through_decide():
         focus = FakeFocus(
             questions=(("unit or integration?", ("unit", "integration")),)

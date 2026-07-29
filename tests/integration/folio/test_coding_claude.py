@@ -52,7 +52,7 @@ _GATED_RITUALS = _ritual_source(
 _TYPED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.folio.coding import coding
+    from vekna.folio.coding import CodingOpts, coding
     from vekna.folio.coding_claude import ClaudeOptions
     from vekna.lexicon import Transition, done, goto, ritual, step
 
@@ -70,11 +70,13 @@ _TYPED_RITUALS = textwrap.dedent("""
         plan = await coding(
             task.text,
             output=Plan,
-            focus_options=ClaudeOptions(
-                permission_mode="plan",
-                allowed_tools=["Read"],
-                max_turns=2,
-                effort="high",
+            opts=CodingOpts(
+                focus_options=ClaudeOptions(
+                    permission_mode="plan",
+                    allowed_tools=["Read"],
+                    max_turns=2,
+                    effort="high",
+                )
             ),
         )
         return done(plan)

@@ -25,13 +25,14 @@ class Session(StrEnum):
     CONTINUE = "continue"
 
 
-# Every knob here is portable: it means the same thing whichever Focus answers
-# the call. Focus-specific ones travel separately, as `focus_options`. All of
-# them are also *configuration* — reusing one `CodingOpts` across calls is
-# harmless, which is the point of bundling them. `session` is not configuration,
-# it is per-call identity, so it stays a parameter of `coding` itself. `forbid`
-# is what makes that visible: the old `CodingOpts(session=...)` spelling raises
+# What bundles here is *configuration*: reusing one `CodingOpts` across calls is
+# harmless, which is the point of bundling it. Per-call identity is not — the
+# thread a call joins stays a parameter of `coding` itself, and `forbid` is what
+# makes that visible, since the old `CodingOpts(session=...)` spelling raises
 # rather than being quietly dropped onto whatever thread the call defaults to.
+# Portability is a property of the fields rather than the bundle: every knob but
+# `focus_options` means the same thing whichever Focus answers, and that one is
+# read by the Focus it was built for and ignored by any other.
 class CodingOpts(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,6 +40,7 @@ class CodingOpts(BaseModel):
     system: str | None = None
     cwd: str | None = None
     gate_tools: list[str] | None = None
+    focus_options: BaseModel | None = None
 
 
 class CodingResult(BaseModel):
