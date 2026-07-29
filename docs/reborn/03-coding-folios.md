@@ -24,20 +24,25 @@ Non-deterministic inside a step, deterministic between them.
   ```python
   await coding(
       prompt,
-      output=SomeModel,               # validated via TypeAdapter; failure raises
-      session="new",                  # which thread of memory this call is on
+      output=SomeModel,                   # validated via TypeAdapter; failure raises
+      session=Session.CONTINUE,           # whether this call resumes
+      key="lint-loop",                    # which thread it resumes and files under
       opts=CodingOpts(
           model=model, system=system, cwd=cwd,
-          gate_tools=["Bash"],        # opt in to a decide round-trip per tool
+          gate_tools=["Bash"],            # opt in to a decide round-trip per tool
+          focus_options=ClaudeOptions(),  # the answering Focus's own knobs
       ),
-      focus_options=ClaudeOptions(),  # Focus-specific knobs
   )
   ```
 
-  Every portable knob bundles into `CodingOpts` rather than spreading across the
-  signature (ruff PLR0913 stays strict) — portable meaning it says the same thing
-  whichever Focus answers. Default return is `CodingResult` (text + telemetry);
-  `output=T` returns `T`.
+  Configuration bundles into `CodingOpts` rather than spreading across the
+  signature (ruff PLR0913 stays strict) — configuration meaning reusing one
+  across calls is harmless. Per-call identity (`session`, `key`) stays on the
+  signature, and so does `output`, which shapes the return type. Portability is
+  a property of the fields rather than the bundle: every knob but
+  `focus_options` says the same thing whichever Focus answers, and that one is
+  read by the Focus it was built for and ignored by any other. Default return is
+  `CodingResult` (text + telemetry); `output=T` returns `T`.
 - `vekna.folio.coding_claude` — `ClaudeCodingFocus` implementing
   `CodingFocusProtocol` via `claude-agent-sdk`, a plain runtime dependency.
   `_links.py` is the only place importing the SDK, and it matches the SDK's
@@ -68,9 +73,14 @@ and that used to be an implementation detail of the Focus. It is a declaration
 now, because the right answer differs per ritual and the wrong one is invisible:
 
 ```python
-await coding(prompt, session="new")        # fresh context
-await coding(prompt, session="continue")   # the cast's running session
-await coding(prompt, session="lint-loop")  # a named session, resumed by name
+# fresh context
+await coding(prompt)
+# the cast's running session
+await coding(prompt, session=Session.CONTINUE)
+# a thread of its own, resumed by key
+await coding(prompt, session=Session.CONTINUE, key="lint-loop")
+# that same thread, started over
+await coding(prompt, session=Session.NEW, key="lint-loop")
 ```
 
 A retry after a failed attempt usually wants `continue` — the agent remembering
@@ -83,48 +93,59 @@ default contradicts what the boundary is for. Resume (0.6.0) reusing the prior
 SDK session when re-entering an interrupted rite is unaffected — that is the
 *same* rite continuing, not a new one inheriting.
 
-Named sessions give a loop its own thread of memory without pinning the whole
-cast to one context: a lint-fix loop remembers its own attempts while a review
-rite in the same cast starts clean. `merge_ready`'s `repair` step is the shipped
+A key gives a loop its own thread of memory without pinning the whole cast to
+one context: a lint-fix loop remembers its own attempts while a review rite in
+the same cast starts clean. `merge_ready`'s `repair` step is the shipped
 example.
 
 The grimoire records which session a rite used, so the journal, the daemon and
 the Eye can all show it — and replay can reproduce it.
 
-Three things the implementation settled that the sketch above left open:
+Five things the implementation settled that the sketch above left open:
 
-- **`continue` is the last session *any* `coding` rite produced**, not the last
-  `continue` call. The motivating case — a retry that remembers what it tried —
-  follows a first attempt written as a plain `coding(...)`, which under the
-  default records no thread of its own. Reading only its own kind would start
-  that retry fresh while looking like it resumed.
-- **It is its own parameter, not a knob on `CodingOpts`.** Everything on
-  `CodingOpts` is configuration: reusing one across calls is harmless, which is
-  the point of bundling them. A thread is per-call identity instead, so a
-  shared `CodingOpts` carrying one would put two rites on a single agent's
-  memory without either call saying so — the invisible wrong answer this
-  declaration exists to remove, arriving through the door it came in. Folding
-  `gate_tools` into `CodingOpts` left `coding` at four parameters, so the fifth
-  costs nothing that PLR0913 charges for. `CodingOpts` forbids extras, so the
-  older spelling raises rather than being silently dropped.
-- **The blank check runs at call time, not construction time.** With `session`
-  off the model there is no boundary left to validate at, so a `CodingOpts`
-  field validator is no longer the alternative it once was — and a declaration
-  the medium refuses is a `CodingSessionError`, which is a `RitualError`, which
-  is what a ritual author already catches.
+- **Whether to resume and which thread to resume are two parameters.** One
+  parameter holding two reserved words *plus* any name an author invents is a
+  set no type can close, and the validator standing in for the type coerced
+  rather than refused: `session=None` opened a thread named `"None"`. `session`
+  is the closed enum now and `key` names the thread, so a slip in an author's
+  never-type-checked `rituals.py` raises `CodingSessionError` instead of
+  quietly sharing memory. `new` with a key is not a contradiction — it is how a
+  loop starts its thread over.
+- **`continue` without a key is the last session *any* `coding` rite
+  produced**, not the last `continue` call. The motivating case — a retry that
+  remembers what it tried — follows a first attempt written as a plain
+  `coding(...)`, which under the default files itself under no key. Reading only
+  its own kind would start that retry fresh while looking like it resumed.
+- **Both halves are parameters, not knobs on `CodingOpts`.** What bundles is
+  configuration: reusing one `CodingOpts` across calls is harmless, which is the
+  point of bundling it. A thread is per-call identity instead, so a shared
+  `CodingOpts` carrying one would put two rites on a single agent's memory
+  without either call saying so — the invisible wrong answer this declaration
+  exists to remove, arriving through the door it came in. `CodingOpts` forbids
+  extras, so both older spellings raise rather than being silently dropped.
+  Paying for the second parameter is what moved `focus_options` into the bundle:
+  five is what PLR0913 allows, and `output` cannot leave, because the overloads
+  type the return off it.
+- **The checks run at call time, not construction time.** With neither half on
+  the model there is no boundary left to validate at, so a `CodingOpts` field
+  validator is no longer the alternative it once was — and a declaration the
+  medium refuses is a `CodingSessionError`, which is a `RitualError`, which is
+  what a ritual author already catches.
 - **Two concurrent `coding` rites both move "the last session".** A step body
   running two mediums under a `TaskGroup` leaves `continue` after it
-  last-writer-wins. Named threads are unaffected, and a name is the answer when
+  last-writer-wins. Keyed threads are unaffected, and a key is the answer when
   it matters.
 
 ## Scope
 
 - `vekna.folio.coding/{_pacts,_mills}.py` — `CodingOpts`, `CodingResult`,
   `Session`, `CodingOutputError`, `CodingSessionError` and the Medium itself.
-- `SessionBook` on the lexicon's `RiteContext` — one per cast, holding the
-  named threads and the last id any call recorded. It only remembers; which
-  name a call means is the medium's vocabulary. Reached through the context
-  rather than exported, since the context is what a medium already holds.
+- `SessionBook` on the lexicon's `RiteContext` — one per cast, holding the keyed
+  threads and the last id any call recorded. It only remembers; what a key means
+  is the medium's vocabulary. Reached through the context rather than exported,
+  since the context is what a medium already holds. A call that declared a
+  thread and got no session id back cannot be filed, and says so as a delta on
+  its own rite rather than skipping the record in silence.
 - `vekna.folio.coding_claude/{_pacts,_links}.py` + `register()`.
 - Medium↔Focus boundary types (`CodingCall`, `FocusReply`, `GateFn`, `AskFn`,
   `CodingFocusProtocol`) live in `vekna.lexicon`, so folio⊥folio stays absolute

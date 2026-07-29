@@ -106,7 +106,7 @@ lexicon/
   _edges.py      # empty
 folio/
   coding/        # the coding medium (backend-agnostic)
-    _pacts.py    # CodingOpts, CodingResult, CodingOutputError
+    _pacts.py    # CodingOpts, CodingResult, Session, the two errors
     _mills.py    # the medium itself, plus the one-shot prompt entry
     _inits.py    # register(): expects a Focus, offers the prompt entry
   coding_claude/ # Claude Agent SDK focus for `coding`

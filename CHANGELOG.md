@@ -12,25 +12,31 @@ and this project adheres to [Semantic Versioning].
 ### Added
 
 - **`coding` medium** (`vekna.folio.coding`) — hand work to an agent from
-  inside a step. Every portable knob bundles into
-  `CodingOpts(model=..., system=..., cwd=..., gate_tools=...)` — portable
-  meaning it says the same thing whichever Focus answers, and configuration
-  meaning one is safe to reuse. `output=SomeModel` validates the
-  agent's reply and returns it typed, raising `CodingOutputError` when it does
-  not fit. Permissive by default: tool use is gated only when a call passes
+  inside a step. Configuration bundles into
+  `CodingOpts(model=..., system=..., cwd=..., gate_tools=..., focus_options=...)`
+  — configuration meaning one is safe to reuse across calls, which is the point
+  of bundling it. Every field but `focus_options` is portable too, saying the
+  same thing whichever Focus answers; that one is read by the Focus it was
+  built for and ignored by any other. `output=SomeModel` validates the agent's
+  reply and returns it typed, raising `CodingOutputError` when it does not fit.
+  Permissive by default: tool use is gated only when a call passes
   `gate_tools=[...]`, which turns each matching tool into a `decide`
   round-trip.
-- **Session continuity is the author's** — `coding(prompt, session=...)`
-  declares which thread of agent memory a call is on. `"new"` is a fresh
-  context and the default, since a step is a task boundary and carrying context
-  across one by default contradicts what the boundary is for. `"continue"`
-  carries on from the cast's last agent call, and any other string is a named
-  thread resumed by that name — `merge_ready`'s repair loop uses one, so a
-  second attempt knows what the first already tried. It is a parameter rather
-  than a knob on `CodingOpts` because a thread is per-call identity, not
-  reusable configuration. The medium resolves the declaration against a
-  per-cast session book and hands the Focus a plain session id; the rite's
-  telemetry records the declaration as well as the id.
+- **Session continuity is the author's** — `coding(prompt, session=..., key=...)`
+  declares which thread of agent memory a call is on. `session` says whether the
+  call resumes: `Session.NEW` is a fresh context and the default, since a step
+  is a task boundary and carrying context across one by default contradicts what
+  the boundary is for; `Session.CONTINUE` carries on. `key` says which thread —
+  `merge_ready`'s repair loop keys its own, so a second attempt knows what the
+  first already tried, while an unkeyed `continue` follows whichever agent call
+  ran last. `new` with a key starts that thread over. Both are parameters rather
+  than knobs on `CodingOpts`, because a thread is per-call identity and not
+  reusable configuration; a word that is not one of the two, or a key naming
+  nothing, raises `CodingSessionError`. The medium resolves the declaration
+  against a per-cast session book and hands the Focus a plain session id; the
+  rite's telemetry records both halves of the declaration as well as the id, and
+  a declared thread the Focus gave no id for says so on the rite rather than
+  going unrecorded in silence.
 - **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
   `_links.py` is the only module importing `claude-agent-sdk`.
 - **`ask_human`** — the agent can put a question to the operator mid-rite,
