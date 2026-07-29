@@ -413,6 +413,41 @@ class TestSessionDeclaration:
         }
 
     @staticmethod
+    def test_a_declared_thread_that_did_not_take_says_so():
+        # The rite that failed to record is the one that reports it: reading
+        # `session_id: null` off the journal afterwards is not the same as being
+        # told, and the next call on the thread would resume the wrong id.
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
+
+        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
+        assert deltas == [
+            "the focus reported no session id: nothing recorded for key 'repair'"
+        ]
+
+    @staticmethod
+    def test_an_unkeyed_continue_that_did_not_take_says_so():
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE))
+
+        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
+        assert deltas == [
+            "the focus reported no session id: nothing recorded for the running session"
+        ]
+
+    @staticmethod
+    def test_a_call_that_declared_no_thread_stays_quiet():
+        # Nothing was claimed, so there is nothing to report — a Focus that
+        # never reports ids would otherwise narrate every call it answers.
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual())
+
+        assert [e for e in grimoire.events if isinstance(e, RiteStreamed)] == []
+
+    @staticmethod
     @pytest.mark.parametrize("key", ["", "  ", 3, ["repair"]])
     def test_a_key_that_names_nothing_is_refused(key):
         register_focus("coding", FakeFocus())

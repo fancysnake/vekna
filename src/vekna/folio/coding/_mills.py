@@ -117,6 +117,22 @@ def _thread(*, context: RiteContext, session: object, key: object) -> _Thread:
     return _Thread(declared=declared, resume=resume, key=keyed)
 
 
+# A reply with no id cannot be filed, and a call that declared a thread has to
+# hear about it: the next call on that thread would otherwise resume whatever
+# ran before this one while the ritual reads as threaded. Said out loud rather
+# than raised — the agent's work is done and valid, and a Focus that reports no
+# ids would otherwise be unusable with threads at all. A call that declared
+# nothing stays quiet, having claimed nothing to lose.
+def _record(*, context: RiteContext, thread: _Thread, session_id: str | None) -> None:
+    if session_id is not None:
+        context.sessions.record(session_id, name=thread.key)
+        return
+    if thread.declared == Session.NEW and thread.key is None:
+        return
+    label = f"key {thread.key!r}" if thread.key is not None else "the running session"
+    emit_delta(f"the focus reported no session id: nothing recorded for {label}")
+
+
 def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
     adapter: TypeAdapter[_OutputT] = TypeAdapter(output)
     try:
@@ -178,8 +194,7 @@ async def coding(
         gate=_make_gate(context.channel, resolved.gate_tools),
         ask=_make_ask(context.channel),
     )
-    if reply.session_id is not None:
-        context.sessions.record(reply.session_id, name=thread.key)
+    _record(context=context, thread=thread, session_id=reply.session_id)
     # The declaration, not just the id: whether the author meant this rite to
     # carry context is the thing the journal cannot read off `session_id`.
     telemetry: dict[str, JsonValue] = {
