@@ -17,11 +17,11 @@
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for
-permission, unless a call names ``gate_tools`` — and it can put a question to
-you mid-step through ``ask_human``, which every ``coding`` call offers. What
-happens next is decided at the step boundary: a gate passes or it does not, a
-budget runs out, you answer a ``decide``. Agents are non-deterministic inside a
-step and deterministic between them.
+permission, unless a call's ``CodingOpts`` names ``gate_tools`` — and it can put
+a question to you mid-step through ``ask_human``, which every ``coding`` call
+offers. What happens next is decided at the step boundary: a gate passes or it
+does not, a budget runs out, you answer a ``decide``. Agents are
+non-deterministic inside a step and deterministic between them.
 
 Concurrency lives inside a step too, and needs nothing from the engine: see
 ``merge_ready.gates``, which starts two shells in an ``asyncio.TaskGroup`` and
@@ -36,7 +36,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from vekna.folio.coding import CodingOpts, coding
+from vekna.folio.coding import CodingOpts, Session, coding
 from vekna.folio.coding_claude import ClaudeOptions
 from vekna.folio.flow import decide
 from vekna.folio.shell import ShellResult, shell
@@ -360,12 +360,12 @@ async def gates(state: Attempt) -> Transition:
 # repaired, and the prompt says only what actually failed.
 # The loop is what the thread is for. Every pass through here meets a failure
 # the previous pass tried and failed to fix, and an agent starting fresh each
-# time will reach for the same idea again. A name rather than `continue`: they
-# are the same thing in a ritual whose only agent call this is, and they stop
-# being the same the moment a second one is added.
+# time will reach for the same idea again. A key rather than a bare `continue`:
+# they are the same thing in a ritual whose only agent call this is, and they
+# stop being the same the moment a second one is added.
 @step
 async def repair(failure: Red) -> Transition:
-    await coding(_REPAIR + _complaint(failure), session="repair")
+    await coding(_REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
     return goto(gates, Attempt(budget=failure.budget - 1))
 
 
