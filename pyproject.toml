@@ -35,6 +35,8 @@ dev = [
     "pytest-asyncio (>=1.3.0,<2.0.0)",
     "pre-commit (>=4.6.0,<5.0.0)",
     "tingle (>=0.4.0,<0.5.0)",
+    "taplo (>=0.9.3,<0.10.0)",
+    "pytest-xdist (>=3.8.0,<4.0.0)",
 ]
 
 # BLACK
@@ -94,11 +96,7 @@ forbidden_modules = [
 name = "inits"
 type = "forbidden"
 source_modules = ["vekna.inits"]
-forbidden_modules = [
-    "vekna.edges",
-    "vekna.folio",
-    "vekna.lexicon",
-]
+forbidden_modules = ["vekna.specs", "vekna.edges", "vekna.folio", "vekna.lexicon"]
 
 [[tool.importlinter.contracts]]
 name = "mills"
@@ -139,7 +137,6 @@ forbidden_modules = [
     "vekna.links",
     "vekna.inits",
     "vekna.mills",
-    "vekna.pacts",
     "vekna.edges",
     "vekna.folio",
     "vekna.lexicon",
@@ -226,9 +223,7 @@ forbidden_modules = [
 name = "folio-inits"
 type = "forbidden"
 source_modules = ["vekna.folio.*._inits"]
-forbidden_modules = [
-    "vekna.folio.*._edges",
-]
+forbidden_modules = ["vekna.folio.*._edges"]
 
 [[tool.importlinter.contracts]]
 name = "folio-mills"
@@ -314,7 +309,7 @@ forbidden_modules = [
     "vekna.lexicon._mills",
     "vekna.lexicon._specs",
     "vekna.lexicon._edges",
-    "vekna.folio"
+    "vekna.folio",
 ]
 
 [[tool.importlinter.contracts]]
@@ -333,9 +328,7 @@ forbidden_modules = [
 name = "lexicon-inits"
 type = "forbidden"
 source_modules = ["vekna.lexicon._inits"]
-forbidden_modules = [
-    "vekna.lexicon._edges",
-]
+forbidden_modules = ["vekna.lexicon._edges"]
 
 [[tool.importlinter.contracts]]
 name = "lexicon-mills"
@@ -420,7 +413,7 @@ disallow_subclassing_any = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
-exclude = []
+exclude = ["tests/.*.py"]
 explicit_package_bases = true
 extra_checks = true
 implicit_reexport = true
@@ -439,6 +432,10 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+
 [[tool.mypy.overrides]]
 module = "vekna.folio.coding_claude._links"
 disallow_any_expr = false
@@ -447,7 +444,6 @@ disallow_any_explicit = false
 # RUFF
 
 [tool.ruff]
-fix = false
 line-length = 88
 output-format = 'concise'
 preview = true
@@ -455,11 +451,27 @@ preview = true
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "COM812", # Trailing comma missing
-    "CPY",    # Missing copyright notice at top of file
-    "D1",     # Missing docstring
+    "COM812",  # Trailing comma missing
+    "CPY",     # Missing copyright notice at top of file
+    "D1",      # Missing docstring
     "PLC2701", # Private name import
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = [
+    "ANN", # flake8-annotations
+    "S",
+]
+# A @ritual entrypoint must be `async def` — Ritual.run is typed
+# Awaitable[Transition] — and one that only maps components onto the first
+# step's payload has nothing to await. The rule is right about the function and
+# wrong about the contract, and it fires on every ritual anyone writes.
+"rituals.py" = [
+    "RUF029", # Function is declared `async`, but doesn't `await`
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-values-type = "tuple"
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
@@ -469,20 +481,6 @@ allow-star-arg-any = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**.py" = [
-    "ANN",     # flake8-annotations
-    "S",
-]
-# A @ritual entrypoint must be `async def` — Ritual.run is typed
-# Awaitable[Transition] — and one that only maps components onto the first
-# step's payload has nothing to await. The rule is right about the function and
-# wrong about the contract, and it fires on every ritual anyone writes.
-"rituals.py" = [
-    "RUF029",  # Function is declared `async`, but doesn't `await`
-]
-
 
 # VULTURE
 
@@ -502,7 +500,3 @@ show_missing = true
 skip_covered = true
 exclude_also = ["if TYPE_CHECKING:", "# pragma: no cover"]
 precision = 2
-
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
