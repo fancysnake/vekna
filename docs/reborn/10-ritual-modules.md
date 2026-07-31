@@ -193,5 +193,5 @@ rituals/
   naming `files` or `modules` keeps working unchanged.
 - Two sources declaring a step of the same name fail with an error naming both.
 - A directory holding both `rituals.py` and `rituals/` fails with an error naming
-  both paths, and the walk up stops there rather than skipping to a parent.
+  both paths, and the upward walk stops there rather than skipping to a parent.
 - `mise run check` and `mise run test` pass.
