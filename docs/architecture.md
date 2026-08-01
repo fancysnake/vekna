@@ -148,8 +148,18 @@ needs its own typing exemption, not for room to grow.
 
 ## Typing exemptions
 
-Two modules relax `disallow_any_expr`, each for a boundary that cannot be
-expressed otherwise. Both are declared in `pyproject.toml` with the reason:
+`Any` that reaches in from a framework object the project does not define is
+accepted rather than narrowed away by hand, and confined to one module named in
+a `pyproject.toml` override so the exemption cannot spread:
+
+- `folio.coding_claude._links` — the Claude Agent SDK's own types.
+- `folio.coding._pacts` — pydantic's `ValidationError.errors()`, a list of
+  TypedDicts whose values are `Any`, read to turn a refused `CodingOpts` into a
+  sentence. A `pacts` module may import no internal layer, so the boundary has
+  no adapter to live in beside it.
+
+Two more boundaries are narrowed per line instead, being a handful of
+expressions rather than a module's worth:
 
 - `lexicon._mills.dispatch` — reflection over runtime annotations and
   `ParamSpec` signature forwarding.

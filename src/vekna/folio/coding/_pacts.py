@@ -1,6 +1,13 @@
 from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ModelWrapValidatorHandler,
+    ValidationError,
+    model_validator,
+)
 
 from vekna.lexicon import RitualError
 
@@ -11,6 +18,44 @@ class CodingOutputError(RitualError):
 
 class CodingSessionError(RitualError):
     pass
+
+
+class CodingOptsError(RitualError):
+    pass
+
+
+_MOVED = frozenset({"session", "key"})
+_MOVED_HINT = "session and key are parameters of coding(), not fields of CodingOpts"
+
+
+def _where(loc: tuple[int | str, ...]) -> str:
+    return ".".join(str(part) for part in loc) or "the bundle"
+
+
+# The two halves of the declaration are the whole reason `forbid` is on, so the
+# refusal names where they went. Anything else pydantic rejected is quoted as it
+# came: a `RitualError` either way, because a mis-built bundle is an author's
+# mistake in a file nothing type-checks, and the cast should say so rather than
+# unwind through the engine's frames. Reading `errors()` is what this module's
+# `disallow_any_expr` exemption is for — pydantic's report is a list of
+# TypedDicts whose values are `Any`, and it stops here.
+def _refusal(*, bundle: str, error: ValidationError) -> str:
+    details = error.errors()
+    extras = [
+        str(detail["loc"][0])
+        for detail in details
+        if detail["type"] == "extra_forbidden" and detail["loc"]
+    ]
+    if extras:
+        named = ", ".join(repr(name) for name in extras)
+        field = "no field" if len(extras) == 1 else "no fields"
+        moved = f" — {_MOVED_HINT}" if _MOVED.intersection(extras) else ""
+        return f"{bundle} has {field} {named}{moved}"
+    # Reassembled rather than quoted whole: inside a wrap validator pydantic
+    # titles its own report `ValidatorCallable`, which names an implementation
+    # detail of this refusal instead of the model the author was building.
+    said = "; ".join(f"{_where(detail['loc'])}: {detail['msg']}" for detail in details)
+    return f"{bundle} refused what it was given — {said}"
 
 
 # Closed, and only two words wide: whether this call resumes. *Which* thread it
@@ -40,6 +85,21 @@ class CodingOpts(BaseModel):
     cwd: str | None = None
     gate_tools: list[str] | None = None
     focus_options: BaseModel | None = None
+
+    # Wrapping the model's own validation rather than overriding `__init__`,
+    # which would have to spell every field a second time to stay typed — and a
+    # second spelling of the field list is the drift this bundle exists to
+    # avoid. `CodingOptsError` is not a `ValueError`, so pydantic lets it past
+    # rather than folding it back into a `ValidationError`.
+    @model_validator(mode="wrap")
+    @classmethod
+    def _refuse_unknown(
+        cls, values: object, handler: ModelWrapValidatorHandler[Self]
+    ) -> Self:
+        try:
+            return handler(values)
+        except ValidationError as error:
+            raise CodingOptsError(_refusal(bundle=cls.__name__, error=error)) from error
 
 
 class CodingResult(BaseModel):

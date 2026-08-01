@@ -2,6 +2,7 @@ from ._inits import register
 from ._mills import coding
 from ._pacts import (
     CodingOpts,
+    CodingOptsError,
     CodingOutputError,
     CodingResult,
     CodingSessionError,
@@ -10,6 +11,7 @@ from ._pacts import (
 
 __all__ = [
     "CodingOpts",
+    "CodingOptsError",
     "CodingOutputError",
     "CodingResult",
     "CodingSessionError",

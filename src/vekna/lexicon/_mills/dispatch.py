@@ -7,6 +7,7 @@ from typing import Annotated, ParamSpec, TypeGuard, TypeVar, get_args, get_type_
 from pydantic import BaseModel
 
 from vekna.lexicon._pacts import (
+    MediumBoundaryError,
     Ritual,
     RitualBoundaryError,
     RitualDefinitionError,
@@ -51,6 +52,31 @@ def _is_model_union(annotation: object) -> TypeGuard[UnionType]:
     )
 
 
+# The same check Python is about to perform on the call itself, run early so the
+# failure can be named. A keyword a medium no longer takes is a mistake an
+# author's rituals.py makes and nothing type-checks — `coding(gate_tools=[...])`
+# after `gate_tools` moved into `CodingOpts` — and Python's TypeError reports it
+# as a traceback out of the engine's own frames. The unknown keywords are named
+# from the signature rather than read off the TypeError, whose wording is the
+# interpreter's to change; anything else `bind` refuses is quoted as it came.
+def _check_call(
+    *,
+    name: str,
+    signature: inspect.Signature,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+) -> None:
+    try:
+        signature.bind(*args, **kwargs)
+    except TypeError as error:
+        if unknown := [key for key in kwargs if key not in signature.parameters]:
+            named = ", ".join(repr(key) for key in unknown)
+            msg = f"medium {name!r} takes no argument {named}"
+        else:
+            msg = f"medium {name!r} was called wrong: {error}"
+        raise MediumBoundaryError(msg) from error
+
+
 # Signature-forwarding via ParamSpec is Any-tainted the same way the rest of
 # this module is, so `medium` stays here rather than next to `medium_rite` in
 # the engine — _mills keeps its strictness.
@@ -58,9 +84,15 @@ def medium(
     func: Callable[_P, Awaitable[_MediumT]],
 ) -> Callable[_P, Awaitable[_MediumT]]:
     name = func.__name__
+    # Once, at decoration time: a signature rebuilt per call would put a
+    # reflection cost on every medium a cast reaches.
+    signature = inspect.signature(func)
 
     async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
+        # Inside the rite, not before it: the call is what failed, so the rite
+        # that names the medium is where the failure belongs.
         async with medium_rite(name):
+            _check_call(name=name, signature=signature, args=args, kwargs=kwargs)
             return await func(*args, **kwargs)
 
     # Set directly rather than via functools.wraps, whose _Wrapped return type

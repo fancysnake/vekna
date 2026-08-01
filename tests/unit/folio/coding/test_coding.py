@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from vekna.folio.coding import (
     CodingOpts,
+    CodingOptsError,
     CodingOutputError,
     CodingResult,
     CodingSessionError,
@@ -17,6 +18,7 @@ from vekna.folio.coding import (
 from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
+    MediumBoundaryError,
     NoComponents,
     Transition,
     done,
@@ -231,6 +233,16 @@ class TestCodingMedium:
         _cast(r)
 
         assert focus.calls[0].focus_options is knobs
+
+    @staticmethod
+    def test_a_bundle_field_of_the_wrong_shape_names_the_field():
+        # Every other way of mis-building the bundle reads like the moved knobs:
+        # a `RitualError` naming the field, not a pydantic report titled after
+        # the validator that caught it.
+        with pytest.raises(CodingOptsError, match="model: Input should be") as raised:
+            CodingOpts(model=3)
+
+        assert "ValidatorCallable" not in str(raised.value)
 
     @staticmethod
     def test_agent_question_with_options_routes_through_decide():
@@ -472,9 +484,22 @@ class TestSessionDeclaration:
     def test_the_thread_is_not_a_knob_on_opts(knob):
         # Per-call identity, not configuration, so a shared `CodingOpts` cannot
         # carry it. `forbid` is what keeps the old spelling from being dropped
-        # onto whatever thread the call defaults to.
-        with pytest.raises(ValidationError, match=knob):
+        # onto whatever thread the call defaults to, and the refusal is a
+        # `RitualError` so the cast reports it rather than unwinding.
+        with pytest.raises(CodingOptsError, match=f"no field '{knob}'") as raised:
             CodingOpts(**{knob: "repair"})
+
+        assert "parameters of coding()" in str(raised.value)
+
+    @staticmethod
+    def test_the_old_call_spelling_names_the_argument_it_lost():
+        # `gate_tools` moved into the bundle, and the call that still passes it
+        # is a slip nothing type-checks — Python's own TypeError would report it
+        # as a traceback out of the engine's frames.
+        register_focus("coding", FakeFocus())
+
+        with pytest.raises(MediumBoundaryError, match="takes no argument"):
+            _cast(_one_call_ritual(gate_tools=["Bash"]))
 
     @staticmethod
     def test_telemetry_names_the_thread_the_author_declared():

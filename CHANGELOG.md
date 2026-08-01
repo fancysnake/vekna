@@ -32,7 +32,8 @@ and this project adheres to [Semantic Versioning].
   ran last. `new` with a key starts that thread over. Both are parameters rather
   than knobs on `CodingOpts`, because a thread is per-call identity and not
   reusable configuration; a word that is not one of the two, or a key naming
-  nothing, raises `CodingSessionError`. The medium resolves the declaration
+  nothing, raises `CodingSessionError`, and the older `CodingOpts(session=...)`
+  spelling raises `CodingOptsError` naming where the two halves went. The medium resolves the declaration
   against a per-cast session book and hands the Focus a plain session id; the
   rite's telemetry records both halves of the declaration as well as the id, and
   a declared thread the Focus gave no id for says so on the rite rather than
@@ -84,6 +85,13 @@ and this project adheres to [Semantic Versioning].
   written in the author's `rituals.py`, which it never sees. A `@step` may
   still admit several shapes (`Lint | Coverage`) as long as every member is a
   model; a ritual's components stay a single model, being one CLI interface.
+- **A medium called with an argument it does not take says so.** `@medium`
+  binds the call against the medium's own signature before invoking it and
+  raises the new `MediumBoundaryError` — `medium 'coding' takes no argument
+  'gate_tools'` — on the medium's own rite. Python's `TypeError` said the same
+  thing as a traceback out of the engine's frames, which is the wrong register
+  for a keyword that moved: `gate_tools` is a `CodingOpts` field now, and a call
+  still passing it is a slip in a `rituals.py` nothing type-checks.
 - **A cast's result prints as JSON.** `result: {"covered":true,"remaining":3}`
   rather than a pydantic repr, and `result: null` when a ritual finishes with
   nothing.

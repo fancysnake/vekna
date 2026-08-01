@@ -160,6 +160,14 @@ class RitualBoundaryError(RitualError):
     pass
 
 
+# A medium called with arguments it does not take. Python's own TypeError says
+# the same thing and says it as a traceback, which is the wrong register for a
+# mistake in an author's never-type-checked rituals.py: a moved keyword is the
+# same class of slip as a misspelled session, and should read like one.
+class MediumBoundaryError(RitualError):
+    pass
+
+
 class StandalonePromptError(RitualError):
     pass
 

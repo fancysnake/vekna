@@ -122,7 +122,12 @@ Five things the implementation settled that the sketch above left open:
   `CodingOpts` carrying one would put two rites on a single agent's memory
   without either call saying so — the invisible wrong answer this declaration
   exists to remove, arriving through the door it came in. `CodingOpts` forbids
-  extras, so both older spellings raise rather than being silently dropped.
+  extras, so both older spellings raise rather than being silently dropped —
+  and they raise as `RitualError`s: `CodingOptsError` for a knob put on the
+  bundle, `MediumBoundaryError` for a keyword the medium no longer takes. A
+  pydantic `ValidationError` and a Python `TypeError` said the same things as
+  tracebacks, which made the *deliberately* forbidden spellings read worse than
+  every accidental slip beside them.
   Paying for the second parameter is what moved `focus_options` into the bundle:
   five is what PLR0913 allows, and `output` cannot leave, because the overloads
   type the return off it.
@@ -139,7 +144,8 @@ Five things the implementation settled that the sketch above left open:
 ## Scope
 
 - `vekna.folio.coding/{_pacts,_mills}.py` — `CodingOpts`, `CodingResult`,
-  `Session`, `CodingOutputError`, `CodingSessionError` and the Medium itself.
+  `Session`, `CodingOutputError`, `CodingSessionError`, `CodingOptsError` and
+  the Medium itself.
 - `SessionBook` on the lexicon's `RiteContext` — one per cast, holding the keyed
   threads and the last id any call recorded. It only remembers; what a key means
   is the medium's vocabulary. Reached through the context rather than exported,

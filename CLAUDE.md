@@ -74,6 +74,12 @@ map, layout, patterns, and drift flags:
 - Never touch `.env*` files
 - NEVER add noqa/type ignore/pylint comments or directives without explicit
   per-case approval.
+- `Any` reaching in from a framework object we do not define — an SDK client,
+  pydantic's `ValidationError.errors()` — is accepted rather than narrowed away
+  by hand. Confine it to one module and name that module in a
+  `[[tool.mypy.overrides]]` entry, so the exemption cannot spread through the
+  codebase; write an adapter module when the boundary has no home already.
+  `vekna.folio.coding_claude._links` is the pattern.
 - Functions/methods with 3+ parameters (excluding `self`) take them
   keyword-only with `*,`:
 
