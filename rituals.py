@@ -240,7 +240,7 @@ async def judge(diff: Diff) -> Transition:
 # merge_ready — run both gates at once, and babysit them to green.
 
 _REPAIR = """\
-`mise run prcheck` and `mise run test` are this project's gates, and what
+`mise run lint:py` and `mise run test` are this project's gates, and what
 follows is what they said. Make them green.
 
 Fix the cause, not the symptom: do not disable a lint rule, add a noqa or a
@@ -334,7 +334,7 @@ async def gates(state: Attempt) -> Transition:
     # them at once is not only faster: one cast then tells you everything that
     # is red, rather than the first thing that is red.
     async with asyncio.TaskGroup() as group:
-        linting = group.create_task(shell("mise run prcheck"))
+        linting = group.create_task(shell("mise run lint:py"))
         suite = group.create_task(shell("mise run test"))
     lint, tests = linting.result(), suite.result()
     if not lint.exit_code and not tests.exit_code:
