@@ -85,4 +85,4 @@ operations; the daemon is not the thing that hangs.
   message rather than accepting it silently.
 - A cast whose only rite times out exits non-zero with the rite named, not with
   a bare `CancelledError` traceback.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

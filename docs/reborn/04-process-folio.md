@@ -35,4 +35,4 @@ Vekna daemon. Locks. TUI.
 - A ritual spawns a long-running process, runs rites against it, and tears it
   down cleanly on cast exit — no orphaned processes.
 - Typed handle returns validate (`output=ServerHandle` style).
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

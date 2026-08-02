@@ -41,4 +41,4 @@ SDK, lexicon, folios, TUI, any new surface.
 
 - `vekna tmux` attaches exactly like bare `vekna` did in `0.0.4`.
 - `vekna tmux notify` works identically.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

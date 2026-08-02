@@ -64,4 +64,4 @@ for now.
   to stdout, exits 0.
 - `decide` prompts on stdin and routes the answer back.
 - Probing the absent daemon socket is silent and does not hang.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

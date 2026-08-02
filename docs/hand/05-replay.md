@@ -98,4 +98,4 @@ new recording, and the unmatched-call failure is how it says so.
 - A fixture with a `decide` replays the recorded answer with no prompt on stdin.
 - `replays()` works in a plain pytest run with no daemon and no network.
 - A fixture in `fixtures/` survives pruning of `runs/`.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.
