@@ -433,10 +433,18 @@ class Verdict(BaseModel):
     reading: Reading
 
 
+Took = Literal["fix", "file", "ignore"]
+
+# Named as a constant, and typed: `decide` answers with the type it was offered,
+# so this is what carries the literal through to `Triaged` rather than a `str`
+# the step would have to check for itself.
+_TOOK: tuple[Took, ...] = ("fix", "file", "ignore")
+
+
 class Triaged(BaseModel):
     link: str
     reading: Reading
-    took: Literal["fix", "file", "ignore"]
+    took: Took
 
 
 # `gh`, not an agent holding a fetch tool: it reads private repositories, it
@@ -495,8 +503,7 @@ async def route(verdict: Verdict) -> Transition:
     # The headline and the size, not the whole reading: the reading is in the
     # result, and a prompt you have to scroll is not a prompt.
     took = await decide(
-        f"{verdict.reading.headline} [{verdict.reading.size}]",
-        options=["fix", "file", "ignore"],
+        f"{verdict.reading.headline} [{verdict.reading.size}]", options=_TOOK
     )
     triaged = Triaged(link=verdict.link, reading=verdict.reading, took=took)
     if took == "ignore":
