@@ -14,13 +14,15 @@ enter = "poetry install"
 # Mise creates and activates this virtualenv automatically
 _.python.venv = { path = ".venv", create = true }
 PACKAGE = "vekna"
-SRC_PATHS = "src"                                               # Add: rituals.py
+SRC_PATHS = "src"
 TEST_PATHS = "tests"
 SCRIPT_PATHS = "rituals.py"
 TOML_PATHS = ".taplo.toml pyproject.toml mise.toml tingle.toml"
 
 [task_config]
-includes = ["git::https://github.com/fancysnake/shared-configs.git//python.toml"]
+includes = [
+    "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=5da354f89c7e72d677e80326270aa8d8226ee76e",
+]
 
 [tasks.update]
 run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
