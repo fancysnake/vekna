@@ -104,9 +104,9 @@ async def cover_diff(components: CoverDiff) -> Transition:
 
 @step
 async def measure(state: Uncovered) -> Transition:
-    # `mise run diff-cover` runs the suite under coverage, then fails when the
+    # `test:py:cov:diff` runs the suite under coverage, then fails when the
     # lines this branch changed are not exercised by a test.
-    result = await shell("mise run diff-cover --fail-under 100")
+    result = await shell("mise run test:py:cov:diff -- --fail-under 100")
     if result.exit_code == 0:
         return done(CoverReport(covered=True, remaining=state.budget))
     # `<=`, not `==`: the Components reject a negative bound, and this stays
@@ -240,7 +240,7 @@ async def judge(diff: Diff) -> Transition:
 # merge_ready — run both gates at once, and babysit them to green.
 
 _REPAIR = """\
-`mise run lint:py` and `mise run test` are this project's gates, and what
+`mise run lint:py` and `mise run test:py` are this project's gates, and what
 follows is what they said. Make them green.
 
 Fix the cause, not the symptom: do not disable a lint rule, add a noqa or a
@@ -335,7 +335,7 @@ async def gates(state: Attempt) -> Transition:
     # is red, rather than the first thing that is red.
     async with asyncio.TaskGroup() as group:
         linting = group.create_task(shell("mise run lint:py"))
-        suite = group.create_task(shell("mise run test"))
+        suite = group.create_task(shell("mise run test:py"))
     lint, tests = linting.result(), suite.result()
     if not lint.exit_code and not tests.exit_code:
         return done(MergeReport(green=True, remaining=state.budget))
