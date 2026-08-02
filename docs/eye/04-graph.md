@@ -93,4 +93,4 @@ Cross-cast graphs — one graph is one ritual.
 - `on_error` edges and `done` terminals are drawn.
 - An unreachable step is flagged in `rituals show` and in both renderers.
 - The web view renders a ritual that has never been cast.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

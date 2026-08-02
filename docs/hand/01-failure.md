@@ -109,4 +109,4 @@ failure is not another's, and the daemon already surfaces both.
   declares one, and otherwise aborts the cast — never an implicit self-catch.
 - `rituals show` prints the `on_error` edge; a recovery step reachable only that
   way is not reported as unreachable.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

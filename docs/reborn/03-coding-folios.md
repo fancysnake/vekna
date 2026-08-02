@@ -187,7 +187,7 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
 
   @step
   async def measure(state: Uncovered) -> Transition:
-      result = await shell("mise run diff-cover --fail-under 100")
+      result = await shell("mise run test:py:cov:diff -- --fail-under 100")
       if result.exit_code == 0:
           return done(CoverReport(covered=True, remaining=state.budget))
       if state.budget == 0:

@@ -88,4 +88,4 @@ not this doc's to revisit.
   started from one shows on both.
 - A missing extra is reported once at startup, naming the surface, and the lich
   runs on what it has.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

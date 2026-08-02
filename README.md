@@ -45,7 +45,7 @@ class Verdict(BaseModel):
 
 @step
 async def fix(state: Attempt) -> Transition:
-    result = await shell("mise run test")
+    result = await shell("mise run test:py")
     if result.exit_code == 0:
         return done(Verdict(outcome="green"))
     if state.left <= 0:
@@ -195,8 +195,9 @@ GLIMPSE layering, enforced by `import-linter`. See
 ## Development
 
 ```bash
-mise run test    # all tests
-mise run check   # format + lint + types + import contracts
+mise run test:py     # all tests
+mise run check:py    # the loop while you work: format, lint, tests
+mise run fullcheck   # the gate before you push: adds diff-coverage and tingle
 ```
 
 ## Licence

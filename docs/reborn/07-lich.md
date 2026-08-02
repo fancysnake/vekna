@@ -248,4 +248,4 @@ local surface at this release.
   the answer shows on the terminal surface too.
 - A message from a user not on the allowlist changes nothing and gets no reply.
 - Without the `discord` extra the lich runs terminal-only and says so once.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

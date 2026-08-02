@@ -81,4 +81,4 @@ this release. See above for the two things to do instead.
   the first ritual runs.
 - A stranger follows the README, writes a three-step ritual, and runs it
   end-to-end from a terminal — then raises a lich and casts it from Discord.
-- `mise run check`, `mise run test`, and diff-coverage pass on `main`.
+- `mise run fullcheck` passes on `main`.
