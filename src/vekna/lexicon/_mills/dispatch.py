@@ -1,11 +1,13 @@
 import inspect
 import textwrap
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import ParamSpec, TypeVar, cast
+from typing import ParamSpec, TypeVar
 
 from pydantic import BaseModel
 
 from vekna.lexicon._pacts import (
+    Done,
+    Goto,
     MediumBoundaryError,
     Ritual,
     RitualBoundaryError,
@@ -15,18 +17,11 @@ from vekna.lexicon._pacts import (
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 
-from ._annotations import _component_flags, _components_model, _Erased, _payload_type
+from ._annotations import _component_flags, _components_model, _payload_type
 from .engine import medium_rite
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
-
-# A step declares the payload it takes — `async def measure(state: Uncovered)` —
-# and a parameter type is contravariant, so a decorator asking for
-# `Callable[[BaseModel], ...]` refuses every step an author will ever write.
-# The variable is what lets the declaration through; the erasure below is what
-# the runtime works in.
-_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
 
 
 # Signature-forwarding via ParamSpec is str-tainted the same way the rest of
@@ -73,16 +68,16 @@ def medium(
     return wrapped
 
 
-def source_text(func: _Erased) -> str | None:
+def source_text(func: Callable[[BaseModel], Awaitable[Goto | Done]]) -> str | None:
     try:
         return textwrap.dedent(inspect.getsource(func))
     except (OSError, TypeError):
         return None
 
 
-def step(func: Callable[[_PayloadT], Awaitable[Transition]]) -> Step:
+def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
     name = func.__name__
-    erased = cast("_Erased", func)
+    erased = func
     payload_type = _payload_type(erased)
 
     async def run(payload: BaseModel | None) -> Transition:
@@ -98,9 +93,9 @@ def step(func: Callable[[_PayloadT], Awaitable[Transition]]) -> Step:
 
 def ritual(
     name: str, *, max_steps: int = DEFAULT_MAX_STEPS
-) -> Callable[[Callable[[_PayloadT], Awaitable[Transition]]], Ritual]:
-    def wrap(func: Callable[[_PayloadT], Awaitable[Transition]]) -> Ritual:
-        erased = cast("_Erased", func)
+) -> Callable[[Callable[[BaseModel], Awaitable[Transition]]], Ritual]:
+    def wrap(func: Callable[[BaseModel], Awaitable[Transition]]) -> Ritual:
+        erased = func
         model = _components_model(erased)
 
         # The cast's entry boundary, and the counterpart to the step's: nothing

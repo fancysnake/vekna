@@ -7,12 +7,13 @@ from pydantic import BaseModel
 
 from vekna.lexicon._pacts import RitualDefinitionError, Transition
 
+_NAMELESS = "value"
+
+
 # What the decorators hand their helpers, and what a Step runs: past the
 # boundary check the payload is a BaseModel and nothing more, because the type
 # it was checked against is a runtime value read off an annotation.
 _Erased = Callable[[BaseModel], Awaitable[Transition]]
-
-_NAMELESS = "value"
 
 
 # 3.14 merged `typing.Union` into `types.UnionType`. Before it, `|` yields the
