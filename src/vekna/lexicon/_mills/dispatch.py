@@ -2,7 +2,15 @@ import inspect
 import textwrap
 from collections.abc import Awaitable, Callable
 from types import NoneType, UnionType
-from typing import Annotated, ParamSpec, TypeGuard, TypeVar, get_args, get_type_hints
+from typing import (
+    Annotated,
+    ParamSpec,
+    TypeGuard,
+    TypeVar,
+    cast,
+    get_args,
+    get_type_hints,
+)
 
 from pydantic import BaseModel
 
@@ -22,10 +30,21 @@ from .engine import medium_rite
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
 
+# A step declares the payload it takes — `async def measure(state: Uncovered)` —
+# and a parameter type is contravariant, so a decorator asking for
+# `Callable[[BaseModel], ...]` refuses every step an author will ever write.
+# The variable is what lets the declaration through; the erasure below is what
+# the runtime works in.
+_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
 
-def _sole_annotation(
-    func: Callable[[BaseModel], Awaitable[Transition]], *, decorator: str, noun: str
-) -> object:
+
+# What the decorators hand their helpers, and what a Step runs: past the
+# boundary check the payload is a BaseModel and nothing more, because the type
+# it was checked against is a runtime value read off an annotation.
+_Erased = Callable[[BaseModel], Awaitable[Transition]]
+
+
+def _sole_annotation(func: _Erased, *, decorator: str, noun: str) -> object:
     parameters = list(inspect.signature(func).parameters.values())
     if len(parameters) != 1:
         msg = f"@{decorator} {func.__name__!r} must take exactly one {noun} parameter"
@@ -108,9 +127,7 @@ def medium(
 # A step may admit more than one payload shape — `Lint | Coverage` for a step
 # two others transition into — so a union is legal here where a ritual's
 # components, being one CLI interface, are not.
-def _payload_type(
-    func: Callable[[BaseModel], Awaitable[Transition]],
-) -> type[BaseModel] | UnionType:
+def _payload_type(func: _Erased) -> type[BaseModel] | UnionType:
     annotation = _sole_annotation(func, decorator="step", noun="payload")
     if (model := _as_model(annotation)) is not None:
         return model
@@ -123,29 +140,30 @@ def _payload_type(
     raise RitualDefinitionError(msg)
 
 
-def source_text(func: Callable[[BaseModel], Awaitable[Transition]]) -> str | None:
+def source_text(func: _Erased) -> str | None:
     try:
         return textwrap.dedent(inspect.getsource(func))
     except (OSError, TypeError):
         return None
 
 
-def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
+def step(func: Callable[[_PayloadT], Awaitable[Transition]]) -> Step:
     name = func.__name__
-    payload_type = _payload_type(func)
+    erased = cast("_Erased", func)
+    payload_type = _payload_type(erased)
 
     async def run(payload: BaseModel | None) -> Transition:
+        # The cast above is discharged here: what the annotation declared is
+        # checked against what arrived, and only then is the step called.
         if not isinstance(payload, payload_type):
             msg = f"step {name!r} expected {payload_type}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
-        return await func(payload)
+        return await erased(payload)
 
-    return Step(name=name, run=run, input_type=payload_type, source=source_text(func))
+    return Step(name=name, run=run, input_type=payload_type, source=source_text(erased))
 
 
-def _components_model(
-    func: Callable[[BaseModel], Awaitable[Transition]],
-) -> type[BaseModel]:
+def _components_model(func: _Erased) -> type[BaseModel]:
     annotation = _sole_annotation(func, decorator="ritual", noun="components")
     if (model := _as_model(annotation)) is not None:
         return model
@@ -209,9 +227,10 @@ def component_flags(components: type[BaseModel]) -> list[tuple[str, str, bool]]:
 
 def ritual(
     name: str, *, max_steps: int = DEFAULT_MAX_STEPS
-) -> Callable[[Callable[[BaseModel], Awaitable[Transition]]], Ritual]:
-    def wrap(func: Callable[[BaseModel], Awaitable[Transition]]) -> Ritual:
-        model = _components_model(func)
+) -> Callable[[Callable[[_PayloadT], Awaitable[Transition]]], Ritual]:
+    def wrap(func: Callable[[_PayloadT], Awaitable[Transition]]) -> Ritual:
+        erased = cast("_Erased", func)
+        model = _components_model(erased)
 
         # The cast's entry boundary, and the counterpart to the step's: nothing
         # ties the instance the CLI validated to the model this ritual
@@ -223,14 +242,14 @@ def ritual(
                     f"got {type(values).__name__}"
                 )
                 raise RitualBoundaryError(msg)
-            return await func(values)
+            return await erased(values)
 
         return Ritual(
             name=name,
             components=model,
             run=run,
             max_steps=max_steps,
-            source=source_text(func),
+            source=source_text(erased),
         )
 
     return wrap
