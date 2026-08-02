@@ -87,4 +87,4 @@ any Medium but `coding`; `shell` does not read prose.
 - Against a Focus without progressive disclosure, everything still works, the
   bodies are inlined, and the one-time notice appears once per cast.
 - `vekna rituals show` prints skill descriptions.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

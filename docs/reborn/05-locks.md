@@ -93,4 +93,4 @@ live daemon is correct — it blocks without one.
 - `warn` shows the banner once per cast; locks still succeed.
 - `allow` is silent.
 - `deny` without vekna blocks with the retry/quit prompt.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

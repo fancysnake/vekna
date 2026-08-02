@@ -84,4 +84,4 @@ Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 - `vekna --debug` logs every event of a full cast — hello, rites, a decide
   round-trip, goodbye — and an event addressed to a cast that has gone shows up
   as dropped rather than vanishing. Without the flag, nothing extra is printed.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.

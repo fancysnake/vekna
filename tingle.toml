@@ -11,11 +11,7 @@ include = ["src/**/*.py"]
 [ranges.python-tests]
 include = ["tests/**/*.py"]
 
-[ranges.python-tests-int]
-include = ["tests/integration/**/*.py"]
-
 # A branch may take on debt in one metric if it pays off as much elsewhere.
-
 [check]
 policy = "sum"
 
@@ -26,24 +22,30 @@ name = "fmt-comment"
 type = "regex_count"
 group = "formatting"
 pattern = '#\s*fmt'
+description = "`# fmt` comments that switch off the formatter."
 
 [[metrics]]
 name = "taplo-comment"
 type = "regex_count"
 group = "formatting"
 pattern = '#\s*taplo:'
+description = "`# taplo:` comments that switch off TOML formatting."
+
+# Linting
 
 [[metrics]]
 name = "codespell-comment"
 type = "regex_count"
-group = "formatting"
+group = "linting"
 pattern = '#\s*codespell:ignore'
+description = "`# codespell:ignore` comments that skip the spellchecker."
 
 [[metrics]]
 name = "noqa-comment"
 type = "regex_count"
 group = "linting"
 pattern = '#\s*noqa:'
+description = "`# noqa:` comments that silence a ruff rule on one line."
 
 [[metrics]]
 name = "ruff-comment"
@@ -56,20 +58,21 @@ name = "ruff-ignores"
 type = "toml_list_length"
 group = "linting"
 key = "tool.ruff.lint.ignore"
-
+description = "Ruff lint rules disabled project-wide."
 
 [[metrics]]
 name = "ruff-per-file-ignores"
 type = "toml_list_length"
 group = "linting"
 key = "tool.ruff.lint.per-file-ignores"
-
+description = "Ruff lint rules disabled for specific files."
 
 [[metrics]]
 name = "pylint-comment"
 type = "regex_count"
 group = "linting"
 pattern = '#\s*pylint:'
+description = "`# pylint:` comments that silence a check inline."
 
 [[metrics]]
 name = "pylint-disables"
@@ -78,6 +81,7 @@ group = "linting"
 file = ".pylintrc"
 section = "MESSAGES CONTROL"
 option = "disable"
+description = "Pylint checks disabled project-wide."
 
 # testing
 
@@ -113,7 +117,6 @@ group = "testing"
 pattern = 'mark\.xfail'
 ranges = ["python-tests"]
 
-
 # typing
 
 [[metrics]]
@@ -122,6 +125,7 @@ type = "regex_count"
 group = "typing"
 pattern = '#\s*type:\s*ignore'
 ranges = ["python-src"]
+description = "`# type: ignore` comments that silence the type checker."
 
 [[metrics]]
 name = "mypy-overrides"
@@ -129,6 +133,7 @@ type = "toml_table_array"
 group = "typing"
 key = "tool.mypy.overrides"
 label = "module"
+description = "Modules given relaxed mypy strictness."
 
 [[metrics]]
 name = "type-any"
@@ -158,7 +163,7 @@ group = "typing"
 pattern = 'disallow_\w+ = false'
 ranges = ["config"]
 
-# refactoring
+# Refactoring
 
 [[metrics]]
 name = "todo-comments"

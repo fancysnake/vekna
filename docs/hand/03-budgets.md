@@ -93,4 +93,4 @@ in flight.
   that declares neither.
 - The journal records final consumption, so a finished cast can be asked what it
   cost.
-- `mise run check` and `mise run test` pass.
+- `mise run fullcheck` passes.
