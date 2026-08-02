@@ -1,6 +1,6 @@
 import inspect
 import textwrap
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType, UnionType
 from typing import (
     Annotated,
@@ -98,10 +98,16 @@ def _check_call(
 
 # Signature-forwarding via ParamSpec is Any-tainted the same way the rest of
 # this module is, so `medium` stays here rather than next to `medium_rite` in
-# the engine — _mills keeps its strictness.
+# the engine — _mills keeps its strictness. It returns a Coroutine rather than
+# an Awaitable because `asyncio.create_task` takes the narrower of the two, and
+# running two mediums at once is a thing rituals do — `merge_ready.gates` puts
+# both gates in a TaskGroup. An Awaitable return made that call untypeable, and
+# the `Task[Any]` it inferred then spread through everything read off the
+# result. `object` for the send and yield types rather than `Any`, which this
+# project disallows and which nothing here needs.
 def medium(
     func: Callable[_P, Awaitable[_MediumT]],
-) -> Callable[_P, Awaitable[_MediumT]]:
+) -> Callable[_P, Coroutine[object, object, _MediumT]]:
     name = func.__name__
     # Once, at decoration time: a signature rebuilt per call would put a
     # reflection cost on every medium a cast reaches.
