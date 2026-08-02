@@ -1,6 +1,6 @@
 [settings]
 # Sequential execution to avoid race conditions in parallel tests
-jobs = 1
+jobs = 8
 
 [tools]
 pipx = "1.16.5"
@@ -16,7 +16,7 @@ _.python.venv = { path = ".venv", create = true }
 PACKAGE = "vekna"
 SRC_PATHS = "src"
 TEST_PATHS = "tests"
-SCRIPT_PATHS = "rituals.py"
+SCRIPT_PATHS = ""
 TOML_PATHS = ".taplo.toml pyproject.toml mise.toml tingle.toml"
 
 [task_config]
