@@ -16,8 +16,8 @@ ships its own notifications now. `docs/reborn/` is the plan from here.)
 description — run it rather than trusting a hardcoded list here. Most used:
 
 ```bash
-mise run test       # all tests
-mise run check      # format + lint
+mise run test:py       # all tests
+mise run check:py      # format + lint
 ```
 
 ## Workflow
@@ -35,7 +35,7 @@ mise run check      # format + lint
 ## Definition of done
 
 Failure paths return useful errors, no silent swallows; a new path emits
-meaningful events; happy path + one edge case tested; `mise run test` and
+meaningful events; happy path + one edge case tested; `mise run test:py` and
 `mise run check` both green.
 
 ## Architecture
