@@ -124,6 +124,7 @@ name = "type-ignores"
 type = "regex_count"
 group = "typing"
 pattern = '#\s*type:\s*ignore'
+ranges = ["python-src"]
 description = "`# type: ignore` comments that silence the type checker."
 
 [[metrics]]
@@ -143,9 +144,9 @@ ranges = ["python-src"]
 
 [[metrics]]
 name = "type-object"
-type = "regex_count"
+type = "symbol_uses"
 group = "typing"
-pattern = '(?<![\.\w])object\b(?!-)'
+symbol = "object"
 ranges = ["python-src"]
 
 [[metrics]]

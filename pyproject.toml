@@ -24,6 +24,7 @@ dev = [
     "black (>=26.3.1,<27.0.0)",
     "codespell (>=2.4.2,<3.0.0)",
     "deptry (>=0.25.1,<0.26.0)",
+    "pip-audit (>=2.9.0,<3.0.0)",
     "import-linter (>=2.11,<3.0)",
     "mypy (>=2.3.0,<3.0.0)",
     "pylint (>=4.0.5,<5.0.0)",
@@ -96,7 +97,7 @@ forbidden_modules = [
 name = "inits"
 type = "forbidden"
 source_modules = ["vekna.inits"]
-forbidden_modules = ["vekna.specs", "vekna.edges", "vekna.folio", "vekna.lexicon"]
+forbidden_modules = ["vekna.edges", "vekna.folio", "vekna.lexicon"]
 
 [[tool.importlinter.contracts]]
 name = "mills"
@@ -137,6 +138,7 @@ forbidden_modules = [
     "vekna.links",
     "vekna.inits",
     "vekna.mills",
+    "vekna.pacts",
     "vekna.edges",
     "vekna.folio",
     "vekna.lexicon",
@@ -413,7 +415,7 @@ disallow_subclassing_any = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
-exclude = ["tests/.*.py"]
+exclude = []
 explicit_package_bases = true
 extra_checks = true
 implicit_reexport = true
@@ -469,9 +471,6 @@ ignore = [
 "rituals.py" = [
     "RUF029", # Function is declared `async`, but doesn't `await`
 ]
-
-[tool.ruff.lint.flake8-pytest-style]
-parametrize-values-type = "tuple"
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
