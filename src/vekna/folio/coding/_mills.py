@@ -74,7 +74,7 @@ class _Thread:
 # runtime is the only place `session=None` or `key=3` is caught — and mypy,
 # reading the annotation, would call a guard against an already-narrowed type
 # unreachable.
-def _declared(session: object) -> Session:
+def _declared(session: Session) -> Session:
     # Compared rather than looked up with `Session(...)`, which takes a `str`
     # and so would not see the arguments this check is here for.
     for word in Session:
@@ -85,7 +85,7 @@ def _declared(session: object) -> Session:
     raise CodingSessionError(msg)
 
 
-def _keyed(key: object) -> str | None:
+def _keyed(key: str | None) -> str | None:
     if key is None:
         return None
     # Stripping once, here, is what makes it one classification: an unnamed
@@ -107,7 +107,7 @@ def _keyed(key: object) -> str | None:
 # the default records no key of its own. Reading only its own kind would start
 # that retry fresh while looking like it resumed — the failure the declaration
 # exists to make visible.
-def _thread(*, context: RiteContext, session: object, key: object) -> _Thread:
+def _thread(*, context: RiteContext, session: Session, key: str | None) -> _Thread:
     declared = _declared(session)
     keyed = _keyed(key)
     if declared == Session.NEW:

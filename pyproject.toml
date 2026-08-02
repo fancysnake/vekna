@@ -443,6 +443,11 @@ module = "vekna.folio.coding_claude._links"
 disallow_any_expr = false
 disallow_any_explicit = false
 
+[[tool.mypy.overrides]]
+module = "vekna.lexicon._mills._annotations"
+disallow_any_expr = false
+disallow_any_explicit = false
+
 # Pydantic's own error report is a list of TypedDicts whose values are `Any`.
 # Reading it is how `CodingOpts` turns a refusal into a sentence, and a `pacts`
 # module may import no internal layer, so the boundary lives here rather than
@@ -479,6 +484,7 @@ ignore = [
 "rituals.py" = [
     "RUF029", # Function is declared `async`, but doesn't `await`
 ]
+"src/vekna/lexicon/_mills/_annotations.py" = ["any-type"]
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
