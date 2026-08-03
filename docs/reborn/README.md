@@ -21,9 +21,13 @@ and casts on command, from a terminal or from Discord.
   standalone runner; `folio/flow`, `folio/shell`. `vekna cast` runs rituals.
 - [03-coding-folios.md](03-coding-folios.md) — `0.3.0` `folio/coding` +
   `folio/coding_claude`; `vekna cast "<prompt>"`.
-- [04-process-folio.md](04-process-folio.md) — `0.4.0` `folio/process`
-  (dev-server use case); plus `coding`'s session declaration, filed in
-  [03-coding-folios.md](03-coding-folios.md) with the Medium it changes.
+- `04` — `folio/process`, **moved to Hand** as
+  [`../hand/06-process.md`](../hand/06-process.md): owning a process is
+  cancellation plus bounds, and both of those are Hand's already. The slot keeps
+  its number rather than closing up, so the numbering below still means what it
+  did. `coding`'s session declaration, which was filed here as the other half of
+  `0.4.0`, shipped in `0.3.0` instead — see
+  [03-coding-folios.md](03-coding-folios.md).
 - [05-locks.md](05-locks.md) — `0.5.0` locks API, `warn` default (no
   coordination yet).
 - [06-vekna-daemon.md](06-vekna-daemon.md) — `0.6.0` daemon, lock coordination,
@@ -34,6 +38,20 @@ and casts on command, from a terminal or from Discord.
   library, clean audits.
 - [09-site.md](09-site.md) — `1.0.0` `vekna.dev`: landing page and user
   documentation, Astro in `www/`, shipped with the tag, not after it.
+- [10-ritual-modules.md](10-ritual-modules.md) — `0.5.0` a ritual source may be
+  a package the author splits as they like; recursive submodule sweep, empty
+  `__init__.py`. Numbered after 09 because the slots below it are spoken for;
+  the version is what orders it.
+
+## Undecided
+
+- [11-steps-as-dto.md](11-steps-as-dto.md) — steps return the next step as a
+  value, so a return type declares a ritual's edges instead of a parser
+  inferring them. Competes directly with
+  [`../eye/04-graph.md`](../eye/04-graph.md)'s `@step(goes_to=[...])`; exactly
+  one should be built, and both wait on rituals entering mypy's scope. Filed
+  here rather than in the roadmap because it breaks the public ritual API, and
+  that is a decision to take before 1.0 fixes it — not a feature 1.0 waits for.
 
 ## Parked
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from vekna.lexicon import (
     FocusMissingError,
+    MediumBoundaryError,
     NoComponents,
     RitualError,
     Transition,
@@ -21,7 +22,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, resolve_focus, run_cast
-from vekna.lexicon._pacts import RiteBegan, RiteStreamed
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
@@ -124,6 +125,78 @@ class TestMedium:
     def test_current_rite_outside_cast_raises():
         with pytest.raises(RitualError):
             current_rite()
+
+
+# The call arrives as a dict rather than as `**kwargs` on purpose: a wrong call
+# spelled out in the test body is one the linters would refuse to let stand, and
+# an author's rituals.py is exactly the file nothing checks.
+def _caller(call: dict[str, object]):
+    @step
+    async def ask(_state: Start) -> Transition:
+        await pick(**call)
+        return done(None)
+
+    @ritual("caller")
+    async def caller(_: NoComponents) -> Transition:
+        await asyncio.sleep(0)
+        return goto(ask, Start())
+
+    return caller
+
+
+def _cast(the_ritual, grimoire):
+    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("a\n"))
+    return asyncio.run(
+        run_cast(
+            ritual=the_ritual,
+            components=the_ritual.components(),
+            grimoire=grimoire,
+            channel=renderer,
+        )
+    )
+
+
+class TestMediumBoundary:
+    @staticmethod
+    def test_an_argument_the_medium_does_not_take_is_named():
+        # A keyword that moved elsewhere is a slip in an author's rituals.py,
+        # which nothing type-checks; Python's own TypeError would report it as a
+        # traceback out of the engine's frames.
+        with pytest.raises(MediumBoundaryError, match="takes no argument 'flavour'"):
+            _cast(
+                _caller({"prompt": "which?", "options": ["a", "b"], "flavour": "loud"}),
+                Grimoire(cast_id="c1", clock=_fixed_clock),
+            )
+
+    @staticmethod
+    def test_a_call_bind_refuses_otherwise_is_quoted_as_it_came():
+        # Nothing unknown was passed, so there is no keyword to name — what
+        # `bind` said is more useful than anything this could reword.
+        with pytest.raises(MediumBoundaryError, match="was called wrong: missing"):
+            _cast(
+                _caller({"prompt": "which?"}),
+                Grimoire(cast_id="c1", clock=_fixed_clock),
+            )
+
+    @staticmethod
+    def test_the_refusal_belongs_to_the_medium_rite():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        with pytest.raises(MediumBoundaryError):
+            _cast(
+                _caller({"prompt": "which?", "options": ["a"], "flavour": "loud"}),
+                grimoire,
+            )
+
+        began = next(
+            e for e in grimoire.events if isinstance(e, RiteBegan) and e.name == "pick"
+        )
+        ended = next(e for e in grimoire.events if isinstance(e, RiteEnded))
+        assert (began.category, ended.rite_id, ended.status) == (
+            "medium",
+            began.rite_id,
+            "error",
+        )
 
 
 class TestResolveFocus:

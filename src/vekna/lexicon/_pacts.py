@@ -102,6 +102,9 @@ GateFn = Callable[[str], Awaitable[bool]]
 AskFn = Callable[[str, Sequence[str] | None], Awaitable[str]]
 
 
+# `resume` is a session id the medium has already resolved, never a declaration:
+# which thread a call belongs to is the medium's vocabulary, and a focus that had
+# to learn it would be a second place to keep it right.
 @dataclass(frozen=True, kw_only=True)
 class CodingCall:
     prompt: str
@@ -110,6 +113,7 @@ class CodingCall:
     cwd: str | None
     output_schema: dict[str, JsonValue] | None
     focus_options: BaseModel | None
+    resume: str | None = None
 
 
 # Typed and closed, not a loose telemetry dict: a focus that spelled a key
@@ -153,6 +157,14 @@ class StepBoundaryError(RitualError):
 
 
 class RitualBoundaryError(RitualError):
+    pass
+
+
+# A medium called with arguments it does not take. Python's own TypeError says
+# the same thing and says it as a traceback, which is the wrong register for a
+# mistake in an author's never-type-checked rituals.py: a moved keyword is the
+# same class of slip as a misspelled session, and should read like one.
+class MediumBoundaryError(RitualError):
     pass
 
 

@@ -1,5 +1,21 @@
 from ._inits import register
 from ._mills import coding
-from ._pacts import CodingOpts, CodingOutputError, CodingResult
+from ._pacts import (
+    CodingOpts,
+    CodingOptsError,
+    CodingOutputError,
+    CodingResult,
+    CodingSessionError,
+    Session,
+)
 
-__all__ = ["CodingOpts", "CodingOutputError", "CodingResult", "coding", "register"]
+__all__ = [
+    "CodingOpts",
+    "CodingOptsError",
+    "CodingOutputError",
+    "CodingResult",
+    "CodingSessionError",
+    "Session",
+    "coding",
+    "register",
+]

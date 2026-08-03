@@ -17,11 +17,11 @@
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for
-permission, unless a call names ``gate_tools`` — and it can put a question to
-you mid-step through ``ask_human``, which every ``coding`` call offers. What
-happens next is decided at the step boundary: a gate passes or it does not, a
-budget runs out, you answer a ``decide``. Agents are non-deterministic inside a
-step and deterministic between them.
+permission, unless a call's ``CodingOpts`` names ``gate_tools`` — and it can put
+a question to you mid-step through ``ask_human``, which every ``coding`` call
+offers. What happens next is decided at the step boundary: a gate passes or it
+does not, a budget runs out, you answer a ``decide``. Agents are
+non-deterministic inside a step and deterministic between them.
 
 Concurrency lives inside a step too, and needs nothing from the engine: see
 ``merge_ready.gates``, which starts two shells in an ``asyncio.TaskGroup`` and
@@ -36,7 +36,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from vekna.folio.coding import CodingOpts, coding
+from vekna.folio.coding import CodingOpts, Session, coding
 from vekna.folio.coding_claude import ClaudeOptions
 from vekna.folio.flow import decide
 from vekna.folio.shell import ShellResult, shell
@@ -217,14 +217,16 @@ async def judge(diff: Diff) -> Transition:
     judgement = await coding(
         f"{_REVIEW}{focus}base: {diff.base}\n\n{diff.text}",
         output=Judgement,
-        opts=CodingOpts(system=_REVIEW_SYSTEM),
         # Read-only, enforced rather than requested: `dontAsk` denies anything
         # outside the allowlist without stopping to prompt. Not `plan`, which
         # executes no tools at all — the reviewer could not read CLAUDE.md.
-        focus_options=ClaudeOptions(
-            permission_mode="dontAsk",
-            allowed_tools=["Read", "Grep", "Glob"],
-            effort="high",
+        opts=CodingOpts(
+            system=_REVIEW_SYSTEM,
+            focus_options=ClaudeOptions(
+                permission_mode="dontAsk",
+                allowed_tools=["Read", "Grep", "Glob"],
+                effort="high",
+            ),
         ),
     )
     return done(
@@ -356,9 +358,14 @@ async def gates(state: Attempt) -> Transition:
 
 # Three payload shapes, one step: whichever gate went red, this is where it is
 # repaired, and the prompt says only what actually failed.
+# The loop is what the thread is for. Every pass through here meets a failure
+# the previous pass tried and failed to fix, and an agent starting fresh each
+# time will reach for the same idea again. A key rather than a bare `continue`:
+# they are the same thing in a ritual whose only agent call this is, and they
+# stop being the same the moment a second one is added.
 @step
 async def repair(failure: Red) -> Transition:
-    await coding(_REPAIR + _complaint(failure))
+    await coding(_REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
     return goto(gates, Attempt(budget=failure.budget - 1))
 
 
@@ -426,10 +433,18 @@ class Verdict(BaseModel):
     reading: Reading
 
 
+Took = Literal["fix", "file", "ignore"]
+
+# Named as a constant, and typed: `decide` answers with the type it was offered,
+# so this is what carries the literal through to `Triaged` rather than a `str`
+# the step would have to check for itself.
+_TOOK: tuple[Took, ...] = ("fix", "file", "ignore")
+
+
 class Triaged(BaseModel):
     link: str
     reading: Reading
-    took: Literal["fix", "file", "ignore"]
+    took: Took
 
 
 # `gh`, not an agent holding a fetch tool: it reads private repositories, it
@@ -470,10 +485,12 @@ async def size_up(fetched: Fetched) -> Transition:
     reading = await coding(
         f"{_READ_ISSUE}{fetched.body}{_END_ISSUE}",
         output=Reading,
-        focus_options=ClaudeOptions(
-            permission_mode="dontAsk",
-            allowed_tools=["Read", "Grep", "Glob"],
-            max_turns=8,
+        opts=CodingOpts(
+            focus_options=ClaudeOptions(
+                permission_mode="dontAsk",
+                allowed_tools=["Read", "Grep", "Glob"],
+                max_turns=8,
+            )
         ),
     )
     return goto(route, Verdict(link=fetched.link, reading=reading))
@@ -486,8 +503,7 @@ async def route(verdict: Verdict) -> Transition:
     # The headline and the size, not the whole reading: the reading is in the
     # result, and a prompt you have to scroll is not a prompt.
     took = await decide(
-        f"{verdict.reading.headline} [{verdict.reading.size}]",
-        options=["fix", "file", "ignore"],
+        f"{verdict.reading.headline} [{verdict.reading.size}]", options=_TOOK
     )
     triaged = Triaged(link=verdict.link, reading=verdict.reading, took=took)
     if took == "ignore":
@@ -496,6 +512,7 @@ async def route(verdict: Verdict) -> Transition:
     # The agent may run commands, and every one of them is gated: `gate_tools`
     # puts each Bash call to you before it happens.
     await coding(
-        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}", gate_tools=["Bash"]
+        f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}",
+        opts=CodingOpts(gate_tools=["Bash"]),
     )
     return done(triaged)

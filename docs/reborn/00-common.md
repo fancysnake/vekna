@@ -160,8 +160,8 @@ phylactery: one registry row
 **Lifecycle:**
 
 1. `vekna cast write-tests --testdir=./tests`.
-2. The cast process loads `./rituals.py` (+ config modules), finds
-   `@ritual('write-tests')`, validates Components against the entrypoint's
+2. The cast process loads `./rituals.py` or `./rituals/` (+ config modules),
+   finds `@ritual('write-tests')`, validates Components against the entrypoint's
    components model, and registers its `@step`s + mediums in the compendium.
 3. It probes `/tmp/vekna-<uid>.sock`. Reachable → attach + `CastHello`.
    Not → standalone (stdout events, stdin prompts).
@@ -293,7 +293,8 @@ author's to write.)
 - `Directory` — existing path; same.
 - `Text` — string, `multiline=True/False`. `--text=-` reads stdin; multiline opens `$EDITOR`.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
-- `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value).
+- `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value),
+  which is Hand's — [`../hand/06-process.md`](../hand/06-process.md).
 
 **Output direction — deferred.** "Inputs and outputs are both Components on one
 interface" is unbuilt, and reads badly against the word: an output is not
@@ -316,8 +317,10 @@ queryable from the journal, never in the typed return value.
 
 ## Discovery and configuration
 
-**Implicit.** `vekna cast write-tests` walks up from `cwd` for `rituals.py`,
-imports it, finds `@ritual('write-tests')`.
+**Implicit.** `vekna cast write-tests` walks up from `cwd` for `rituals.py` —
+or a `rituals/` package, which the author may split as they like — imports it,
+and finds `@ritual('write-tests')`. Every submodule of a package is swept, so
+its `__init__.py` stays empty ([10-ritual-modules.md](10-ritual-modules.md)).
 
 **Configurable.** `./.vekna.toml` (project) or `~/.config/vekna/config.toml`
 (global). Both read; project wins. Env overrides for one-shots
@@ -427,7 +430,9 @@ run …` commands.
 7. Lock state replays from grimoire events — no separate "current state" message.
 8. Always-fresh cast process per cast. No pooling. No duplicate-cast block —
    locks express it.
-9. Implicit `./rituals.py` discovery; project + global config augment.
+9. Implicit `./rituals.py` **or `./rituals/`** discovery; project + global
+   config augment. A package is swept recursively, so how it is split is the
+   author's.
 10. Daemon arrives at 0.6.0; 1.0 ships when all features are ready.
 11. Standalone is a feature. Every primitive works (locks degrade per setting).
 12. `folio/process` owns Process + Executable as mediums, not values.

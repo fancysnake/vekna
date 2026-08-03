@@ -1,6 +1,6 @@
 [project]
 name = "vekna"
-version = "0.2.0"
+version = "0.3.0"
 description = "Coding agent overseer"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = { text = "BSD-3-Clause license" }
@@ -443,6 +443,19 @@ module = "vekna.folio.coding_claude._links"
 disallow_any_expr = false
 disallow_any_explicit = false
 
+[[tool.mypy.overrides]]
+module = "vekna.lexicon._mills._annotations"
+disallow_any_expr = false
+disallow_any_explicit = false
+
+# Pydantic's own error report is a list of TypedDicts whose values are `Any`.
+# Reading it is how `CodingOpts` turns a refusal into a sentence, and a `pacts`
+# module may import no internal layer, so the boundary lives here rather than
+# in an adapter beside it.
+[[tool.mypy.overrides]]
+module = "vekna.folio.coding._pacts"
+disallow_any_expr = false
+
 # RUFF
 
 [tool.ruff]
@@ -471,6 +484,7 @@ ignore = [
 "rituals.py" = [
     "RUF029", # Function is declared `async`, but doesn't `await`
 ]
+"src/vekna/lexicon/_mills/_annotations.py" = ["any-type"]
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]

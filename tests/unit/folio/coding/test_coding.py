@@ -7,14 +7,18 @@ from pydantic import BaseModel, ValidationError
 
 from vekna.folio.coding import (
     CodingOpts,
+    CodingOptsError,
     CodingOutputError,
     CodingResult,
+    CodingSessionError,
+    Session,
     coding,
     register,
 )
 from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
+    MediumBoundaryError,
     NoComponents,
     Transition,
     done,
@@ -40,14 +44,24 @@ class FakeFocus:
         deltas: tuple[str, ...] = (),
         gate_tools: tuple[str, ...] = (),
         questions: tuple[tuple[str, tuple[str, ...] | None], ...] = (),
+        session_id: str | None = "s1",
     ) -> None:
-        self._reply = FocusReply(text=text, session_id="s1", num_turns=2, cost_usd=0.5)
+        self._reply = FocusReply(
+            text=text, session_id=session_id, num_turns=2, cost_usd=0.5
+        )
         self._deltas = deltas
         self._gate_tools = gate_tools
         self._questions = questions
         self.calls = []
         self.gate_answers = []
         self.answers = []
+
+    # What a real focus does: a call that resumes stays on its session, and one
+    # that does not is handed a new id. `s1`, `s2`, `s3` by arrival.
+    def _session_id(self, call) -> str | None:
+        if self._reply.session_id is None:
+            return None
+        return call.resume if call.resume is not None else f"s{len(self.calls)}"
 
     async def run(self, call, *, on_delta, gate, ask):
         self.calls.append(call)
@@ -58,7 +72,7 @@ class FakeFocus:
                 self.gate_answers.append(await gate(tool))
         for question, options in self._questions:
             self.answers.append(await ask(question, options))
-        return self._reply
+        return self._reply.model_copy(update={"session_id": self._session_id(call)})
 
 
 class Answer(BaseModel):
@@ -137,6 +151,8 @@ class TestCodingMedium:
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         medium_finish = finished[0]
         assert medium_finish.result == {
+            "session": "new",
+            "key": None,
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
@@ -184,7 +200,7 @@ class TestCodingMedium:
 
         @step
         async def work(_: Answer) -> Transition:
-            await coding("fix it", gate_tools=["bash"])
+            await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
             return done(None)
 
         @ritual("r")
@@ -195,6 +211,38 @@ class TestCodingMedium:
         _cast(r, stdin="n\n")
 
         assert focus.gate_answers == [False, True]
+
+    @staticmethod
+    def test_focus_options_ride_the_bundle_intact():
+        # The bundle carries a Focus's own model, and pydantic hands the Focus
+        # back the instance it was given rather than a coerced BaseModel.
+        focus = FakeFocus()
+        register_focus("coding", focus)
+        knobs = Answer(port=8080)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", opts=CodingOpts(focus_options=knobs))
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r)
+
+        assert focus.calls[0].focus_options is knobs
+
+    @staticmethod
+    def test_a_bundle_field_of_the_wrong_shape_names_the_field():
+        # Every other way of mis-building the bundle reads like the moved knobs:
+        # a `RitualError` naming the field, not a pydantic report titled after
+        # the validator that caught it.
+        with pytest.raises(CodingOptsError, match="model: Input should be") as raised:
+            CodingOpts(model=3)
+
+        assert "ValidatorCallable" not in str(raised.value)
 
     @staticmethod
     def test_agent_question_with_options_routes_through_decide():
@@ -262,3 +310,223 @@ class TestCodingMedium:
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
+
+
+def _one_call_ritual(**declaration):
+    @step
+    async def work(_: Answer) -> Transition:
+        await coding("fix it", **declaration)
+        return done(None)
+
+    @ritual("r")
+    async def r(_: NoComponents) -> Transition:
+        await asyncio.sleep(0)
+        return goto(work, Answer(port=1))
+
+    return r
+
+
+class TestSessionDeclaration:
+    @staticmethod
+    def _resumes(*declarations) -> list[str | None]:
+        # One step, one coding call per `(session, key)` declaration, so what a
+        # call resumes is read off the focus rather than inferred from the reply.
+        focus = FakeFocus()
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            for index, (session, key) in enumerate(declarations):
+                await coding(f"call {index}", session=session, key=key)
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _cast(r)
+        return [call.resume for call in focus.calls]
+
+    @classmethod
+    def test_the_default_starts_a_fresh_session_every_time(cls):
+        assert cls._resumes((Session.NEW, None), (Session.NEW, None)) == [None, None]
+
+    @classmethod
+    @pytest.mark.parametrize("spelling", [Session.CONTINUE, "continue"])
+    def test_continue_picks_up_the_session_before_it(cls, spelling):
+        # The plain string still lands on the member, so an author who never
+        # imports `Session` declares the same thing.
+        assert cls._resumes((Session.NEW, None), (spelling, None)) == [None, "s1"]
+
+    @classmethod
+    def test_two_keyed_threads_do_not_read_each_other(cls):
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"),
+            (Session.CONTINUE, "review"),
+            (Session.CONTINUE, "repair"),
+        ) == [None, None, "s1"]
+
+    @classmethod
+    def test_a_keyed_new_restarts_the_thread_it_files_under(cls):
+        # `new` with a key is how a loop starts over: the third call resumes
+        # `s2`, what the restart opened, rather than the `s1` before it.
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"),
+            (Session.NEW, "repair"),
+            (Session.CONTINUE, "repair"),
+        ) == [None, None, "s2"]
+
+    @classmethod
+    def test_padding_does_not_open_a_second_thread(cls):
+        # Two spellings of one key that would render identically in the
+        # journal, so a thread that silently forked would be invisible there.
+        assert cls._resumes(
+            (Session.CONTINUE, "repair"), (Session.CONTINUE, " repair ")
+        ) == [None, "s1"]
+
+    @classmethod
+    def test_continue_without_a_key_follows_whatever_ran_last(cls):
+        # The documented consequence of "the cast's running session": a keyed
+        # rite moves it too, so an unkeyed `continue` after one resumes its id.
+        assert cls._resumes((Session.CONTINUE, "repair"), (Session.CONTINUE, None)) == [
+            None,
+            "s1",
+        ]
+
+    @staticmethod
+    def test_a_focus_that_reports_no_session_records_nothing():
+        # A reply without a session_id leaves the book untouched, so the
+        # `continue` after it starts fresh instead of resuming some older call.
+        focus = FakeFocus(session_id=None)
+        register_focus("coding", focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("fix it", session=Session.CONTINUE, key="repair")
+            await coding("fix it again", session=Session.CONTINUE)
+            return done(None)
+
+        @ritual("r")
+        async def r(_: NoComponents) -> Transition:
+            await asyncio.sleep(0)
+            return goto(work, Answer(port=1))
+
+        _, grimoire = _cast(r)
+
+        assert [call.resume for call in focus.calls] == [None, None]
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "continue",
+            "key": "repair",
+            "session_id": None,
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }
+
+    @staticmethod
+    def test_a_declared_thread_that_did_not_take_says_so():
+        # The rite that failed to record is the one that reports it: reading
+        # `session_id: null` off the journal afterwards is not the same as being
+        # told, and the next call on the thread would resume the wrong id.
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
+
+        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
+        assert deltas == [
+            "the focus reported no session id: nothing recorded for key 'repair'"
+        ]
+
+    @staticmethod
+    def test_an_unkeyed_continue_that_did_not_take_says_so():
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE))
+
+        deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
+        assert deltas == [
+            "the focus reported no session id: nothing recorded for the running session"
+        ]
+
+    @staticmethod
+    def test_a_call_that_declared_no_thread_stays_quiet():
+        # Nothing was claimed, so there is nothing to report — a Focus that
+        # never reports ids would otherwise narrate every call it answers.
+        register_focus("coding", FakeFocus(session_id=None))
+
+        _, grimoire = _cast(_one_call_ritual())
+
+        assert [e for e in grimoire.events if isinstance(e, RiteStreamed)] == []
+
+    @staticmethod
+    @pytest.mark.parametrize("key", ["", "  ", 3, ["repair"]])
+    def test_a_key_that_names_nothing_is_refused(key):
+        register_focus("coding", FakeFocus())
+
+        with pytest.raises(CodingSessionError, match="key names the thread"):
+            _cast(_one_call_ritual(session=Session.CONTINUE, key=key))
+
+    @staticmethod
+    @pytest.mark.parametrize("session", [None, 3, "repair", " new", "New", ""])
+    def test_a_word_that_is_not_a_reserved_one_is_refused(session):
+        # `"repair"` among them on purpose: a thread name is a `key` now, and
+        # the older spelling has to say so rather than open a thread called
+        # after whatever it was handed. An author's `rituals.py` is never
+        # type-checked, so this is the only place the slip is caught.
+        register_focus("coding", FakeFocus())
+
+        with pytest.raises(CodingSessionError, match="session takes"):
+            _cast(_one_call_ritual(session=session))
+
+    @staticmethod
+    @pytest.mark.parametrize("knob", ["session", "key"])
+    def test_the_thread_is_not_a_knob_on_opts(knob):
+        # Per-call identity, not configuration, so a shared `CodingOpts` cannot
+        # carry it. `forbid` is what keeps the old spelling from being dropped
+        # onto whatever thread the call defaults to, and the refusal is a
+        # `RitualError` so the cast reports it rather than unwinding.
+        with pytest.raises(CodingOptsError, match=f"no field '{knob}'") as raised:
+            CodingOpts(**{knob: "repair"})
+
+        assert "parameters of coding()" in str(raised.value)
+
+    @staticmethod
+    def test_the_old_call_spelling_names_the_argument_it_lost():
+        # `gate_tools` moved into the bundle, and the call that still passes it
+        # is a slip nothing type-checks — Python's own TypeError would report it
+        # as a traceback out of the engine's frames.
+        register_focus("coding", FakeFocus())
+
+        with pytest.raises(MediumBoundaryError, match="takes no argument"):
+            _cast(_one_call_ritual(gate_tools=["Bash"]))
+
+    @staticmethod
+    def test_telemetry_names_the_thread_the_author_declared():
+        register_focus("coding", FakeFocus())
+
+        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
+
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "continue",
+            "key": "repair",
+            "session_id": "s1",
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }
+
+    @staticmethod
+    def test_telemetry_carries_a_null_key_when_none_was_declared():
+        register_focus("coding", FakeFocus())
+
+        _, grimoire = _cast(_one_call_ritual())
+
+        finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert finished[0].result == {
+            "session": "new",
+            "key": None,
+            "session_id": "s1",
+            "num_turns": 2,
+            "cost_usd": 0.5,
+        }

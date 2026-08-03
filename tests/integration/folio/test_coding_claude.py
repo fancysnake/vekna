@@ -44,13 +44,15 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
 _RITUALS = _ritual_source(name="write_haiku", call="coding(task.text)")
 
 _GATED_RITUALS = _ritual_source(
-    name="gated", call='coding(task.text, gate_tools=["Bash"])'
+    name="gated",
+    call='coding(task.text, opts=CodingOpts(gate_tools=["Bash"]))',
+    imports=", CodingOpts",
 )
 
 _TYPED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.folio.coding import coding
+    from vekna.folio.coding import CodingOpts, coding
     from vekna.folio.coding_claude import ClaudeOptions
     from vekna.lexicon import Transition, done, goto, ritual, step
 
@@ -68,11 +70,13 @@ _TYPED_RITUALS = textwrap.dedent("""
         plan = await coding(
             task.text,
             output=Plan,
-            focus_options=ClaudeOptions(
-                permission_mode="plan",
-                allowed_tools=["Read"],
-                max_turns=2,
-                effort="high",
+            opts=CodingOpts(
+                focus_options=ClaudeOptions(
+                    permission_mode="plan",
+                    allowed_tools=["Read"],
+                    max_turns=2,
+                    effort="high",
+                )
             ),
         )
         return done(plan)
@@ -80,6 +84,30 @@ _TYPED_RITUALS = textwrap.dedent("""
 
     @ritual("planned")
     async def planned(components: Task) -> Transition:
+        return goto(work, Task(text=components.text))
+    """)
+
+
+_THREADED_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.coding import Session, coding
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    @step
+    async def work(task: Task) -> Transition:
+        await coding(task.text)
+        await coding(task.text, session=Session.CONTINUE)
+        return done(None)
+
+
+    @ritual("threaded")
+    async def threaded(components: Task) -> Transition:
         return goto(work, Task(text=components.text))
     """)
 
@@ -151,6 +179,8 @@ def _sdk_stub(
         await asyncio.sleep(0)
         captured["prompt"] = prompt
         captured["options"] = options
+        # Every call, not just the last: a thread is only visible across two.
+        captured.setdefault("every_options", []).append(options)
         yield SystemMessage(subtype="init")
         yield AssistantMessage(
             content=(
@@ -223,6 +253,7 @@ class TestCastWithClaudeFocus:
         assert options.can_use_tool is None
         assert options.model is None
         assert options.output_format is None
+        assert options.resume is None
 
     @staticmethod
     def test_assistant_content_given_as_a_string_still_streams(
@@ -252,6 +283,24 @@ class TestCastWithClaudeFocus:
 
         assert exit_code == _USAGE_EXIT
         assert "claude-agent-sdk" in capsys.readouterr().err
+
+
+class TestSessionThread:
+    @staticmethod
+    def test_a_continue_call_resumes_what_the_call_before_it_opened(
+        tmp_path, monkeypatch
+    ):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_THREADED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["threaded", "--text", "keep going"])
+
+        assert exit_code == 0
+        opened, carried_on = captured["every_options"]
+        assert opened.resume is None
+        assert carried_on.resume == "s-stub"
 
 
 class TestToolGate:

@@ -1,8 +1,19 @@
 # Feature — `folio/process`
 
-**Version:** `0.4.0`
+**Version:** `3.0.0`
 
-See [00-common.md](00-common.md) — Components (deferred Process/Executable).
+See [`../reborn/00-common.md`](../reborn/00-common.md) — Components (deferred
+Process/Executable).
+
+Filed under Reborn as `0.4.0` until July 2026, and moved here because what this
+folio is actually about is lifetime: spawn, wait, signal, kill, and a child that
+does not outlive the cast that started it. That is cancellation reaching the
+process ([02-timeout-race.md](02-timeout-race.md)) plus a bound on what a
+running thing may spend ([03-budgets.md](03-budgets.md)) — both already Hand's,
+and both wanted *before* a folio whose whole job is owning a process. Landing
+this first would have meant writing a second, private teardown mechanism and
+then rewriting it. `folio/shell`'s `run_bash` already carries that debt: no
+timeout, no output cap, and a child reaped only on the success path.
 
 ## Goal
 

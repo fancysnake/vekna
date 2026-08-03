@@ -16,7 +16,8 @@ pip install .
 
 ## A ritual
 
-Put a `rituals.py` in your project:
+Put a `rituals.py` in your project — or a `rituals/` package, split however you
+like, once one file stops being enough:
 
 ```python
 from typing import Annotated
@@ -106,9 +107,11 @@ result: {"outcome":"green"}
 
 ## Where rituals come from
 
-`rituals.py` in the current directory or any parent. A `.vekna.toml` (project)
-or `~/.config/vekna/config.toml` (global) can name more, resolved relative to
-the config file:
+`rituals.py` — or a `rituals/` package — in the current directory or any
+parent. A package is searched all the way down, so its `__init__.py` can stay
+empty and you can split it by ritual, by kind, or not at all. A `.vekna.toml`
+(project) or `~/.config/vekna/config.toml` (global) can name more, resolved
+relative to the config file:
 
 ```toml
 [rituals]
@@ -119,14 +122,17 @@ modules = ["mycompany.rites"]
 ## Configuring the agent
 
 ```python
-from vekna.folio.coding import CodingOpts, coding
+from vekna.folio.coding import CodingOpts, Session, coding
 from vekna.folio.coding_claude import ClaudeOptions
 
 # Portable knobs
 await coding("refactor this", opts=CodingOpts(model="opus", cwd="./svc"))
 
 # Ask before the agent runs a tool
-await coding("clean the build", gate_tools=["Bash"])
+await coding("clean the build", opts=CodingOpts(gate_tools=["Bash"]))
+
+# Which thread of agent memory this call is on
+await coding("try again", session=Session.CONTINUE, key="lint-loop")
 
 # Typed output, validated on return
 class Plan(BaseModel):
@@ -134,11 +140,16 @@ class Plan(BaseModel):
 
 plan = await coding("plan the migration", output=Plan)
 
-# Focus-specific knobs
-await coding("survey the code", focus_options=ClaudeOptions(
+# Knobs only the answering Focus reads
+await coding("survey the code", opts=CodingOpts(focus_options=ClaudeOptions(
     permission_mode="dontAsk", allowed_tools=["Read", "Grep"], effort="high"
-))
+)))
 ```
+
+Everything reusable bundles into `CodingOpts` — sharing one across calls is
+harmless, which is the point. What stays on the call is what cannot be shared:
+`session` and `key`, which say which agent memory *this* call is on, and
+`output`, which decides what it returns.
 
 `dontAsk` with an allowlist is how you get a read-only agent: everything
 outside the list is denied without stopping to ask you. Not `permission_mode=
@@ -147,6 +158,33 @@ files you gave it `Read` for.
 
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
 tool; the cast blocks until you answer.
+
+### Sessions
+
+Two `coding` calls in one cast either share the agent's context or they do not.
+`session` says whether this call resumes, and `key` says which thread it
+resumes and files itself under:
+
+| declaration | what the call gets |
+| --- | --- |
+| `Session.NEW` (default) | a fresh context |
+| `Session.CONTINUE` | the cast's last agent call, carried on |
+| `Session.CONTINUE, key="fix"` | the thread keyed `"fix"`, carried on |
+| `Session.NEW, key="fix"` | a fresh context, and `"fix"` starts from it |
+
+A retry wants `continue` — an agent remembering what it already tried is the
+whole value. A review step wants `new`: an agent that helped write the code is
+not a reviewer of it, and sharing silently makes that step worthless while
+looking like it ran. The default is `new` because a step is a task boundary, and
+carrying context across one by default contradicts what the boundary is for.
+
+Give a loop its own key. An unkeyed `continue` means whichever agent call ran
+last, which is the same thing while a ritual has one, and stops being the same
+the moment it gains a second.
+
+A key is refused if it names nothing (`""`, `"  "`), and `session` takes only
+the two words, so a thread name left in the old spelling raises
+`CodingSessionError` rather than opening a thread of its own.
 
 ## Architecture
 

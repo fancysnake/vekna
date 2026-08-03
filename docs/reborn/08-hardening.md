@@ -26,11 +26,14 @@ enough that a second person can use it.
   itself moved to history, since a shipped roadmap is not a manual. This bullet
   is the inventory — [09-site.md](09-site.md) publishes it and owns nothing of
   what it says.
-- Example `rituals.py` library — at least: PR triage, test-and-fix loop,
-  migration babysitter.
+- Example ritual library — at least: PR triage, test-and-fix loop, migration
+  babysitter. Layout follows the guidance in
+  [10-ritual-modules.md](10-ritual-modules.md): split by ritual before splitting
+  by kind, and let a ritual stay one file until it earns a package.
 - Error pathways audited — SDK disconnects, resume on a corrupt run dir,
-  malformed `rituals.py`, a phylactery whose root no longer exists, Focus extra
-  missing.
+  malformed `rituals.py`, a `rituals/` submodule that fails to import, two
+  sources declaring the same step name, a phylactery whose root no longer
+  exists, Focus extra missing.
 - Telemetry hooks (opt-in) for measuring primitive latency.
 - Removal of any transitional shims left from earlier releases.
 - `deptry`, `pip-audit`, `mypy --strict`, `vulture` all clean.

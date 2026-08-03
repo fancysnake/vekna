@@ -16,7 +16,7 @@ acts.
 
 ## Contents
 
-The order among the five is not fixed.
+The order among them is not fixed, though 06 wants 02 and 03 before it.
 
 - [01-failure.md](01-failure.md) — failure as a transition: `on_error`, a typed
   `Failure` payload, recovery as an ordinary step.
@@ -28,6 +28,10 @@ The order among the five is not fixed.
   rather than carrying in every prompt.
 - [05-replay.md](05-replay.md) — replay a recorded cast against its journal and
   check the ritual still walks the same path.
+- [06-process.md](06-process.md) — `folio/process`: `spawn` and `attach` as
+  Mediums, so a dev server's lifetime lives in a folio rather than a ritual
+  body. Reborn's `0.4.0` until it became clear that owning a process is 02 and
+  03 wearing a different hat.
 
 ## Filed here, not fenced here
 

@@ -32,9 +32,13 @@ work.
   (stdout events; stdin prompts for `decide`). Probe degrades
   gracefully when the socket is absent.
 - `vekna.folio.flow` — `decide` (the single human round-trip: choice,
-  confirmation, free text) + `parallel`. `branch`/`repeat`
-  fold into conditional `goto` / `goto`-with-guard at the step level, and
-  `attempt` into ordinary `try/except` in a step body — not separate mediums.
+  confirmation, free text). `branch`/`repeat` fold into conditional `goto` /
+  `goto`-with-guard at the step level, `attempt` into ordinary `try/except` in a
+  step body, and `parallel` into plain `asyncio` — not separate mediums.
+  Concurrency lives inside a step and stays the language's; **steps themselves
+  never run concurrently**, which is what keeps a cast to one cursor and so
+  keeps resume ([06-vekna-daemon.md](06-vekna-daemon.md)) a single-cursor
+  problem.
 - `vekna.folio.shell` — `shell` Medium + bash Focus.
 - Worked example: a `@ritual` with at least two `@step`s wired by
   `goto`/`done`, using `shell` + `decide` and a guarded loop. Since 0.3.0 this

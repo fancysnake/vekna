@@ -7,14 +7,37 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
+## [0.3.0] - 2026-07-27
+
 ### Added
 
 - **`coding` medium** (`vekna.folio.coding`) — hand work to an agent from
-  inside a step. Portable knobs bundle into `CodingOpts(model, system, cwd)`;
-  `output=SomeModel` validates the agent's reply and returns it typed, raising
-  `CodingOutputError` when it does not fit. Permissive by default: tool use is
-  gated only when a call passes `gate_tools=[...]`, which turns each matching
-  tool into a `decide` round-trip.
+  inside a step. Configuration bundles into
+  `CodingOpts(model=..., system=..., cwd=..., gate_tools=..., focus_options=...)`
+  — configuration meaning one is safe to reuse across calls, which is the point
+  of bundling it. Every field but `focus_options` is portable too, saying the
+  same thing whichever Focus answers; that one is read by the Focus it was
+  built for and ignored by any other. `output=SomeModel` validates the agent's
+  reply and returns it typed, raising `CodingOutputError` when it does not fit.
+  Permissive by default: tool use is gated only when a call passes
+  `gate_tools=[...]`, which turns each matching tool into a `decide`
+  round-trip.
+- **Session continuity is the author's** — `coding(prompt, session=..., key=...)`
+  declares which thread of agent memory a call is on. `session` says whether the
+  call resumes: `Session.NEW` is a fresh context and the default, since a step
+  is a task boundary and carrying context across one by default contradicts what
+  the boundary is for; `Session.CONTINUE` carries on. `key` says which thread —
+  `merge_ready`'s repair loop keys its own, so a second attempt knows what the
+  first already tried, while an unkeyed `continue` follows whichever agent call
+  ran last. `new` with a key starts that thread over. Both are parameters rather
+  than knobs on `CodingOpts`, because a thread is per-call identity and not
+  reusable configuration; a word that is not one of the two, or a key naming
+  nothing, raises `CodingSessionError`, and the older `CodingOpts(session=...)`
+  spelling raises `CodingOptsError` naming where the two halves went. The medium resolves the declaration
+  against a per-cast session book and hands the Focus a plain session id; the
+  rite's telemetry records both halves of the declaration as well as the id, and
+  a declared thread the Focus gave no id for says so on the rite rather than
+  going unrecorded in silence.
 - **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
   `_links.py` is the only module importing `claude-agent-sdk`.
 - **`ask_human`** — the agent can put a question to the operator mid-rite,
@@ -62,6 +85,13 @@ and this project adheres to [Semantic Versioning].
   written in the author's `rituals.py`, which it never sees. A `@step` may
   still admit several shapes (`Lint | Coverage`) as long as every member is a
   model; a ritual's components stay a single model, being one CLI interface.
+- **A medium called with an argument it does not take says so.** `@medium`
+  binds the call against the medium's own signature before invoking it and
+  raises the new `MediumBoundaryError` — `medium 'coding' takes no argument
+  'gate_tools'` — on the medium's own rite. Python's `TypeError` said the same
+  thing as a traceback out of the engine's frames, which is the wrong register
+  for a keyword that moved: `gate_tools` is a `CodingOpts` field now, and a call
+  still passing it is a slip in a `rituals.py` nothing type-checks.
 - **A cast's result prints as JSON.** `result: {"covered":true,"remaining":3}`
   rather than a pydantic repr, and `result: null` when a ritual finishes with
   nothing.
@@ -443,7 +473,8 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/fancysnake/vekna/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fancysnake/vekna/compare/v0.0.4...v0.1.0
 [0.0.4]: https://github.com/fancysnake/vekna/compare/v0.0.3...v0.0.4
