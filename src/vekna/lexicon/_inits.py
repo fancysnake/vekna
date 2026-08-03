@@ -107,7 +107,7 @@ def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
         for the_ritual in module.rituals:
             compendium.register(the_ritual, source=module.source)
         for the_step in module.steps:
-            compendium.register_step(the_step)
+            compendium.register_step(the_step, source=module.source)
 
 
 def _build_compendium(cwd: Path) -> Compendium:

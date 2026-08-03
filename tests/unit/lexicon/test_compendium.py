@@ -1,3 +1,6 @@
+import asyncio
+from dataclasses import replace
+
 import pytest
 from pydantic import BaseModel
 
@@ -28,6 +31,11 @@ def beta(components: State) -> Transition:
 async def same_name_as_alpha(components: State) -> Transition:
     await asyncio.sleep(0)
     return done(State(x=components.x))
+
+
+# What two submodules each declaring a step called `noop` hand the sweep: the
+# same name on a different object.
+same_name_as_noop = replace(noop, source="async def noop(): ...")
 
 
 class TestCompendium:
@@ -78,3 +86,25 @@ class TestCompendium:
     @staticmethod
     def test_unregistered_step_is_none():
         assert Compendium().step("noop") is None
+
+    # `measure` is a natural name in two rituals, and the loser used to vanish:
+    # `rituals show` would then draw the other ritual's step under this one's
+    # name, which is worse than refusing to draw anything.
+    @staticmethod
+    def test_two_steps_of_one_name_collide_naming_both_sources():
+        compendium = Compendium()
+        compendium.register_step(noop, source="rituals.first")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register_step(same_name_as_noop, source="rituals.second")
+
+        assert "rituals.first" in str(raised.value)
+        assert "rituals.second" in str(raised.value)
+
+    @staticmethod
+    def test_the_same_step_reached_twice_registers_once():
+        compendium = Compendium()
+        compendium.register_step(noop, source="rituals.first")
+        compendium.register_step(noop, source="rituals.second")
+
+        assert compendium.step("noop") is noop
