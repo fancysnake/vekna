@@ -25,7 +25,9 @@ bound** — do not summon it.
 ## Where the incantation lives
 
 `rituals.py`, in the current directory or **any parent** — the cast walks up
-until it finds one. Nothing else is discovered implicitly.
+until it finds one. Nothing else is discovered implicitly *yet*: a `rituals/`
+package is found the same way from `0.4.0` on, which is the one item under
+**Not yet bound** likely to have landed by the time you read this.
 
 More sources can be named in `.vekna.toml` (project, found by walking up) or
 `~/.config/vekna/config.toml` (global). Paths resolve **relative to the config
@@ -589,11 +591,15 @@ and `mise run fullcheck` must be green.
 
 Planned, designed, **not in `0.3.0`**. Do not write against any of it.
 
-- **`rituals/` as a package.** Discovery builds `directory / "rituals.py"` and
-  asks `.is_file()` — a directory is never a candidate. A package is reachable
-  only by naming it in `.vekna.toml` `modules` with the path exported, and
-  relative imports inside it are fragile. Planned for `0.5.0`
-  (`docs/reborn/10-ritual-modules.md`).
+- **`rituals/` as a package** — **landing in `0.4.0`, written on the
+  `ritual-modules` branch, not on `main`.** Until it merges, discovery builds
+  `directory / "rituals.py"` and asks `.is_file()`, so a directory is never a
+  candidate and `.vekna.toml` `modules` is the only route. After it merges a
+  package is found by walking up, searched all the way down, every level needing
+  its own `__init__.py`, and a directory holding both `rituals.py` and
+  `rituals/` is an error naming both. Check which side of that merge you are on
+  before splitting a ritual source; `docs/reborn/10-ritual-modules.md` is the
+  design.
 - **`@step(max_visits=N)`.** Does not exist. `@step` is a bare decorator; the
   only engine bound is `max_steps` on the ritual.
 - **`@step(goes_to=[...])`** and declared edges. Rejected in favour of steps-as-DTOs
