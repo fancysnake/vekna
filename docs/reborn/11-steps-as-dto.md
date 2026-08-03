@@ -13,8 +13,9 @@ trampoline.
 
 Today it guesses. `goto(target: Step, payload: BaseModel | None)` erases both
 ends: nothing checks that `write_tests` accepts an `Uncovered`, because
-`_checked` and `StepBoundaryError` are runtime and `mise run mypy` is `mypy
-src`, which never reads a ritual file. The graph is recovered by parsing each
+`_checked` and `StepBoundaryError` are runtime and the annotation `goto` carries
+says only `Step`. Type-checking a ritual file does not close this — `SRC_PATHS`
+now covers `rituals.py` and the erasure survives it. The graph is recovered by parsing each
 step's source for `goto` calls whose first argument is a bare name, so a
 computed target is invisible — `00-common.md` calls this inferable and
 best-effort, and `04-graph.md` is blunter: *"drawing a graph you know is
@@ -78,23 +79,29 @@ Costs:
 - **`raise` exits stay outside the type**, the same blind spot Option A has.
   `collect` and `read_link` both raise `RitualError`; `sync_base` in the example
   raises three times.
-- **It buys nothing until rituals are type-checked.** `mypy src` excludes them,
-  and the `@step`/`@ritual` contravariance issue blocks putting them in — 13 of
-  the 22 errors `mypy rituals.py` reports today are that one problem. See
+- ~~**It buys nothing until rituals are type-checked.**~~ **Spent.** This was
+  the cost that held B back, and it is paid: `SRC_PATHS` is `src rituals.py`,
+  the `@step`/`@ritual` contravariance issue that blocked it is fixed, and
+  `mypy` is clean on the file that used to report 22 errors. What B buys is now
+  collectable the day it is built. See
   [10-ritual-modules.md](10-ritual-modules.md), Out of scope.
 
 ## What decides it
 
-- **If rituals never enter mypy's scope**, B is hover polish and A is the real
-  answer.
+- ~~**If rituals never enter mypy's scope**, B is hover polish and A is the real
+  answer.~~ Moot: they entered.
 - **If they do**, B subsumes A completely and `goes_to` should not be built at
   all — a type-checked return annotation is a superset of a
-  runtime-cross-checked decorator argument.
+  runtime-cross-checked decorator argument. **This is the branch that fired.**
 - **Timing.** B breaks the public API. Deciding after 1.0 means either not doing
   it or holding it for 2.0; A can land any time.
 
-So the prerequisite is the same either way: fix the decorator generics, get
-rituals type-checked, and the choice answers itself.
+The prerequisite was: fix the decorator generics, get rituals type-checked, and
+the choice answers itself. Both halves landed together, so on this document's
+own rule the *choice* is answered — B over A, and `04-graph.md`'s `goes_to`
+should not be built. Only **timing** is still open, and it is the harder half:
+B breaks the public API, so it is 1.0 work or it is 2.0 work, and nothing about
+type-checking rituals decides which.
 
 ## Not the question
 
@@ -132,6 +139,7 @@ only how the next step is *spelled*.
 
 ## Deciding
 
-Not scheduled. Record the decision here when it is made, and delete the losing
-option from both this file and `04-graph.md` rather than leaving two live
-designs for the same problem.
+Not scheduled — but no longer blocked, and the blocker is not coming back. What
+is left to decide is when, not which: see "What decides it" above. Record the
+decision here when it is made, and delete the losing option from both this file
+and `04-graph.md` rather than leaving two live designs for the same problem.
