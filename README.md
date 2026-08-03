@@ -16,7 +16,8 @@ pip install .
 
 ## A ritual
 
-Put a `rituals.py` in your project:
+Put a `rituals.py` in your project — or a `rituals/` package, split however you
+like, once one file stops being enough:
 
 ```python
 from typing import Annotated
@@ -108,20 +109,17 @@ result: {"outcome":"green"}
 
 ## Where rituals come from
 
-`rituals.py`, in the current directory or any parent — the cast walks up until
-it finds one. A `.vekna.toml` (project) or `~/.config/vekna/config.toml`
-(global) can name more, resolved relative to the config file:
+`rituals.py` — or a `rituals/` package — in the current directory or any
+parent. A package is searched all the way down, so its `__init__.py` can stay
+empty and you can split it by ritual, by kind, or not at all. A `.vekna.toml`
+(project) or `~/.config/vekna/config.toml` (global) can name more, resolved
+relative to the config file:
 
 ```toml
 [rituals]
 files = ["ops/release.py"]
 modules = ["mycompany.rites"]
 ```
-
-`modules` is also the route to a ritual *package* today, and needs it importable
-— walking up finds `rituals.py` and nothing else. Discovering a `rituals/`
-directory the same way is [`docs/reborn/10-ritual-modules.md`](docs/reborn/10-ritual-modules.md),
-scheduled for `0.5.0`.
 
 ## Configuring the agent
 
