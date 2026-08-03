@@ -140,7 +140,9 @@ def _build_compendium(cwd: Path) -> Compendium:
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
-                _register(compendium=compendium, found=load_rituals_module(module))
+                _register(
+                    compendium=compendium, found=load_rituals_module(module, root=cwd)
+                )
     return compendium
 
 

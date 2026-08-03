@@ -102,7 +102,11 @@ def load_rituals_package(path: Path) -> list[RitualSource]:
     return _swept(name=path.name, module=importlib.import_module(path.name))
 
 
-def load_rituals_module(name: str) -> list[RitualSource]:
+# `root` is the cwd, which is what `PYTHONPATH=.` used to have to say: a
+# configured `modules = ["myproj.rituals"]` names a package in the project being
+# cast, and nothing puts that project on the path of a console script.
+def load_rituals_module(name: str, *, root: Path) -> list[RitualSource]:
+    _on_path(root)
     return _swept(name=name, module=importlib.import_module(name))
 
 

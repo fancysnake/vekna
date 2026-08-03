@@ -403,6 +403,37 @@ class TestRitualSources:
         assert exit_code == 0
         assert out.count("ping\n") == 1
 
+    # A console script's sys.path[0] is the venv's bin, so the project being
+    # cast is on the path of nothing until the loader puts it there.
+    @staticmethod
+    def test_a_configured_package_resolves_without_pythonpath(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(tmp_path / "mylib", _PACKAGE)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["mylib"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "ping\n" in out
+
+    @staticmethod
+    def test_a_configured_package_is_swept_to_the_bottom(tmp_path, monkeypatch, capsys):
+        _write(
+            tmp_path / "mylib",
+            {**_PACKAGE, "deep/__init__.py": "", "deep/steps.py": _DEEP_STEPS},
+        )
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["mylib"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("dig")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "  deeper → (done)\n" in out
+
     @staticmethod
     def test_two_different_files_claiming_one_name_still_collide(
         tmp_path, monkeypatch, capsys
