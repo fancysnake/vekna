@@ -107,10 +107,11 @@ Five things the implementation settled that the sketch above left open:
   parameter holding two reserved words *plus* any name an author invents is a
   set no type can close, and the validator standing in for the type coerced
   rather than refused: `session=None` opened a thread named `"None"`. `session`
-  is the closed enum now and `key` names the thread, so a slip in an author's
-  never-type-checked `rituals.py` raises `CodingSessionError` instead of
-  quietly sharing memory. `new` with a key is not a contradiction — it is how a
-  loop starts its thread over.
+  is the closed enum now and `key` names the thread, so a slip in a
+  `rituals.py` raises `CodingSessionError` instead of quietly sharing memory —
+  and whether that file is type-checked is the author's call, so the runtime is
+  what covers it. `new` with a key is not a contradiction — it is how a loop
+  starts its thread over.
 - **`continue` without a key is the last session *any* `coding` rite
   produced**, not the last `continue` call. The motivating case — a retry that
   remembers what it tried — follows a first attempt written as a plain
@@ -182,7 +183,7 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
 
   ```python
   @ritual("cover_diff")
-  async def cover_diff(components: CoverDiff) -> Transition:
+  def cover_diff(components: CoverDiff) -> Transition:
       return goto(measure, Uncovered(budget=components.bound))
 
   @step

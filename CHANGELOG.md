@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
+### Changed
+
+- **A step or entrypoint is written `def` when its body has nothing to await.**
+  `@step` and `@ritual` used to require `async def` whatever the body did, so a
+  step that only routes on its payload — or an entrypoint that only names the
+  first step — said `async` to satisfy a signature and then awaited nothing.
+  Both spellings are accepted now. What the wrapper asks is whether the value it
+  got back still needs awaiting — not which keyword the author used, which the
+  value cannot tell it — so a `def` body that hands back a coroutine is awaited
+  too: forgetting the `await` on a helper call gives working code rather than a
+  transition that is secretly a coroutine. The four
+  entrypoints in vekna's own `rituals.py` are `def`, and the `RUF029` exception
+  that existed to tolerate the old shape is gone.
+- **`@step` and `@ritual` take the author's own model.** Their parameter was
+  typed `Callable[[BaseModel], ...]`; parameters are contravariant, so a step
+  declared `(fetched: Fetched)` was an error on every decorator in a rituals
+  file its author type-checked — 13 of the 22 errors `mypy rituals.py` reported.
+  The decorators are generic in the payload now, which is what makes pointing a
+  type checker at a rituals file worth doing.
+- **vekna type-checks its own `rituals.py`.** It sits in `SRC_PATHS` beside
+  `src`, under the same strict config, so the one file in this repo that uses
+  vekna the way an author does is checked the way an author would check it. This
+  narrows, but does not retire, the reason the runtime boundary checks exist:
+  whether *your* rituals file is type-checked is yours to decide, and
+  `RitualBoundaryError`, `StepBoundaryError` and `MediumBoundaryError` are what
+  cover it when you don't.
+
 ## [0.3.0] - 2026-07-27
 
 ### Added

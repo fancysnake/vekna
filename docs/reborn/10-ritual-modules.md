@@ -166,13 +166,13 @@ rituals/
 
 ## Out of scope
 
-- **Rituals in mypy's scope.** `mise run mypy` is `mypy src`, so a ritual
-  package is unchecked wherever it lives. Worth doing — `mypy rituals.py`
-  reports 22 errors today, of which 13 are the known `@step`/`@ritual`
-  contravariance issue, 8 are `Any` leakage from the `TaskGroup` in
-  `merge_ready.gates`, and one is a real bug (`decide(options=[...])` returns
-  `str` into `Triaged.took: Literal[...]`). It is blocked on the decorator
-  generics, and it is not this.
+- ~~**Rituals in mypy's scope.**~~ **Done, separately.** `SRC_PATHS` is
+  `src rituals.py` and the file is clean. It had reported 22 errors: 13 the
+  `@step`/`@ritual` contravariance issue, since fixed by giving the decorators
+  the author's own model; 8 `Any` leakage from the `TaskGroup` in
+  `merge_ready.gates`; and one real bug (`decide(options=[...])` returning `str`
+  into `Triaged.took: Literal[...]`). A ritual *package* — the subject of this
+  document — still has to be named in `SRC_PATHS` to get the same treatment.
 - **Steps as DTOs**, with step values appearing only in return statements —
   [11-steps-as-dto.md](11-steps-as-dto.md). Undecided, and competing with
   [`../eye/04-graph.md`](../eye/04-graph.md): it is a change to the ritual model

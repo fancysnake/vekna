@@ -3,8 +3,9 @@ import io
 
 from pydantic import BaseModel
 
+from tests.conftest import entry
 from vekna.folio.shell import ShellResult, shell
-from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
+from vekna.lexicon import Transition, done, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteStreamed, Ritual
@@ -59,46 +60,13 @@ async def run_multibyte(_state: State) -> Transition:
     return done(await shell(f"python3 -c \"print('☃' * {_LONG_LINE})\""))
 
 
-@ritual("echoer")
-async def echoer(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_echo, State())
-
-
-@ritual("failing")
-async def failing(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_fail, State())
-
-
-@ritual("quiet")
-async def quiet(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_quiet, State())
-
-
-@ritual("quiet_partial")
-async def quiet_partial(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_quiet_partial, State())
-
-
-@ritual("long_line")
-async def long_line(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_long_line, State())
-
-
-@ritual("partial_line")
-async def partial_line(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_partial_line, State())
-
-
-@ritual("multibyte")
-async def multibyte(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
-    return goto(run_multibyte, State())
+echoer = entry(name="echoer", target=run_echo, payload=State())
+failing = entry(name="failing", target=run_fail, payload=State())
+quiet = entry(name="quiet", target=run_quiet, payload=State())
+quiet_partial = entry(name="quiet_partial", target=run_quiet_partial, payload=State())
+long_line = entry(name="long_line", target=run_long_line, payload=State())
+partial_line = entry(name="partial_line", target=run_partial_line, payload=State())
+multibyte = entry(name="multibyte", target=run_multibyte, payload=State())
 
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:

@@ -70,10 +70,10 @@ class _Thread:
 
 
 # Both checks take `object` rather than the parameter's own type, and that is
-# what lets them exist: an author's `rituals.py` is never type-checked, so the
-# runtime is the only place `session=None` or `key=3` is caught — and mypy,
-# reading the annotation, would call a guard against an already-narrowed type
-# unreachable.
+# what lets them exist: whether an author's `rituals.py` is type-checked is up
+# to them, so the runtime is the only place `session=None` or `key=3` is caught
+# in general — and mypy, reading the annotation, would call a guard against an
+# already-narrowed type unreachable.
 def _declared(session: Session) -> Session:
     # Compared rather than looked up with `Session(...)`, which takes a `str`
     # and so would not see the arguments this check is here for.

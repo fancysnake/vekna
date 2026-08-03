@@ -54,8 +54,10 @@ async def fix(state: Attempt) -> Transition:
     return goto(fix, Attempt(left=state.left - 1))
 
 
+# `def`, not `async def`: naming the first step has nothing to await. A step or
+# entrypoint is written whichever way its body needs.
 @ritual("fix_tests")
-async def fix_tests(components: FixTests) -> Transition:
+def fix_tests(components: FixTests) -> Transition:
     return goto(fix, Attempt(left=components.bound))
 ```
 

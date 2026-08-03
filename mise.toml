@@ -14,7 +14,12 @@ enter = "poetry install"
 # Mise creates and activates this virtualenv automatically
 _.python.venv = { path = ".venv", create = true }
 PACKAGE = "vekna"
-SRC_PATHS = "src"
+# `rituals.py` is here, and not only `src`, so the engine's own author-facing
+# contract is checked the way an author would check it: the decorators, the
+# transitions and the folio calls all go through mypy under the same strict
+# config as the package. It is the one file outside `src` that uses vekna the
+# way a user does, and drift shows up here before it ships.
+SRC_PATHS = "src rituals.py"
 TEST_PATHS = "tests"
 SCRIPT_PATHS = ""
 TOML_PATHS = ".taplo.toml pyproject.toml mise.toml tingle.toml"

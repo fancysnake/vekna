@@ -97,7 +97,7 @@ class CoverReport(BaseModel):
 
 
 @ritual("cover_diff")
-async def cover_diff(components: CoverDiff) -> Transition:
+def cover_diff(components: CoverDiff) -> Transition:
     # The entrypoint: map the CLI Components into the first step's payload.
     return goto(measure, Uncovered(budget=components.bound))
 
@@ -179,7 +179,7 @@ class Review(BaseModel):
 
 
 @ritual("review")
-async def review(components: ReviewRequest) -> Transition:
+def review(components: ReviewRequest) -> Transition:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.
     return goto(collect, components)
@@ -326,7 +326,7 @@ def _complaint(failure: Red) -> str:
 # max_steps is the backstop, not the control — the bound is. It sits well above
 # a plausible bound, so tripping it means a ritual that will not settle.
 @ritual("merge_ready", max_steps=32)
-async def merge_ready(components: MergeReady) -> Transition:
+def merge_ready(components: MergeReady) -> Transition:
     return goto(gates, Attempt(budget=components.bound))
 
 
@@ -465,7 +465,7 @@ def _gh_view(link: Url) -> str:
 
 
 @ritual("triage")
-async def triage(components: Triage) -> Transition:
+def triage(components: Triage) -> Transition:
     return goto(read_link, components)
 
 

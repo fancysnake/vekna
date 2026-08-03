@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from tests.conftest import entry
 from vekna.folio.coding import (
     CodingOpts,
     CodingOptsError,
@@ -19,12 +20,9 @@ from vekna.lexicon import (
     FocusMissingError,
     FocusReply,
     MediumBoundaryError,
-    NoComponents,
     Transition,
     done,
-    goto,
     register_focus,
-    ritual,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -111,10 +109,7 @@ class TestCodingMedium:
             opts = CodingOpts(model="opus", cwd="/tmp/x")
             return done(await coding("fix it", opts=opts))
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         result, grimoire = _cast(r)
 
@@ -141,10 +136,7 @@ class TestCodingMedium:
             await coding("fix it")
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _, grimoire = _cast(r)
 
@@ -167,10 +159,7 @@ class TestCodingMedium:
         async def work(_: Answer) -> Transition:
             return done(await coding("start server", output=Answer))
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         result, _ = _cast(r)
 
@@ -185,10 +174,7 @@ class TestCodingMedium:
         async def work(_: Answer) -> Transition:
             return done(await coding("start server", output=Answer))
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         with pytest.raises(CodingOutputError):
             _cast(r)
@@ -203,10 +189,7 @@ class TestCodingMedium:
             await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _cast(r, stdin="n\n")
 
@@ -225,10 +208,7 @@ class TestCodingMedium:
             await coding("fix it", opts=CodingOpts(focus_options=knobs))
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _cast(r)
 
@@ -256,10 +236,7 @@ class TestCodingMedium:
             await coding("write the test")
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _cast(r, stdin="2\n")
 
@@ -275,10 +252,7 @@ class TestCodingMedium:
             await coding("write the test")
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _cast(r, stdin="the tmp_path one\n")
 
@@ -303,10 +277,7 @@ class TestCodingMedium:
             await coding("fix it")
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
@@ -318,12 +289,7 @@ def _one_call_ritual(**declaration):
         await coding("fix it", **declaration)
         return done(None)
 
-    @ritual("r")
-    async def r(_: NoComponents) -> Transition:
-        await asyncio.sleep(0)
-        return goto(work, Answer(port=1))
-
-    return r
+    return entry(target=work, payload=Answer(port=1))
 
 
 class TestSessionDeclaration:
@@ -340,10 +306,7 @@ class TestSessionDeclaration:
                 await coding(f"call {index}", session=session, key=key)
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _cast(r)
         return [call.resume for call in focus.calls]
@@ -407,10 +370,7 @@ class TestSessionDeclaration:
             await coding("fix it again", session=Session.CONTINUE)
             return done(None)
 
-        @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
-            return goto(work, Answer(port=1))
+        r = entry(target=work, payload=Answer(port=1))
 
         _, grimoire = _cast(r)
 
@@ -494,8 +454,8 @@ class TestSessionDeclaration:
     @staticmethod
     def test_the_old_call_spelling_names_the_argument_it_lost():
         # `gate_tools` moved into the bundle, and the call that still passes it
-        # is a slip nothing type-checks — Python's own TypeError would report it
-        # as a traceback out of the engine's frames.
+        # is a slip an unchecked rituals.py would carry to runtime — Python's own
+        # TypeError would report it as a traceback out of the engine's frames.
         register_focus("coding", FakeFocus())
 
         with pytest.raises(MediumBoundaryError, match="takes no argument"):

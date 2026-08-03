@@ -162,8 +162,10 @@ class RitualBoundaryError(RitualError):
 
 # A medium called with arguments it does not take. Python's own TypeError says
 # the same thing and says it as a traceback, which is the wrong register for a
-# mistake in an author's never-type-checked rituals.py: a moved keyword is the
-# same class of slip as a misspelled session, and should read like one.
+# mistake in a rituals.py: a moved keyword is the same class of slip as a
+# misspelled session, and should read like one. This repo type-checks its own
+# rituals.py, but an author's is theirs to check or not, so the runtime is the
+# only place the general case is caught.
 class MediumBoundaryError(RitualError):
     pass
 
@@ -218,8 +220,9 @@ class Ritual:
 
 
 # A transition carries a pydantic model or nothing. The annotations alone would
-# not hold: mypy sees `src/`, and a transition is written in the author's
-# rituals.py, which it never reads.
+# not hold: a transition is written in a rituals.py, and whether mypy reads that
+# file is the author's call. This repo puts its own in `SRC_PATHS` and gets the
+# error at check time; everyone else gets it here.
 def _checked(value: object, *, kind: str) -> BaseModel | None:
     if value is None or isinstance(value, BaseModel):  # type: ignore [misc]
         return value
