@@ -1,22 +1,21 @@
 import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from types import NoneType, UnionType
 from typing import Annotated, Any, TypeGuard, get_args, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import RitualDefinitionError, Transition
+from vekna.lexicon._pacts import RitualDefinitionError
 
 _NAMELESS = "value"
 
 
-# What the decorators hand their helpers, and what a Step runs: past the
-# boundary check the payload is a BaseModel and nothing more, because the type
-# it was checked against is a runtime value read off an annotation. The return
-# is a union because a body with nothing to await is written `def` — a step
-# that only routes on its payload, or an entrypoint that only names the first
-# step — and the wrapper awaits whichever arrived.
-_Erased = Callable[[BaseModel], Transition | Awaitable[Transition]]
+# What this module reflects over: past the boundary check the payload is a
+# BaseModel and nothing more, because the type it was checked against is a
+# runtime value read off an annotation. The return is `object` because nothing
+# here calls the function — a signature and a `__name__` are the whole need, and
+# what a body hands back is the caller's business, in `dispatch`.
+_Erased = Callable[[BaseModel], object]
 
 
 # 3.14 merged `typing.Union` into `types.UnionType`. Before it, `|` yields the

@@ -6,8 +6,6 @@ from typing import ParamSpec, Protocol, TypeVar, cast
 from pydantic import BaseModel
 
 from vekna.lexicon._pacts import (
-    Done,
-    Goto,
     MediumBoundaryError,
     Ritual,
     RitualBoundaryError,
@@ -34,6 +32,11 @@ _ComponentsT = TypeVar("_ComponentsT", bound=BaseModel)
 # to await, and saying `async` to satisfy a signature is a lie the linter is
 # right to call.
 _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
+
+# The same contract with the payload type erased, which is the shape the
+# wrappers actually call. `_Erased` next door is the reflection half and says
+# nothing about the return, so the call side names it here.
+_Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
 
 
 # Signature-forwarding via ParamSpec is str-tainted the same way the rest of
@@ -87,19 +90,20 @@ def source_text(func: _Erased) -> str | None:
         return None
 
 
-# The one shape both wrappers end on. Which of the two the author wrote is
-# read off the value rather than off the function, because
-# `iscoroutinefunction` at decoration time would buy a branch that is already
-# free here — an isinstance against two dataclasses, beside a step that awaits
-# a subprocess or an agent — and cost a TypeGuard whose typeshed signature is
-# Any-tainted.
+# The one shape both wrappers end on. The question is whether what came back
+# still needs awaiting, so that is what gets asked — the alternative, an
+# isinstance against `Goto | Done`, answers it by enumerating the transitions
+# instead, which is a second copy of that union living in a module whose job is
+# not to know what a transition is. `iscoroutinefunction` at decoration time
+# would also miss a `def` body that hands back a coroutine, and costs a
+# TypeGuard whose typeshed signature is Any-tainted.
 async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
-    return outcome if isinstance(outcome, Goto | Done) else await outcome
+    return await outcome if isinstance(outcome, Awaitable) else outcome
 
 
 def step(func: _Written[_PayloadT]) -> Step:
     name = func.__name__
-    erased = cast("_Erased", func)
+    erased = cast("_Called", func)
     payload_type = _payload_type(erased)
 
     async def run(payload: BaseModel | None) -> Transition:
@@ -123,7 +127,7 @@ class _RitualDecorator(Protocol):
 
 def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator:
     def wrap(func: _Written[_ComponentsT]) -> Ritual:
-        erased = cast("_Erased", func)
+        erased = cast("_Called", func)
         model = _components_model(erased)
 
         # The cast's entry boundary, and the counterpart to the step's: nothing
