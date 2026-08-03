@@ -7,7 +7,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ._links.loader import load_rituals_file, load_rituals_module, read_config
+from ._links.loader import (
+    load_rituals_file,
+    load_rituals_module,
+    load_rituals_package,
+    read_config,
+)
 from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
@@ -28,6 +33,8 @@ _USAGE = (
     '       vekna cast --prompt "<text>"\n'
 )
 _NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
+_RITUALS_FILE = "rituals.py"
+_RITUALS_PACKAGE = "rituals"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
@@ -47,11 +54,32 @@ def _load_folios() -> None:
             importlib.import_module(name).register()
 
 
-def _find_rituals_file(start: Path) -> Path | None:
+# A directory counts only with an `__init__.py`, at every level: a `rituals/`
+# holding anything else would otherwise shadow a parent's real rituals.py and
+# offer nothing in its place.
+def _is_package(directory: Path) -> bool:
+    return (directory / "__init__.py").is_file()
+
+
+# Not a precedence rule. Both spellings name the ritual source and neither says
+# it is the one meant, so a half-finished move into rituals/ would keep casting
+# the file it was moved out of — silently, which is the shape of bug this
+# feature exists to remove.
+def _find_rituals_source(start: Path) -> Path | None:
     for directory in (start, *start.parents):
-        candidate = directory / "rituals.py"
-        if candidate.is_file():
-            return candidate
+        file = directory / _RITUALS_FILE
+        package = directory / _RITUALS_PACKAGE
+        found_file, found_package = file.is_file(), _is_package(package)
+        if found_file and found_package:
+            msg = (
+                f"{file} and {package} both name the ritual source here"
+                " — delete or rename one"
+            )
+            raise RitualDefinitionError(msg)
+        if found_file:
+            return file
+        if found_package:
+            return package
     return None
 
 
@@ -94,8 +122,13 @@ def _build_compendium(cwd: Path) -> Compendium:
             seen_files.add(resolved)
             _register(compendium=compendium, found=load_rituals_file(resolved))
 
-    if (implicit := _find_rituals_file(cwd)) is not None:
-        load_file(implicit)
+    if (implicit := _find_rituals_source(cwd)) is not None:
+        if implicit.is_dir():
+            _register(
+                compendium=compendium, found=load_rituals_package(implicit.resolve())
+            )
+        else:
+            load_file(implicit)
     for config in _config_files(cwd):
         rituals = read_config(config).rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is

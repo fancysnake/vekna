@@ -46,6 +46,83 @@ _RITUALS = textwrap.dedent("""
 
 _BROKEN = "import a_module_that_does_not_exist\n"
 
+# The same two rituals as `_RITUALS`, split the way the feature exists to allow:
+# an empty `__init__.py`, models in one module, prose in another, and every step
+# in a third that reaches both by relative import.
+_COMPONENTS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+
+    class Tick(BaseModel):
+        left: int
+
+
+    class Countdown(BaseModel):
+        start: int
+
+
+    class Pong(BaseModel):
+        said: str
+    """)
+
+_PROMPTS = 'GREETING = "pong"\n'
+
+_STEPS = textwrap.dedent("""
+    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
+
+    from .components import Countdown, Pong, Tick
+    from .prompts import GREETING
+
+
+    @step
+    async def tick(state: Tick) -> Transition:
+        if not state.left:
+            return done(state)
+        return goto(tick, Tick(left=state.left - 1))
+
+
+    @ritual("countdown")
+    async def countdown(components: Countdown) -> Transition:
+        return goto(tick, Tick(left=components.start))
+
+
+    @ritual("ping")
+    async def ping(_: NoComponents) -> Transition:
+        return done(Pong(said=GREETING))
+    """)
+
+# A level down, reaching two levels up for what it needs.
+_DEEP_STEPS = textwrap.dedent("""
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+    from ..components import Countdown, Tick
+    from ..prompts import GREETING
+
+
+    @step
+    async def deeper(state: Tick) -> Transition:
+        return done(Tick(left=state.left + len(GREETING)))
+
+
+    @ritual("dig")
+    async def dig(components: Countdown) -> Transition:
+        return goto(deeper, Tick(left=components.start))
+    """)
+
+_PACKAGE = {
+    "__init__.py": "",
+    "components.py": _COMPONENTS,
+    "prompts.py": _PROMPTS,
+    "steps.py": _STEPS,
+}
+
+
+def _write(root, files):
+    for relative, text in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
 
 @pytest.fixture
 def _home(tmp_path, monkeypatch) -> None:
@@ -130,6 +207,140 @@ class TestRitualsShow:
 
         assert exit_code == _USAGE_EXIT
         assert "no ritual named 'nope'" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("_home")
+class TestRitualPackages:
+    @staticmethod
+    def test_a_package_is_found_and_lists_every_ritual(tmp_path, monkeypatch, capsys):
+        _write(tmp_path / "rituals", _PACKAGE)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "countdown  --start <int>\n" in out
+        assert "ping\n" in out
+
+    @staticmethod
+    def test_a_package_is_found_by_walking_up(tmp_path, monkeypatch, capsys):
+        _write(tmp_path / "rituals", _PACKAGE)
+        (deep := tmp_path / "src" / "nested").mkdir(parents=True)
+        monkeypatch.chdir(deep)
+
+        exit_code = rituals_list()
+
+        assert exit_code == 0
+        assert "ping\n" in capsys.readouterr().out
+
+    # The whole point of the sweep: `__init__.py` names neither step, and the
+    # graph is drawn to its end rather than stopping at the first one.
+    @staticmethod
+    def test_show_draws_a_graph_the_init_never_mentions(tmp_path, monkeypatch, capsys):
+        _write(tmp_path / "rituals", _PACKAGE)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert not (tmp_path / "rituals" / "__init__.py").read_text()
+        assert "  (start) → tick\n" in out
+        assert "  tick → tick, (done)\n" in out
+
+    @staticmethod
+    def test_an_init_may_import_from_a_sibling(tmp_path, monkeypatch, capsys):
+        _write(
+            tmp_path / "rituals",
+            {**_PACKAGE, "__init__.py": "from .prompts import GREETING\n"},
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        assert exit_code == 0
+        assert "ping\n" in capsys.readouterr().out
+
+    @staticmethod
+    def test_a_nested_subpackage_is_swept(tmp_path, monkeypatch, capsys):
+        _write(
+            tmp_path / "rituals",
+            {**_PACKAGE, "deep/__init__.py": "", "deep/steps.py": _DEEP_STEPS},
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("dig")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "  (start) → deeper\n" in out
+        assert "  deeper → (done)\n" in out
+
+    # `pkgutil.iter_modules` yields a directory holding no `__init__` as nothing
+    # at all, so a namespace-package level would go unswept in silence.
+    @staticmethod
+    def test_a_directory_without_an_init_is_not_swept(tmp_path, monkeypatch, capsys):
+        _write(tmp_path / "rituals", {**_PACKAGE, "loose/steps.py": _DEEP_STEPS})
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "ping\n" in out
+        assert "dig" not in out
+
+    @staticmethod
+    def test_a_directory_without_an_init_is_not_a_source(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        _write(tmp_path / "nested" / "rituals", {"steps.py": _STEPS})
+        monkeypatch.chdir(tmp_path / "nested")
+
+        exit_code = rituals_list()
+
+        assert exit_code == 0
+        assert "ping\n" in capsys.readouterr().out
+
+    @staticmethod
+    def test_a_file_beside_a_package_is_an_error(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        _write(tmp_path / "rituals", _PACKAGE)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert str(tmp_path / "rituals.py") in err
+        assert str(tmp_path / "rituals") in err
+
+    # And the walk stops there rather than reaching past the ambiguity to a
+    # parent that has a source of its own.
+    @staticmethod
+    def test_the_walk_stops_at_the_ambiguity(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (below := tmp_path / "below").mkdir()
+        (below / "rituals.py").write_text(_RITUALS)
+        _write(below / "rituals", _PACKAGE)
+        monkeypatch.chdir(below)
+
+        exit_code = rituals_list()
+
+        assert exit_code == _USAGE_EXIT
+        assert str(below / "rituals.py") in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_submodule_that_cannot_be_imported_is_a_usage_error(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(tmp_path / "rituals", {**_PACKAGE, "broken.py": _BROKEN})
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        assert exit_code == _USAGE_EXIT
+        assert "a_module_that_does_not_exist" in capsys.readouterr().err
 
 
 @pytest.mark.usefixtures("_home")
