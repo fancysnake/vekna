@@ -13,9 +13,10 @@ trampoline.
 
 Today it guesses. `goto(target: Step, payload: BaseModel | None)` erases both
 ends: nothing checks that `write_tests` accepts an `Uncovered`, because
-`_checked` and `StepBoundaryError` are runtime and the annotation `goto` carries
-says only `Step`. Type-checking a ritual file does not close this — `SRC_PATHS`
-now covers `rituals.py` and the erasure survives it. The graph is recovered by parsing each
+`_checked` and `StepBoundaryError` are runtime, and the annotation carried by
+`goto` says only `Step`. Type-checking a ritual file does not close this —
+`SRC_PATHS` now covers `rituals.py` and the erasure survives it. The graph is
+recovered by parsing each
 step's source for `goto` calls whose first argument is a bare name, so a
 computed target is invisible — `00-common.md` calls this inferable and
 best-effort, and `04-graph.md` is blunter: *"drawing a graph you know is

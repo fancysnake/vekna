@@ -13,10 +13,11 @@ and this project adheres to [Semantic Versioning].
   `@step` and `@ritual` used to require `async def` whatever the body did, so a
   step that only routes on its payload — or an entrypoint that only names the
   first step — said `async` to satisfy a signature and then awaited nothing.
-  Both spellings are accepted now. Which one the author wrote is read off the
-  returned value rather than off the function, so a `def` body that hands back a
-  coroutine is still awaited: forgetting the `await` on a helper call gives
-  working code rather than a transition that is secretly a coroutine. The four
+  Both spellings are accepted now. What the wrapper asks is whether the value it
+  got back still needs awaiting — not which keyword the author used, which the
+  value cannot tell it — so a `def` body that hands back a coroutine is awaited
+  too: forgetting the `await` on a helper call gives working code rather than a
+  transition that is secretly a coroutine. The four
   entrypoints in vekna's own `rituals.py` are `def`, and the `RUF029` exception
   that existed to tolerate the old shape is gone.
 - **`@step` and `@ritual` take the author's own model.** Their parameter was
