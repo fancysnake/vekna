@@ -12,8 +12,11 @@ _NAMELESS = "value"
 
 # What the decorators hand their helpers, and what a Step runs: past the
 # boundary check the payload is a BaseModel and nothing more, because the type
-# it was checked against is a runtime value read off an annotation.
-_Erased = Callable[[BaseModel], Awaitable[Transition]]
+# it was checked against is a runtime value read off an annotation. The return
+# is a union because a body with nothing to await is written `def` — a step
+# that only routes on its payload, or an entrypoint that only names the first
+# step — and the wrapper awaits whichever arrived.
+_Erased = Callable[[BaseModel], Transition | Awaitable[Transition]]
 
 
 # 3.14 merged `typing.Union` into `types.UnionType`. Before it, `|` yields the

@@ -1,7 +1,7 @@
 import inspect
 import textwrap
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import ParamSpec, TypeVar
+from typing import ParamSpec, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -17,11 +17,23 @@ from vekna.lexicon._pacts import (
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 
-from ._annotations import _component_flags, _components_model, _payload_type
+from ._annotations import _component_flags, _components_model, _Erased, _payload_type
 from .engine import medium_rite
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
+_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+_ComponentsT = TypeVar("_ComponentsT", bound=BaseModel)
+
+
+# What the author wrote, before the payload type is erased. Their own model as
+# the parameter, because a step declared `(fetched: Fetched)` is not a
+# `Callable[[BaseModel], ...]` — parameters are contravariant, and typing it as
+# one is an error on every decorator in a rituals file the author type-checks.
+# And `def` or `async def` as the body needs: routing on a payload has nothing
+# to await, and saying `async` to satisfy a signature is a lie the linter is
+# right to call.
+_Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 
 
 # Signature-forwarding via ParamSpec is str-tainted the same way the rest of
@@ -68,16 +80,26 @@ def medium(
     return wrapped
 
 
-def source_text(func: Callable[[BaseModel], Awaitable[Goto | Done]]) -> str | None:
+def source_text(func: _Erased) -> str | None:
     try:
         return textwrap.dedent(inspect.getsource(func))
     except (OSError, TypeError):
         return None
 
 
-def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
+# The one shape both wrappers end on. Which of the two the author wrote is
+# read off the value rather than off the function, because
+# `iscoroutinefunction` at decoration time would buy a branch that is already
+# free here — an isinstance against two dataclasses, beside a step that awaits
+# a subprocess or an agent — and cost a TypeGuard whose typeshed signature is
+# Any-tainted.
+async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
+    return outcome if isinstance(outcome, Goto | Done) else await outcome
+
+
+def step(func: _Written[_PayloadT]) -> Step:
     name = func.__name__
-    erased = func
+    erased = cast("_Erased", func)
     payload_type = _payload_type(erased)
 
     async def run(payload: BaseModel | None) -> Transition:
@@ -86,16 +108,22 @@ def step(func: Callable[[BaseModel], Awaitable[Transition]]) -> Step:
         if not isinstance(payload, payload_type):
             msg = f"step {name!r} expected {payload_type}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
-        return await erased(payload)
+        return await _settled(erased(payload))
 
     return Step(name=name, run=run, input_type=payload_type, source=source_text(erased))
 
 
-def ritual(
-    name: str, *, max_steps: int = DEFAULT_MAX_STEPS
-) -> Callable[[Callable[[BaseModel], Awaitable[Transition]]], Ritual]:
-    def wrap(func: Callable[[BaseModel], Awaitable[Transition]]) -> Ritual:
-        erased = func
+# A structural callback, so `wrap` below cannot declare it as a base. Its point
+# is to scope `_ComponentsT` to the decorator `ritual` returns rather than to
+# `ritual` itself, where the call site names only the ritual and has nothing to
+# bind the variable from.
+class _RitualDecorator(Protocol):
+    def __call__(self, func: _Written[_ComponentsT]) -> Ritual: ...
+
+
+def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator:
+    def wrap(func: _Written[_ComponentsT]) -> Ritual:
+        erased = cast("_Erased", func)
         model = _components_model(erased)
 
         # The cast's entry boundary, and the counterpart to the step's: nothing
@@ -108,7 +136,7 @@ def ritual(
                     f"got {type(values).__name__}"
                 )
                 raise RitualBoundaryError(msg)
-            return await erased(values)
+            return await _settled(erased(values))
 
         return Ritual(
             name=name,

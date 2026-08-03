@@ -14,7 +14,7 @@ enter = "poetry install"
 # Mise creates and activates this virtualenv automatically
 _.python.venv = { path = ".venv", create = true }
 PACKAGE = "vekna"
-SRC_PATHS = "src"
+SRC_PATHS = "src rituals.py"
 TEST_PATHS = "tests"
 SCRIPT_PATHS = ""
 TOML_PATHS = ".taplo.toml pyproject.toml mise.toml tingle.toml"
