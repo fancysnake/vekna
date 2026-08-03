@@ -96,8 +96,13 @@ class Compendium:
 
     # `source` names where the ritual came from, so a genuine collision between
     # two different files says which two rather than leaving the author to guess.
+    # The *same* object reached twice is not one: a package is swept module by
+    # module, and a submodule that imports a sibling's ritual to reach it hands
+    # the sweep the object a second time.
     def register(self, ritual: Ritual, *, source: str | None = None) -> None:
-        if ritual.name in self._rituals:
+        if (known := self._rituals.get(ritual.name)) is not None:
+            if known is ritual:
+                return
             raise RitualDefinitionError(self._collision(ritual.name, source))
         self._rituals[ritual.name] = ritual
         if source is not None:

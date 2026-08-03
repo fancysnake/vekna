@@ -84,8 +84,11 @@ RiteEvent = RiteBegan | RiteStreamed | RiteEnded
 # What loading a ritual source yields. The loader reaches the filesystem, so it
 # lives in `_links`, which may not import the compendium in `_mills` — it hands
 # back what it found and `_inits` registers it.
-@dataclass(frozen=True)
+# One per *module*, not per top-level source: a package is swept all the way
+# down, and a collision between two of its submodules should name which two.
+@dataclass(frozen=True, kw_only=True)
 class RitualSource:
+    source: str
     rituals: list["Ritual"]
     steps: list["Step"]
 

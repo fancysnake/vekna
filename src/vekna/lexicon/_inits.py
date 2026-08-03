@@ -74,11 +74,12 @@ def _config_files(cwd: Path) -> list[Path]:
 # sources claiming one ritual name is still an error.
 # The loader reaches the filesystem and so may not touch the compendium in
 # _mills: it hands back what it found, and binding the two is this layer's job.
-def _register(*, compendium: Compendium, found: RitualSource, source: str) -> None:
-    for the_ritual in found.rituals:
-        compendium.register(the_ritual, source=source)
-    for the_step in found.steps:
-        compendium.register_step(the_step)
+def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
+    for module in found:
+        for the_ritual in module.rituals:
+            compendium.register(the_ritual, source=module.source)
+        for the_step in module.steps:
+            compendium.register_step(the_step)
 
 
 def _build_compendium(cwd: Path) -> Compendium:
@@ -91,11 +92,7 @@ def _build_compendium(cwd: Path) -> Compendium:
         # discovered file all collapse to one entry.
         if (resolved := path.resolve()) not in seen_files:
             seen_files.add(resolved)
-            _register(
-                compendium=compendium,
-                found=load_rituals_file(resolved),
-                source=str(resolved),
-            )
+            _register(compendium=compendium, found=load_rituals_file(resolved))
 
     if (implicit := _find_rituals_file(cwd)) is not None:
         load_file(implicit)
@@ -110,11 +107,7 @@ def _build_compendium(cwd: Path) -> Compendium:
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
-                _register(
-                    compendium=compendium,
-                    found=load_rituals_module(module),
-                    source=f"module {module}",
-                )
+                _register(compendium=compendium, found=load_rituals_module(module))
     return compendium
 
 

@@ -3,6 +3,7 @@ import importlib
 import importlib.util
 import tomllib
 from pathlib import Path
+from types import ModuleType
 
 from pydantic import ValidationError
 
@@ -15,8 +16,13 @@ from vekna.lexicon._pacts import (
 )
 
 
-def _found(namespace: dict[str, object]) -> RitualSource:
+# The one place a module's namespace is read. Binding it to a declared
+# `dict[str, object]` is what discharges the `Any` a module's `__dict__` carries,
+# so no load route needs an ignore of its own.
+def _found(*, source: str, module: ModuleType) -> RitualSource:
+    namespace: dict[str, object] = vars(module)
     return RitualSource(
+        source=source,
         rituals=[v for v in namespace.values() if isinstance(v, Ritual)],
         steps=[v for v in namespace.values() if isinstance(v, Step)],
     )
@@ -28,18 +34,20 @@ def _module_name(path: Path) -> str:
     return f"vekna_rituals_{hashlib.sha256(str(path).encode()).hexdigest()[:12]}"
 
 
-def load_rituals_file(path: Path) -> RitualSource:
+# A list of one, so that every route hands `_inits` the same shape: a package
+# yields one entry per module swept.
+def load_rituals_file(path: Path) -> list[RitualSource]:
     spec = importlib.util.spec_from_file_location(_module_name(path), path)
     if spec is None or spec.loader is None:
         msg = f"cannot import rituals from {path}"
         raise RitualDefinitionError(msg)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return _found(vars(module))  # type: ignore [misc]
+    return [_found(source=str(path), module=module)]
 
 
-def load_rituals_module(name: str) -> RitualSource:
-    return _found(vars(importlib.import_module(name)))  # type: ignore [misc]
+def load_rituals_module(name: str) -> list[RitualSource]:
+    return [_found(source=f"module {name}", module=importlib.import_module(name))]
 
 
 # A config that does not parse stops the command: loading no rituals from it

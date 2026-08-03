@@ -24,6 +24,12 @@ def beta(components: State) -> Transition:
     return goto(noop, State(x=components.x))
 
 
+@ritual("alpha")
+async def same_name_as_alpha(components: State) -> Transition:
+    await asyncio.sleep(0)
+    return done(State(x=components.x))
+
+
 class TestCompendium:
     @staticmethod
     def test_register_and_lookup():
@@ -35,12 +41,25 @@ class TestCompendium:
         assert compendium.names() == ["alpha", "beta"]
 
     @staticmethod
-    def test_duplicate_registration_raises():
+    def test_two_rituals_of_one_name_collide_naming_both_sources():
         compendium = Compendium()
-        compendium.register(alpha)
+        compendium.register(alpha, source="rituals.first")
 
-        with pytest.raises(RitualDefinitionError):
-            compendium.register(alpha)
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register(same_name_as_alpha, source="rituals.second")
+
+        assert "rituals.first" in str(raised.value)
+        assert "rituals.second" in str(raised.value)
+
+    # A submodule that reaches a sibling's ritual imports it, so the sweep of a
+    # package hands the same object over once per module that names it.
+    @staticmethod
+    def test_the_same_ritual_reached_twice_registers_once():
+        compendium = Compendium()
+        compendium.register(alpha, source="rituals.first")
+        compendium.register(alpha, source="rituals.second")
+
+        assert compendium.names() == ["alpha"]
 
     @staticmethod
     def test_missing_ritual_raises():
