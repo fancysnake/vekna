@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 from pydantic import BaseModel
 
@@ -12,20 +10,17 @@ class State(BaseModel):
 
 
 @step
-async def noop(state: State) -> Transition:
-    await asyncio.sleep(0)
+def noop(state: State) -> Transition:
     return done(state)
 
 
 @ritual("alpha")
-async def alpha(components: State) -> Transition:
-    await asyncio.sleep(0)
+def alpha(components: State) -> Transition:
     return goto(noop, State(x=components.x))
 
 
 @ritual("beta")
-async def beta(components: State) -> Transition:
-    await asyncio.sleep(0)
+def beta(components: State) -> Transition:
     return goto(noop, State(x=components.x))
 
 

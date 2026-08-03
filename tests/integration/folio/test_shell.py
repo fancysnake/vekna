@@ -60,44 +60,37 @@ async def run_multibyte(_state: State) -> Transition:
 
 
 @ritual("echoer")
-async def echoer(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def echoer(_: NoComponents) -> Transition:
     return goto(run_echo, State())
 
 
 @ritual("failing")
-async def failing(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def failing(_: NoComponents) -> Transition:
     return goto(run_fail, State())
 
 
 @ritual("quiet")
-async def quiet(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def quiet(_: NoComponents) -> Transition:
     return goto(run_quiet, State())
 
 
 @ritual("quiet_partial")
-async def quiet_partial(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def quiet_partial(_: NoComponents) -> Transition:
     return goto(run_quiet_partial, State())
 
 
 @ritual("long_line")
-async def long_line(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def long_line(_: NoComponents) -> Transition:
     return goto(run_long_line, State())
 
 
 @ritual("partial_line")
-async def partial_line(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def partial_line(_: NoComponents) -> Transition:
     return goto(run_partial_line, State())
 
 
 @ritual("multibyte")
-async def multibyte(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def multibyte(_: NoComponents) -> Transition:
     return goto(run_multibyte, State())
 
 

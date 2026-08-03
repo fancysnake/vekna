@@ -42,34 +42,29 @@ class Start(BaseModel):
 
 
 @step
-async def tick(state: Tick) -> Transition:
-    await asyncio.sleep(0)
+def tick(state: Tick) -> Transition:
     if not state.left:
         return done(state)
     return goto(tick, Tick(left=state.left - 1))
 
 
 @ritual("countdown")
-async def countdown(components: Start) -> Transition:
-    await asyncio.sleep(0)
+def countdown(components: Start) -> Transition:
     return goto(tick, Tick(left=components.start))
 
 
 @step
-async def spin(state: Tick) -> Transition:
-    await asyncio.sleep(0)
+def spin(state: Tick) -> Transition:
     return goto(spin, state)
 
 
 @ritual("spinner", max_steps=5)
-async def spinner(components: Start) -> Transition:
-    await asyncio.sleep(0)
+def spinner(components: Start) -> Transition:
     return goto(spin, Tick(left=components.start))
 
 
 @step
-async def finish(state: Tick) -> Transition:
-    await asyncio.sleep(0)
+def finish(state: Tick) -> Transition:
     return done(state)
 
 
@@ -77,8 +72,7 @@ _SPRINT_START = 7
 
 
 @ritual("sprint", max_steps=1)
-async def sprint(components: Start) -> Transition:
-    await asyncio.sleep(0)
+def sprint(components: Start) -> Transition:
     return goto(finish, Tick(left=components.start))
 
 
@@ -87,14 +81,12 @@ class BoomError(RuntimeError):
 
 
 @step
-async def explode(_state: Tick) -> Transition:
-    await asyncio.sleep(0)
+def explode(_state: Tick) -> Transition:
     raise BoomError
 
 
 @ritual("detonate")
-async def detonate(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def detonate(_: NoComponents) -> Transition:
     return goto(explode, Tick(left=0))
 
 
@@ -111,8 +103,7 @@ async def light_fuse(_state: Tick) -> Transition:
 
 
 @ritual("smoulder")
-async def smoulder(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def smoulder(_: NoComponents) -> Transition:
     return goto(light_fuse, Tick(left=0))
 
 
@@ -140,8 +131,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("bare")
-            async def bare() -> Transition:
-                await asyncio.sleep(0)
+            def bare() -> Transition:
                 return done()
 
     @staticmethod
@@ -149,8 +139,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("pair")
-            async def pair(components: Start, extra: Tick) -> Transition:
-                await asyncio.sleep(0)
+            def pair(components: Start, extra: Tick) -> Transition:
                 return done(components.start + extra.left)
 
     @staticmethod
@@ -158,8 +147,7 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="pydantic model"):
 
             @ritual("loose")
-            async def loose(bound: int) -> Transition:
-                await asyncio.sleep(0)
+            def loose(bound: int) -> Transition:
                 return done(bound)
 
 
@@ -329,8 +317,7 @@ class TestSessionBook:
         seen = []
 
         @step
-        async def note(state: Tick) -> Transition:
-            await asyncio.sleep(0)
+        def note(state: Tick) -> Transition:
             book = current_rite().sessions
             seen.append((book, book.named("thread")))
             book.record(f"s{state.left}", name="thread")
@@ -339,8 +326,7 @@ class TestSessionBook:
             return goto(note, Tick(left=state.left - 1))
 
         @ritual("noting")
-        async def noting(components: Start) -> Transition:
-            await asyncio.sleep(0)
+        def noting(components: Start) -> Transition:
             return goto(note, Tick(left=components.start))
 
         for _ in range(2):

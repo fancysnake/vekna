@@ -112,8 +112,7 @@ class TestCodingMedium:
             return done(await coding("fix it", opts=opts))
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         result, grimoire = _cast(r)
@@ -142,8 +141,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _, grimoire = _cast(r)
@@ -168,8 +166,7 @@ class TestCodingMedium:
             return done(await coding("start server", output=Answer))
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         result, _ = _cast(r)
@@ -186,8 +183,7 @@ class TestCodingMedium:
             return done(await coding("start server", output=Answer))
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         with pytest.raises(CodingOutputError):
@@ -204,8 +200,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _cast(r, stdin="n\n")
@@ -226,8 +221,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _cast(r)
@@ -257,8 +251,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _cast(r, stdin="2\n")
@@ -276,8 +269,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _cast(r, stdin="the tmp_path one\n")
@@ -304,8 +296,7 @@ class TestCodingMedium:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
@@ -319,8 +310,7 @@ def _one_call_ritual(**declaration):
         return done(None)
 
     @ritual("r")
-    async def r(_: NoComponents) -> Transition:
-        await asyncio.sleep(0)
+    def r(_: NoComponents) -> Transition:
         return goto(work, Answer(port=1))
 
     return r
@@ -341,8 +331,7 @@ class TestSessionDeclaration:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _cast(r)
@@ -408,8 +397,7 @@ class TestSessionDeclaration:
             return done(None)
 
         @ritual("r")
-        async def r(_: NoComponents) -> Transition:
-            await asyncio.sleep(0)
+        def r(_: NoComponents) -> Transition:
             return goto(work, Answer(port=1))
 
         _, grimoire = _cast(r)

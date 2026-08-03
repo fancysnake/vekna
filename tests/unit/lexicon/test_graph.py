@@ -15,45 +15,41 @@ class State(BaseModel):
 
 
 @step
-async def finish(state: State) -> Transition:
-    await asyncio.sleep(0)
+def finish(state: State) -> Transition:
     return done(state)
 
 
 @step
-async def tick(state: State) -> Transition:
-    await asyncio.sleep(0)
+def tick(state: State) -> Transition:
     if not state.x:
         return done(state)
     return goto(finish, State(x=state.x - 1))
 
 
 @step
-async def branchy(state: State) -> Transition:
-    await asyncio.sleep(0)
+def branchy(state: State) -> Transition:
     if state.x:
         return goto(finish, state)
     return goto(finish, State(x=1))
 
 
 @step
-async def spin(state: State) -> Transition:
-    await asyncio.sleep(0)
+def spin(state: State) -> Transition:
     return goto(spin, state)
 
 
 @ritual("countdown")
-async def countdown(components: State) -> Transition:
-    await asyncio.sleep(0)
+def countdown(components: State) -> Transition:
     return goto(tick, State(x=components.x))
 
 
 @ritual("spinner")
-async def spinner(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def spinner(_: NoComponents) -> Transition:
     return goto(spin, State(x=0))
 
 
+# Stands in for a hand-built `Ritual.run`, which is typed Awaitable whichever
+# way the body that produced it was written.
 async def _never(_: BaseModel) -> Transition:
     await asyncio.sleep(0)
     return done()
@@ -69,11 +65,10 @@ def _hand_built_ritual(source: str | None) -> Ritual:
 # indentation after dedent, so its source cannot be parsed on its own.
 def _unindentable_step() -> Step:
     @step
-    async def odd(state: State) -> Transition:
+    def odd(state: State) -> Transition:
         note = """
 text at column zero
 """
-        await asyncio.sleep(0)
         return done(note + str(state.x))
 
     return odd

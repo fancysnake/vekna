@@ -33,7 +33,9 @@ class Elsewhere(BaseModel):
     n: int
 
 
-async def _emit(payload: Ping) -> object:
+# Deliberately `async def`: it is what keeps the wrapper's awaiting path under
+# test, against `TestSyncBody` covering the other one.
+async def _emit(payload: Ping) -> Transition:
     await asyncio.sleep(0)
     return done(Pong(n=payload.n + 1))
 
@@ -64,7 +66,7 @@ class TestStepDecorator:
 
     @staticmethod
     def test_rejects_function_without_single_param():
-        def _two(first: Ping, second: Ping) -> object:
+        def _two(first: Ping, second: Ping) -> Transition:
             return done(Pong(n=first.n + second.n))
 
         with pytest.raises(RitualDefinitionError):
@@ -72,7 +74,7 @@ class TestStepDecorator:
 
     @staticmethod
     def test_rejects_unannotated_param():
-        def _bare(value) -> object:
+        def _bare(value) -> Transition:
             return done(value)
 
         with pytest.raises(RitualDefinitionError):
@@ -80,7 +82,7 @@ class TestStepDecorator:
 
     @staticmethod
     def test_rejects_a_payload_type_that_is_not_a_model():
-        def _loose(payload: int) -> object:
+        def _loose(payload: int) -> Transition:
             return done(Pong(n=payload))
 
         with pytest.raises(RitualDefinitionError, match="pydantic model"):
@@ -90,8 +92,7 @@ class TestStepDecorator:
 # A step two others transition into admits either shape.
 class TestUnionPayload:
     @staticmethod
-    async def _merge(payload: Ping | Pong) -> object:
-        await asyncio.sleep(0)
+    def _merge(payload: Ping | Pong) -> Transition:
         return done(Pong(n=payload.n))
 
     @classmethod
@@ -116,7 +117,7 @@ class TestUnionPayload:
 
     @staticmethod
     def test_rejects_a_union_with_a_non_model_member():
-        def _mixed(payload: Ping | int) -> object:
+        def _mixed(payload: Ping | int) -> Transition:
             return done(Pong(n=int(payload)))
 
         with pytest.raises(RitualDefinitionError, match="union"):

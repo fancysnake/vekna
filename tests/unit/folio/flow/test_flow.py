@@ -33,8 +33,7 @@ async def gather(_state: State) -> Transition:
 
 
 @ritual("survey")
-async def survey(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def survey(_: NoComponents) -> Transition:
     return goto(gather, State())
 
 

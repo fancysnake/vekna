@@ -49,8 +49,7 @@ async def choose(_state: Start) -> Transition:
 
 
 @ritual("chooser")
-async def chooser(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def chooser(_: NoComponents) -> Transition:
     return goto(choose, Start())
 
 
@@ -67,15 +66,13 @@ async def identify(_state: Start) -> Transition:
 
 
 @ritual("identifier")
-async def identifier(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def identifier(_: NoComponents) -> Transition:
     return goto(identify, Start())
 
 
 # The ritual body itself runs at the cast root, outside any rite.
 @ritual("rootless")
-async def rootless(_: NoComponents) -> Transition:
-    await asyncio.sleep(0)
+def rootless(_: NoComponents) -> Transition:
     emit_delta("nowhere to hang")
     return done(None)
 
@@ -137,8 +134,7 @@ def _caller(call: dict[str, object]):
         return done(None)
 
     @ritual("caller")
-    async def caller(_: NoComponents) -> Transition:
-        await asyncio.sleep(0)
+    def caller(_: NoComponents) -> Transition:
         return goto(ask, Start())
 
     return caller
