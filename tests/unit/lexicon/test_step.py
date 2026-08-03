@@ -167,8 +167,11 @@ class TestSyncBody:
         with pytest.raises(RitualBoundaryError):
             asyncio.run(_enter.run(Elsewhere(n=1)))
 
-    # `def` is read off the value, not off the function, so a sync body that
-    # hands back a coroutine is awaited rather than mistaken for a transition.
+    # Not a designed feature — a consequence of asking the value whether it
+    # needs awaiting rather than asking the function whether it was `async`.
+    # Pinned because it is the forgiving direction: an author who writes
+    # `return _helper(p)` and forgets the `await` gets working code, and anyone
+    # switching the wrapper to `iscoroutinefunction` would take that away.
     @staticmethod
     def test_awaits_a_coroutine_a_sync_body_hands_back():
         async def _later(payload: Ping) -> Transition:
