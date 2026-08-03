@@ -35,10 +35,10 @@ def _where(loc: tuple[int | str, ...]) -> str:
 # The two halves of the declaration are the whole reason `forbid` is on, so the
 # refusal names where they went. Anything else pydantic rejected is quoted as it
 # came: a `RitualError` either way, because a mis-built bundle is an author's
-# mistake in a file nothing type-checks, and the cast should say so rather than
-# unwind through the engine's frames. Reading `errors()` is what this module's
-# `disallow_any_expr` exemption is for — pydantic's report is a list of
-# TypedDicts whose values are `Any`, and it stops here.
+# mistake in a file only they decide to type-check, and the cast should say so
+# rather than unwind through the engine's frames. Reading `errors()` is what
+# this module's `disallow_any_expr` exemption is for — pydantic's report is a
+# list of TypedDicts whose values are `Any`, and it stops here.
 def _refusal(*, bundle: str, error: ValidationError) -> str:
     details = error.errors()
     extras = [
