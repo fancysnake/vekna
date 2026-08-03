@@ -59,6 +59,17 @@ class TestCompendium:
         assert "rituals.first" in str(raised.value)
         assert "rituals.second" in str(raised.value)
 
+    # A source is what a collision names, not what makes it one.
+    @staticmethod
+    def test_two_rituals_of_one_name_collide_without_a_source():
+        compendium = Compendium()
+        compendium.register(alpha)
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register(same_name_as_alpha)
+
+        assert "'alpha' is already registered" in str(raised.value)
+
     # A submodule that reaches a sibling's ritual imports it, so the sweep of a
     # package hands the same object over once per module that names it.
     @staticmethod
