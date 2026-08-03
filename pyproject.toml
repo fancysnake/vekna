@@ -477,13 +477,6 @@ ignore = [
     "ANN", # flake8-annotations
     "S",
 ]
-# A @ritual entrypoint must be `async def` — Ritual.run is typed
-# Awaitable[Transition] — and one that only maps components onto the first
-# step's payload has nothing to await. The rule is right about the function and
-# wrong about the contract, and it fires on every ritual anyone writes.
-"rituals.py" = [
-    "RUF029", # Function is declared `async`, but doesn't `await`
-]
 "src/vekna/lexicon/_mills/_annotations.py" = ["any-type"]
 
 [tool.ruff.lint.flake8-type-checking]
