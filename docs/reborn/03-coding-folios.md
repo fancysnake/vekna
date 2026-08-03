@@ -183,7 +183,7 @@ TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
 
   ```python
   @ritual("cover_diff")
-  async def cover_diff(components: CoverDiff) -> Transition:
+  def cover_diff(components: CoverDiff) -> Transition:
       return goto(measure, Uncovered(budget=components.bound))
 
   @step

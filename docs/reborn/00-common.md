@@ -90,7 +90,7 @@ class Attempt(BaseModel): failures: str; budget: int
 class Report(BaseModel):  fixed: bool
 
 @ritual("fix_demo")                                # boundary: CLI in, final out
-async def fix_demo(components: FixDemo) -> Transition:
+def fix_demo(components: FixDemo) -> Transition:   # `def`: nothing to await
     return goto(run_tests, Attempt(failures="", budget=components.bound))
 
 @step

@@ -45,7 +45,7 @@ payload and an edge in the graph.
       return goto(run_tests, Attempt(failures="", budget=a.budget))
 
   @step
-  async def triage(f: Failure[Attempt]) -> Transition:
+  def triage(f: Failure[Attempt]) -> Transition:
       if f.attempt >= 3:
           return done(Report(fixed=False, reason=f.error.message))
       return goto(claude_fix, f.payload.narrowed())
