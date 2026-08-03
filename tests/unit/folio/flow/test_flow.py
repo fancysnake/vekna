@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel
 
+from tests.conftest import entry
 from vekna.folio.flow import decide
-from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
+from vekna.lexicon import Transition, done, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 
@@ -32,9 +33,7 @@ async def gather(_state: State) -> Transition:
     return done(Survey(choice=choice, approved=approved, note=note))
 
 
-@ritual("survey")
-def survey(_: NoComponents) -> Transition:
-    return goto(gather, State())
+survey = entry(name="survey", target=gather, payload=State())
 
 
 class TestDecideMedium:

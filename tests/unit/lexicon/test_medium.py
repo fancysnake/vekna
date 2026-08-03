@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel
 
+from tests.conftest import entry
 from vekna.lexicon import (
     FocusMissingError,
     MediumBoundaryError,
@@ -15,7 +16,6 @@ from vekna.lexicon import (
     done,
     emit_delta,
     expect_focus,
-    goto,
     medium,
     ritual,
     step,
@@ -48,9 +48,7 @@ async def choose(_state: Start) -> Transition:
     return done(Picked(choice=choice))
 
 
-@ritual("chooser")
-def chooser(_: NoComponents) -> Transition:
-    return goto(choose, Start())
+chooser = entry(name="chooser", target=choose, payload=Start())
 
 
 @medium
@@ -65,9 +63,7 @@ async def identify(_state: Start) -> Transition:
     return done(None)
 
 
-@ritual("identifier")
-def identifier(_: NoComponents) -> Transition:
-    return goto(identify, Start())
+identifier = entry(name="identifier", target=identify, payload=Start())
 
 
 # The ritual body itself runs at the cast root, outside any rite.
@@ -126,18 +122,14 @@ class TestMedium:
 
 # The call arrives as a dict rather than as `**kwargs` on purpose: a wrong call
 # spelled out in the test body is one the linters would refuse to let stand, and
-# an author's rituals.py is exactly the file nothing checks.
+# an author's rituals.py is a file they may never point a checker at.
 def _caller(call: dict[str, object]):
     @step
     async def ask(_state: Start) -> Transition:
         await pick(**call)
         return done(None)
 
-    @ritual("caller")
-    def caller(_: NoComponents) -> Transition:
-        return goto(ask, Start())
-
-    return caller
+    return entry(name="caller", target=ask, payload=Start())
 
 
 def _cast(the_ritual, grimoire):
@@ -156,8 +148,8 @@ class TestMediumBoundary:
     @staticmethod
     def test_an_argument_the_medium_does_not_take_is_named():
         # A keyword that moved elsewhere is a slip in an author's rituals.py,
-        # which nothing type-checks; Python's own TypeError would report it as a
-        # traceback out of the engine's frames.
+        # which they may never type-check; Python's own TypeError would report it
+        # as a traceback out of the engine's frames.
         with pytest.raises(MediumBoundaryError, match="takes no argument 'flavour'"):
             _cast(
                 _caller({"prompt": "which?", "options": ["a", "b"], "flavour": "loud"}),
