@@ -140,6 +140,32 @@ class CodingFocusProtocol(Protocol):
     ) -> FocusReply: ...
 
 
+# The shell medium's boundary, written the same way coding's is and for the same
+# reason: the lexicon may not import a folio, so a Focus that stands where bash
+# stands needs its call and its reply spelled here. `stream` is not on the call —
+# whether output is echoed is the medium's business, and it says so by passing
+# `on_line` or not.
+@dataclass(frozen=True, kw_only=True)
+class ShellCall:
+    command: str
+    cwd: str | None = None
+
+
+class ShellReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stdout: str
+    stderr: str
+    exit_code: int
+
+
+class ShellFocusProtocol(Protocol):
+    @staticmethod
+    async def run(
+        call: ShellCall, *, on_line: Callable[[str], None] | None
+    ) -> ShellReply: ...
+
+
 class RitualError(Exception):
     pass
 

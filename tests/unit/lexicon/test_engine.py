@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
+    FocusMissingError,
     Goto,
     NoComponents,
     RitualBoundaryError,
@@ -256,6 +257,34 @@ class TestFailedRiteIsJournaled:
 
 class TestMediumRegistry:
     @staticmethod
+    def test_a_registered_focus_resolves():
+        registry = MediumRegistry()
+        registry.register("shell", "the focus")
+
+        assert registry.resolve("shell") == "the focus"
+
+    @staticmethod
+    def test_nothing_registered_and_no_default_is_an_error():
+        registry = MediumRegistry()
+        registry.expect("coding", hint="pip install claude-agent-sdk")
+
+        with pytest.raises(FocusMissingError, match="pip install claude-agent-sdk"):
+            registry.resolve("coding")
+
+    @staticmethod
+    def test_a_default_answers_when_nothing_is_registered():
+        registry = MediumRegistry()
+
+        assert registry.resolve("shell", default="bash") == "bash"
+
+    @staticmethod
+    def test_a_registered_focus_wins_over_the_default():
+        registry = MediumRegistry()
+        registry.register("shell", "the double")
+
+        assert registry.resolve("shell", default="bash") == "the double"
+
+    @staticmethod
     def test_offered_prompt_comes_back():
         registry = MediumRegistry()
 
@@ -273,6 +302,47 @@ class TestMediumRegistry:
 
         with pytest.raises(RitualError, match="offers no one-shot prompt"):
             registry.prompt_runner("coding")
+
+
+class TestFocusScope:
+    @staticmethod
+    def test_the_scoped_focus_answers_inside_the_block():
+        registry = MediumRegistry()
+
+        with registry.scope("shell", "the double"):
+            resolved = registry.resolve("shell")
+
+        assert resolved == "the double"
+
+    @staticmethod
+    def test_an_absent_focus_is_absent_again_afterwards():
+        registry = MediumRegistry()
+
+        with registry.scope("shell", "the double"):
+            pass
+
+        with pytest.raises(FocusMissingError, match="no Focus registered"):
+            registry.resolve("shell")
+
+    @staticmethod
+    def test_a_focus_registered_before_the_scope_comes_back():
+        registry = MediumRegistry()
+        registry.register("shell", "the author's own")
+
+        with registry.scope("shell", "the double"):
+            pass
+
+        assert registry.resolve("shell") == "the author's own"
+
+    @staticmethod
+    def test_a_scope_whose_block_raises_still_restores():
+        registry = MediumRegistry()
+        registry.register("shell", "the author's own")
+
+        with pytest.raises(RuntimeError), registry.scope("shell", "the double"):
+            raise RuntimeError
+
+        assert registry.resolve("shell") == "the author's own"
 
 
 class TestSessionBook:

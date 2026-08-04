@@ -1,5 +1,5 @@
 import contextlib
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -149,13 +149,35 @@ class MediumRegistry:
 
     # `object`, not a marker base class: the lexicon may not name a folio's
     # Focus protocol, and a medium narrows what it resolved to its own.
-    def resolve(self, medium_name: str) -> object:
+    # A `default` is for a medium that can always answer for itself — `shell`
+    # has bash whether or not anything registered. Raising is right for a focus
+    # that may not be installed at all, and wrong for one that is the runtime.
+    def resolve(self, medium_name: str, *, default: object | None = None) -> object:
         if (focus := self._foci.get(medium_name)) is not None:
             return focus
+        if default is not None:
+            return default
         msg = f"no Focus registered for medium {medium_name!r}"
         if hint := self._hints.get(medium_name):
             msg = f"{msg} — {hint}"
         raise FocusMissingError(msg)
+
+    # Install and put back exactly what was there, an absence included. The
+    # registry had `register` and a wholesale `reset` and nothing between them:
+    # a test double that reset would clobber a focus the author registered, and
+    # one that only registered would leave itself installed for whatever ran
+    # next.
+    @contextlib.contextmanager
+    def scope(self, medium_name: str, focus: object) -> Iterator[None]:
+        previous = self._foci.get(medium_name)
+        self._foci[medium_name] = focus
+        try:
+            yield
+        finally:
+            if previous is None:
+                self._foci.pop(medium_name, None)
+            else:
+                self._foci[medium_name] = previous
 
     def offer_prompt(self, medium_name: str, run: PromptRunner) -> None:
         self._prompts[medium_name] = run
@@ -187,8 +209,14 @@ def register_focus(medium_name: str, focus: object) -> None:
     _registry.register(medium_name, focus)
 
 
-def resolve_focus(medium_name: str) -> object:
-    return _registry.resolve(medium_name)
+def resolve_focus(medium_name: str, *, default: object | None = None) -> object:
+    return _registry.resolve(medium_name, default=default)
+
+
+def focus_scope(
+    medium_name: str, focus: object
+) -> contextlib.AbstractContextManager[None]:
+    return _registry.scope(medium_name, focus)
 
 
 def offer_prompt(medium_name: str, run: PromptRunner) -> None:
