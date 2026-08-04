@@ -5,7 +5,15 @@ from pydantic import BaseModel
 
 from tests.conftest import entry
 from vekna.folio.shell import ShellResult, shell
-from vekna.lexicon import Transition, done, step
+from vekna.lexicon import (
+    ShellCall,
+    ShellFocusProtocol,
+    ShellReply,
+    Transition,
+    done,
+    focus_scope,
+    step,
+)
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteStreamed, Ritual
@@ -165,3 +173,37 @@ class TestShellStreaming:
         assert not _deltas(grimoire)
         assert "hushed" not in out.getvalue()
         assert result.stdout == "hushed"
+
+
+# A Focus is static — it carries no per-call state — so what it records lives
+# beside it rather than on it.
+_intercepted: list[ShellCall] = []
+
+
+class _RecordingFocus(ShellFocusProtocol):
+    @staticmethod
+    async def run(call, *, on_line):
+        _intercepted.append(call)
+        if on_line is not None:
+            on_line("intercepted")
+        return ShellReply(stdout="from the focus", stderr="", exit_code=0)
+
+
+class TestShellFocus:
+    @staticmethod
+    def test_a_registered_focus_answers_instead_of_bash():
+        _intercepted.clear()
+
+        with focus_scope("shell", _RecordingFocus):
+            result, grimoire, _ = _run(echoer)
+
+        assert result == ShellResult(stdout="from the focus", stderr="", exit_code=0)
+        assert [call.command for call in _intercepted] == ["echo hello && exit 0"]
+        assert _deltas(grimoire) == ["intercepted"]
+
+    @staticmethod
+    def test_bash_answers_again_once_the_scope_closes():
+        with focus_scope("shell", _RecordingFocus):
+            pass
+
+        assert _cast(echoer).stdout.strip() == "hello"
