@@ -11,7 +11,8 @@ class TestMeasure:
     def test_a_green_gate_ends_the_ritual_with_the_budget_untouched(
         trial: Trial,
     ) -> None:
-        trial.shell.replies(when=_GATE, exit_code=0)
+        # The glob form, because it is the one the ritual-scribe skill teaches.
+        trial.shell.replies(when="mise run test:py:cov:diff*", exit_code=0)
 
         transition = trial.walk(measure, Uncovered(budget=3))
 
