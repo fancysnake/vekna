@@ -12,8 +12,16 @@ dependencies = [
     "pydantic (>=2.12.5,<3.0.0)",
 ]
 
+# `vekna.trial` is importable without pytest — `Trial` is a plain context
+# manager. Only the fixture needs it, and only a pytest run ever loads that.
+[project.optional-dependencies]
+trial = ["pytest (>=8.0,<10.0)"]
+
 [project.scripts]
 vekna = 'vekna.inits.cli:run'
+
+[project.entry-points.pytest11]
+vekna_trial = "vekna.edges.pytest_plugin"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -159,6 +167,11 @@ forbidden_modules = [
     "vekna.folio",
     "vekna.lexicon",
 ]
+# Direct imports only. An edge is a framework's door — the pytest11 plugin asks
+# `vekna.trial` for a Trial and nothing else — and what the one thing it names
+# imports on its own behalf is that thing's business. Naming a layer here
+# directly is still forbidden, which is what this contract is for.
+allow_indirect_imports = "True"
 
 [[tool.importlinter.contracts]]
 name = "inside-gates"
@@ -413,6 +426,7 @@ forbidden_modules = [
     "vekna.trial._edges",
 ]
 
+
 [[tool.importlinter.contracts]]
 name = "trial-mills"
 type = "forbidden"
@@ -442,6 +456,10 @@ forbidden_modules = [
 # drive a cast, and it is one module in one wheel versioned with the lexicon.
 # Nothing may reach back: a rituals.py that could import the trial would have a
 # route to the cast runtime, which is the thing that must not happen.
+# `vekna.edges` is not a source here, and is the single exception: the pytest11
+# plugin is the trial's own entry point, holds one fixture, and imports it
+# inside that fixture's body so a coverage run does not see the package before
+# it starts measuring.
 [[tool.importlinter.contracts]]
 name = "nothing-imports-trial"
 type = "forbidden"
@@ -455,7 +473,6 @@ source_modules = [
     "vekna.mills",
     "vekna.pacts",
     "vekna.specs",
-    "vekna.edges",
 ]
 forbidden_modules = ["vekna.trial"]
 
@@ -515,6 +532,13 @@ disallow_any_explicit = false
 module = "vekna.folio.coding._pacts"
 disallow_any_expr = false
 
+# `@pytest.fixture` is an overloaded, Any-typed decorator from a framework we do
+# not define. The plugin is one module holding one fixture, which is what keeps
+# the exemption from spreading anywhere it could matter.
+[[tool.mypy.overrides]]
+module = "vekna.edges.pytest_plugin"
+disallow_any_expr = false
+
 # RUFF
 
 [tool.ruff]
@@ -537,6 +561,10 @@ ignore = [
     "S",
 ]
 "src/vekna/lexicon/_mills/_annotations.py" = ["any-type"]
+# The import is inside the fixture deliberately: pytest loads an entry-point
+# plugin before coverage starts, and a top-level import would take the whole
+# package with it. The module says so at length.
+"src/vekna/edges/pytest_plugin.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]

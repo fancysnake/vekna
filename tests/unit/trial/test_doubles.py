@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from vekna.lexicon._pacts import AskFn, CodingCall, FocusReply, GateFn, ShellCall
 from vekna.trial import CodingDouble, DecideDouble, ShellDouble, TrialScriptError
+from vekna.trial._links import TrialShellFocus
 
 
 class Judgement(BaseModel):
@@ -174,6 +175,13 @@ class TestShellDouble:
         reply = double.answer(ShellCall(command="anything"), None)
 
         assert reply.stdout == "quiet\n"
+
+
+class TestOutsideATrial:
+    @staticmethod
+    def test_a_focus_reached_with_no_trial_bound_says_so():
+        with pytest.raises(TrialScriptError, match="only reachable inside a Trial"):
+            asyncio.run(TrialShellFocus.run(ShellCall(command="ls"), on_line=None))
 
 
 class TestDecideDouble:
