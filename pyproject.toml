@@ -400,6 +400,65 @@ forbidden_modules = [
     "vekna.folio",
 ]
 
+# Trial
+
+[[tool.importlinter.contracts]]
+name = "trial-links"
+type = "forbidden"
+source_modules = ["vekna.trial._links"]
+forbidden_modules = [
+    "vekna.trial._gates",
+    "vekna.trial._inits",
+    "vekna.trial._specs",
+    "vekna.trial._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "trial-mills"
+type = "forbidden"
+source_modules = ["vekna.trial._mills"]
+forbidden_modules = [
+    "vekna.trial._gates",
+    "vekna.trial._links",
+    "vekna.trial._inits",
+    "vekna.trial._edges",
+]
+
+[[tool.importlinter.contracts]]
+name = "trial-pacts"
+type = "forbidden"
+source_modules = ["vekna.trial._pacts"]
+forbidden_modules = [
+    "vekna.trial._gates",
+    "vekna.trial._links",
+    "vekna.trial._inits",
+    "vekna.trial._mills",
+    "vekna.trial._specs",
+    "vekna.trial._edges",
+]
+
+# The one-way door. `vekna.trial` reaches into the lexicon's internals —
+# `Grimoire`, `run_cast`, the rite contextvar — because a test harness has to
+# drive a cast, and it is one module in one wheel versioned with the lexicon.
+# Nothing may reach back: a rituals.py that could import the trial would have a
+# route to the cast runtime, which is the thing that must not happen.
+[[tool.importlinter.contracts]]
+name = "nothing-imports-trial"
+type = "forbidden"
+source_modules = [
+    "vekna.lexicon",
+    "vekna.folio",
+    "vekna.wire",
+    "vekna.gates",
+    "vekna.links",
+    "vekna.inits",
+    "vekna.mills",
+    "vekna.pacts",
+    "vekna.specs",
+    "vekna.edges",
+]
+forbidden_modules = ["vekna.trial"]
+
 # MYPY
 
 [tool.mypy]
