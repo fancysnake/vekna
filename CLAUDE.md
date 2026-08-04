@@ -106,7 +106,7 @@ map, layout, patterns, and drift flags:
 
 ### Structure
 
-```
+```text
 tests/
   unit/                   # mirrors src/ structure
   integration/

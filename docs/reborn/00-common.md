@@ -123,15 +123,16 @@ targets, the full **static** workflow graph is derivable without running: an
 edge `A → B` exists where step `A`'s body does `goto(B, …)`, and `done(…)` is a
 terminal. Execution walks one path at runtime via `goto` (recorded in the
 grimoire); the static graph is the superset. `vekna rituals show` dumps it;
-the dashboard renders it. The runtime cross-check guarantees every actual edge is a valid static edge,
-and static analysis can flag unreachable steps or dead-end payloads. (Inference
+the dashboard renders it. The runtime cross-check guarantees every actual edge
+is a valid static edge, and static analysis can flag unreachable steps or
+dead-end payloads. (Inference
 landed with `rituals show` in 0.3.0, read off each function's source text — so
 a `goto` whose target is computed rather than named does not appear, making the
 dump best-effort rather than exhaustive. Rendering waits for the dashboard.)
 
 ## Process model
 
-```
+```text
 ritual library                cast process                     vekna daemon (0.6.0+)
 ──────────────                ────────────                     ─────────────────────
 rituals.py            ◄────── imports                          ┌──── CLI
@@ -148,7 +149,7 @@ rituals.py            ◄────── imports                          ┌
 A lich (0.7.0) hangs off the same daemon, bound to one project directory —
 though a directory may hold several:
 
-```
+```text
 lich "hollow-vesper"                       ┌── the terminal that raised it
 one directory            ◄── commands ─────┼── shells that attached later
 one cast at a time                         └── #lich-hollow-vesper on discord
@@ -178,7 +179,7 @@ phylactery: one registry row
 
 ## Package layout
 
-```
+```text
 src/vekna/
   pacts/ specs/ mills/ links/ gates/ inits/ edges/   # vekna daemon: full GLIMPSE
     gates/cli/click/                                  # vekna CLI — vekna, vekna cast
@@ -291,7 +292,8 @@ author's to write.)
 
 - `File` — existing readable path. CLI tab-completes; journal stores `path + sha256`.
 - `Directory` — existing path; same.
-- `Text` — string, `multiline=True/False`. `--text=-` reads stdin; multiline opens `$EDITOR`.
+- `Text` — string, `multiline=True/False`. `--text=-` reads stdin; multiline
+  opens `$EDITOR`.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
 - `Process`, `Executable` — **deferred to `folio/process`** (lifetime ≠ value),
   which is Hand's — [`../hand/06-process.md`](../hand/06-process.md).
@@ -356,7 +358,7 @@ mid-cast → attach + replay.
 
 One command tree. Commands arrive across releases:
 
-```
+```text
 vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only command running ritual code) — 0.2.0
 vekna cast --prompt "<text>"                  # one-step cast on the coding medium, no rituals.py needed — 0.3.0
 vekna rituals list                            # defined rituals + their Components — 0.3.0

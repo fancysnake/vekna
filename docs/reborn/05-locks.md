@@ -57,7 +57,7 @@ works too — helper is sugar.
 **Default `warn` at 0.5.0; flips to `deny` when the daemon lands (0.6.0).**
 Banner appears once per cast on first acquisition (not per lock):
 
-```
+```text
 ⚠ STANDALONE MODE — LOCKS NOT COORDINATED
    This cast holds locks locally only. Concurrent casts on this
    project may corrupt each other. Start vekna for real safety.
@@ -65,7 +65,7 @@ Banner appears once per cast on first acquisition (not per lock):
 
 `deny` blocking prompt (same shape as other "needs vekna" features):
 
-```
+```text
 ✋ rite "fix" requested lock "project:edit"
    no daemon detected — locks require a running vekna.
    [r] retry · [q] quit cast

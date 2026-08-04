@@ -3,6 +3,11 @@
 jobs = 8
 
 [tools]
+# Pinned to the same version `.pre-commit-config.yaml` pins, so the hook and the
+# task cannot disagree about what passes. `node` is here only because the
+# linter is npm-backed and its shim needs one on PATH.
+markdownlint-cli2 = "0.23.2"
+node = "26"
 pipx = "1.16.5"
 "pipx:poetry" = "2.4.1"
 python = "3.11"
@@ -32,11 +37,18 @@ includes = [
 [tasks.update]
 run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
 
+# Globs and rule config live in `.markdownlint-cli2.jsonc`, which pre-commit
+# reads too — so there is one answer to "does this markdown pass".
+[tasks."lint:markdown"]
+description = "Check Markdown files"
+run = "markdownlint-cli2"
+
 [tasks.fullcheck]
 run = [
     "poetry install",
     { task = "format:py" },
     { task = "lint:py" },
+    { task = "lint:markdown" },
     { task = "test:py:cov:diff" },
     { task = "lint:tingle" },
 ]

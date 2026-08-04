@@ -1,0 +1,22 @@
+{
+  // House style, not taste imposed after the fact: every rule relaxed below is
+  // one the docs already broke deliberately and consistently.
+  "config": {
+    // Prose wraps at 80. Tables, code blocks and headings are where a wrap
+    // would cost more than the overrun does — a table row cannot wrap at all.
+    "MD013": {
+      "line_length": 80,
+      "tables": false,
+      "code_blocks": false,
+      "headings": false
+    },
+    // A changelog repeats "Added" and "Fixed" under every version, which is the
+    // format doing its job. Duplicates under one parent are still an error.
+    "MD024": { "siblings_only": true },
+    // Cosmetic pipe padding, and the docs are already consistent the other way:
+    // padded header cells over compact `|---|---|` separators.
+    "MD060": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": [".venv", "node_modules", "**/node_modules"]
+}

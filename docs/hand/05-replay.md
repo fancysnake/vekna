@@ -22,7 +22,7 @@ fixture. This turns the one into the other.
 - **A diff, not a pass/fail grunt.** Drift is reported as the first transition
   that differs, with both payloads side by side:
 
-  ```
+  ```text
   drift at step 3
     recorded: goto(write_tests, Uncovered(budget=2, report="…"))
     replayed: goto(measure,     Uncovered(budget=2))

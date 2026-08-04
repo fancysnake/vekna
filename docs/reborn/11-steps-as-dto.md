@@ -24,7 +24,7 @@ incomplete is a weaker feature than not drawing one."*
 
 What that costs, measured on the real file:
 
-```
+```console
 $ vekna rituals show merge_ready
 steps:
   (start) → gates
