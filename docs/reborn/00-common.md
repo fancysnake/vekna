@@ -122,13 +122,12 @@ a step decides for itself.
 targets, the full **static** workflow graph is derivable without running: an
 edge `A → B` exists where step `A`'s body does `goto(B, …)`, and `done(…)` is a
 terminal. Execution walks one path at runtime via `goto` (recorded in the
-grimoire); the static graph is the superset. `vekna rituals show` dumps it;
-the dashboard renders it. The runtime cross-check guarantees every actual edge
-is a valid static edge, and static analysis can flag unreachable steps or
-dead-end payloads. (Inference
-landed with `rituals show` in 0.3.0, read off each function's source text — so
-a `goto` whose target is computed rather than named does not appear, making the
-dump best-effort rather than exhaustive. Rendering waits for the dashboard.)
+grimoire). `vekna rituals show` dumps the static graph; the dashboard renders
+it, and static analysis can flag unreachable steps or dead-end payloads.
+(Inference landed with `rituals show` in 0.3.0, read off each function's source
+text — so a `goto` whose target is computed rather than named does not appear.
+That makes the dump best-effort rather than exhaustive, and not a guaranteed
+superset of the edges a cast walks. Rendering waits for the dashboard.)
 
 ## Process model
 
