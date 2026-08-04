@@ -86,9 +86,13 @@ submodules cooperate.
 ```text
 (root)
   gates/         # empty until 0.6.0 gives it daemon commands
-  links/ mills/ pacts/ specs/ edges/      # empty, awaiting the daemon
+  links/ mills/ pacts/ specs/             # empty, awaiting the daemon
+  edges/
+    pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/
     cli.py       # click root: cast, rituals — reaches lexicon dynamically
+rituals.py       # the rituals this project casts on itself, named by
+                 # .vekna.toml so `src` is the one measured directory
 lexicon/
   _pacts.py      # Ritual, Step, Transition, Channel, rite events,
                  # component types (File, Directory, Text, Url, GitRef)
@@ -120,6 +124,11 @@ folio/
 wire/
   _pacts.py      # message models, and the frame codec over them
   _links.py      # read_frames off a StreamReader
+trial/
+  _pacts.py      # recorded calls, scripted answers, the errors
+  _mills.py      # the answer script (match, queue, exhaust), the recorder
+  _links.py      # the doubles — they stand where a Focus and a Channel do
+  _inits.py      # Trial: installs the doubles, drives run_cast/one step
 ```
 
 Split a file at ~1000 lines or when two unrelated concerns create merge
@@ -153,6 +162,8 @@ accepted rather than narrowed away by hand, and confined to one module named in
 a `pyproject.toml` override so the exemption cannot spread:
 
 - `folio.coding_claude._links` — the Claude Agent SDK's own types.
+- `edges.pytest_plugin` — `@pytest.fixture`, an overloaded Any-typed decorator.
+  One module, one fixture.
 - `folio.coding._pacts` — pydantic's `ValidationError.errors()`, a list of
   TypedDicts whose values are `Any`, read to turn a refused `CodingOpts` into a
   sentence. A `pacts` module may import no internal layer, so the boundary has
@@ -169,6 +180,26 @@ expressions rather than a module's worth:
 Keeping each in its own submodule is why `_mills` and `_links` are packages: a
 flat module would spread the exemption over the engine and the renderer.
 Everything else, including the AST reader in `_mills/graph.py`, is strict.
+
+## The trial's two exceptions
+
+`vekna.trial` imports the lexicon's internals — `Grimoire`, `run_cast`, the
+rite `ContextVar` — because a test harness has to drive a cast, and the second
+public door was closed for having no consumer. This is one, it is one module in
+one wheel versioned with the lexicon, and a public cast-runtime door would also
+be reachable from a `rituals.py`, which is the thing that must not happen. A
+`nothing-imports-trial` contract keeps the door one-way.
+
+Its pytest plugin sits in the root `edges/` rather than in `trial/_gates.py`,
+for two reasons that both had to hold. A gate may import only `pacts`, and a
+fixture must build what it hands out. And pytest loads an entry-point plugin
+*before* pytest-cov starts measuring: importing anything under `vekna.trial`
+runs that package's `__init__` on the way in, which reported the whole lexicon
+as unexecuted and cost 16 points of coverage. From `edges/`, importing inside
+the fixture body, the report is right — which is what the `PLC0415` per-file
+ignore on that one module buys. `vekna.edges` is the single source excluded
+from `nothing-imports-trial`, and the root `edges` contract checks direct
+imports only, an edge being a door to one thing.
 
 ## Lint exemption
 

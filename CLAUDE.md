@@ -41,7 +41,7 @@ green.
 
 ## Architecture
 
-Four packages:
+Five packages:
 
 - `lexicon` — the engine. Ritual/step/medium model, the cast runtime, the
   grimoire, the CLI gates. `vekna.lexicon` is the ritual author's door;
@@ -49,6 +49,9 @@ Four packages:
 - `folio` — the mediums: `coding`, `shell`, `flow`, plus `coding_claude`, the
   Claude Agent SDK focus. Folios never import each other.
 - `wire` — the daemon protocol's DTOs and framing. Imports nothing.
+- `trial` — the ritual author's test seam: a `Trial` installs a double where
+  each medium reaches the outside and runs the ritual against a script. It may
+  import the lexicon's internals; **nothing may import it**.
 - `inits` — the click entry point.
 
 Within a package, GLIMPSE layering names the roles (outermost → innermost:
@@ -110,11 +113,18 @@ map, layout, patterns, and drift flags:
 tests/
   unit/                   # mirrors src/ structure
   integration/
-    cli/test_{command}.py   # driven through a CLI entry point
-    folio/test_{folio}.py   # a medium end-to-end, real or stubbed backend
-    test_acceptance.py      # a spec's acceptance run, not one command
+    cli/test_{command}.py       # driven through a CLI entry point
+    folio/test_{folio}.py       # a medium end-to-end, real or stubbed backend
+    rituals/test_{ritual}.py    # a ritual in src/rituals.py, via `trial`
+    trial/                      # the test seam itself
+    test_acceptance.py          # a spec's acceptance run, not one command
   conftest.py
 ```
+
+A ritual is tested with the `trial` fixture: `trial.walk(step, payload)` for
+one step's decision, `trial.cast(ritual, components)` for the path. The mediums
+answer from a script and their own bodies still run. `src/rituals.py` is
+measured like the package and held to the same bar.
 
 Test type follows the layer of the code under test. This holds when raising
 coverage too — an uncovered line in `gates` / `links` means a missing
