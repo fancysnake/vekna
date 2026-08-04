@@ -184,19 +184,19 @@ Everything else, including the AST reader in `_mills/graph.py`, is strict.
 ## The trial's two exceptions
 
 `vekna.trial` imports the lexicon's internals — `Grimoire`, `run_cast`, the
-rite `ContextVar` — because a test harness has to drive a cast, and the second
-public door was closed for having no consumer. This is one, it is one module in
-one wheel versioned with the lexicon, and a public cast-runtime door would also
-be reachable from a `rituals.py`, which is the thing that must not happen. A
+rite `ContextVar` — because a test harness has to drive a cast. The second
+public door was closed for having no consumer; this is one, one module in one
+wheel versioned with the lexicon, and a public cast-runtime door would also be
+reachable from a `rituals.py`, which is the thing that must not happen. A
 `nothing-imports-trial` contract keeps the door one-way.
 
 Its pytest plugin sits in the root `edges/` rather than in `trial/_gates.py`,
 for two reasons that both had to hold. A gate may import only `pacts`, and a
 fixture must build what it hands out. And pytest loads an entry-point plugin
-*before* pytest-cov starts measuring: importing anything under `vekna.trial`
-runs that package's `__init__` on the way in, which reported the whole lexicon
+*before* pytest-cov starts measuring, so importing anything under `vekna.trial`
+runs that package's `__init__` on the way in — which reported the whole lexicon
 as unexecuted and cost 16 points of coverage. From `edges/`, importing inside
-the fixture body, the report is right — which is what the `PLC0415` per-file
+the fixture body, the report is right; that is what the `PLC0415` per-file
 ignore on that one module buys. `vekna.edges` is the single source excluded
 from `nothing-imports-trial`, and the root `edges` contract checks direct
 imports only, an edge being a door to one thing.

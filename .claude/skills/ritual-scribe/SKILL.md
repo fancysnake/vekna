@@ -432,11 +432,11 @@ thing that is red.
 ## Testing a ritual
 
 `pip install vekna[trial]` and a `trial` fixture arrives — no conftest, no
-plugin line. It installs a double where each medium reaches the outside and
-runs the ritual against a script of answers. **The medium's own body still
-runs**: session threading, `resume` resolution, output-schema validation and
-exit-code handling are exercised, not skipped. A ritual that mis-declares
-`session=Session.CONTINUE` fails its test.
+plugin line. It doubles each medium where it reaches the outside and answers
+from a script. **The medium's own body still runs**: session threading,
+`resume` resolution, output-schema validation and exit-code handling are
+exercised, not skipped, so a ritual that mis-declares `session=Session.CONTINUE`
+fails its test.
 
 Two entry points. **`walk` runs one step and answers with its `Transition`** —
 no ritual needed, which is what makes a long step testable at all. **`cast`
@@ -477,19 +477,19 @@ def test_merge_ready_repairs_once_then_goes_green(trial: Trial) -> None:
 
 Plus `trial.steps`, `trial.deltas`, `trial.events`, `trial.result`.
 
-**`when=` is a glob, and matched answers beat the queue.** Two gates started in
-one `TaskGroup` arrive in whatever order the scheduler picks, so a script keyed
-on arrival is flaky by construction. Answers with no `when=` fall back to
-arrival order for whatever no pattern claims. Each is consumed once unless it
-says `always=True`.
+**`when=` is a glob, and matched answers beat the queue.** Answers with no
+`when=` fall back to arrival order for whatever no pattern claims — and two
+gates in one `TaskGroup` arrive in whatever order the scheduler picks, so key
+concurrent calls on a pattern. Each answer is consumed once unless it says
+`always=True`.
 
 **Nothing defaults.** An unscripted call raises `TrialScriptError` naming the
-call and what the script still held. A double that invented `exit_code=0` would
-send a ritual down a branch nobody wrote and report the run as a pass.
+call and what the script still held, rather than inventing an `exit_code=0`
+that sends the ritual down a branch nobody wrote.
 
 **A `decide` answer must be one the step offered**, or it raises before the
-ritual sees it — that is the real channel's contract. `answer=True` is the
-`yes` a bare `decide(...)` reads back as `True`.
+ritual sees it — the real channel's contract. `answer=True` is the `yes` a bare
+`decide(...)` reads back as `True`.
 
 **A model reply is serialised, not shortcut**: `trial.coding.replies(
 Judgement(verdict="ship", findings=[]))` for a `coding(..., output=Judgement)`
@@ -511,15 +511,15 @@ assert trial.coding.gated == [("Bash", True)]
 
 **A failure inside a `TaskGroup` arrives wrapped.** An unscripted call in a
 step that runs two mediums at once surfaces as an `ExceptionGroup` — Python's
-doing, not the trial's. Assert on `.exceptions[0]`, or `walk` a step that holds
+doing, not the trial's. Assert on `.exceptions[0]`, or `walk` a step holding
 one medium.
 
-`cast` and `walk` own the event loop, because a ritual test is an ordinary
-test. Inside a suite that already runs one, use `cast_async` / `walk_async`;
-calling the sync pair from a running loop raises saying which to use.
+`cast` and `walk` own the event loop. Inside a suite that already runs one, use
+`cast_async` / `walk_async`; calling the sync pair from a running loop raises
+saying which to use.
 
-What the trial does **not** do: it replaces mediums, not step bodies. A step
-that reaches for `subprocess` or `httpx` directly still does exactly that.
+The trial replaces mediums, not step bodies. A step that reaches for
+`subprocess` or `httpx` directly still does exactly that.
 
 ---
 
@@ -631,8 +631,8 @@ this document, they are right and this document is stale — say so.
 - [ ] `vekna rituals show <name>` draws the graph you meant.
 - [ ] Every ritual has a test over its happy path and at least one boundary —
       budget exhausted, gate red, human declines — written with the `trial`
-      fixture. A ritual with no test is a program nobody has ever run except by
-      spending an agent, a shell and a human on it.
+      fixture. Untested, the only way to run it is to spend an agent, a shell
+      and a human.
 
 Then `mise run fullcheck`, green.
 

@@ -23,8 +23,8 @@ and casts on command, from a terminal or from Discord.
   `folio/coding_claude`; `vekna cast "<prompt>"`.
 - [12-trial.md](12-trial.md) — `0.3.2` `vekna.trial`: run a ritual with the
   mediums answering from a script. A complementary release, not a slot — it
-  waits on nothing below and nothing below waits on it. Numbered after 11
-  because the numbers are handed out in order; the version is what orders it.
+  waits on nothing below and nothing below waits on it. Numbered last, released
+  early: the version is what orders it.
 - `04` — `folio/process`, **moved to Hand** as
   [`../hand/06-process.md`](../hand/06-process.md): owning a process is
   cancellation plus bounds, and both of those are Hand's already. The slot keeps

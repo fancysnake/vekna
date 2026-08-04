@@ -5,23 +5,21 @@
 See [00-common.md](00-common.md) — package layout, layering, Components.
 
 A complementary release rather than a roadmap slot. Nothing a `0.3.0` ritual
-does changes: the surface is additive, the one existing behaviour it touches
-(`shell` resolving a Focus) keeps its present default, and it does not wait on
-`0.4.0` or block it. It ships beside the roadmap because the thing it fixes —
-rituals having no way to be tested — gets worse with every ritual written
-until it lands.
+does changes: the surface is additive, and the one existing behaviour it
+touches (`shell` resolving a Focus) keeps its present default. It ships beside
+the roadmap because what it fixes — rituals having no way to be tested — gets
+worse with every ritual written.
 
 ## Goal
 
-A ritual is a program. `vekna cast` is the only way to run one, and running one
+A ritual is a program, `vekna cast` is the only way to run one, and running one
 spends an agent, a shell and a human. So the four rituals in this repo's
 `rituals.py` — 518 lines, 9 steps — have no tests, and neither can anyone
-else's. They are not in `[tool.coverage.run] source` either, so nothing has
-ever reported them as uncovered: the one file in this repo that uses vekna the
-way an author does is the one file no gate looks at.
+else's. They are not in `[tool.coverage.run] source` either: the one file in
+this repo that uses vekna the way an author does is the one file no gate looks
+at.
 
-The pieces already exist; they are just not shipped. This repo's own suite
-hand-rolls them:
+The pieces exist, unshipped — this repo's suite hand-rolls them:
 
 | Hand-rolled | Where | Call sites |
 |---|---|---|
@@ -41,8 +39,8 @@ script, and to assert on what the ritual asked for.
 - **`vekna.trial`** — a fifth package. `Trial`, three doubles, one pytest
   fixture, and nothing else on the public surface.
 - **`trial.cast(ritual, components)`** runs a whole cast in-process and returns
-  the result model.
-- **`trial.walk(step, payload)`** runs one step and returns its `Transition`.
+  the result model; **`trial.walk(step, payload)`** runs one step and returns
+  its `Transition`.
 - **Doubles at the folio's outer edge** — `trial.coding`, `trial.shell`,
   `trial.decide`. The medium's own body still runs.
 - **A Focus seam for `shell`.** `ShellCall`, `ShellReply` and
@@ -59,25 +57,24 @@ script, and to assert on what the ritual asked for.
   and `trial.result`.
 - **A pytest plugin** offering one fixture, `trial`. pytest is an optional
   extra: `pip install vekna[trial]`.
-- **Tests for this repo's four rituals**, written with it. The feature is not
-  done until the thing that motivated it is covered.
+- **Tests for this repo's four rituals**, written with it.
 - **`rituals.py` moves to `src/rituals.py`** and joins the coverage report,
   held to the same diff-coverage bar as the package. A root `.vekna.toml`
   points the engine at it.
 
 ## Why each one
 
-**Two entry points, not one.** A step is where a ritual's decisions are, and a
-cast is where its path is. `walk` answers "given this payload, where does
-`measure` go?" without a ritual wrapper — which is what `entry()` is for at 20
-call sites, written out three lines at a time. `cast` answers "does
-`merge_ready` repair once and then go green?", which no per-step test can.
-`walk` is also what makes a 130-line step testable at all: the alternative is
-scripting every medium call in the ritual to reach the third step.
+**Two entry points, not one.** A step is where a ritual's decisions are, a cast
+is where its path is. `walk` answers "given this payload, where does `measure`
+go?" without a ritual wrapper — what `entry()` is for at 20 call sites, written
+out three lines at a time — and is what makes a 130-line step testable at all:
+the alternative is scripting every medium call in the ritual to reach the third
+step. `cast` answers "does `merge_ready` repair once and then go green?", which
+no per-step test can.
 
 **Doubles at the folio edge, not at the medium.** Intercepting `coding(...)`
-itself would be smaller, and would test nothing: session threading, `resume`
-resolution, output-schema validation and the exit-code handling all live in the
+itself would be smaller and would test nothing: session threading, `resume`
+resolution, output-schema validation and exit-code handling all live in the
 medium body, and a ritual that mis-declares `session=Session.CONTINUE` would
 pass a test that skipped them. Standing the double where the Claude SDK stands
 keeps that body under test — `trial.coding.calls[1].resume` is how a test
@@ -85,20 +82,18 @@ proves the second call joined the first one's thread.
 
 **`shell` has no seam at all.** `shell()` calls `run_bash` in the same `_links`
 module, so today the only way in is monkeypatching a private symbol. Coding's
-boundary types already live in the lexicon's pacts, which is what lets
-`coding_claude` implement a Focus without importing `folio/shell` — the same
-shape, written a second time, is what gives `trial` a supported way in and
-costs the shell folio one indirection. Resolving with `BashFocus` as the
-default is what keeps it free: `resolve_focus` raising `FocusMissingError` is
-right for an SDK that may not be installed and wrong for bash, and a `shell()`
-call in a cast that never loaded the folios must keep working.
+boundary types already live in the lexicon's pacts — the shape that lets
+`coding_claude` implement a Focus without importing a folio. Written a second
+time it gives `trial` a supported way in and costs the shell folio one
+indirection. `BashFocus` as the resolution default is what keeps it free:
+`FocusMissingError` is right for an SDK that may not be installed and wrong for
+bash, and a `shell()` call in a cast that loaded no folios must keep working.
 
 **`focus_scope`, because a leaked double poisons the next test.** The registry
-has `register_focus` and a wholesale `reset_registry`, and nothing between
-them. A trial that reset the registry would clobber a focus the author
-registered themselves; one that only registered would leave a scripted agent
-installed for whatever ran next. Install-and-restore is the operation, so it
-becomes one.
+has `register_focus` and a wholesale `reset_registry`, nothing between them. A
+trial that reset would clobber a focus the author registered; one that only
+registered would leave a scripted agent installed for whatever ran next.
+Install-and-restore is the operation, so it becomes one.
 
 **Matching by pattern, not only by arrival.** `merge_ready.gates` starts both
 gates in an `asyncio.TaskGroup`:
@@ -110,38 +105,37 @@ async with asyncio.TaskGroup() as group:
 ```
 
 Which lands first is the scheduler's business, so a queue keyed on arrival
-order makes that test flaky by construction. Each double takes answers
-`when=` a pattern — the command for `shell`, the prompt for `coding` and
-`decide` — and falls back to an ordered queue for calls no pattern claims.
-Matched answers win; each is consumed once, unless it says `always=True`.
+order makes that test flaky by construction. Each double takes answers `when=`
+a pattern — the command for `shell`, the prompt for `coding` and `decide` — and
+falls back to an ordered queue for calls no pattern claims. Matched answers
+win; each is consumed once, unless it says `always=True`.
 
-**An unscripted call raises, and never defaults.** A double that returned
+**An unscripted call raises, and never defaults.** A double returning
 `exit_code=0` for a command nobody scripted would send `cover_diff` down the
-covered branch and report a pass; one that returned `exit_code=1` would loop
-`merge_ready` until `max_steps=32` and report a budget failure. Both are worse
-than a stop, and neither says what was missing. `TrialScriptError` names the
-call, the pattern that would have matched it, and what the script still held.
+covered branch and report a pass; one returning `exit_code=1` would loop
+`merge_ready` until `max_steps=32` and report a budget failure. Neither says
+what was missing. `TrialScriptError` names the call, the pattern that would
+have matched it, and what the script still held.
 
 **A scripted answer is checked against the options.** `decide` returns a member
-of what it offered or raises — that is the real `Channel`'s contract. A test
-scripting `"repair"` for a step that offers `["fix", "stop"]` is testing a
-ritual that does not exist, so the double refuses it the way the channel would.
+of what it offered or raises — the real `Channel`'s contract. A test scripting
+`"repair"` for a step that offers `["fix", "stop"]` is testing a ritual that
+does not exist, so the double refuses it the way the channel would.
 
 **The reply may be a model.** `judge` calls `coding(..., output=Judgement)`,
-and the Focus answers with text that the medium validates against the schema.
+and the Focus answers with text the medium validates against the schema.
 `trial.coding.replies(Judgement(verdict="ship", findings=[]))` serialises the
-model, so the test says what it means and the medium's validation still runs on
-the way back.
+model, so the test says what it means and that validation still runs on the way
+back.
 
 **The double reaches its script through a contextvar.** `CodingFocusProtocol`
 declares `run` as a `@staticmethod` — a real Focus carries no per-call state —
-and a class that implements a protocol must declare it as a base, so a double
-with an instance method would not type-check. `src/` is checked under the
-strict config; `tests/` is not, which is why `FakeFocus` gets away with it
-today and `vekna.trial` cannot. The double stays static and reads the active
-`Trial` from a contextvar, the mechanism the engine already uses for the rite
-context. Relaxing the shipped protocol for a test double's convenience is the
-alternative, and it is the wrong way round.
+and a class implementing a protocol must declare it as a base, so a double with
+an instance method would not type-check. `src/` is checked under the strict
+config and `tests/` is not, which is why `FakeFocus` gets away with it today
+and `vekna.trial` cannot. The double stays static and reads the active `Trial`
+from a contextvar, the mechanism the engine already uses for the rite context.
+The alternative is relaxing a shipped protocol for a test double's convenience.
 
 **A fixture and a plain object.** The fixture is what a pytest user wants;
 `Trial` as a context manager is what everyone else needs, and what keeps the
@@ -170,7 +164,7 @@ def test_merge_ready_repairs_once_then_goes_green(trial: Trial) -> None:
     trial.shell.replies(when="mise run lint:py", exit_code=1, stdout="E501")
     trial.shell.replies(when="mise run test:py", exit_code=0, always=True)
     trial.shell.replies(when="mise run lint:py", exit_code=0)
-    trial.decide.answers(True, when="*hand it to the agent?*")
+    trial.decide.answers(answer=True, when="*hand it to the agent?*")
     trial.coding.replies("fixed the long line")
 
     result = trial.cast(merge_ready, MergeReady(bound=2))
@@ -192,17 +186,16 @@ suite can grow beside `rituals.py` for a year and nothing will say which of its
 9 steps and 8 helpers no test has ever reached.
 
 `[tool.coverage.run] source` takes packages and directories, not files, so a
-`rituals.py` sitting at the repo root cannot simply be named in it. What is
-left is widening the source to `.` and omitting the rest of the repo, or
-`source_pkgs = ["rituals"]`, which measures whatever `import rituals` resolves
-to and so depends on the cwd. Moving the file is one line of config and no
-special case at all — `source = ["src"]` picks it up because it picks up
-everything under `src`.
+root `rituals.py` cannot simply be named in it. What is left is widening the
+source to `.` and omitting the rest of the repo, or `source_pkgs = ["rituals"]`,
+which measures whatever `import rituals` resolves to and so depends on the cwd.
+Moving the file is one line of config and no special case — `source = ["src"]`
+picks it up because it picks up everything under `src`.
 
 It also shortens `SRC_PATHS` in `mise.toml` from `src rituals.py` back to
-`src`, and with it the paragraph of comment explaining why the second entry is
-there. Every tool the repo runs — mypy, ruff, black, pylint, vulture,
-coverage — stops needing to be told about this file twice.
+`src`, and drops the paragraph of comment explaining the second entry. Every
+tool the repo runs — mypy, ruff, black, pylint, vulture, coverage — stops being
+told about this file twice.
 
 Discovery survives on the config route, verified on a scratch project before
 this was written:
@@ -227,23 +220,23 @@ config file**, so a cast started anywhere in the repo finds the same source.
 holding exactly that path — so a test says `from rituals import merge_ready,
 gates` and nothing new is configured to make it.
 
-What it costs, said out loud:
+What it costs:
 
-- **This repo stops exercising the implicit walk-up**, which is the default
-  author experience and the thing `_find_rituals_file` exists for. It stays
-  covered by `tests/integration/cli/`, which builds a `rituals.py` in a
-  `tmp_path` — but it stops being covered by daily use here.
+- **This repo stops exercising the implicit walk-up**, the default author
+  experience and the thing `_find_rituals_file` exists for. It stays covered by
+  `tests/integration/cli/`, which builds a `rituals.py` in a `tmp_path` — but
+  not by daily use here.
 - **The wheel must not gain a top-level `rituals` module.** poetry-core takes
   the package from the project name, so it builds `src/vekna` and nothing else,
-  but `rituals` is a name an author is very likely to own themselves. Checking
-  the built wheel is an acceptance item rather than an assumption.
+  but `rituals` is a name an author is very likely to own. Checking the built
+  wheel is an acceptance item rather than an assumption.
 - **`0.5.0` inherits a slightly different move.**
   [10-ritual-modules.md](10-ritual-modules.md) turns this file into a `rituals/`
   package; from `src/` that package is reached by the `modules` route rather
-  than the walk-up, which is precisely the route that doc puts the ritual root's
-  parent on `sys.path` for. Nothing there is invalidated; one sentence in it is.
-- **The stray `rituals/` at the repo root goes.** It is untracked, holds nothing
-  but a `__pycache__` from an earlier split experiment, and under
+  than the walk-up — precisely the route that doc puts the ritual root's parent
+  on `sys.path` for. Nothing there is invalidated; one sentence in it is.
+- **The stray `rituals/` at the repo root goes.** Untracked, holding nothing but
+  a `__pycache__` from an earlier split experiment, and under
   `10-ritual-modules.md` a directory holding both `rituals.py` and `rituals/`
   becomes an error naming both.
 
@@ -282,19 +275,16 @@ src/vekna/trial/
 - `tests/integration/rituals/test_{ritual}.py` — this repo's four.
 
 **`vekna.trial` imports the lexicon's internals**, `Grimoire` and `run_cast`
-among them, and gets a contract that says so. The second public door was closed
-for having no consumer ([`../architecture.md`](../architecture.md)); this is a
-consumer, but it is one module in one wheel versioned with the lexicon, and a
-public cast-runtime door would also be reachable from a `rituals.py`, which is
-the thing that must not happen. If a third consumer appears, that is when the
-door reopens.
+among them, and gets a contract that says so — the reasoning is in
+[`../architecture.md`](../architecture.md). If a third consumer appears, that is
+when the second public door reopens.
 
 **Both new sources are measured**: `src/vekna/trial/` and `src/rituals.py`
 carry the usual 100% on changed lines. For the rituals that is the larger half
 of the work — 308 statements across four rituals, nine steps and eight helpers,
-none of it written with a test in mind. Where a branch is awkward to reach it
-gets reached through the doubles; `# pragma: no cover` is not the answer here,
-and neither is a threshold that quietly excludes the file the release is about.
+none of it written with a test in mind. An awkward branch gets reached through
+the doubles; `# pragma: no cover` is not the answer here, and neither is a
+threshold that quietly excludes the file the release is about.
 
 ## Out of scope
 
@@ -305,12 +295,10 @@ and neither is a threshold that quietly excludes the file the release is about.
 - **Generic interception by medium name.** An author's own medium gets its own
   seam, the way `coding` and `shell` have theirs. A by-name override in
   `@medium` would cover it in one mechanism and would short-circuit the medium
-  body — the failure this feature's whole design is arranged against. If enough
-  author-written mediums appear to make it a pattern, it comes back as its own
-  document.
+  body — the failure this design is arranged against. If enough author-written
+  mediums appear to make it a pattern, it comes back as its own document.
 - **Sandboxing a step body.** `trial` replaces mediums. A step that reaches for
-  `subprocess` or `httpx` directly still does exactly that, and no fixture here
-  pretends otherwise.
+  `subprocess` or `httpx` directly still does exactly that.
 - **Migrating the existing suite.** `entry()` stays where the test is about the
   engine or a folio rather than about a ritual; `mock`-level tests of the
   coding medium keep mocking the SDK. What is not duplicated is `_cast` and
