@@ -40,7 +40,7 @@ radius is unchanged.
 
 One row in the daemon's registry, kept beside `runs/`:
 
-```
+```text
 name (key) · root · created · last cast (cast_id) · discord channel id
 ```
 
@@ -79,7 +79,7 @@ vekna cannot know which one you meant, and guessing is wrong in both directions
 abandoning one you meant to continue. So it asks, listing what sleeps there and
 what each last did:
 
-```
+```text
 Two liches sleep here.
   [1] hollow-vesper   last cast fix_demo, 3 days ago
   [2] ashen-quill     last cast pr_triage, yesterday

@@ -7,7 +7,7 @@ sits in a layer and every layer has a contract; nothing is exempt by accident.
 
 ## Packages
 
-```
+```text
 (root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.6.0.
 lexicon   The SDK and the cast runtime: ritual/step/medium model, grimoire.
 folio     The mediums — coding, shell, flow — and their foci.
@@ -48,7 +48,7 @@ never use. The cast runtime is private.
 
 ## Layers within a package
 
-```
+```text
 pacts   Protocols, DTOs, errors, enums, constants-as-types.
 specs   Business invariants — pure constants, no IO.
 mills   Business logic and services.
@@ -83,7 +83,7 @@ submodules cooperate.
 
 ## Current layout
 
-```
+```text
 (root)
   gates/         # empty until 0.6.0 gives it daemon commands
   links/ mills/ pacts/ specs/ edges/      # empty, awaiting the daemon

@@ -1,0 +1,42 @@
+---
+name: Markdown
+
+# A workflow of its own, because `ci.yml` ignores `docs/**` — a docs-only pull
+# request runs none of it, which is exactly the pull request this check is for.
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/markdown.yml"
+      # `ci.yml` runs on a mise.toml-only change but never runs
+      # `lint:markdown` — so the task and its tools answer to this workflow.
+      - "mise.toml"
+
+  push:
+    branches: ["main"]
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/markdown.yml"
+      - "mise.toml"
+
+concurrency:
+  group: markdown-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      # The steps below run code the pull request itself supplies, so the
+      # checkout token has no business staying behind in `.git/config`.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v4
+      - run: mise install markdownlint-cli2 node
+      - run: mise run lint:markdown

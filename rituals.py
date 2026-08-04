@@ -120,7 +120,11 @@ async def measure(state: Uncovered) -> Transition:
 async def write_tests(state: Uncovered) -> Transition:
     # The report names the uncovered lines, so the agent gets the failure
     # rather than a description of it.
-    await coding(_FIX_UNCOVERED + state.report)
+    # Writing tests is the job, so edits run free; commands are not, and
+    # `gate_tools` puts each Bash call to you before it happens. Without it the
+    # call would default to bypassPermissions, which is a lot of trust to hand
+    # an agent whose brief is "make the coverage number go up".
+    await coding(_FIX_UNCOVERED + state.report, opts=CodingOpts(gate_tools=["Bash"]))
     return goto(measure, Uncovered(budget=state.budget - 1))
 
 

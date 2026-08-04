@@ -37,7 +37,7 @@ getting in the way of it.
 
 Measured against today's engine, on the layout it is meant to support:
 
-```
+```text
 rituals/
   __init__.py
   components.py
@@ -60,7 +60,7 @@ holds neither.
 `spec_from_file_location` gives the module a synthetic dotted-less name, so the
 first relative import fails:
 
-```
+```text
 ModuleNotFoundError: No module named 'vekna_rituals_probe'
 ```
 
@@ -71,7 +71,7 @@ A directory source must therefore route to `load_rituals_module`, not
 `vekna` is a console script, so `sys.path[0]` is the venv's `bin`, and the
 project root is on the path of exactly nothing:
 
-```
+```console
 $ vekna rituals list
 No module named 'rituals'
 ```
@@ -84,7 +84,7 @@ the one file it replaces.
 name is invisible to the compendium — and because an unregistered step is
 treated as a leaf, `rituals show` truncates *silently*:
 
-```
+```text
 steps:
   (start) → collect
   collect → judge          ← judge not re-exported; graph stops, no warning
@@ -139,7 +139,7 @@ Two things follow, and both are guidance for the example library
   `_wanted`, `_arc` are none of the three, and at 13% of `pr_sweep.py` they are
   a file rather than a rounding error.
 
-```
+```text
 rituals/
   shared.py          Bound
   cover_diff.py      ~70   ─┐

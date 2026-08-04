@@ -60,11 +60,11 @@ and this project adheres to [Semantic Versioning].
   than knobs on `CodingOpts`, because a thread is per-call identity and not
   reusable configuration; a word that is not one of the two, or a key naming
   nothing, raises `CodingSessionError`, and the older `CodingOpts(session=...)`
-  spelling raises `CodingOptsError` naming where the two halves went. The medium resolves the declaration
-  against a per-cast session book and hands the Focus a plain session id; the
-  rite's telemetry records both halves of the declaration as well as the id, and
-  a declared thread the Focus gave no id for says so on the rite rather than
-  going unrecorded in silence.
+  spelling raises `CodingOptsError` naming where the two halves went. The
+  medium resolves the declaration against a per-cast session book and hands the
+  Focus a plain session id; the rite's telemetry records both halves of the
+  declaration as well as the id, and a declared thread the Focus gave no id for
+  says so on the rite rather than going unrecorded in silence.
 - **Claude Agent SDK focus** (`vekna.folio.coding_claude`) — the first Focus.
   `_links.py` is the only module importing `claude-agent-sdk`.
 - **`ask_human`** — the agent can put a question to the operator mid-rite,
@@ -136,7 +136,6 @@ and this project adheres to [Semantic Versioning].
   ```python
   class FixTests(BaseModel):
       bound: int = 3
-
 
   @ritual("fix_tests")
   async def fix_tests(components: FixTests) -> Transition:
@@ -295,7 +294,6 @@ and this project adheres to [Semantic Versioning].
 
 ### Security
 
-
 ## [0.2.0] - 2026-06-28
 
 ### Added
@@ -334,7 +332,6 @@ and this project adheres to [Semantic Versioning].
 - Top-level CLI now exposes the `cast` command alongside the existing `tmux`
   group.
 
-
 ## [0.1.0] - 2026-06-01
 
 ### Changed
@@ -350,7 +347,6 @@ and this project adheres to [Semantic Versioning].
   `status-right` line.
 - Claude Code notification hook is now
   `vekna tmux notify --app claude --hook Notification`.
-
 
 ## [0.0.4] - 2026-04-21
 
@@ -440,7 +436,6 @@ and this project adheres to [Semantic Versioning].
 - Background task cancellation on Python 3.13+ no longer raises
   `CancelledError` during shutdown.
 
-
 ## [0.0.3] - 2026-04-13
 
 ### Added
@@ -485,7 +480,8 @@ and this project adheres to [Semantic Versioning].
 ### Added
 
 - CLI entry point (`vekna`) that starts or attaches to a named tmux session
-- Layered architecture: gates (Click CLI), mills (server logic), links (tmux subprocess calls), pacts (protocols)
+- Layered architecture: gates (Click CLI), mills (server logic), links (tmux
+  subprocess calls), pacts (protocols)
 - Pre-commit hooks: ruff, mypy, bandit, pylint, pytest
 - CI workflow with GitHub Actions
 - Dependabot configuration for pip and GitHub Actions
