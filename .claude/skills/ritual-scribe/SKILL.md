@@ -16,7 +16,7 @@ asking the operator questions — and then the step ends, and a boundary decides
 what happens next. A gate passed or it did not. A budget ran out. A human
 answered. Nothing is left to the agent's discretion at the seam.
 
-Everything below is the shipped surface, read off the source of vekna `0.3.2`.
+Everything below is the shipped surface, read off the source of vekna `0.4.0`.
 What is planned but not yet bound is quarantined at the bottom under **Not yet
 bound** — do not summon it.
 
@@ -640,9 +640,9 @@ Then `mise run fullcheck`, green.
 
 ## Not yet bound
 
-Planned, designed, **not in `0.3.2`**. Do not write against any of it.
+Planned, designed, **not on this branch**. Do not write against any of it.
 
-- **`rituals/` as a package** — **landing in `0.5.0`, written on the
+- **`rituals/` as a package** — **landing in `0.4.0`, written on the
   `ritual-modules` branch, not on `main`.** Until it merges, discovery builds
   `directory / "rituals.py"` and asks `.is_file()`, so a directory is never a
   candidate and `.vekna.toml` `modules` is the only route. After it merges a

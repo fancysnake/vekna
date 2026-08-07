@@ -1,6 +1,6 @@
 # Feature — Trial: testing rituals
 
-**Version:** `0.3.2`
+**Version:** `0.4.0`
 
 See [00-common.md](00-common.md) — package layout, layering, Components.
 
