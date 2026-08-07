@@ -5,21 +5,13 @@ author controls and whose agent calls happen inside those steps. `vekna cast
 <ritual>` runs one; output streams live as a tree of rites. Agents run
 permissively within a step; determinism lives at the step boundaries.
 
-Python, managed by mise; poetry for dependencies; mise for tasks.
-
 (The tmux focus-switcher vekna started as was removed in 0.3.0 — Claude Code
 ships its own notifications now. `docs/reborn/` is the plan from here.)
 
 ## Commands
 
 `mise tasks` is the source of truth for every runnable task and its
-description — run it rather than trusting a hardcoded list here. Most used:
-
-```bash
-mise run test:py       # all tests
-mise run check:py      # the loop while you work: format, lint, tests
-mise run fullcheck     # the gate before you push: adds diff-coverage and tingle
-```
+description.
 
 ## Workflow
 
@@ -41,28 +33,12 @@ green.
 
 ## Architecture
 
-Five packages:
+`vekna.lexicon` is the ritual author's door; `vekna.lexicon.entry` is the CLI
+and cast-runtime door. `wire` imports nothing — keep it that way, no
+import-linter contract guards it.
 
-- `lexicon` — the engine. Ritual/step/medium model, the cast runtime, the
-  grimoire, the CLI gates. `vekna.lexicon` is the ritual author's door;
-  `vekna.lexicon.entry` is the CLI and cast-runtime door.
-- `folio` — the mediums: `coding`, `shell`, `flow`, plus `coding_claude`, the
-  Claude Agent SDK focus. Folios never import each other.
-- `wire` — the daemon protocol's DTOs and framing. Imports nothing.
-- `trial` — the ritual author's test seam: a `Trial` installs a double where
-  each medium reaches the outside and runs the ritual against a script. It may
-  import the lexicon's internals; **nothing may import it**.
-- `inits` — the click entry point.
-
-Within a package, GLIMPSE layering names the roles (outermost → innermost:
-`gates → links → mills → specs → pacts`):
-
-- `gates` — CLIs, APIs, entry points
-- `links` — adapters that reach the outside (processes, sockets, filesystem)
-- `mills` — logic
-- `specs` — business invariants: pure constants, no IO, consumed only by mills
-- `pacts` — protocols, DTOs, aggregates
-- `inits` — DI, top of the stack, imported by nothing
+Within a package, GLIMPSE layering names the roles, outermost → innermost:
+`gates → links → mills → specs → pacts`.
 
 That arrow is the role ordering, **not** the import graph, which is stricter:
 `gates` and `links` may import only `pacts`, and `links` and `mills` are peers
@@ -105,59 +81,10 @@ map, layout, patterns, and drift flags:
   (`from vekna.mills.bus import EventBus`, not via a facade). Exceptions:
   external public-API package, or line-length pressure on the canonical path.
 
-## Testing
-
-### Structure
-
-```text
-tests/
-  unit/                   # mirrors src/ structure
-  integration/
-    cli/test_{command}.py       # driven through a CLI entry point
-    folio/test_{folio}.py       # a medium end-to-end, real or stubbed backend
-    rituals/test_{ritual}.py    # a ritual in src/rituals.py, via `trial`
-    trial/                      # the test seam itself
-    test_acceptance.py          # a spec's acceptance run, not one command
-  conftest.py
-```
-
-A ritual is tested with the `trial` fixture: `trial.walk(step, payload)` for
-one step's decision, `trial.cast(ritual, components)` for the path. The mediums
-answer from a script and their own bodies still run. `src/rituals.py` is
-measured like the package and held to the same bar.
-
-Test type follows the layer of the code under test. This holds when raising
-coverage too — an uncovered line in `gates` / `links` means a missing
-**integration** test, never a quick mock-everything unit test of IO-bearing
-code.
-
-### Unit tests (`tests/unit/`)
-
-- Yes: mills, specs, pacts (pure logic)
-- No: gates, inits
-- Links only when the logic is pure and the I/O is injected — a renderer
-  formatting to a supplied stream, a probe taking a socket path. A link that
-  reaches the network or filesystem on its own belongs in integration.
-- Write tests in classes
-- Mock at the highest level to avoid side effects
-- Check all mock calls
-
-### Integration tests (`tests/integration/`)
-
-- Yes: CLI commands (gates)
-- No: pure logic (mills, specs)
-- Mock at the lowest level or don't mock if possible
-- Check all mock calls and side effects
-
-### Mocking
-
-- Mock external boundaries (third-party SDKs such as `claude_agent_sdk`, at
-  their use site), never project code or DI.
-- NEVER use `ANY` for simple values (`[]`, `{}`, booleans, strings, ints). Use
-  `ANY` only for genuinely hard-to-compare objects.
-
 ## Details
 
+- [`tests/CLAUDE.md`](tests/CLAUDE.md) — testing conventions, loaded when you
+  work under `tests/`
 - [`docs/README.md`](docs/README.md) — docs index, release names
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
 - [`docs/reborn/`](docs/reborn/README.md) — Reborn (`1.0.0`), the plan from
