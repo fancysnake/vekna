@@ -86,9 +86,11 @@ RiteEvent = RiteBegan | RiteStreamed | RiteEnded
 # back what it found and `_inits` registers it.
 # One per *module*, not per top-level source: a package is swept all the way
 # down, and a collision between two of its submodules should name which two.
+# `origin`, not `source`: a Ritual's and a Step's `source` is their own source
+# *code*, read by `graph.py`. This is the module that declared them.
 @dataclass(frozen=True, kw_only=True)
 class RitualSource:
-    source: str
+    origin: str
     rituals: list["Ritual"]
     steps: list["Step"]
 

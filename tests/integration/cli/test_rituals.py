@@ -330,6 +330,46 @@ class TestRitualPackages:
         assert exit_code == _USAGE_EXIT
         assert str(below / "rituals.py") in capsys.readouterr().err
 
+    # What per-module origins exist for: two files collide by path, two
+    # submodules of one package collide by dotted name.
+    @staticmethod
+    def test_two_submodules_claiming_one_step_name_collide(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(
+            tmp_path / "rituals",
+            # Only the step name is shared: the rituals are renamed so it is
+            # `tick` that collides and not whichever ritual is swept first.
+            {**_PACKAGE, "again.py": _STEPS.replace('@ritual("', '@ritual("re_')},
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "step 'tick' is already registered" in err
+        assert "rituals.again" in err
+        assert "rituals.steps" in err
+
+    # `import_module` answers from sys.modules before sys.path, so a package of
+    # this name loaded from anywhere else would be swept in its place.
+    @staticmethod
+    def test_a_package_shadowed_by_an_import_is_a_usage_error(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(tmp_path / "rituals", _PACKAGE)
+        _write(elsewhere := tmp_path / "elsewhere" / "rituals", _PACKAGE)
+        monkeypatch.syspath_prepend(str(elsewhere.parent))
+        monkeypatch.chdir(tmp_path)
+        __import__("rituals")
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "already imported from somewhere other than" in err
+
     @staticmethod
     def test_a_submodule_that_cannot_be_imported_is_a_usage_error(
         tmp_path, monkeypatch, capsys

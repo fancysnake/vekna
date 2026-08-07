@@ -20,7 +20,23 @@ from vekna.lexicon import (
     step,
 )
 
-from .prompts import REVIEW, REVIEW_SYSTEM
+_REVIEW_SYSTEM = """\
+You are reviewing a diff on this repository, and only what the diff changes.
+Read CLAUDE.md and docs/architecture.md first: this project has layering rules,
+naming rules and a definition of done that a diff can break while looking
+innocent on its own. Your tools are read-only. Report what you find; change
+nothing.
+"""
+
+_REVIEW = """\
+Review the diff below and return the findings you can defend.
+
+A finding names where it is, what is wrong, and how much it matters:
+"blocker" for something that breaks a contract, a layer, or the gates; "risk"
+for what will bite later; "nit" for the rest. An empty findings list is a valid
+answer, and a better one than padding.
+
+"""
 
 
 class ReviewRequest(BaseModel):
@@ -93,13 +109,13 @@ async def collect(request: ReviewRequest) -> Transition:
 async def judge(diff: Diff) -> Transition:
     focus = f"Pay particular attention to: {diff.focus}\n\n" if diff.focus else ""
     judgement = await coding(
-        f"{REVIEW}{focus}base: {diff.base}\n\n{diff.text}",
+        f"{_REVIEW}{focus}base: {diff.base}\n\n{diff.text}",
         output=Judgement,
         # Read-only, enforced rather than requested: `dontAsk` denies anything
         # outside the allowlist without stopping to prompt. Not `plan`, which
         # executes no tools at all — the reviewer could not read CLAUDE.md.
         opts=CodingOpts(
-            system=REVIEW_SYSTEM,
+            system=_REVIEW_SYSTEM,
             focus_options=ClaudeOptions(
                 permission_mode="dontAsk",
                 allowed_tools=["Read", "Grep", "Glob"],

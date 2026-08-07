@@ -51,10 +51,10 @@ class TestCompendium:
     @staticmethod
     def test_two_rituals_of_one_name_collide_naming_both_sources():
         compendium = Compendium()
-        compendium.register(alpha, source="rituals.first")
+        compendium.register(alpha, origin="rituals.first")
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.register(same_name_as_alpha, source="rituals.second")
+            compendium.register(same_name_as_alpha, origin="rituals.second")
 
         assert "rituals.first" in str(raised.value)
         assert "rituals.second" in str(raised.value)
@@ -75,8 +75,8 @@ class TestCompendium:
     @staticmethod
     def test_the_same_ritual_reached_twice_registers_once():
         compendium = Compendium()
-        compendium.register(alpha, source="rituals.first")
-        compendium.register(alpha, source="rituals.second")
+        compendium.register(alpha, origin="rituals.first")
+        compendium.register(alpha, origin="rituals.second")
 
         assert compendium.names() == ["alpha"]
 
@@ -104,10 +104,10 @@ class TestCompendium:
     @staticmethod
     def test_two_steps_of_one_name_collide_naming_both_sources():
         compendium = Compendium()
-        compendium.register_step(noop, source="rituals.first")
+        compendium.register_step(noop, origin="rituals.first")
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.register_step(same_name_as_noop, source="rituals.second")
+            compendium.register_step(same_name_as_noop, origin="rituals.second")
 
         assert "rituals.first" in str(raised.value)
         assert "rituals.second" in str(raised.value)
@@ -115,7 +115,7 @@ class TestCompendium:
     @staticmethod
     def test_the_same_step_reached_twice_registers_once():
         compendium = Compendium()
-        compendium.register_step(noop, source="rituals.first")
-        compendium.register_step(noop, source="rituals.second")
+        compendium.register_step(noop, origin="rituals.first")
+        compendium.register_step(noop, origin="rituals.second")
 
         assert compendium.step("noop") is noop

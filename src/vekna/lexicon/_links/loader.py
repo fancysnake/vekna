@@ -22,10 +22,10 @@ from vekna.lexicon._pacts import (
 # The one place a module's namespace is read. Binding it to a declared
 # `dict[str, object]` is what discharges the `Any` a module's `__dict__` carries,
 # so no load route needs an ignore of its own.
-def _found(*, source: str, module: ModuleType) -> RitualSource:
+def _found(*, origin: str, module: ModuleType) -> RitualSource:
     namespace: dict[str, object] = vars(module)
     return RitualSource(
-        source=source,
+        origin=origin,
         rituals=[v for v in namespace.values() if isinstance(v, Ritual)],
         steps=[v for v in namespace.values() if isinstance(v, Step)],
     )
@@ -46,32 +46,22 @@ def _package_directory(module: ModuleType) -> Path | None:
     return Path(file).parent
 
 
+# Every module, not just the package's own namespace: `__init__.py` stays empty,
+# so a step it does not re-export would otherwise be invisible to the compendium
+# — and an unregistered step is drawn as a leaf, which truncates the graph
+# `rituals show` prints without saying so. The root is the first thing yielded
+# rather than a case of its own.
 # Imported one at a time rather than through `pkgutil.walk_packages`, which
 # swallows a submodule's ImportError unless handed an `onerror`: a ritual
 # package that does not import must fail the cast as loudly as a rituals.py that
 # does not.
-def _submodules(*, directory: Path, prefix: str) -> Iterator[tuple[str, ModuleType]]:
-    for info in pkgutil.iter_modules([str(directory)]):
-        name = f"{prefix}.{info.name}"
-        module = importlib.import_module(name)
-        yield name, module
-        if (nested := _package_directory(module)) is not None:
-            yield from _submodules(directory=nested, prefix=name)
-
-
-# Every module, not just the package's own namespace: `__init__.py` stays empty,
-# so a step it does not re-export would otherwise be invisible to the compendium
-# — and an unregistered step is drawn as a leaf, which truncates the graph
-# `rituals show` prints without saying so.
-def _swept(*, name: str, module: ModuleType) -> list[RitualSource]:
-    found = [_found(source=name, module=module)]
+def _modules(*, name: str, module: ModuleType) -> Iterator[tuple[str, ModuleType]]:
+    yield name, module
     if (directory := _package_directory(module)) is None:
-        return found
-    found += [
-        _found(source=sub_name, module=sub)
-        for sub_name, sub in _submodules(directory=directory, prefix=name)
-    ]
-    return found
+        return
+    for info in pkgutil.iter_modules([str(directory)]):
+        sub = f"{name}.{info.name}"
+        yield from _modules(name=sub, module=importlib.import_module(sub))
 
 
 # So that a ritual package can be imported by its own name, which is what
@@ -91,7 +81,7 @@ def load_rituals_file(path: Path) -> list[RitualSource]:
         raise RitualDefinitionError(msg)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return [_found(source=str(path), module=module)]
+    return [_found(origin=str(path), module=module)]
 
 
 # A real import under the package's real name, not `spec_from_file_location`:
@@ -99,7 +89,19 @@ def load_rituals_file(path: Path) -> list[RitualSource]:
 # relative import inside it fails on a name no package has.
 def load_rituals_package(path: Path) -> list[RitualSource]:
     _on_path(path.parent)
-    return _swept(name=path.name, module=importlib.import_module(path.name))
+    module = importlib.import_module(path.name)
+    # `import_module` answers from `sys.modules` before it consults `sys.path`,
+    # so a package of this name already loaded — an installed distribution, a
+    # test that imported one earlier — would hand back its rituals under the
+    # discovered path's name. Silently casting someone else's rituals is worse
+    # than not casting at all.
+    if _package_directory(module) != path:
+        msg = f"{path.name!r} was already imported from somewhere other than {path}"
+        raise RitualDefinitionError(msg)
+    return [
+        _found(origin=name, module=found)
+        for name, found in _modules(name=path.name, module=module)
+    ]
 
 
 # `root` is the cwd, which is what `PYTHONPATH=.` used to have to say: a
@@ -107,7 +109,18 @@ def load_rituals_package(path: Path) -> list[RitualSource]:
 # cast, and nothing puts that project on the path of a console script.
 def load_rituals_module(name: str, *, root: Path) -> list[RitualSource]:
     _on_path(root)
-    return _swept(name=name, module=importlib.import_module(name))
+    module = importlib.import_module(name)
+    return [
+        _found(origin=found_name, module=found)
+        for found_name, found in _modules(name=name, module=module)
+    ]
+
+
+# Dispatching on the shape of a path is the loader's business: `_inits` binds
+# what it gets to the compendium, and a caller that had to ask `is_dir()` first
+# would be routing around the dedup that lives on the one entry point.
+def load_rituals_source(path: Path) -> list[RitualSource]:
+    return load_rituals_package(path) if path.is_dir() else load_rituals_file(path)
 
 
 # A config that does not parse stops the command: loading no rituals from it

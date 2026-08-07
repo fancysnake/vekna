@@ -101,16 +101,18 @@ class _Declarations(Generic[_DeclaredT]):
     def __init__(self, kind: str) -> None:
         self._kind = kind
         self._known: dict[str, _DeclaredT] = {}
-        self._sources: dict[str, str] = {}
+        self._origins: dict[str, str] = {}
 
-    def add(self, name: str, declared: _DeclaredT, source: str | None) -> None:
-        if (first := self._known.get(name)) is not None:
+    # `name` is not a parameter: `_DeclaredT` is a Ritual or a Step, and both
+    # carry the name the caller would otherwise be handing back.
+    def add(self, declared: _DeclaredT, *, origin: str | None) -> None:
+        if (first := self._known.get(declared.name)) is not None:
             if first is declared:
                 return
-            raise RitualDefinitionError(self._collision(name, source))
-        self._known[name] = declared
-        if source is not None:
-            self._sources[name] = source
+            raise RitualDefinitionError(self._collision(declared.name, origin))
+        self._known[declared.name] = declared
+        if origin is not None:
+            self._origins[declared.name] = origin
 
     def get(self, name: str) -> _DeclaredT | None:
         return self._known.get(name)
@@ -118,12 +120,12 @@ class _Declarations(Generic[_DeclaredT]):
     def names(self) -> list[str]:
         return sorted(self._known)
 
-    def _collision(self, name: str, source: str | None) -> str:
+    def _collision(self, name: str, origin: str | None) -> str:
         msg = f"{self._kind} {name!r} is already registered"
-        first = self._sources.get(name)
-        if first is None or source is None:
+        first = self._origins.get(name)
+        if first is None or origin is None:
             return msg
-        return f"{msg} — declared in both {first} and {source}"
+        return f"{msg} — declared in both {first} and {origin}"
 
 
 class Compendium:
@@ -131,15 +133,15 @@ class Compendium:
         self._rituals: _Declarations[Ritual] = _Declarations("ritual")
         self._steps: _Declarations[Step] = _Declarations("step")
 
-    def register(self, ritual: Ritual, *, source: str | None = None) -> None:
-        self._rituals.add(ritual.name, ritual, source)
+    def register(self, ritual: Ritual, *, origin: str | None = None) -> None:
+        self._rituals.add(ritual, origin=origin)
 
     # Once a name collision was worth no more than the first definition winning
     # — every step was in one file, where a duplicate is a visible mistake.
     # Across the submodules of a package `measure` is a natural name twice, and
     # the loser vanishing means `rituals show` drawing the other ritual's step.
-    def register_step(self, the_step: Step, *, source: str | None = None) -> None:
-        self._steps.add(the_step.name, the_step, source)
+    def register_step(self, the_step: Step, *, origin: str | None = None) -> None:
+        self._steps.add(the_step, origin=origin)
 
     def step(self, name: str) -> Step | None:
         return self._steps.get(name)

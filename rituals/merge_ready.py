@@ -9,8 +9,18 @@ from vekna.folio.flow import decide
 from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import Transition, done, goto, ritual, step
 
-from .prompts import REPAIR
-from .shared import Bound
+from .shared import Bound, said
+
+_REPAIR = """\
+`mise run lint:py` and `mise run test:py` are this project's gates, and what
+follows is what they said. Make them green.
+
+Fix the cause, not the symptom: do not disable a lint rule, add a noqa or a
+type: ignore, skip or delete a test, or lower a threshold. Ask me rather than
+guessing when the choice is mine — a failing assertion that may be the test's
+fault rather than the code's, for one.
+
+"""
 
 
 class MergeReady(BaseModel):
@@ -51,20 +61,12 @@ _HEADLINE = {
 }
 
 
-# Both streams, in arrival order as far as two captures allow: mypy and pylint
-# put their diagnostics on stdout, but a task that dies before it starts — a
-# missing tool, a bad flag, a traceback — says so on stderr and nowhere else.
-# Passing stdout alone hands the repair agent an empty complaint.
-def _said(result: ShellResult) -> str:
-    return "\n".join(part for part in (result.stdout, result.stderr) if part.strip())
-
-
 def _red(*, budget: int, lint: ShellResult, suite: ShellResult) -> Red:
     if lint.exit_code and suite.exit_code:
-        return BothRed(budget=budget, lint=_said(lint), suite=_said(suite))
+        return BothRed(budget=budget, lint=said(lint), suite=said(suite))
     if lint.exit_code:
-        return LintFailure(budget=budget, lint=_said(lint))
-    return SuiteFailure(budget=budget, suite=_said(suite))
+        return LintFailure(budget=budget, lint=said(lint))
+    return SuiteFailure(budget=budget, suite=said(suite))
 
 
 def _lint_said(failure: LintFailure | BothRed) -> str:
@@ -125,5 +127,5 @@ async def gates(state: Attempt) -> Transition:
 # stop being the same the moment a second one is added.
 @step
 async def repair(failure: Red) -> Transition:
-    await coding(REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
+    await coding(_REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
     return goto(gates, Attempt(budget=failure.budget - 1))

@@ -35,10 +35,10 @@ Task copies the contextvar the runtime hangs them from.
 
 ## Layout
 
-One module per ritual, and its models, steps and helpers stay together in it.
-Prompt text lives in [`prompts.py`](prompts.py) instead: a block of prose
-between two steps hides what the steps do. [`shared.py`](shared.py) holds what
-more than one ritual uses, which is one type.
+One module per ritual, and its models, steps, helpers and prompt text stay
+together in it — the prompts at the top, since a block of prose between two
+steps hides what the steps do. [`shared.py`](shared.py) holds what more than
+one ritual uses, which is one type and one helper.
 
 `__init__.py` is empty and stays that way — the engine sweeps every submodule,
 so nothing needs re-exporting to be found.

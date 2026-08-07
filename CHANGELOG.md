@@ -44,18 +44,18 @@ and this project adheres to [Semantic Versioning].
   got back still needs awaiting — not which keyword the author used, which the
   value cannot tell it — so a `def` body that hands back a coroutine is awaited
   too: forgetting the `await` on a helper call gives working code rather than a
-  transition that is secretly a coroutine. The four
-  entrypoints in vekna's own `rituals.py` are `def`, and the `RUF029` exception
-  that existed to tolerate the old shape is gone.
+  transition that is secretly a coroutine. The four entrypoints in vekna's own
+  `rituals/` are `def`, and the `RUF029` exception that existed to tolerate the
+  old shape is gone.
 - **`@step` and `@ritual` take the author's own model.** Their parameter was
   typed `Callable[[BaseModel], ...]`; parameters are contravariant, so a step
   declared `(fetched: Fetched)` was an error on every decorator in a rituals
   file its author type-checked — 13 of the 22 errors `mypy rituals.py` reported.
   The decorators are generic in the payload now, which is what makes pointing a
   type checker at a rituals file worth doing.
-- **vekna type-checks its own `rituals.py`.** It sits in `SRC_PATHS` beside
-  `src`, under the same strict config, so the one file in this repo that uses
-  vekna the way an author does is checked the way an author would check it. This
+- **vekna type-checks its own rituals.** `rituals/` sits in `SRC_PATHS` beside
+  `src`, under the same strict config, so the code in this repo that uses vekna
+  the way an author does is checked the way an author would check it. This
   narrows, but does not retire, the reason the runtime boundary checks exist:
   whether *your* rituals file is type-checked is yours to decide, and
   `RitualBoundaryError`, `StepBoundaryError` and `MediumBoundaryError` are what

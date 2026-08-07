@@ -7,12 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ._links.loader import (
-    load_rituals_file,
-    load_rituals_module,
-    load_rituals_package,
-    read_config,
-)
+from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
@@ -32,7 +27,9 @@ _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
 )
-_NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
+_NO_RITUALS = (
+    "no rituals found (create a rituals.py or a rituals/ package in this directory)"
+)
 _RITUALS_FILE = "rituals.py"
 _RITUALS_PACKAGE = "rituals"
 _HELP_FLAGS = frozenset({"-h", "--help"})
@@ -96,7 +93,7 @@ def _config_files(cwd: Path) -> list[Path]:
     return found
 
 
-# `files` is additive, not a replacement for the rituals.py found by walking up:
+# `files` is additive, not a replacement for the source found by walking up:
 # naming that same file is how an author is explicit about it, so a source
 # already loaded is skipped rather than colliding with itself. Two *different*
 # sources claiming one ritual name is still an error.
@@ -105,9 +102,9 @@ def _config_files(cwd: Path) -> list[Path]:
 def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
     for module in found:
         for the_ritual in module.rituals:
-            compendium.register(the_ritual, source=module.source)
+            compendium.register(the_ritual, origin=module.origin)
         for the_step in module.steps:
-            compendium.register_step(the_step, source=module.source)
+            compendium.register_step(the_step, origin=module.origin)
 
 
 def _build_compendium(cwd: Path) -> Compendium:
@@ -115,20 +112,16 @@ def _build_compendium(cwd: Path) -> Compendium:
     seen_files: set[Path] = set()
     seen_modules: set[str] = set()
 
-    def load_file(path: Path) -> None:
+    def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
-        # discovered file all collapse to one entry.
+        # discovered source all collapse to one entry — a package reached twice
+        # deduplicates here exactly as a file does.
         if (resolved := path.resolve()) not in seen_files:
             seen_files.add(resolved)
-            _register(compendium=compendium, found=load_rituals_file(resolved))
+            _register(compendium=compendium, found=load_rituals_source(resolved))
 
     if (implicit := _find_rituals_source(cwd)) is not None:
-        if implicit.is_dir():
-            _register(
-                compendium=compendium, found=load_rituals_package(implicit.resolve())
-            )
-        else:
-            load_file(implicit)
+        load_source(implicit)
     for config in _config_files(cwd):
         rituals = read_config(config).rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
@@ -136,7 +129,7 @@ def _build_compendium(cwd: Path) -> Compendium:
         # directory — resolving against the cwd would mean a different file
         # each time.
         for relative in rituals.files:
-            load_file(config.parent / relative)
+            load_source(config.parent / relative)
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
@@ -158,11 +151,14 @@ def _help_text(cwd: Path) -> str:
     lines = [
         _USAGE.rstrip(),
         "",
-        "Run a ritual defined in rituals.py (or configured via .vekna.toml).",
+        (
+            "Run a ritual defined in rituals.py or a rituals/ package"
+            " (or configured via .vekna.toml)."
+        ),
         "Each ritual's component fields are passed as --options.",
         "",
         '--prompt/-p "<text>" casts a one-step ritual on the coding medium',
-        "instead, with no rituals.py required.",
+        "instead, with no ritual source required.",
         "",
     ]
     try:
