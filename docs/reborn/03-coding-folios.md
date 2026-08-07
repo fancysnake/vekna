@@ -157,7 +157,7 @@ Five things the implementation settled that the sketch above left open:
 - Medium↔Focus boundary types (`CodingCall`, `FocusReply`, `GateFn`, `AskFn`,
   `CodingFocusProtocol`) live in `vekna.lexicon`, so folio⊥folio stays absolute
   — `coding_claude` imports the lexicon only.
-- Focus registry in the lexicon (`register_focus` / `resolve_focus`). The cast
+- Focus slot in the lexicon (`CODING_FOCUS.register` / `.resolve`). The cast
   runtime imports `vekna.folio.coding_claude` under
   `suppress(ModuleNotFoundError)`; a broken or partial install surfaces only
   when a ritual reaches for the Medium, as `FocusMissingError` with an install

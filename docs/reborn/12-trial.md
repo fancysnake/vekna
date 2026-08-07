@@ -47,7 +47,7 @@ script, and to assert on what the ritual asked for.
   `ShellFocusProtocol` in the lexicon's pacts beside coding's; `BashFocus` in
   `folio/shell/_links.py`; `shell()` resolving a Focus **with `BashFocus` as
   the default**, so an unregistered `shell()` behaves exactly as it does today.
-- **`focus_scope(medium, focus)`** in the lexicon — install a Focus for the
+- **`SHELL_FOCUS.scope(focus)`** in the lexicon — install a Focus for the
   duration of a block and put back what was there.
 - **An unscripted call raises.** `TrialScriptError` names the call and what the
   script still held.
@@ -89,8 +89,8 @@ indirection. `BashFocus` as the resolution default is what keeps it free:
 `FocusMissingError` is right for an SDK that may not be installed and wrong for
 bash, and a `shell()` call in a cast that loaded no folios must keep working.
 
-**`focus_scope`, because a leaked double poisons the next test.** The registry
-has `register_focus` and a wholesale `reset_registry`, nothing between them. A
+**`scope`, because a leaked double poisons the next test.** The slot has
+`register` and a wholesale `reset_registry`, nothing between them. A
 trial that reset would clobber a focus the author registered; one that only
 registered would leave a scripted agent installed for whatever ran next.
 Install-and-restore is the operation, so it becomes one.
@@ -257,9 +257,9 @@ src/vekna/trial/
 ```
 
 - `lexicon/_pacts.py` — `ShellCall`, `ShellReply`, `ShellFocusProtocol`.
-- `lexicon/_mills/engine.py` — `MediumRegistry.resolve` taking a default,
-  `focus_scope` installing and restoring.
-- `lexicon/__init__.py` — the three shell types and `focus_scope` exported.
+- `lexicon/_mills/engine.py` — `FocusSlot.resolve` taking a default, `.scope`
+  installing and restoring.
+- `lexicon/__init__.py` — the three shell types and `SHELL_FOCUS` exported.
 - `folio/shell/_links.py` — `BashFocus` around `run_bash`; `shell()` resolving
   a Focus, defaulting to it.
 - `pyproject.toml` — import-linter contracts for the new package (`vekna.trial`

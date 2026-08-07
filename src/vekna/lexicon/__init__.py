@@ -7,15 +7,14 @@ runtime is reached through `vekna.lexicon._inits`.
 
 from ._mills.dispatch import medium, ritual, step
 from ._mills.engine import (
+    CODING_FOCUS,
+    SHELL_FOCUS,
+    FocusSlot,
     RiteContext,
     current_rite,
     emit_delta,
-    expect_focus,
-    focus_scope,
     offer_prompt,
     record_result,
-    register_focus,
-    resolve_focus,
 )
 from ._pacts import (
     AskFn,
@@ -52,6 +51,8 @@ from ._pacts import (
 )
 
 __all__ = [
+    "CODING_FOCUS",
+    "SHELL_FOCUS",
     "AskFn",
     "Channel",
     "CodingCall",
@@ -61,6 +62,7 @@ __all__ = [
     "File",
     "FocusMissingError",
     "FocusReply",
+    "FocusSlot",
     "GateFn",
     "GitRef",
     "Goto",
@@ -84,14 +86,10 @@ __all__ = [
     "current_rite",
     "done",
     "emit_delta",
-    "expect_focus",
-    "focus_scope",
     "goto",
     "medium",
     "offer_prompt",
     "record_result",
-    "register_focus",
-    "resolve_focus",
     "ritual",
     "sha256_of",
     "step",

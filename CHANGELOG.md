@@ -30,9 +30,13 @@ and this project adheres to [Semantic Versioning].
   beside coding's in the lexicon's pacts, `BashFocus` in the shell folio.
   `shell()` resolves a Focus **with `BashFocus` as the default**, so an
   unregistered `shell()` behaves exactly as it did, folios loaded or not.
-- **`focus_scope(medium, focus)`** — install a Focus for the duration of a block
-  and put back exactly what was there, an absence included. The registry had
-  `register_focus` and a wholesale `reset_registry` and nothing between them.
+- **`FocusSlot`, and `CODING_FOCUS` / `SHELL_FOCUS` in the lexicon** — a medium's
+  name and the protocol a Focus for it must satisfy, in one typed object.
+  `register` refuses a Focus the medium could not call and `resolve` hands back
+  the protocol, so no medium casts out of a registry of `object` any more.
+  `.scope(focus)` installs one for the duration of a block and puts back exactly
+  what was there, an absence included — the registry had `register_focus` and a
+  wholesale `reset_registry` and nothing between them.
 - **The four rituals in this repo are tested**, happy path and boundaries both;
   `src/rituals.py` reports 100% — 193 statements no gate had looked at.
 

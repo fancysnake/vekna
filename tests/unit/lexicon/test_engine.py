@@ -22,7 +22,14 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, SessionBook, run_cast
+from vekna.lexicon._mills.engine import (
+    FocusSlot,
+    Grimoire,
+    SessionBook,
+    offer_prompt,
+    prompt_runner,
+    run_cast,
+)
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
@@ -255,94 +262,114 @@ class TestFailedRiteIsJournaled:
         assert "✗ explode" in out.getvalue()
 
 
-class TestMediumRegistry:
+class TestFocusSlot:
     @staticmethod
     def test_a_registered_focus_resolves():
-        registry = MediumRegistry()
-        registry.register("shell", "the focus")
+        slot = FocusSlot[str]("shell")
+        slot.register("the focus")
 
-        assert registry.resolve("shell") == "the focus"
+        assert slot.resolve() == "the focus"
+
+    @staticmethod
+    def test_an_unexpected_medium_names_itself_and_nothing_more():
+        slot = FocusSlot[str]("unheard")
+
+        with pytest.raises(FocusMissingError, match="unheard") as raised:
+            slot.resolve()
+
+        # No hint was ever expected for it, so the message is the bare one.
+        assert "—" not in str(raised.value)
 
     @staticmethod
     def test_nothing_registered_and_no_default_is_an_error():
-        registry = MediumRegistry()
-        registry.expect("coding", hint="pip install claude-agent-sdk")
+        slot = FocusSlot[str]("coding")
+        slot.expect(hint="pip install claude-agent-sdk")
 
         with pytest.raises(FocusMissingError, match="pip install claude-agent-sdk"):
-            registry.resolve("coding")
+            slot.resolve()
 
     @staticmethod
     def test_a_default_answers_when_nothing_is_registered():
-        registry = MediumRegistry()
+        slot = FocusSlot[str]("shell")
 
-        assert registry.resolve("shell", default="bash") == "bash"
+        assert slot.resolve(default="bash") == "bash"
 
     @staticmethod
     def test_a_registered_focus_wins_over_the_default():
-        registry = MediumRegistry()
-        registry.register("shell", "the double")
+        slot = FocusSlot[str]("shell")
+        slot.register("the double")
 
-        assert registry.resolve("shell", default="bash") == "the double"
+        assert slot.resolve(default="bash") == "the double"
 
     @staticmethod
-    def test_offered_prompt_comes_back():
-        registry = MediumRegistry()
+    def test_a_cleared_slot_forgets_the_hint_as_well_as_the_focus():
+        slot = FocusSlot[str]("coding")
+        slot.expect(hint="pip install claude-agent-sdk")
+        slot.register("the focus")
 
+        slot.clear()
+
+        with pytest.raises(FocusMissingError) as raised:
+            slot.resolve()
+        assert "pip install" not in str(raised.value)
+
+
+class TestPrompts:
+    @staticmethod
+    def test_offered_prompt_comes_back():
         async def run(_prompt: str) -> str:
             await asyncio.sleep(0)
             return "answered"
 
-        registry.offer_prompt("coding", run)
+        offer_prompt("scribing", run)
 
-        assert registry.prompt_runner("coding") is run
+        assert prompt_runner("scribing") is run
 
     @staticmethod
     def test_a_medium_offering_no_prompt_is_an_error():
-        registry = MediumRegistry()
-
         with pytest.raises(RitualError, match="offers no one-shot prompt"):
-            registry.prompt_runner("coding")
+            prompt_runner("hollow")
 
 
 class TestFocusScope:
     @staticmethod
     def test_the_scoped_focus_answers_inside_the_block():
-        registry = MediumRegistry()
+        slot = FocusSlot[str]("shell")
 
-        with registry.scope("shell", "the double"):
-            resolved = registry.resolve("shell")
+        with slot.scope("the double"):
+            resolved = slot.resolve()
 
         assert resolved == "the double"
 
     @staticmethod
     def test_an_absent_focus_is_absent_again_afterwards():
-        registry = MediumRegistry()
+        slot = FocusSlot[str]("shell")
 
-        with registry.scope("shell", "the double"):
+        with slot.scope("the double"):
             pass
 
         with pytest.raises(FocusMissingError, match="no Focus registered"):
-            registry.resolve("shell")
+            slot.resolve()
 
     @staticmethod
     def test_a_focus_registered_before_the_scope_comes_back():
-        registry = MediumRegistry()
-        registry.register("shell", "the author's own")
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
 
-        with registry.scope("shell", "the double"):
+        with slot.scope("the double"):
             pass
 
-        assert registry.resolve("shell") == "the author's own"
+        assert slot.resolve() == "the author's own"
 
     @staticmethod
     def test_a_scope_whose_block_raises_still_restores():
-        registry = MediumRegistry()
-        registry.register("shell", "the author's own")
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
 
-        with pytest.raises(RuntimeError), registry.scope("shell", "the double"):
+        with pytest.raises(RuntimeError), slot.scope("the double"):
             raise RuntimeError
 
-        assert registry.resolve("shell") == "the author's own"
+        assert slot.resolve() == "the author's own"
 
 
 class TestSessionBook:

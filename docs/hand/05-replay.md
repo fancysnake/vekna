@@ -76,8 +76,8 @@ the check is `verify`.
 - `gates/cli/click/` — `casts replay`, `--record`.
 - `lexicon/` — `replays()` on the public surface, and the seam the driver uses
   to stand in for Focus resolution. That seam is the one engine-side change:
-  Focus resolution has to be substitutable, which the registry
-  (`register_focus` / `resolve_focus`) mostly already makes it.
+  Focus resolution has to be substitutable, which `FocusSlot` (`register` /
+  `resolve` / `scope`) mostly already makes it.
 
 ## Out of scope
 

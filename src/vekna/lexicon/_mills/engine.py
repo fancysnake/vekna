@@ -3,12 +3,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon._pacts import (
     Channel,
+    CodingFocusProtocol,
     Done,
     FocusMissingError,
     RiteBegan,
@@ -18,10 +19,13 @@ from vekna.lexicon._pacts import (
     Ritual,
     RitualDefinitionError,
     RitualError,
+    ShellFocusProtocol,
     Step,
     StepBudgetExceededError,
     StringOutput,
 )
+
+_FocusT = TypeVar("_FocusT")
 
 
 def _now() -> datetime:
@@ -135,100 +139,90 @@ class Compendium:
 PromptRunner = Callable[[str], Awaitable[StringOutput]]
 
 
-class MediumRegistry:
-    def __init__(self) -> None:
-        self._foci: dict[str, object] = {}
-        self._hints: dict[str, str] = {}
-        self._prompts: dict[str, PromptRunner] = {}
+# A slot is a medium's name *and* the protocol whatever stands there must
+# satisfy. A `str` key carries no type, which is what forced the registry this
+# replaces to store `object` and every medium to cast back out of it — and a
+# cast checks nothing, so a Focus whose `run` had the wrong shape reached the
+# call site intact. Here the type travels with the name: `register` refuses what
+# the medium could not call, and `resolve` hands back the protocol itself.
+# A Focus holds no state and its `run` is static, so the class and an instance
+# of it both satisfy the protocol; a folio may register either.
+class FocusSlot(Generic[_FocusT]):
+    def __init__(self, medium_name: str) -> None:
+        self.medium_name = medium_name
+        self._focus: _FocusT | None = None
+        self._hint: str | None = None
+        _clearers.append(self.clear)
 
-    def expect(self, medium_name: str, *, hint: str) -> None:
-        self._hints[medium_name] = hint
+    def expect(self, *, hint: str) -> None:
+        self._hint = hint
 
-    def register(self, medium_name: str, focus: object) -> None:
-        self._foci[medium_name] = focus
+    def register(self, focus: _FocusT) -> None:
+        self._focus = focus
 
-    # `object`, not a marker base class: the lexicon may not name a folio's
-    # Focus protocol, and a medium narrows what it resolved to its own.
     # A `default` is for a medium that can always answer for itself — `shell`
     # has bash whether or not anything registered. Raising is right for a focus
     # that may not be installed at all, and wrong for one that is the runtime.
-    def resolve(self, medium_name: str, *, default: object | None = None) -> object:
-        if (focus := self._foci.get(medium_name)) is not None:
-            return focus
+    def resolve(self, *, default: _FocusT | None = None) -> _FocusT:
+        if self._focus is not None:
+            return self._focus
         if default is not None:
             return default
-        msg = f"no Focus registered for medium {medium_name!r}"
-        if hint := self._hints.get(medium_name):
-            msg = f"{msg} — {hint}"
+        msg = f"no Focus registered for medium {self.medium_name!r}"
+        if self._hint is not None:
+            msg = f"{msg} — {self._hint}"
         raise FocusMissingError(msg)
 
     # Install and put back exactly what was there, an absence included. The
-    # registry had `register` and a wholesale `reset` and nothing between them:
-    # a test double that reset would clobber a focus the author registered, and
+    # slot had `register` and a wholesale `reset` and nothing between them: a
+    # test double that reset would clobber a focus the author registered, and
     # one that only registered would leave itself installed for whatever ran
     # next.
     @contextlib.contextmanager
-    def scope(self, medium_name: str, focus: object) -> Iterator[None]:
-        previous = self._foci.get(medium_name)
-        self._foci[medium_name] = focus
+    def scope(self, focus: _FocusT) -> Iterator[None]:
+        previous = self._focus
+        self._focus = focus
         try:
             yield
         finally:
-            if previous is None:
-                self._foci.pop(medium_name, None)
-            else:
-                self._foci[medium_name] = previous
+            self._focus = previous
 
-    def offer_prompt(self, medium_name: str, run: PromptRunner) -> None:
-        self._prompts[medium_name] = run
-
-    def prompt_runner(self, medium_name: str) -> PromptRunner:
-        try:
-            return self._prompts[medium_name]
-        except KeyError:
-            msg = f"medium {medium_name!r} offers no one-shot prompt"
-            raise RitualError(msg) from None
-
-    # Everything a folio registered, not just the foci: a hint or a prompt
-    # runner outliving the reset means a test inherits registration it never
-    # made, and passes only in the company of whichever test made it.
-    def reset(self) -> None:
-        self._foci.clear()
-        self._hints.clear()
-        self._prompts.clear()
+    # The hint as well as the focus: either one outliving the reset means a test
+    # inherits registration it never made, and passes only in the company of
+    # whichever test made it.
+    def clear(self) -> None:
+        self._focus = None
+        self._hint = None
 
 
-_registry = MediumRegistry()
+# Slots enrol themselves, so a medium added later is reset without anyone
+# having to remember this list.
+_clearers: list[Callable[[], None]] = []
 
+CODING_FOCUS: FocusSlot[CodingFocusProtocol] = FocusSlot("coding")
+SHELL_FOCUS: FocusSlot[ShellFocusProtocol] = FocusSlot("shell")
 
-def expect_focus(medium_name: str, *, hint: str) -> None:
-    _registry.expect(medium_name, hint=hint)
-
-
-def register_focus(medium_name: str, focus: object) -> None:
-    _registry.register(medium_name, focus)
-
-
-def resolve_focus(medium_name: str, *, default: object | None = None) -> object:
-    return _registry.resolve(medium_name, default=default)
-
-
-def focus_scope(
-    medium_name: str, focus: object
-) -> contextlib.AbstractContextManager[None]:
-    return _registry.scope(medium_name, focus)
+# A one-shot prompt is the same callable whichever medium offers it, so a name
+# is all it needs to be keyed by.
+_prompts: dict[str, PromptRunner] = {}
 
 
 def offer_prompt(medium_name: str, run: PromptRunner) -> None:
-    _registry.offer_prompt(medium_name, run)
+    _prompts[medium_name] = run
 
 
 def prompt_runner(medium_name: str) -> PromptRunner:
-    return _registry.prompt_runner(medium_name)
+    try:
+        return _prompts[medium_name]
+    except KeyError:
+        msg = f"medium {medium_name!r} offers no one-shot prompt"
+        raise RitualError(msg) from None
 
 
 def reset_registry() -> None:
-    _registry.reset()
+    for clear in _clearers:
+        clear()
+    _prompts.clear()
 
 
 @dataclass

@@ -1,21 +1,19 @@
 import asyncio
 import codecs
 from collections.abc import Callable
-from typing import cast
 
 from vekna.lexicon import (
+    SHELL_FOCUS,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     emit_delta,
     medium,
-    resolve_focus,
 )
 
 from ._pacts import ShellResult
 
 _CHUNK = 1 << 16
-MEDIUM = "shell"
 
 
 # A StreamReader iterates itself by *lines*, which is the very thing that
@@ -112,7 +110,7 @@ class BashFocus(ShellFocusProtocol):
 async def shell(
     command: str, *, cwd: str | None = None, stream: bool = True
 ) -> ShellResult:
-    focus = cast("ShellFocusProtocol", resolve_focus(MEDIUM, default=BashFocus))
+    focus = SHELL_FOCUS.resolve(default=BashFocus)
     reply = await focus.run(
         ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
     )

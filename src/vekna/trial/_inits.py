@@ -7,11 +7,12 @@ from typing import Self, TypeVar
 from pydantic import BaseModel
 
 from vekna.lexicon._mills.engine import (
+    CODING_FOCUS,
+    SHELL_FOCUS,
     Grimoire,
     RiteContext,
     _current_rite,
     _rite,
-    focus_scope,
     run_cast,
 )
 from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
@@ -29,8 +30,6 @@ from ._pacts import TrialError
 
 _ResultT = TypeVar("_ResultT")
 
-_CODING = "coding"
-_SHELL = "shell"
 _CAST_ID = "trial"
 
 
@@ -58,8 +57,8 @@ class Trial:
         self._installed = contextlib.ExitStack()
 
     def __enter__(self) -> Self:
-        self._installed.enter_context(focus_scope(_CODING, TrialCodingFocus))
-        self._installed.enter_context(focus_scope(_SHELL, TrialShellFocus))
+        self._installed.enter_context(CODING_FOCUS.scope(TrialCodingFocus))
+        self._installed.enter_context(SHELL_FOCUS.scope(TrialShellFocus))
         self._installed.enter_context(
             doubles_bound(coding=self.coding, shell=self.shell)
         )

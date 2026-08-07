@@ -6,12 +6,12 @@ from pydantic import BaseModel
 from tests.conftest import entry
 from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import (
+    SHELL_FOCUS,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     Transition,
     done,
-    focus_scope,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -194,7 +194,7 @@ class TestShellFocus:
     def test_a_registered_focus_answers_instead_of_bash():
         _intercepted.clear()
 
-        with focus_scope("shell", _RecordingFocus):
+        with SHELL_FOCUS.scope(_RecordingFocus):
             result, grimoire, _ = _run(echoer)
 
         assert result == ShellResult(stdout="from the focus", stderr="", exit_code=0)
@@ -203,7 +203,7 @@ class TestShellFocus:
 
     @staticmethod
     def test_bash_answers_again_once_the_scope_closes():
-        with focus_scope("shell", _RecordingFocus):
+        with SHELL_FOCUS.scope(_RecordingFocus):
             pass
 
         assert _cast(echoer).stdout.strip() == "hello"

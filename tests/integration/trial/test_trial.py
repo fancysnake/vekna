@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 
 import pytest
 from pydantic import BaseModel
@@ -7,12 +8,14 @@ from vekna.folio.coding import CodingOpts, CodingOutputError, Session, coding
 from vekna.folio.flow import decide
 from vekna.folio.shell import shell
 from vekna.lexicon import (
+    SHELL_FOCUS,
+    ShellCall,
+    ShellFocusProtocol,
+    ShellReply,
     StepBoundaryError,
     Transition,
     done,
-    focus_scope,
     goto,
-    resolve_focus,
     ritual,
     step,
 )
@@ -298,17 +301,27 @@ class TestTheLoop:
         assert result == Report(green=True, remaining=1)
 
 
+class _AuthorsOwnFocus(ShellFocusProtocol):
+    @staticmethod
+    async def run(
+        call: ShellCall, *, on_line: Callable[[str], None] | None
+    ) -> ShellReply:
+        if on_line is not None:
+            on_line(call.command)
+        return ShellReply(stdout=call.command, stderr="", exit_code=0)
+
+
 class TestRegistryIsLeftAsFound:
     @staticmethod
     def test_a_focus_registered_before_the_trial_comes_back_after_it() -> None:
         # The outer scope is the test's own tidying, not part of what is
-        # asserted: the registry is global, and a focus left behind here would
+        # asserted: the slot is global, and a focus left behind here would
         # answer for whatever ran next.
-        with focus_scope("shell", "the author's own"):
+        with SHELL_FOCUS.scope(_AuthorsOwnFocus):
             with Trial():
                 pass
 
-            assert resolve_focus("shell") == "the author's own"
+            assert SHELL_FOCUS.resolve() is _AuthorsOwnFocus
 
     # What `shell()` resolves to once the double is gone is bash, which
     # tests/integration/folio/test_shell.py is where it is proven.
@@ -317,4 +330,4 @@ class TestRegistryIsLeftAsFound:
         with Trial():
             pass
 
-        assert resolve_focus("shell", default="bash again") == "bash again"
+        assert SHELL_FOCUS.resolve(default=_AuthorsOwnFocus) is _AuthorsOwnFocus

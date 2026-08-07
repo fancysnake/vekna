@@ -98,7 +98,7 @@ lexicon/
                  # component types (File, Directory, Text, Url, GitRef)
   _specs.py      # DEFAULT_MAX_STEPS
   _mills/
-    engine.py    # Grimoire, Compendium, MediumRegistry, rite ctx, run_cast
+    engine.py    # Grimoire, Compendium, FocusSlot, rite ctx, run_cast
     dispatch.py  # @step/@ritual/@medium and signature reflection
     graph.py     # AST step-graph reader for `rituals show`
   _links/

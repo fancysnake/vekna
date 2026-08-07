@@ -52,10 +52,10 @@ class TestPytestPlugin:
         pytester: pytest.Pytester,
     ) -> None:
         pytester.makepyfile(
-            "from vekna.lexicon import resolve_focus\n"
+            "from vekna.lexicon import SHELL_FOCUS\n"
             "\n"
             "def test_nothing_is_installed():\n"
-            "    assert resolve_focus('shell', default='bash') == 'bash'\n"
+            "    assert SHELL_FOCUS.resolve(default='bash') == 'bash'\n"
         )
 
         run = pytester.runpytest_subprocess()

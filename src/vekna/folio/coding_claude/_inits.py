@@ -1,11 +1,10 @@
-from vekna.lexicon import register_focus
+from vekna.lexicon import CODING_FOCUS
 
 from ._links import ClaudeCodingFocus
 
-# The medium name is a literal, not an import: a folio never imports another
-# folio, so this is the one place the two agree by spelling.
-_MEDIUM = "coding"
 
-
+# The slot comes from the lexicon, not from the coding folio: a folio never
+# imports another folio, and the lexicon is where the two agree on both the
+# medium's name and the protocol a Focus for it must satisfy.
 def register() -> None:
-    register_focus(_MEDIUM, ClaudeCodingFocus())
+    CODING_FOCUS.register(ClaudeCodingFocus)
