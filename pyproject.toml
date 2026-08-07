@@ -422,6 +422,7 @@ source_modules = ["vekna.trial._links"]
 forbidden_modules = [
     "vekna.trial._gates",
     "vekna.trial._inits",
+    "vekna.trial._mills",
     "vekna.trial._specs",
     "vekna.trial._edges",
 ]
@@ -460,6 +461,11 @@ forbidden_modules = [
 # plugin is the trial's own entry point, holds one fixture, and imports it
 # inside that fixture's body so a coverage run does not see the package before
 # it starts measuring.
+# `src/rituals.py` is the one place the door is unguarded, and import-linter is
+# why: `root_packages` takes packages, and rejects a lone module by name. Making
+# it a package to satisfy a linter is the tail wagging the dog — `10-ritual-
+# modules.md` has a directory and a file of the same name being an error — so
+# the gap is named here instead of hidden.
 [[tool.importlinter.contracts]]
 name = "nothing-imports-trial"
 type = "forbidden"

@@ -50,6 +50,13 @@ unit: the mediums are `links`.
   the "check all mock calls" rule; there is no `assert_called_with` here.
 - An unscripted call raises `TrialScriptError` and stops the cast — there is no
   default answer. A `decide` answer outside the offered options raises too.
+  Inside an `asyncio.TaskGroup` — `merge_ready.gates` runs its two gates in one
+  — it arrives wrapped, so a cast that reaches a grouped step needs
+  `pytest.raises(BaseExceptionGroup)` and an assertion on `.exceptions[0]`.
+  That is Python's doing, not the trial's.
+- A `Trial` answers only inside its `with` block; the `trial` fixture hands you
+  one already entered. Outside it, `cast`/`walk` raise `TrialError` rather than
+  letting `shell()` fall through to real bash.
 - The bite: coding's tool gate (`allow tool 'Bash'?`) arrives at
   `trial.decide`, not at `trial.coding` — the folio builds both out of the
   channel.

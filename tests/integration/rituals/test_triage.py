@@ -147,7 +147,7 @@ class TestRoute:
     def test_fixing_it_puts_the_agent_to_work_with_every_command_gated(
         trial: Trial,
     ) -> None:
-        trial.decide.answers(answer="fix", when="*[small]*")
+        trial.decide.answers(answer="fix", when="*already does*")
         trial.coding.replies("worked on it", uses=["Bash"])
         trial.decide.answers(answer=True, when="*allow tool*")
 
@@ -163,7 +163,7 @@ class TestTriageWhole:
     def test_it_reads_sizes_up_and_files_what_you_told_it_to(trial: Trial) -> None:
         trial.shell.replies(when="gh issue view*", stdout=_BODY)
         trial.coding.replies(_READING, when="*UNTRUSTED*")
-        trial.decide.answers(answer="file", when="*[small]*")
+        trial.decide.answers(answer="file", when="*already does*")
         trial.coding.replies("filed it", when="*TODO.md*")
 
         result = trial.cast(triage, Triage(link=AnyUrl(_ISSUE)))

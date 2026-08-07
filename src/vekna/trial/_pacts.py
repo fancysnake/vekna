@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 _AnswerT = TypeVar("_AnswerT")
 
@@ -34,6 +34,15 @@ class Answer(Generic[_AnswerT]):
     value: _AnswerT
     when: str | None = None
     always: bool = False
+
+
+# What a double asks of the thing holding its answers. The doubles stand where a
+# Focus stands, so they may reach for a contract and not for the mill behind it;
+# `_inits` hands each of them a `Script`.
+class ScriptProtocol(Protocol, Generic[_AnswerT]):
+    def add(self, answer: Answer[_AnswerT]) -> None: ...
+
+    def take(self, subject: str) -> _AnswerT: ...
 
 
 class TrialError(Exception):

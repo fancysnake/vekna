@@ -241,7 +241,7 @@ What it costs:
   becomes an error naming both.
 
 Keep the move a pure rename in its own commit — git's rename detection is what
-keeps diff-coverage from reading all 308 statements as changed lines the moment
+keeps diff-coverage from reading all 193 statements as changed lines the moment
 the file lands in a measured directory.
 
 ## Scope
@@ -253,8 +253,13 @@ src/vekna/trial/
   _mills.py     scripts (match, queue, exhaust), the recorder, steps off events
   _links.py     the doubles — they sit where a Focus and a Channel sit
   _inits.py     Trial: installs the doubles, drives run_cast, holds the recorder
-  _gates.py     the pytest plugin — one `trial` fixture
+
+src/vekna/edges/pytest_plugin.py   the pytest11 plugin — one `trial` fixture
 ```
+
+The plugin sits in the root `edges` rather than under `vekna/trial/`: pytest
+loads an entry-point plugin before pytest-cov starts measuring, so a top-level
+`vekna.trial` import there would report the whole lexicon as unexecuted.
 
 - `lexicon/_pacts.py` — `ShellCall`, `ShellReply`, `ShellFocusProtocol`.
 - `lexicon/_mills/engine.py` — `FocusSlot.resolve` taking a default, `.scope`
@@ -281,7 +286,7 @@ when the second public door reopens.
 
 **Both new sources are measured**: `src/vekna/trial/` and `src/rituals.py`
 carry the usual 100% on changed lines. For the rituals that is the larger half
-of the work — 308 statements across four rituals, nine steps and eight helpers,
+of the work — 193 statements across four rituals, nine steps and eight helpers,
 none of it written with a test in mind. An awkward branch gets reached through
 the doubles; `# pragma: no cover` is not the answer here, and neither is a
 threshold that quietly excludes the file the release is about.

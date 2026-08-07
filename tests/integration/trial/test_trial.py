@@ -102,16 +102,26 @@ class TestCast:
         assert trial.steps == ["gates", "repair", "gates"]
         assert "E501" in trial.coding.prompts[0]
 
+    # `gates` builds the complaint as lint-then-suite, so the order the two
+    # texts come back in is what says which command got which reply. Swap the
+    # two `replies` lines and the assertion goes with them.
     @staticmethod
     def test_concurrent_gates_are_answered_by_pattern_not_by_arrival(
         trial: Trial,
     ) -> None:
-        trial.shell.replies(when="mise run lint:py", exit_code=0, always=True)
-        trial.shell.replies(when="mise run test:py", exit_code=1, always=True)
+        trial.shell.replies(
+            when="mise run lint:py", exit_code=1, stdout="the lint said", always=True
+        )
+        trial.shell.replies(
+            when="mise run test:py", exit_code=1, stdout="the suite said", always=True
+        )
+        trial.decide.answers(answer=True, when="*agent?*")
+        trial.coding.replies("tried")
 
-        result = trial.cast(babysit, Attempt(budget=0))
+        result = trial.cast(babysit, Attempt(budget=1))
 
         assert result == Report(green=False, remaining=0)
+        assert "the lint saidthe suite said" in trial.coding.prompts[0]
 
     @staticmethod
     def test_the_human_declining_ends_the_cast_there(trial: Trial) -> None:
@@ -276,7 +286,7 @@ class TestTheLoop:
             await asyncio.sleep(0)
             trial.cast(babysit, Attempt(budget=0))
 
-        with pytest.raises(TrialError, match="call cast_async"):
+        with pytest.raises(TrialError, match="cast_async"):
             asyncio.run(inside())
 
     @staticmethod
@@ -287,7 +297,7 @@ class TestTheLoop:
             await asyncio.sleep(0)
             trial.walk(gates, Attempt(budget=0))
 
-        with pytest.raises(TrialError, match="call walk_async"):
+        with pytest.raises(TrialError, match="walk_async"):
             asyncio.run(inside())
 
     @staticmethod
@@ -299,6 +309,30 @@ class TestTheLoop:
         result = asyncio.run(trial.cast_async(babysit, Attempt(budget=1)))
 
         assert result == Report(green=True, remaining=1)
+
+
+# Nothing is installed outside the block, and `shell()` answers for itself with
+# bash. Left unguarded, a test that forgot the `with` runs its commands for real
+# and passes on a double that recorded nothing.
+class TestOnlyInsideTheBlock:
+    @staticmethod
+    def test_a_trial_never_entered_refuses_rather_than_reaching_real_bash() -> None:
+        outside = Trial()
+        outside.shell.replies(when="*", exit_code=0)
+
+        with pytest.raises(TrialError, match="only inside its `with` block"):
+            outside.walk(one_gate, Attempt(budget=0))
+
+        assert not outside.shell.commands
+
+    @staticmethod
+    def test_a_closed_trial_stops_answering() -> None:
+        with Trial() as closed:
+            closed.shell.replies(when="*", exit_code=0, always=True)
+            closed.walk(one_gate, Attempt(budget=0))
+
+        with pytest.raises(TrialError, match="only inside its `with` block"):
+            closed.cast(babysit, Attempt(budget=0))
 
 
 class _AuthorsOwnFocus(ShellFocusProtocol):

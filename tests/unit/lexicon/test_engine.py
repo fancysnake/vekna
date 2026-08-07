@@ -371,6 +371,34 @@ class TestFocusScope:
 
         assert slot.resolve() == "the author's own"
 
+    # Two trials in one TaskGroup hold overlapping scopes and exit in whichever
+    # order they finish. Saving and restoring one attribute is only correct
+    # while the blocks nest: the first to leave would put the other's focus
+    # back, and the survivor would answer with a focus that had already gone.
+    @staticmethod
+    def test_overlapping_scopes_each_keep_their_own_focus():
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
+
+        async def scoped(focus: str, hold: float) -> list[str]:
+            with slot.scope(focus):
+                seen = [slot.resolve()]
+                await asyncio.sleep(hold)
+                seen.append(slot.resolve())
+            return seen
+
+        async def both() -> list[list[str]]:
+            async with asyncio.TaskGroup() as group:
+                first = group.create_task(scoped("the first double", 0.02))
+                second = group.create_task(scoped("the second double", 0.0))
+            return [first.result(), second.result()]
+
+        assert asyncio.run(both()) == [
+            ["the first double", "the first double"],
+            ["the second double", "the second double"],
+        ]
+        assert slot.resolve() == "the author's own"
+
 
 class TestSessionBook:
     @staticmethod

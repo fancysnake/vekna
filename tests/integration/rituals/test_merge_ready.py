@@ -30,19 +30,22 @@ class TestGates:
         assert transition == done(MergeReport(green=True, remaining=3))
         assert sorted(trial.shell.commands) == [_LINT, _SUITE]
 
-    # Which of the two lands first is the scheduler's business. 100 runs, and
-    # the answers are keyed on the command rather than on arrival.
+    # Which of the two lands first is the scheduler's business, so the payload
+    # has to come from the command and not from arrival. Once is enough to say
+    # so here; what makes it true is `Script` preferring a pattern over the
+    # queue, and tests/unit/trial/test_script.py fails deterministically if that
+    # stops holding.
     @staticmethod
-    def test_the_two_concurrent_gates_are_answered_correctly_every_time(
+    def test_the_red_gate_is_named_by_its_command_not_by_which_landed_first(
         trial: Trial,
     ) -> None:
-        trial.shell.replies(when=_LINT, exit_code=1, stdout="E501", always=True)
-        trial.shell.replies(when=_SUITE, exit_code=0, always=True)
-        trial.decide.answers(answer=True, when=_SPEND, always=True)
+        trial.shell.replies(when=_LINT, exit_code=1, stdout="E501")
+        trial.shell.replies(when=_SUITE, exit_code=0)
+        trial.decide.answers(answer=True, when=_SPEND)
 
-        transitions = [trial.walk(gates, Attempt(budget=1)) for _ in range(100)]
+        transition = trial.walk(gates, Attempt(budget=1))
 
-        assert transitions == [goto(repair, LintFailure(budget=1, lint="E501"))] * 100
+        assert transition == goto(repair, LintFailure(budget=1, lint="E501"))
 
     @staticmethod
     def test_a_red_suite_alone_picks_the_suite_payload(trial: Trial) -> None:

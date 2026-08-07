@@ -36,9 +36,25 @@ and this project adheres to [Semantic Versioning].
   the protocol, so no medium casts out of a registry of `object` any more.
   `.scope(focus)` installs one for the duration of a block and puts back exactly
   what was there, an absence included — the registry had `register_focus` and a
-  wholesale `reset_registry` and nothing between them.
+  wholesale `reset_registry` and nothing between them. A scope is context-local,
+  so two of them may overlap and neither sees the other's focus; a registration
+  stays process-wide, which is what a folio means by one.
+- **A `Trial` answers only inside its `with` block.** Outside it nothing is
+  installed and `shell()` falls back to bash, so a test that forgot the block
+  would run its commands for real, record nothing on the double, and pass.
+  `cast` and `walk` raise `TrialError` instead, before and after.
 - **The four rituals in this repo are tested**, happy path and boundaries both;
   `src/rituals.py` reports 100% — 193 statements no gate had looked at.
+
+### Removed
+
+- **`register_focus`, `resolve_focus` and `expect_focus` are gone from
+  `vekna.lexicon`.** `FocusSlot` replaces all three:
+  `CODING_FOCUS.register(focus)` for `register_focus("coding", focus)`,
+  `.resolve()` for `resolve_focus`, `.expect(hint=...)` for `expect_focus`, and
+  `.scope(focus)` for the register-then-put-back pair a test used to hand-roll.
+  The slot carries the protocol the old `str` key could not, so a Focus of the
+  wrong shape is refused where it is registered rather than at the call site.
 
 ### Changed
 

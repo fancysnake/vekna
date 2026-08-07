@@ -41,6 +41,20 @@ class TestScriptMatching:
         assert script.take("mise run test:py") == "the suite"
         assert script.take("mise run lint:py") == "whoever asks"
 
+    # Two gates in one TaskGroup arrive in whichever order the scheduler picks.
+    # Taken here in the opposite order to which they were added, so a `Script`
+    # that ever started consulting arrival order fails this outright rather than
+    # making a ritual test flaky.
+    @staticmethod
+    def test_two_patterns_answer_their_own_calls_in_either_order():
+        script = _script(
+            Answer(value="linted", when="*lint:py"),
+            Answer(value="the suite", when="*test:py"),
+        )
+
+        assert script.take("mise run test:py") == "the suite"
+        assert script.take("mise run lint:py") == "linted"
+
     @staticmethod
     def test_two_answers_for_one_pattern_are_taken_in_order():
         script = _script(

@@ -17,8 +17,7 @@ from vekna.lexicon._pacts import (
     ShellReply,
 )
 
-from ._mills import Script
-from ._pacts import Answer, Asked, CodingAnswer, TrialScriptError
+from ._pacts import Answer, Asked, CodingAnswer, ScriptProtocol, TrialScriptError
 
 _YES = "yes"
 _NO = "no"
@@ -27,8 +26,8 @@ _DoubleT = TypeVar("_DoubleT")
 
 
 class CodingDouble:
-    def __init__(self) -> None:
-        self._script: Script[CodingAnswer] = Script(kind="coding")
+    def __init__(self, script: ScriptProtocol[CodingAnswer]) -> None:
+        self._script = script
         self.calls: list[CodingCall] = []
         self.gated: list[tuple[str, bool]] = []
         self.answered: list[str] = []
@@ -36,6 +35,9 @@ class CodingDouble:
     # A model rather than text, because `coding(..., output=Judgement)` answers
     # through the medium's own validation: serialising here is what lets a test
     # say what it means and still run that validation on the way back.
+    # `uses` and `asks` are copied rather than held: a caller's list stays the
+    # caller's to mutate, and a script that changed under one would be answering
+    # a different call than the one the test wrote.
     def replies(
         self,
         reply: str | BaseModel = "",
@@ -49,7 +51,7 @@ class CodingDouble:
         # object is Any-typed, and this module is not one of the ones exempt
         # from saying so.
         text = reply if isinstance(reply, str) else reply.model_dump_json()
-        answer = CodingAnswer(text=text, uses=uses, asks=asks)
+        answer = CodingAnswer(text=text, uses=tuple(uses), asks=tuple(asks))
         self._script.add(Answer(value=answer, when=when, always=always))
 
     @property
@@ -61,8 +63,8 @@ class CodingDouble:
     # which is what makes `calls[1].resume == "s1"` an assertion worth writing.
     async def answer(
         self,
-        call: CodingCall,
         *,
+        call: CodingCall,
         on_delta: Callable[[str], None],
         gate: GateFn | None,
         ask: AskFn,
@@ -82,8 +84,8 @@ class CodingDouble:
 
 
 class ShellDouble:
-    def __init__(self) -> None:
-        self._script: Script[ShellReply] = Script(kind="shell")
+    def __init__(self, script: ScriptProtocol[ShellReply]) -> None:
+        self._script = script
         self.calls: list[ShellCall] = []
 
     def replies(
@@ -105,7 +107,7 @@ class ShellDouble:
     # The lines go out the way bash's do, so a ritual that streams and a
     # renderer that reads deltas both behave as they will in a real cast.
     def answer(
-        self, call: ShellCall, on_line: Callable[[str], None] | None
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
         self.calls.append(call)
         reply = self._script.take(call.command)
@@ -120,8 +122,8 @@ class ShellDouble:
 # agent's own questions are built out of the same channel, so they arrive here
 # too — and are scripted the same way.
 class DecideDouble(Channel):
-    def __init__(self) -> None:
-        self._script: Script[str] = Script(kind="decide")
+    def __init__(self, script: ScriptProtocol[str]) -> None:
+        self._script = script
         self.asked: list[Asked] = []
 
     # Keyword-only, and `True` rather than `"yes"` because that is what the
@@ -140,9 +142,10 @@ class DecideDouble(Channel):
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
-        self.asked.append(Asked(prompt=prompt, options=options, free=free))
+        offered = None if options is None else tuple(options)
+        self.asked.append(Asked(prompt=prompt, options=offered, free=free))
         answer = self._script.take(prompt)
-        return self._offered(answer=answer, options=options, free=free)
+        return self._offered(answer=answer, options=offered, free=free)
 
     # The real channel returns a member of what it offered or raises. A test
     # scripting "repair" for a step offering ["fix", "stop"] is testing a ritual
@@ -184,7 +187,7 @@ class TrialCodingFocus(CodingFocusProtocol):
         ask: AskFn,
     ) -> FocusReply:
         double = _reached("coding", _coding.get())
-        return await double.answer(call, on_delta=on_delta, gate=gate, ask=ask)
+        return await double.answer(call=call, on_delta=on_delta, gate=gate, ask=ask)
 
 
 class TrialShellFocus(ShellFocusProtocol):
@@ -192,7 +195,7 @@ class TrialShellFocus(ShellFocusProtocol):
     async def run(
         call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
-        return _reached("shell", _shell.get()).answer(call, on_line)
+        return _reached("shell", _shell.get()).answer(call, on_line=on_line)
 
 
 @contextlib.contextmanager

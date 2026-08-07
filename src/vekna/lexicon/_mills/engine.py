@@ -151,6 +151,15 @@ class FocusSlot(Generic[_FocusT]):
     def __init__(self, medium_name: str) -> None:
         self.medium_name = medium_name
         self._focus: _FocusT | None = None
+        # Scoped installs are context-local, registrations are not. A registry
+        # entry is the process saying what stands where; a scope is one caller
+        # saying it for the duration of a block, and two callers may hold
+        # overlapping blocks. Saving and restoring one attribute is only correct
+        # while the blocks nest, which nothing makes them do — two trials in one
+        # TaskGroup, and the first to exit puts back the second's focus.
+        self._scoped: ContextVar[_FocusT | None] = ContextVar(
+            f"vekna_focus_{medium_name}", default=None
+        )
         self._hint: str | None = None
         _clearers.append(self.clear)
 
@@ -164,6 +173,8 @@ class FocusSlot(Generic[_FocusT]):
     # has bash whether or not anything registered. Raising is right for a focus
     # that may not be installed at all, and wrong for one that is the runtime.
     def resolve(self, *, default: _FocusT | None = None) -> _FocusT:
+        if (scoped := self._scoped.get()) is not None:
+            return scoped
         if self._focus is not None:
             return self._focus
         if default is not None:
@@ -173,19 +184,18 @@ class FocusSlot(Generic[_FocusT]):
             msg = f"{msg} — {self._hint}"
         raise FocusMissingError(msg)
 
-    # Install and put back exactly what was there, an absence included. The
-    # slot had `register` and a wholesale `reset` and nothing between them: a
-    # test double that reset would clobber a focus the author registered, and
-    # one that only registered would leave itself installed for whatever ran
-    # next.
+    # Install for the duration of a block and put back exactly what was there,
+    # an absence included. The slot had `register` and a wholesale `reset` and
+    # nothing between them: a test double that reset would clobber a focus the
+    # author registered, and one that only registered would leave itself
+    # installed for whatever ran next.
     @contextlib.contextmanager
     def scope(self, focus: _FocusT) -> Iterator[None]:
-        previous = self._focus
-        self._focus = focus
+        token = self._scoped.set(focus)
         try:
             yield
         finally:
-            self._focus = previous
+            self._scoped.reset(token)
 
     # The hint as well as the focus: either one outliving the reset means a test
     # inherits registration it never made, and passes only in the company of
@@ -319,19 +329,30 @@ def medium_rite(name: str) -> contextlib.AbstractAsyncContextManager[None]:
     return _rite(name=name, category="medium")
 
 
+# What a cast needs standing before a step can run. Extracted because the trial
+# drives a single step without a ritual around it and needs the same ground: two
+# copies of this would let the harness and the runtime drift apart, and the
+# symptom would be a ritual test that passes while the real cast behaves
+# differently.
+@contextlib.contextmanager
+def cast_context(*, grimoire: Grimoire, channel: Channel) -> Iterator[None]:
+    token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
+    try:
+        yield
+    finally:
+        _current_rite.reset(token)
+
+
 async def run_cast(
     *, ritual: Ritual, components: BaseModel, grimoire: Grimoire, channel: Channel
 ) -> BaseModel | None:
-    token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
-    try:
+    with cast_context(grimoire=grimoire, channel=channel):
         transition = await ritual.run(components)
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
                 break
             async with _rite(name=transition.target.name, category="step"):
                 transition = await transition.target.run(transition.payload)
-    finally:
-        _current_rite.reset(token)
     if isinstance(transition, Done):
         return transition.result
     # Leaving the loop still mid-flight means the budget ran out, not that the
