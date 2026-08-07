@@ -57,7 +57,7 @@ class Review(BaseModel):
 
 
 @ritual("review")
-async def review(components: ReviewRequest) -> Transition:
+def review(components: ReviewRequest) -> Transition:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.
     return goto(collect, components)

@@ -67,7 +67,7 @@ def _gh_view(link: Url) -> str:
 
 
 @ritual("triage")
-async def triage(components: Triage) -> Transition:
+def triage(components: Triage) -> Transition:
     return goto(read_link, components)
 
 

@@ -25,7 +25,7 @@ class CoverReport(BaseModel):
 
 
 @ritual("cover_diff")
-async def cover_diff(components: CoverDiff) -> Transition:
+def cover_diff(components: CoverDiff) -> Transition:
     # The entrypoint: map the CLI Components into the first step's payload.
     return goto(measure, Uncovered(budget=components.bound))
 

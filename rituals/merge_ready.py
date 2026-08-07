@@ -86,7 +86,7 @@ def _complaint(failure: Red) -> str:
 # max_steps is the backstop, not the control — the bound is. It sits well above
 # a plausible bound, so tripping it means a ritual that will not settle.
 @ritual("merge_ready", max_steps=32)
-async def merge_ready(components: MergeReady) -> Transition:
+def merge_ready(components: MergeReady) -> Transition:
     return goto(gates, Attempt(budget=components.bound))
 
 
