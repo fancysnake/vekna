@@ -103,6 +103,10 @@ repository setting still has to be told once.
 
 ## After the first release
 
+- [ ] [pypi.org/project/vekna](https://pypi.org/project/vekna/) exists, and
+      *Manage* → *Publishing* shows the publisher against the project rather
+      than in the pending list. The first upload is what creates the project and
+      converts the pending publisher; until then the name is claimed by nobody.
 - [ ] The PyPI page renders the README, and the sidebar links resolve
 - [ ] `pip install vekna` in a fresh venv on a machine that has never built it,
       and the first ritual runs — [08-hardening](reborn/08-hardening.md)'s
