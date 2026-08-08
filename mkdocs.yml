@@ -19,6 +19,8 @@ exclude_docs: |
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   # Both schemes are defined in `docs/stylesheets/eldritch.css`. No `primary` or
   # `accent` here on purpose: those generate their own rules, and two sources
   # for one colour is one more than the number that can be right.
