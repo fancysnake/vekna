@@ -82,6 +82,22 @@ Parked until Reborn ships. Unscheduled within `3.x`.
 
 ## Contents
 
-- [`architecture.md`](architecture.md) — layer map, layout, patterns, drift flags
+This directory holds two things with two audiences, and `mkdocs.yml`'s
+`exclude_docs` is what keeps them apart.
+
+**The site** — [vekna.fancysnake.dev](https://vekna.fancysnake.dev), written for
+someone who has just run `pip install vekna`: [`index.md`](index.md),
+[`rituals.md`](rituals.md), [`mediums.md`](mediums.md),
+[`testing.md`](testing.md), [`examples.md`](examples.md),
+[`safety.md`](safety.md), [`cli.md`](cli.md), and
+[`architecture.md`](architecture.md), which is published as it stands for
+anyone sending a patch.
+
+**The plan** — written for the author, and built by nothing:
+
 - [`reborn/`](reborn/README.md) — the common knowledge every Reborn feature doc
   assumes, and the notes on how its numbering came to be what it is
+- [`eye/`](eye/README.md) and [`hand/`](hand/README.md) — the parked tracks
+
+Add a page to the site and it needs a `nav` entry in `mkdocs.yml`. Add one to a
+plan track and it needs nothing, because the whole directory is excluded.

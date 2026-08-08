@@ -1,0 +1,54 @@
+---
+site_name: vekna
+site_url: https://vekna.fancysnake.dev
+site_description: Run coding agents as rituals — small Python programs whose steps you control.
+repo_url: https://github.com/fancysnake/vekna
+repo_name: fancysnake/vekna
+copyright: BSD-3-Clause
+
+# `docs/` holds the plan as well as the manual — `reborn/` and its siblings are
+# written for the author, and read as noise to anyone arriving from PyPI. They
+# stay in the repository and out of the build; a second directory tree would buy
+# the same thing and cost a second place to look.
+exclude_docs: |
+  README.md
+  reborn/
+  eye/
+  hand/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      toggle: {icon: material/weather-sunny, name: Light mode}
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+
+markdown_extensions:
+  - admonition
+  - toc: {permalink: true}
+  - pymdownx.highlight: {anchor_linenums: true}
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Start here:
+      - index.md
+      - rituals.md
+      - mediums.md
+  - Going further:
+      - testing.md
+      - examples.md
+      - cli.md
+  - Before you cast:
+      - safety.md
+  - Contributing:
+      - architecture.md

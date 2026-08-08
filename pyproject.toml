@@ -77,6 +77,10 @@ dev = [
     "setuptools (>=83.0.0)",
 ]
 
+# Only `site:*` and the site workflow install this one — nothing else needs a
+# static-site generator to run the tests.
+docs = ["mkdocs-material (>=9.6,<10.0)"]
+
 # BLACK
 
 [tool.black]

@@ -1,0 +1,51 @@
+---
+name: Site
+
+# `ci.yml` ignores `docs/**`, so a documentation-only change runs none of the
+# test matrix — and this is the workflow that change does run.
+on:
+  pull_request:
+    paths: ["docs/**", "mkdocs.yml", ".github/workflows/site.yml"]
+
+  push:
+    branches: ["main"]
+    paths: ["docs/**", "mkdocs.yml", ".github/workflows/site.yml"]
+
+concurrency:
+  group: site-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v4
+      - run: mise install
+      # Builds with `--strict`, so a link to a page that is not there fails
+      # here rather than being published.
+      - run: mise run site:check
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/
+
+  # Pages has no per-pull-request preview, so a pull request builds and stops
+  # there. The build is the review; the deploy waits for main.
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

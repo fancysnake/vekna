@@ -60,6 +60,23 @@ run = [
     { task = "lint:tingle" },
 ]
 
+[tasks."site:dev"]
+description = "Serve the documentation site with live reload"
+run = "poetry install --with docs --quiet && mkdocs serve"
+
+[tasks."site:build"]
+description = "Build the documentation site into site/"
+run = "poetry install --with docs --quiet && mkdocs build --strict"
+
+# `--strict` is the whole check: it fails the build on a link to a page that is
+# not there, which is what rots first when a page is renamed. The other thing
+# that rots — the CLI reference drifting from what `vekna --help` prints — is
+# guarded by a test instead, because that breaks on a Python change and the
+# suite is what runs on those.
+[tasks."site:check"]
+description = "Build the site and fail on broken internal links"
+run = { task = "site:build" }
+
 # What the tag does, minus the publish: the wheel is built and then installed
 # somewhere that has never seen this project, because `poetry install` leaves a
 # venv where everything imports whether the wheel carries it or not.
