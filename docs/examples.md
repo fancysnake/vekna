@@ -80,3 +80,10 @@ anyone reads.
 
 Then [test it](testing.md). A ritual with no test is a program whose only
 check is running it against a live agent.
+
+Writing one with Claude Code? Copy
+[`.claude/skills/ritual-scribe/`](https://github.com/fancysnake/vekna/blob/main/.claude/skills/ritual-scribe/SKILL.md)
+into your own project. It carries the shipped surface — every decorator, every
+medium argument, and the things that are planned but not yet bound, quarantined
+so the agent does not write against them. An agent guessing at this API writes
+something that reads correctly and does not run.

@@ -99,3 +99,8 @@ per attempt with exactly what you chose to tell it.
 - [Examples](examples.md) — the rituals this project runs on itself.
 - [Safety](safety.md) — what vekna does not sandbox. Worth reading before your
   first cast.
+
+If you use Claude Code, this repository ships a
+[**ritual-scribe** skill](https://github.com/fancysnake/vekna/blob/main/.claude/skills/ritual-scribe/SKILL.md)
+— drop it in your own `.claude/skills/` and the agent writes rituals against
+the real surface rather than inventing an API that reads plausibly.
