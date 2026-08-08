@@ -17,12 +17,12 @@ from vekna.folio.coding import (
     register,
 )
 from vekna.lexicon import (
+    CODING_FOCUS,
     FocusMissingError,
     FocusReply,
     MediumBoundaryError,
     Transition,
     done,
-    register_focus,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -102,7 +102,7 @@ class TestCodingMedium:
     @staticmethod
     def test_default_return_is_telemetry_result():
         focus = FakeFocus(deltas=("thinking", "editing"))
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -129,7 +129,7 @@ class TestCodingMedium:
 
     @staticmethod
     def test_telemetry_lands_in_medium_rite_result():
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         @step
         async def work(_: Answer) -> Transition:
@@ -153,7 +153,7 @@ class TestCodingMedium:
     @staticmethod
     def test_typed_output_validates_the_reply_text():
         focus = FakeFocus(text='{"port": 9000}')
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -168,7 +168,7 @@ class TestCodingMedium:
 
     @staticmethod
     def test_invalid_typed_output_raises():
-        register_focus("coding", FakeFocus(text="not json"))
+        CODING_FOCUS.register(FakeFocus(text="not json"))
 
         @step
         async def work(_: Answer) -> Transition:
@@ -182,7 +182,7 @@ class TestCodingMedium:
     @staticmethod
     def test_gate_tools_route_through_decide():
         focus = FakeFocus(gate_tools=("bash", "read"))
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -200,7 +200,7 @@ class TestCodingMedium:
         # The bundle carries a Focus's own model, and pydantic hands the Focus
         # back the instance it was given rather than a coerced BaseModel.
         focus = FakeFocus()
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
         knobs = Answer(port=8080)
 
         @step
@@ -229,7 +229,7 @@ class TestCodingMedium:
         focus = FakeFocus(
             questions=(("unit or integration?", ("unit", "integration")),)
         )
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -245,7 +245,7 @@ class TestCodingMedium:
     @staticmethod
     def test_agent_question_without_options_asks_for_free_text():
         focus = FakeFocus(questions=(("which fixture?", None),))
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -298,7 +298,7 @@ class TestSessionDeclaration:
         # One step, one coding call per `(session, key)` declaration, so what a
         # call resumes is read off the focus rather than inferred from the reply.
         focus = FakeFocus()
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -362,7 +362,7 @@ class TestSessionDeclaration:
         # A reply without a session_id leaves the book untouched, so the
         # `continue` after it starts fresh instead of resuming some older call.
         focus = FakeFocus(session_id=None)
-        register_focus("coding", focus)
+        CODING_FOCUS.register(focus)
 
         @step
         async def work(_: Answer) -> Transition:
@@ -389,7 +389,7 @@ class TestSessionDeclaration:
         # The rite that failed to record is the one that reports it: reading
         # `session_id: null` off the journal afterwards is not the same as being
         # told, and the next call on the thread would resume the wrong id.
-        register_focus("coding", FakeFocus(session_id=None))
+        CODING_FOCUS.register(FakeFocus(session_id=None))
 
         _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
 
@@ -400,7 +400,7 @@ class TestSessionDeclaration:
 
     @staticmethod
     def test_an_unkeyed_continue_that_did_not_take_says_so():
-        register_focus("coding", FakeFocus(session_id=None))
+        CODING_FOCUS.register(FakeFocus(session_id=None))
 
         _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE))
 
@@ -413,7 +413,7 @@ class TestSessionDeclaration:
     def test_a_call_that_declared_no_thread_stays_quiet():
         # Nothing was claimed, so there is nothing to report — a Focus that
         # never reports ids would otherwise narrate every call it answers.
-        register_focus("coding", FakeFocus(session_id=None))
+        CODING_FOCUS.register(FakeFocus(session_id=None))
 
         _, grimoire = _cast(_one_call_ritual())
 
@@ -422,7 +422,7 @@ class TestSessionDeclaration:
     @staticmethod
     @pytest.mark.parametrize("key", ["", "  ", 3, ["repair"]])
     def test_a_key_that_names_nothing_is_refused(key):
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(CodingSessionError, match="key names the thread"):
             _cast(_one_call_ritual(session=Session.CONTINUE, key=key))
@@ -434,7 +434,7 @@ class TestSessionDeclaration:
         # the older spelling has to say so rather than open a thread called
         # after whatever it was handed. An author's `rituals.py` is never
         # type-checked, so this is the only place the slip is caught.
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(CodingSessionError, match="session takes"):
             _cast(_one_call_ritual(session=session))
@@ -456,14 +456,14 @@ class TestSessionDeclaration:
         # `gate_tools` moved into the bundle, and the call that still passes it
         # is a slip an unchecked rituals.py would carry to runtime — Python's own
         # TypeError would report it as a traceback out of the engine's frames.
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(MediumBoundaryError, match="takes no argument"):
             _cast(_one_call_ritual(gate_tools=["Bash"]))
 
     @staticmethod
     def test_telemetry_names_the_thread_the_author_declared():
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
 
@@ -478,7 +478,7 @@ class TestSessionDeclaration:
 
     @staticmethod
     def test_telemetry_carries_a_null_key_when_none_was_declared():
-        register_focus("coding", FakeFocus())
+        CODING_FOCUS.register(FakeFocus())
 
         _, grimoire = _cast(_one_call_ritual())
 

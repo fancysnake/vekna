@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import (
+    FocusMissingError,
     Goto,
     NoComponents,
     RitualBoundaryError,
@@ -21,7 +22,14 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._mills.engine import Grimoire, MediumRegistry, SessionBook, run_cast
+from vekna.lexicon._mills.engine import (
+    FocusSlot,
+    Grimoire,
+    SessionBook,
+    offer_prompt,
+    prompt_runner,
+    run_cast,
+)
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
@@ -254,25 +262,142 @@ class TestFailedRiteIsJournaled:
         assert "✗ explode" in out.getvalue()
 
 
-class TestMediumRegistry:
+class TestFocusSlot:
+    @staticmethod
+    def test_a_registered_focus_resolves():
+        slot = FocusSlot[str]("shell")
+        slot.register("the focus")
+
+        assert slot.resolve() == "the focus"
+
+    @staticmethod
+    def test_an_unexpected_medium_names_itself_and_nothing_more():
+        slot = FocusSlot[str]("unheard")
+
+        with pytest.raises(FocusMissingError, match="unheard") as raised:
+            slot.resolve()
+
+        # No hint was ever expected for it, so the message is the bare one.
+        assert "—" not in str(raised.value)
+
+    @staticmethod
+    def test_nothing_registered_and_no_default_is_an_error():
+        slot = FocusSlot[str]("coding")
+        slot.expect(hint="pip install claude-agent-sdk")
+
+        with pytest.raises(FocusMissingError, match="pip install claude-agent-sdk"):
+            slot.resolve()
+
+    @staticmethod
+    def test_a_default_answers_when_nothing_is_registered():
+        slot = FocusSlot[str]("shell")
+
+        assert slot.resolve(default="bash") == "bash"
+
+    @staticmethod
+    def test_a_registered_focus_wins_over_the_default():
+        slot = FocusSlot[str]("shell")
+        slot.register("the double")
+
+        assert slot.resolve(default="bash") == "the double"
+
+    @staticmethod
+    def test_a_cleared_slot_forgets_the_hint_as_well_as_the_focus():
+        slot = FocusSlot[str]("coding")
+        slot.expect(hint="pip install claude-agent-sdk")
+        slot.register("the focus")
+
+        slot.clear()
+
+        with pytest.raises(FocusMissingError) as raised:
+            slot.resolve()
+        assert "pip install" not in str(raised.value)
+
+
+class TestPrompts:
     @staticmethod
     def test_offered_prompt_comes_back():
-        registry = MediumRegistry()
-
         async def run(_prompt: str) -> str:
             await asyncio.sleep(0)
             return "answered"
 
-        registry.offer_prompt("coding", run)
+        offer_prompt("scribing", run)
 
-        assert registry.prompt_runner("coding") is run
+        assert prompt_runner("scribing") is run
 
     @staticmethod
     def test_a_medium_offering_no_prompt_is_an_error():
-        registry = MediumRegistry()
-
         with pytest.raises(RitualError, match="offers no one-shot prompt"):
-            registry.prompt_runner("coding")
+            prompt_runner("hollow")
+
+
+class TestFocusScope:
+    @staticmethod
+    def test_the_scoped_focus_answers_inside_the_block():
+        slot = FocusSlot[str]("shell")
+
+        with slot.scope("the double"):
+            resolved = slot.resolve()
+
+        assert resolved == "the double"
+
+    @staticmethod
+    def test_an_absent_focus_is_absent_again_afterwards():
+        slot = FocusSlot[str]("shell")
+
+        with slot.scope("the double"):
+            pass
+
+        with pytest.raises(FocusMissingError, match="no Focus registered"):
+            slot.resolve()
+
+    @staticmethod
+    def test_a_focus_registered_before_the_scope_comes_back():
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
+
+        with slot.scope("the double"):
+            pass
+
+        assert slot.resolve() == "the author's own"
+
+    @staticmethod
+    def test_a_scope_whose_block_raises_still_restores():
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
+
+        with pytest.raises(RuntimeError), slot.scope("the double"):
+            raise RuntimeError
+
+        assert slot.resolve() == "the author's own"
+
+    # Two trials in one TaskGroup hold overlapping scopes and exit in whichever
+    # order they finish. Saving and restoring one attribute is only correct
+    # while the blocks nest: the first to leave would put the other's focus
+    # back, and the survivor would answer with a focus that had already gone.
+    @staticmethod
+    def test_overlapping_scopes_each_keep_their_own_focus():
+        slot = FocusSlot[str]("shell")
+        slot.register("the author's own")
+
+        async def scoped(focus: str, hold: float) -> list[str]:
+            with slot.scope(focus):
+                seen = [slot.resolve()]
+                await asyncio.sleep(hold)
+                seen.append(slot.resolve())
+            return seen
+
+        async def both() -> list[list[str]]:
+            async with asyncio.TaskGroup() as group:
+                first = group.create_task(scoped("the first double", 0.02))
+                second = group.create_task(scoped("the second double", 0.0))
+            return [first.result(), second.result()]
+
+        assert asyncio.run(both()) == [
+            ["the first double", "the first double"],
+            ["the second double", "the second double"],
+        ]
+        assert slot.resolve() == "the author's own"
 
 
 class TestSessionBook:

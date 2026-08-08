@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeVar, cast, overload
+from typing import TypeVar, overload
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from vekna.lexicon import (
+    CODING_FOCUS,
     AskFn,
     Channel,
     CodingCall,
@@ -15,7 +16,6 @@ from vekna.lexicon import (
     emit_delta,
     medium,
     record_result,
-    resolve_focus,
 )
 
 from ._pacts import (
@@ -25,9 +25,6 @@ from ._pacts import (
     CodingSessionError,
     Session,
 )
-
-if TYPE_CHECKING:
-    from vekna.lexicon import CodingFocusProtocol
 
 _OutputT = TypeVar("_OutputT")
 
@@ -172,7 +169,7 @@ async def coding(
     session: Session = Session.NEW,
     key: str | None = None,
 ) -> CodingResult | _OutputT:
-    focus = cast("CodingFocusProtocol", resolve_focus(MEDIUM))
+    focus = CODING_FOCUS.resolve()
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
     thread = _thread(context=context, session=session, key=key)

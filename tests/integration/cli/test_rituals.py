@@ -130,6 +130,16 @@ def _home(tmp_path, monkeypatch) -> None:
 
 
 _SHARED = "shared_rituals"
+_RITUALS_PACKAGE = "rituals"
+
+
+def _forget(package):
+    for name in [
+        name
+        for name in sys.modules
+        if name == package or name.startswith(f"{package}.")
+    ]:
+        del sys.modules[name]
 
 
 # Importable by name and gone again afterwards: load_rituals_module leaves the
@@ -207,6 +217,18 @@ class TestRitualsShow:
 
         assert exit_code == _USAGE_EXIT
         assert "no ritual named 'nope'" in capsys.readouterr().err
+
+
+# A package source is imported under the bare name `rituals`, and whatever
+# holds that name in sys.modules wins over the one a test just wrote — this
+# repo ships a `rituals` package of its own, which tests/integration/rituals
+# imports. Cleared on the way in and on the way out, so neither direction of
+# the leak decides what these tests load.
+@pytest.fixture(autouse=True)
+def _unimported_rituals():
+    _forget(_RITUALS_PACKAGE)
+    yield
+    _forget(_RITUALS_PACKAGE)
 
 
 @pytest.mark.usefixtures("_home")

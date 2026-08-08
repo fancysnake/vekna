@@ -13,6 +13,10 @@ ships its own notifications now. `docs/reborn/` is the plan from here.)
 `mise tasks` is the source of truth for every runnable task and its
 description.
 
+Anything not covered by a task runs through mise: `mise exec -- poetry build -f
+wheel`, `mise exec -- python -c ...`. Bare `poetry`/`python`/`pytest` are denied
+by the global permission rules and will not run.
+
 ## Workflow
 
 - Consider the caller: are we torturing them? Redundant output, needless

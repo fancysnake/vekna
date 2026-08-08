@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
-## [0.4.0] - 2026-08-03
+## [0.4.0] - 2026-08-08
 
 ### Added
 
@@ -20,6 +20,52 @@ and this project adheres to [Semantic Versioning].
   a directory without one is not a source and is not swept. This project's own
   rituals ship that way now, one module per ritual with the prompt text beside
   them in `prompts.py`.
+- **`vekna.trial` — rituals can be tested.** `pip install vekna[trial]` brings a
+  `trial` pytest fixture. It doubles each medium where it reaches the outside —
+  the `coding` and `shell` Focus, the `decide` Channel — and answers from a
+  script. The doubles stand at the folio's outer edge, so the medium's own body
+  still runs: session threading, `resume` resolution, output-schema validation
+  and exit-code handling are exercised, and a ritual that mis-declares
+  `session=Session.CONTINUE` fails its test. `trial.walk(step, payload)` returns
+  one step's `Transition` and needs no ritual; `trial.cast(ritual, components)`
+  returns the result model. Both own the event loop; `cast_async` / `walk_async`
+  are for a suite already inside one.
+- **Answers match by pattern, and nothing defaults.** Each double takes answers
+  `when=` a glob — the command for `shell`, the prompt for `coding` and `decide`
+  — and falls back to an ordered queue for what no pattern claims: two gates
+  started in one `TaskGroup` arrive in whichever order the scheduler picks. An
+  unscripted call raises `TrialScriptError` naming the call and what the script
+  still held, rather than inventing an `exit_code=0` that sends the ritual down
+  a branch nobody wrote and reports the run as a pass.
+- **A Focus for `shell`.** `ShellCall`, `ShellReply` and `ShellFocusProtocol`
+  beside coding's in the lexicon's pacts, `BashFocus` in the shell folio.
+  `shell()` resolves a Focus **with `BashFocus` as the default**, so an
+  unregistered `shell()` behaves exactly as it did, folios loaded or not.
+- **`FocusSlot`, and `CODING_FOCUS` / `SHELL_FOCUS` in the lexicon** — a medium's
+  name and the protocol a Focus for it must satisfy, in one typed object.
+  `register` refuses a Focus the medium could not call and `resolve` hands back
+  the protocol, so no medium casts out of a registry of `object` any more.
+  `.scope(focus)` installs one for the duration of a block and puts back exactly
+  what was there, an absence included — the registry had `register_focus` and a
+  wholesale `reset_registry` and nothing between them. A scope is context-local,
+  so two of them may overlap and neither sees the other's focus; a registration
+  stays process-wide, which is what a folio means by one.
+- **A `Trial` answers only inside its `with` block.** Outside it nothing is
+  installed and `shell()` falls back to bash, so a test that forgot the block
+  would run its commands for real, record nothing on the double, and pass.
+  `cast` and `walk` raise `TrialError` instead, before and after.
+- **The four rituals in this repo are tested**, happy path and boundaries both;
+  `src/rituals.py` reports 100% — 193 statements no gate had looked at.
+
+### Removed
+
+- **`register_focus`, `resolve_focus` and `expect_focus` are gone from
+  `vekna.lexicon`.** `FocusSlot` replaces all three:
+  `CODING_FOCUS.register(focus)` for `register_focus("coding", focus)`,
+  `.resolve()` for `resolve_focus`, `.expect(hint=...)` for `expect_focus`, and
+  `.scope(focus)` for the register-then-put-back pair a test used to hand-roll.
+  The slot carries the protocol the old `str` key could not, so a Focus of the
+  wrong shape is refused where it is registered rather than at the call site.
 
 ### Changed
 
@@ -60,6 +106,13 @@ and this project adheres to [Semantic Versioning].
   whether *your* rituals file is type-checked is yours to decide, and
   `RitualBoundaryError`, `StepBoundaryError` and `MediumBoundaryError` are what
   cover it when you don't.
+- **`rituals.py` moved to `src/rituals.py`**, named by a `.vekna.toml` at the
+  repo root. `[tool.coverage.run] source` takes directories, not files, so the
+  one file here that uses vekna the way an author does was the one file no
+  coverage gate could see. `SRC_PATHS` drops back to `src`, and every tool the
+  repo runs stops being told about this file twice. The cost: this repo no
+  longer exercises the implicit walk-up daily, which `tests/integration/cli/`
+  covers.
 
 ## [0.3.0] - 2026-07-27
 

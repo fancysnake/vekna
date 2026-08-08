@@ -3,7 +3,8 @@
     "allow": [
       "Skill(glimpse)",
       "WebFetch(domain:eve.dev)",
-      "WebFetch(domain:barnum-circus.github.io)"
+      "WebFetch(domain:barnum-circus.github.io)",
+      "WebFetch(domain:downloads.claude.ai)"
     ]
   }
 }

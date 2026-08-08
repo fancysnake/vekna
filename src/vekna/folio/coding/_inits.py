@@ -1,4 +1,4 @@
-from vekna.lexicon import expect_focus, offer_prompt
+from vekna.lexicon import CODING_FOCUS, offer_prompt
 
 from ._mills import INSTALL_HINT, MEDIUM, one_shot
 
@@ -7,5 +7,5 @@ from ._mills import INSTALL_HINT, MEDIUM, one_shot
 # may not import a folio, so it imports this package by name and calls
 # register() on it.
 def register() -> None:
-    expect_focus(MEDIUM, hint=INSTALL_HINT)
+    CODING_FOCUS.expect(hint=INSTALL_HINT)
     offer_prompt(MEDIUM, one_shot)

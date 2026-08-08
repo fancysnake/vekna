@@ -2,7 +2,14 @@ import asyncio
 import codecs
 from collections.abc import Callable
 
-from vekna.lexicon import emit_delta, medium
+from vekna.lexicon import (
+    SHELL_FOCUS,
+    ShellCall,
+    ShellFocusProtocol,
+    ShellReply,
+    emit_delta,
+    medium,
+)
 
 from ._pacts import ShellResult
 
@@ -78,14 +85,35 @@ async def run_bash(
     return "".join(out), "".join(err), await process.wait()
 
 
-# Lives beside run_bash rather than in a _mills of its own: three lines, no
-# branches, and nothing here is business logic — it is the I/O call plus the
-# shape it returns. A mills/inits pair injecting a run_bash that will never
-# have a second implementation would be ceremony around a wrapper.
+# The Focus bash answers through, and the default every unregistered `shell()`
+# resolves to. It exists so there is a supported way to stand somewhere else —
+# monkeypatching `run_bash` was the only way in before — and it costs the folio
+# one indirection.
+class BashFocus(ShellFocusProtocol):
+    @staticmethod
+    async def run(
+        call: ShellCall, *, on_line: Callable[[str], None] | None
+    ) -> ShellReply:
+        stdout, stderr, exit_code = await run_bash(
+            call.command, cwd=call.cwd, on_line=on_line
+        )
+        return ShellReply(stdout=stdout, stderr=stderr, exit_code=exit_code)
+
+
+# Lives beside run_bash rather than in a _mills of its own: no branches, and
+# nothing here is business logic — it is the I/O call plus the shape it returns.
+# A mills/inits pair injecting a run_bash that will never have a second
+# implementation would be ceremony around a wrapper.
+# `default=BashFocus`, so a cast that loaded no folios still runs bash: the
+# medium is importable on its own and answers on its own.
 @medium
 async def shell(
     command: str, *, cwd: str | None = None, stream: bool = True
 ) -> ShellResult:
-    on_line = emit_delta if stream else None
-    stdout, stderr, exit_code = await run_bash(command, cwd=cwd, on_line=on_line)
-    return ShellResult(stdout=stdout, stderr=stderr, exit_code=exit_code)
+    focus = SHELL_FOCUS.resolve(default=BashFocus)
+    reply = await focus.run(
+        ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
+    )
+    return ShellResult(
+        stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
+    )

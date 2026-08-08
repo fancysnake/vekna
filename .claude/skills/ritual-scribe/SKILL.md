@@ -16,7 +16,7 @@ asking the operator questions — and then the step ends, and a boundary decides
 what happens next. A gate passed or it did not. A budget ran out. A human
 answered. Nothing is left to the agent's discretion at the seam.
 
-Everything below is the shipped surface, read off the source of vekna `0.3.0`.
+Everything below is the shipped surface, read off the source of vekna `0.4.0`.
 What is planned but not yet bound is quarantined at the bottom under **Not yet
 bound** — do not summon it.
 
@@ -26,7 +26,7 @@ bound** — do not summon it.
 
 `rituals.py`, in the current directory or **any parent** — the cast walks up
 until it finds one. Nothing else is discovered implicitly *yet*: a `rituals/`
-package is found the same way from `0.4.0` on, which is the one item under
+package is found the same way from `0.5.0` on, which is the one item under
 **Not yet bound** likely to have landed by the time you read this.
 
 More sources can be named in `.vekna.toml` (project, found by walking up) or
@@ -429,6 +429,100 @@ thing that is red.
 
 ---
 
+## Testing a ritual
+
+`pip install vekna[trial]` and a `trial` fixture arrives — no conftest, no
+plugin line. It doubles each medium where it reaches the outside and answers
+from a script. **The medium's own body still runs**: session threading,
+`resume` resolution, output-schema validation and exit-code handling are
+exercised, not skipped, so a ritual that mis-declares `session=Session.CONTINUE`
+fails its test.
+
+Two entry points. **`walk` runs one step and answers with its `Transition`** —
+no ritual needed, which is what makes a long step testable at all. **`cast`
+runs the whole thing and answers with the result model.**
+
+```python
+def test_measure_reports_covered(trial: Trial) -> None:
+    trial.shell.replies(when="mise run test:py:cov:diff*", exit_code=0)
+
+    transition = trial.walk(measure, Uncovered(budget=3))
+
+    assert transition == done(CoverReport(covered=True, remaining=3))
+    assert trial.shell.commands == ["mise run test:py:cov:diff -- --fail-under 100"]
+```
+
+```python
+def test_merge_ready_repairs_once_then_goes_green(trial: Trial) -> None:
+    trial.shell.replies(when="mise run lint:py", exit_code=1, stdout="E501")
+    trial.shell.replies(when="mise run test:py", exit_code=0, always=True)
+    trial.shell.replies(when="mise run lint:py", exit_code=0)
+    trial.decide.answers(answer=True, when="*hand it to the agent?*")
+    trial.coding.replies("fixed the long line")
+
+    result = trial.cast(merge_ready, MergeReady(bound=2))
+
+    assert result == MergeReport(green=True, remaining=1)
+    assert trial.steps == ["gates", "repair", "gates"]
+    assert trial.coding.calls[0].resume is None
+```
+
+### Scripting the three doubles
+
+| Double | Scripted with | Matched on | Recorded in |
+|---|---|---|---|
+| `trial.shell` | `replies(when=…, exit_code=, stdout=, stderr=)` | the command | `.commands`, `.calls` |
+| `trial.coding` | `replies(text_or_model, when=…, uses=[…], asks=[…])` | the prompt | `.prompts`, `.calls`, `.gated`, `.answered` |
+| `trial.decide` | `answers(answer=…, when=…)` | the prompt | `.prompts`, `.asked` |
+
+Plus `trial.steps`, `trial.deltas`, `trial.events`, `trial.result`.
+
+**`when=` is a glob, and matched answers beat the queue.** Answers with no
+`when=` fall back to arrival order for whatever no pattern claims — and two
+gates in one `TaskGroup` arrive in whatever order the scheduler picks, so key
+concurrent calls on a pattern. Each answer is consumed once unless it says
+`always=True`.
+
+**Nothing defaults.** An unscripted call raises `TrialScriptError` naming the
+call and what the script still held, rather than inventing an `exit_code=0`
+that sends the ritual down a branch nobody wrote.
+
+**A `decide` answer must be one the step offered**, or it raises before the
+ritual sees it — the real channel's contract. `answer=True` is the `yes` a bare
+`decide(...)` reads back as `True`.
+
+**A model reply is serialised, not shortcut**: `trial.coding.replies(
+Judgement(verdict="ship", findings=[]))` for a `coding(..., output=Judgement)`
+call, and the medium still validates it on the way back. A reply that does not
+validate raises `CodingOutputError` — the medium's error, not the double's.
+
+### The two that bite
+
+**`gate_tools` prompts arrive at `trial.decide`, not at `trial.coding`.** The
+medium builds the gate out of the channel, so scripting a tool the agent
+reaches for takes both doubles:
+
+```python
+trial.coding.replies("ran the suite", uses=["Bash"])
+trial.decide.answers(answer=True, when="*allow tool*")
+...
+assert trial.coding.gated == [("Bash", True)]
+```
+
+**A failure inside a `TaskGroup` arrives wrapped.** An unscripted call in a
+step that runs two mediums at once surfaces as an `ExceptionGroup` — Python's
+doing, not the trial's. Assert on `.exceptions[0]`, or `walk` a step holding
+one medium.
+
+`cast` and `walk` own the event loop. Inside a suite that already runs one, use
+`cast_async` / `walk_async`; calling the sync pair from a running loop raises
+saying which to use.
+
+The trial replaces mediums, not step bodies. A step that reaches for
+`subprocess` or `httpx` directly still does exactly that.
+
+---
+
 ## Rules of the craft
 
 Rules earned from vekna's own `rituals.py`. Break them deliberately or not at
@@ -535,6 +629,10 @@ this document, they are right and this document is stale — say so.
 - [ ] Spending an agent's time on a retry is a `decide`, not an assumption.
 - [ ] Prompts are module constants; steps read as decisions.
 - [ ] `vekna rituals show <name>` draws the graph you meant.
+- [ ] Every ritual has a test over its happy path and at least one boundary —
+      budget exhausted, gate red, human declines — written with the `trial`
+      fixture. Untested, the only way to run it is to spend an agent, a shell
+      and a human.
 
 Then `mise run fullcheck`, green.
 
@@ -542,7 +640,7 @@ Then `mise run fullcheck`, green.
 
 ## Not yet bound
 
-Planned, designed, **not in `0.3.0`**. Do not write against any of it.
+Planned, designed, **not on this branch**. Do not write against any of it.
 
 - **`rituals/` as a package** — **landing in `0.4.0`, written on the
   `ritual-modules` branch, not on `main`.** Until it merges, discovery builds
