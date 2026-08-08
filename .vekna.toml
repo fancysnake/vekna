@@ -1,8 +1,8 @@
 # The rituals this project casts on itself. Named here rather than found by
-# walking up: `src/rituals.py` is where the file lives so that every tool the
+# walking up: `src/rituals/` is where the package lives so that every tool the
 # repo runs — mypy, ruff, coverage — picks it up by measuring `src`, and the
-# walk-up only ever looks for a `rituals.py` beside the cwd or above it.
-# `files` resolve relative to this file, so a cast started anywhere in the repo
-# finds the same source.
+# walk-up only ever looks for a `rituals.py` or `rituals/` beside the cwd or
+# above it. `files` resolve relative to this file, so a cast started anywhere
+# in the repo finds the same source.
 [rituals]
-files = ["src/rituals.py"]
+files = ["src/rituals"]

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import AnyUrl
 
-from rituals import (
+from rituals.triage import (
     Fetched,
     Reading,
     Triage,

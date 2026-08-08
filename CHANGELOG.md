@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
+## [0.4.0] - 2026-08-08
+
 ### Added
 
 - **A ritual source may be a package.** `rituals/` is found by walking up from

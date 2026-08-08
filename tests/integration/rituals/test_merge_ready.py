@@ -1,6 +1,6 @@
 import pytest
 
-from rituals import (
+from rituals.merge_ready import (
     Attempt,
     BothRed,
     LintFailure,

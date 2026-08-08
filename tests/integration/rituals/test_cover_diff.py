@@ -1,4 +1,11 @@
-from rituals import CoverDiff, CoverReport, Uncovered, cover_diff, measure, write_tests
+from rituals.cover_diff import (
+    CoverDiff,
+    CoverReport,
+    Uncovered,
+    cover_diff,
+    measure,
+    write_tests,
+)
 from vekna.lexicon import done, goto
 from vekna.trial import Trial
 
@@ -33,7 +40,11 @@ class TestMeasure:
 
         transition = trial.walk(measure, Uncovered(budget=0))
 
-        assert transition == done(CoverReport(covered=False, remaining=0))
+        # The report rides out with the failure: a cast that gave up still says
+        # which lines it gave up on.
+        assert transition == done(
+            CoverReport(covered=False, remaining=0, report=_UNCOVERED)
+        )
 
 
 class TestWriteTests:
@@ -85,5 +96,5 @@ class TestCoverDiffWhole:
 
         result = trial.cast(cover_diff, CoverDiff(bound=1))
 
-        assert result == CoverReport(covered=False, remaining=0)
+        assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
         assert trial.steps == ["measure", "write_tests", "measure"]

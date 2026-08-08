@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rituals import (
+from rituals.review import (
     Diff,
     Finding,
     Judgement,
