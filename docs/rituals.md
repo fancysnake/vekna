@@ -110,3 +110,40 @@ modules = ["mycompany.rites"]
 These are additive: naming the file that would have been found anyway is how
 you are explicit about it, and loading it twice is not an error. Two
 *different* sources claiming one ritual name still is.
+
+## Rituals as an installed package
+
+`modules` names something importable, not something on disk nearby — so a
+ritual library distributes like any other Python package. Build a wheel, put it
+on your index, and every project that installs it gets the same rituals:
+
+```toml
+# .vekna.toml, in each project that wants them
+[rituals]
+modules = ["mycompany.rites"]
+```
+
+```bash
+pip install mycompany-rites
+vekna cast housekeeping --depth 2
+```
+
+The project directory then needs nothing but that `.vekna.toml`. The package is
+swept exactly as a local `rituals/` is — every submodule, all the way down — so
+relative imports inside it resolve and `rituals show` draws the whole graph
+rather than stopping at whatever `__init__.py` happened to re-export.
+
+Two things to know:
+
+- **It installs into the same environment as vekna.** The `vekna` command runs
+  on its own interpreter, and a package your project can import is not
+  automatically one that interpreter can. Installing vekna with `pipx` or `uv
+  tool` means injecting the ritual package into that same environment rather
+  than into the project's.
+- **Every level still needs an `__init__.py`.** A namespace package has no
+  directory for the sweep to walk, so its submodules are invisible — the same
+  rule as a local `rituals/`, with the same silence if you skip it.
+
+This is how a team shares rituals without copying files: one package, versioned
+and released like anything else, and a two-line config in each repository that
+uses it.
