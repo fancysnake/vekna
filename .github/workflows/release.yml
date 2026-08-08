@@ -4,9 +4,15 @@ name: Release
 # The tag is the trigger, and `release:build` is the same task run before
 # tagging — so what CI publishes has already been built and import-checked
 # locally by the person who tagged it.
+#
+# `workflow_dispatch` runs everything up to TestPyPI and stops. A version on
+# PyPI can never be replaced, so the rehearsal exists to find whatever only an
+# index can reject — a classifier it does not know, a long description it will
+# not render — while the number is still spendable.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -29,7 +35,10 @@ jobs:
 
       # Refuses to publish a wheel whose version is not the tag. Getting these
       # out of step means a release nobody can reproduce from the repository.
+      # A rehearsal has no tag to disagree with, so it skips this and nothing
+      # else.
       - name: Check the tag matches the package version
+        if: github.ref_type == 'tag'
         run: |
           tagged="${GITHUB_REF_NAME#v}"
           declared=$(mise exec -- python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
@@ -45,8 +54,31 @@ jobs:
           name: dist
           path: dist/
 
-  publish:
+  # The dress rehearsal. TestPyPI applies the same metadata rules as PyPI and
+  # forgets the package on its own schedule, so a rejection lands here instead
+  # of on a version number that can never be reused.
+  testpypi:
     needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # A retagged release, or a second rehearsal of the same version,
+          # would otherwise fail on an upload TestPyPI already has. There is
+          # nothing to learn from that failure.
+          skip-existing: true
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: testpypi
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

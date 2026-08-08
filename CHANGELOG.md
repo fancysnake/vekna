@@ -23,7 +23,10 @@ which links back to the version here that carried each shipped feature.
   happen somewhere else. Publishing is a `v*` tag: CI refuses to publish a wheel
   whose version is not the tag, uploads through PyPI's trusted publishing with
   no token stored anywhere, then installs what the index actually serves and
-  imports it before writing the GitHub release.
+  imports it before writing the GitHub release. Every tag rehearses on TestPyPI
+  first, and the workflow can be run by hand to rehearse without tagging at all
+  — a version on PyPI can never be replaced, so whatever only an index can
+  reject is worth finding while the number is still spendable.
 - **The package declares itself.** An SPDX licence expression, the project URLs,
   keywords and classifiers — a PyPI page that says what vekna is rather than
   showing `BSD-3-Clause license` as a literal string in the licence field.
