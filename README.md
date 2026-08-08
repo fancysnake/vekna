@@ -88,7 +88,7 @@ result: {"outcome":"green"}
 ## Architecture
 
 [GLIMPSE](https://glimpse.fancysnake.dev/) layering, enforced by
-`import-linter`. See
+[`import-linter`](https://import-linter.readthedocs.io/). See
 [`docs/architecture.md`](docs/architecture.md) and
 [`docs/reborn/`](docs/reborn/) for the release-by-release plan.
 

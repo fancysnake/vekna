@@ -1,9 +1,11 @@
 # Architecture
 
-Vekna uses the [**GLIMPSE**](https://glimpse.fancysnake.dev/) layering model. Import boundaries are enforced by
-`import-linter` (contracts in `pyproject.toml`) — 31 of them, covering both the
-boundaries *between* packages and the layering *inside* each one. Every module
-sits in a layer and every layer has a contract; nothing is exempt by accident.
+Vekna uses the [**GLIMPSE**](https://glimpse.fancysnake.dev/) layering model.
+Import boundaries are enforced by
+[`import-linter`](https://import-linter.readthedocs.io/) (contracts in
+`pyproject.toml`) — 31 of them, covering both the boundaries *between* packages
+and the layering *inside* each one. Every module sits in a layer and every
+layer has a contract; nothing is exempt by accident.
 
 ## Packages
 
