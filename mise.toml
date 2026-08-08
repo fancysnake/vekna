@@ -38,12 +38,43 @@ run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
 description = "Check Markdown files"
 run = "markdownlint-cli2"
 
+[tasks."lint:deptry"]
+description = "Find declared-but-unused and used-but-undeclared dependencies"
+run = "deptry src tests"
+
+[tasks."lint:audit"]
+description = "Check installed dependencies against known vulnerabilities"
+run = "pip-audit"
+
+# `lint:py` comes from the shared config and cannot be appended to from here, so
+# the two audits hang off `fullcheck` instead — which is the gate that matters.
 [tasks.fullcheck]
 run = [
     "poetry install",
     { task = "format:py" },
     { task = "lint:py" },
+    { task = "lint:deptry" },
+    { task = "lint:audit" },
     { task = "lint:markdown" },
     { task = "test:py:cov:diff" },
     { task = "lint:tingle" },
 ]
+
+# What the tag does, minus the publish: the wheel is built and then installed
+# somewhere that has never seen this project, because `poetry install` leaves a
+# venv where everything imports whether the wheel carries it or not.
+[tasks."release:build"]
+description = "Build the wheel and sdist, then import-check the wheel in a bare venv"
+run = """
+set -euo pipefail
+rm -rf dist
+poetry build
+bare=$(mktemp -d)
+trap 'rm -rf "$bare"' EXIT
+python -m venv "$bare"
+"$bare/bin/pip" install --quiet --disable-pip-version-check dist/*.whl
+"$bare/bin/python" -c 'import vekna.lexicon, vekna.trial, vekna.wire'
+"$bare/bin/vekna" --help > /dev/null
+python -c 'import sys, zipfile; assert "vekna/py.typed" in zipfile.ZipFile(sys.argv[1]).namelist(), "py.typed missing from the wheel"' dist/*.whl
+echo "ok: $(ls dist/*.whl)"
+"""

@@ -10,6 +10,35 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+### Added
+
+- **`pip install vekna`.** The first release published to PyPI, which is what
+  every version number this project has spent so far was for. `vekna[trial]`
+  brings the pytest fixture. Building it is `mise run release:build`, which
+  builds the wheel and the sdist and then installs the wheel into a venv that
+  has never seen this project — `poetry install` leaves an environment where
+  everything imports whether the wheel carries it or not, so the check has to
+  happen somewhere else. Publishing is a `v*` tag: CI refuses to publish a wheel
+  whose version is not the tag, uploads through PyPI's trusted publishing with
+  no token stored anywhere, then installs what the index actually serves and
+  imports it before writing the GitHub release.
+- **The package declares itself.** An SPDX licence expression, the project URLs,
+  keywords and classifiers — a PyPI page that says what vekna is rather than
+  showing `BSD-3-Clause license` as a literal string in the licence field.
+- **`py.typed`.** The codebase is `mypy --strict` and none of that reached
+  anyone who installed it. `vekna` gains an `__init__.py` at the same time: it
+  was an implicit namespace package, which is the one shape where a PEP 561
+  marker is not reliably honoured.
+- **`lint:deptry` and `lint:audit`** in `fullcheck`. Both tools were dev
+  dependencies wired to nothing.
+
+### Changed
+
+- **`setuptools` is a declared dev dependency**, pinned past a known advisory.
+  Nothing imports it and it is not in the wheel's dependency set — Python 3.11's
+  `venv` seeds it, and a fresh environment would otherwise reintroduce the
+  vulnerable version every time.
+
 ## [0.4.0] - 2026-08-08
 
 ### Added

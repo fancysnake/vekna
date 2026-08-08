@@ -11,8 +11,11 @@ permissively *within* a step; determinism lives at the step boundaries.
 ## Install
 
 ```bash
-pip install .
+pip install vekna
 ```
+
+Testing your rituals needs the `trial` extra: `pip install vekna[trial]`.
+Documentation is at [vekna.fancysnake.dev](https://vekna.fancysnake.dev).
 
 ## A ritual
 
