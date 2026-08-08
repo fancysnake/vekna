@@ -3,6 +3,7 @@ import contextlib
 import importlib
 import sys
 from pathlib import Path
+from typing import NamedTuple
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -58,11 +59,25 @@ def _is_package(directory: Path) -> bool:
     return (directory / "__init__.py").is_file()
 
 
+class _Discovery(NamedTuple):
+    source: Path | None
+    # Walking past a `rituals/` that is not a package is right — one may sit
+    # above a project that has its own source, and stopping there would shadow
+    # it. Reporting "no rituals found (create a rituals.py or a rituals/
+    # package)" while standing next to a directory called `rituals` is not: the
+    # answer is one empty file, and nothing in that sentence says so. Only the
+    # walk that came back empty has the right to say it, so it is recorded here
+    # rather than re-derived by a second walk that could blame a directory a
+    # loaded source has already answered for.
+    near_miss: Path | None
+
+
 # Not a precedence rule. Both spellings name the ritual source and neither says
 # it is the one meant, so a half-finished move into rituals/ would keep casting
 # the file it was moved out of — silently, which is the shape of bug this
 # feature exists to remove.
-def _find_rituals_source(start: Path) -> Path | None:
+def _find_rituals_source(start: Path) -> _Discovery:
+    near_miss: Path | None = None
     for directory in (start, *start.parents):
         file = directory / _RITUALS_FILE
         package = directory / _RITUALS_PACKAGE
@@ -74,26 +89,18 @@ def _find_rituals_source(start: Path) -> Path | None:
             )
             raise RitualDefinitionError(msg)
         if found_file:
-            return file
+            return _Discovery(file, None)
         if found_package:
-            return package
-    return None
+            return _Discovery(package, None)
+        if near_miss is None and package.is_dir():
+            near_miss = package
+    return _Discovery(None, near_miss)
 
 
-# Walking past a `rituals/` that is not a package is right — one may sit above a
-# project that has its own source, and stopping there would shadow it. Reporting
-# "no rituals found (create a rituals.py or a rituals/ package)" while standing
-# next to a directory called `rituals` is not: the answer is one empty file, and
-# nothing in that sentence says so.
-def _no_rituals(cwd: Path) -> str:
-    for directory in (cwd, *cwd.parents):
-        package = directory / _RITUALS_PACKAGE
-        if package.is_dir() and not _is_package(package):
-            return (
-                f"{_NO_RITUALS}\n"
-                f"({package} is not one — every level needs an __init__.py)"
-            )
-    return _NO_RITUALS
+def _no_rituals(near_miss: Path | None) -> str:
+    if near_miss is None:
+        return _NO_RITUALS
+    return f"{_NO_RITUALS}\n({near_miss} is not one — every level needs an __init__.py)"
 
 
 def _config_files(cwd: Path) -> list[Path]:
@@ -123,29 +130,31 @@ def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
             compendium.register_step(the_step, origin=module.origin)
 
 
-def _build_compendium(cwd: Path) -> Compendium:
+class _Library(NamedTuple):
+    compendium: Compendium
+    # What an empty compendium should say. The walk that discovered nothing is
+    # the only place that knows whether there was a near miss, and it has been
+    # left behind by the time anyone asks.
+    when_empty: str
+
+
+def _build_library(cwd: Path) -> _Library:
     compendium = Compendium()
     seen_files: set[Path] = set()
     seen_modules: set[str] = set()
 
-    def load_source(path: Path, *, named_by: Path | None = None) -> None:
+    def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
         # discovered source all collapse to one entry — a package reached twice
         # deduplicates here exactly as a file does.
         if (resolved := path.resolve()) in seen_files:
             return
-        # The discovered source was found by looking, so it is there by
-        # construction; a configured one is a line somebody typed, and the
-        # bare `[Errno 2]` the loader would raise names the path it tried
-        # without naming the file that asked for it.
-        if named_by is not None and not resolved.exists():
-            msg = f"{named_by}: [rituals] names {path}, which does not exist"
-            raise RitualDefinitionError(msg)
         seen_files.add(resolved)
         _register(compendium=compendium, found=load_rituals_source(resolved))
 
-    if (implicit := _find_rituals_source(cwd)) is not None:
-        load_source(implicit)
+    discovered = _find_rituals_source(cwd)
+    if discovered.source is not None:
+        load_source(discovered.source)
     for config in _config_files(cwd):
         rituals = read_config(config).rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
@@ -153,14 +162,21 @@ def _build_compendium(cwd: Path) -> Compendium:
         # directory — resolving against the cwd would mean a different file
         # each time.
         for relative in rituals.files:
-            load_source(config.parent / relative, named_by=config)
+            # The discovered source was found by looking, so it is there by
+            # construction; a configured one is a line somebody typed, and the
+            # bare `[Errno 2]` the loader would raise names the path it tried
+            # without naming the file that asked for it.
+            if not (named := config.parent / relative).exists():
+                msg = f"{config}: [rituals] names {named}, which does not exist"
+                raise RitualDefinitionError(msg)
+            load_source(named)
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
                 _register(
                     compendium=compendium, found=load_rituals_module(module, root=cwd)
                 )
-    return compendium
+    return _Library(compendium, _no_rituals(discovered.near_miss))
 
 
 def _component_options(ritual: Ritual) -> str:
@@ -186,12 +202,13 @@ def _help_text(cwd: Path) -> str:
         "",
     ]
     try:
-        compendium = _build_compendium(cwd)
+        library = _build_library(cwd)
     except _LOAD_ERRORS as error:
         lines.append(f"(could not load rituals: {error})")
         return "\n".join(lines) + "\n"
+    compendium = library.compendium
     if not (names := compendium.names()):
-        lines.append(_no_rituals(cwd))
+        lines.append(library.when_empty)
         return "\n".join(lines) + "\n"
     lines.append("available rituals:")
     lines += [
@@ -200,9 +217,10 @@ def _help_text(cwd: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _list_text(compendium: Compendium, *, cwd: Path) -> str:
+def _list_text(library: _Library) -> str:
+    compendium = library.compendium
     if not (names := compendium.names()):
-        return f"{_no_rituals(cwd)}\n"
+        return f"{library.when_empty}\n"
     return "".join(
         f"{name}{_component_options(compendium.ritual(name))}\n" for name in names
     )
@@ -243,25 +261,25 @@ def _show(compendium: Compendium, name: str) -> int:
     return 0
 
 
-def _compendium_or_usage() -> Compendium | None:
+def _library_or_usage() -> _Library | None:
     try:
-        return _build_compendium(Path.cwd())
+        return _build_library(Path.cwd())
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return None
 
 
 def rituals_list() -> int:
-    if (compendium := _compendium_or_usage()) is None:
+    if (library := _library_or_usage()) is None:
         return 2
-    sys.stdout.write(_list_text(compendium, cwd=Path.cwd()))
+    sys.stdout.write(_list_text(library))
     return 0
 
 
 def rituals_show(name: str) -> int:
-    if (compendium := _compendium_or_usage()) is None:
+    if (library := _library_or_usage()) is None:
         return 2
-    return _show(compendium, name)
+    return _show(library.compendium, name)
 
 
 def _prompt_ritual(prompt: str) -> Ritual:
@@ -314,7 +332,7 @@ def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
     if (prompt := _prompt_text(argv)) is not None:
         return _prompt_ritual(prompt), NoComponents()
     name, *flags = argv
-    the_ritual = _build_compendium(Path.cwd()).ritual(name)
+    the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
     return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))
 
 

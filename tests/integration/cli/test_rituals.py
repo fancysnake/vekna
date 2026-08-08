@@ -562,6 +562,23 @@ class TestRitualsUsage:
         assert str(tmp_path / "rituals") in out
         assert "__init__.py" in out
 
+    # The other half of that hint: a source did load, so the empty library is
+    # about what it declares and not about a directory nobody asked to be one.
+    @staticmethod
+    def test_a_source_that_loaded_is_not_blamed_on_a_rituals_directory(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text("")
+        (tmp_path / "rituals").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert not exit_code
+        assert "no rituals found" in out
+        assert "__init__.py" not in out
+
     @staticmethod
     def test_a_configured_file_that_does_not_exist_names_the_config(
         tmp_path, monkeypatch, capsys

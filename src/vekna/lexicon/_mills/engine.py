@@ -156,7 +156,7 @@ class Compendium:
             # A typo and an empty library are the same message otherwise, and
             # they want opposite things done about them.
             if known := self.names():
-                msg = f"{msg} — this source declares {', '.join(known)}"
+                msg = f"{msg} — known rituals: {', '.join(known)}"
             raise RitualDefinitionError(msg)
         return found
 
