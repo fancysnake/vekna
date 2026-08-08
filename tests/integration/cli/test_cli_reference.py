@@ -39,6 +39,8 @@ def _invocations(text: str) -> list[list[str]]:
 # nothing, and the tokens look alike. A group is asked what it has; anything
 # that is not a group has arguments from here on.
 def _walk(tokens: list[str], root: click.Group) -> tuple[str, bool]:
+    if tokens[0] != "vekna":
+        return " ".join(tokens), False
     command: click.Command = root
     path = tokens[0]
     for token in tokens[1:]:
@@ -81,3 +83,11 @@ class TestCliReference:
         _, invented = _documented("```bash\nvekna rituals delete\n```\n")
 
         assert invented == {"vekna rituals delete"}
+
+    # The page is scanned for lines starting with `vekna`, which `veknabad`
+    # does — the root has to be the root and not merely begin like it.
+    @staticmethod
+    def test_a_root_that_is_not_the_root_is_caught():
+        _, invented = _documented("```bash\nveknabad cast\n```\n")
+
+        assert invented == {"veknabad cast"}
