@@ -93,8 +93,10 @@ someone who has just run `pip install vekna`: [`index.md`](index.md),
 [`architecture.md`](architecture.md), which is published as it stands for
 anyone sending a patch.
 
-**The plan** — written for the author, and built by nothing:
+**The plan and the runbook** — written for the author, and built by nothing:
 
+- [`releasing.md`](releasing.md) — the manual half of a release: the accounts,
+  the DNS, and the order to do a tag in
 - [`reborn/`](reborn/README.md) — the common knowledge every Reborn feature doc
   assumes, and the notes on how its numbering came to be what it is
 - [`eye/`](eye/README.md) and [`hand/`](hand/README.md) — the parked tracks

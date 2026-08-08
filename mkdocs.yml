@@ -12,6 +12,7 @@ copyright: BSD-3-Clause
 # the same thing and cost a second place to look.
 exclude_docs: |
   README.md
+  releasing.md
   reborn/
   eye/
   hand/
