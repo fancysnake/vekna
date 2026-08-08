@@ -12,8 +12,8 @@ Documentation is at [vekna.fancysnake.dev](https://vekna.fancysnake.dev).
 pip install vekna
 ```
 
-Python 3.11+. Testing your rituals needs the `trial` extra: `pip install
-vekna[trial]`.
+Python 3.11+. Testing your rituals needs the `trial` extra:
+`pip install 'vekna[trial]'` — quoted, because zsh globs the brackets.
 
 ## A ritual
 

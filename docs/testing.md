@@ -5,7 +5,7 @@ A ritual is a program, and it deserves the same test any other program gets.
 costs no agent call and no wall time.
 
 ```bash
-pip install vekna[trial]
+pip install 'vekna[trial]'
 ```
 
 That brings a `trial` pytest fixture.

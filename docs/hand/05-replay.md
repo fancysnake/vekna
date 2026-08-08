@@ -10,8 +10,13 @@ thing the user writes and keeps — and they are the least verified thing in the
 system: edit a step, and the only way to find out what you broke is to spend an
 agent run finding out.
 
-From `0.7.0` the journal holds every event of every cast. A recording is a
-fixture. This turns the one into the other.
+From `0.7.0` the daemon's journal holds every event of every cast it ran. A
+recording is a fixture, and this turns the one into the other — so what is
+replayable is what the daemon saw. A standalone cast keeps its journal in
+memory and takes it to the grave
+([`../reborn/00-common.md`](../reborn/00-common.md)); giving those a recording
+worth replaying is a separate piece of work, not something this feature
+assumes.
 
 ## What ships
 

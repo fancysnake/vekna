@@ -34,7 +34,9 @@ Small, and stated:
 - The `coding` medium's tool gate. `CodingOpts(gate_tools=[...])` asks you
   before the agent runs a named tool, and `permission_mode="dontAsk"` with an
   `allowed_tools` list denies everything outside it without stopping to ask.
-  That is how you get a genuinely read-only agent.
+  That is how you get a genuinely read-only agent — the list doing the work,
+  not the mode: `dontAsk` denies what is not on it and grants what is, so one
+  write-capable tool in there is a write-capable agent.
 - A `decide` never defaults and never times out. Nothing in a cast answers a
   question on your behalf.
 - Step budgets. `max_steps` bounds the trampoline, so a ritual that loops
