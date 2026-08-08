@@ -158,3 +158,9 @@ The word is deliberate and narrow. A **folio** ships mediums and their backends
 (`vekna.folio.shell`); a **tome** ships rituals. A **grimoire** is neither — it
 is the event log of one cast, which is a thing that happens rather than a thing
 you install.
+
+It is a word for prose, though, and not a config key. `modules` resolves the
+cwd as well as the environment, so `mycompany.rites` loads whether it arrived
+from a wheel or sits in your own `src/` — and nothing at the config line tells
+those apart. Naming the key `tomes` would claim a distinction the loader does
+not make. It takes a Python module path, so it says `modules`.
