@@ -1,3 +1,6 @@
+import asyncio
+from dataclasses import replace
+
 import pytest
 from pydantic import BaseModel
 
@@ -24,6 +27,17 @@ def beta(components: State) -> Transition:
     return goto(noop, State(x=components.x))
 
 
+@ritual("alpha")
+async def same_name_as_alpha(components: State) -> Transition:
+    await asyncio.sleep(0)
+    return done(State(x=components.x))
+
+
+# What two submodules each declaring a step called `noop` hand the sweep: the
+# same name on a different object.
+same_name_as_noop = replace(noop, source="async def noop(): ...")
+
+
 class TestCompendium:
     @staticmethod
     def test_register_and_lookup():
@@ -35,12 +49,36 @@ class TestCompendium:
         assert compendium.names() == ["alpha", "beta"]
 
     @staticmethod
-    def test_duplicate_registration_raises():
+    def test_two_rituals_of_one_name_collide_naming_both_sources():
+        compendium = Compendium()
+        compendium.register(alpha, origin="rituals.first")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register(same_name_as_alpha, origin="rituals.second")
+
+        assert "rituals.first" in str(raised.value)
+        assert "rituals.second" in str(raised.value)
+
+    # A source is what a collision names, not what makes it one.
+    @staticmethod
+    def test_two_rituals_of_one_name_collide_without_a_source():
         compendium = Compendium()
         compendium.register(alpha)
 
-        with pytest.raises(RitualDefinitionError):
-            compendium.register(alpha)
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register(same_name_as_alpha)
+
+        assert "'alpha' is already registered" in str(raised.value)
+
+    # A submodule that reaches a sibling's ritual imports it, so the sweep of a
+    # package hands the same object over once per module that names it.
+    @staticmethod
+    def test_the_same_ritual_reached_twice_registers_once():
+        compendium = Compendium()
+        compendium.register(alpha, origin="rituals.first")
+        compendium.register(alpha, origin="rituals.second")
+
+        assert compendium.names() == ["alpha"]
 
     @staticmethod
     def test_missing_ritual_raises():
@@ -59,3 +97,25 @@ class TestCompendium:
     @staticmethod
     def test_unregistered_step_is_none():
         assert Compendium().step("noop") is None
+
+    # `measure` is a natural name in two rituals, and the loser used to vanish:
+    # `rituals show` would then draw the other ritual's step under this one's
+    # name, which is worse than refusing to draw anything.
+    @staticmethod
+    def test_two_steps_of_one_name_collide_naming_both_sources():
+        compendium = Compendium()
+        compendium.register_step(noop, origin="rituals.first")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.register_step(same_name_as_noop, origin="rituals.second")
+
+        assert "rituals.first" in str(raised.value)
+        assert "rituals.second" in str(raised.value)
+
+    @staticmethod
+    def test_the_same_step_reached_twice_registers_once():
+        compendium = Compendium()
+        compendium.register_step(noop, origin="rituals.first")
+        compendium.register_step(noop, origin="rituals.second")
+
+        assert compendium.step("noop") is noop

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from ._links.loader import load_rituals_file, load_rituals_module, read_config
+from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
@@ -27,7 +27,11 @@ _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
 )
-_NO_RITUALS = "no rituals found (create a rituals.py in this directory)"
+_NO_RITUALS = (
+    "no rituals found (create a rituals.py or a rituals/ package in this directory)"
+)
+_RITUALS_FILE = "rituals.py"
+_RITUALS_PACKAGE = "rituals"
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
@@ -47,11 +51,32 @@ def _load_folios() -> None:
             importlib.import_module(name).register()
 
 
-def _find_rituals_file(start: Path) -> Path | None:
+# A directory counts only with an `__init__.py`, at every level: a `rituals/`
+# holding anything else would otherwise shadow a parent's real rituals.py and
+# offer nothing in its place.
+def _is_package(directory: Path) -> bool:
+    return (directory / "__init__.py").is_file()
+
+
+# Not a precedence rule. Both spellings name the ritual source and neither says
+# it is the one meant, so a half-finished move into rituals/ would keep casting
+# the file it was moved out of — silently, which is the shape of bug this
+# feature exists to remove.
+def _find_rituals_source(start: Path) -> Path | None:
     for directory in (start, *start.parents):
-        candidate = directory / "rituals.py"
-        if candidate.is_file():
-            return candidate
+        file = directory / _RITUALS_FILE
+        package = directory / _RITUALS_PACKAGE
+        found_file, found_package = file.is_file(), _is_package(package)
+        if found_file and found_package:
+            msg = (
+                f"{file} and {package} both name the ritual source here"
+                " — delete or rename one"
+            )
+            raise RitualDefinitionError(msg)
+        if found_file:
+            return file
+        if found_package:
+            return package
     return None
 
 
@@ -68,17 +93,18 @@ def _config_files(cwd: Path) -> list[Path]:
     return found
 
 
-# `files` is additive, not a replacement for the rituals.py found by walking up:
+# `files` is additive, not a replacement for the source found by walking up:
 # naming that same file is how an author is explicit about it, so a source
 # already loaded is skipped rather than colliding with itself. Two *different*
 # sources claiming one ritual name is still an error.
 # The loader reaches the filesystem and so may not touch the compendium in
 # _mills: it hands back what it found, and binding the two is this layer's job.
-def _register(*, compendium: Compendium, found: RitualSource, source: str) -> None:
-    for the_ritual in found.rituals:
-        compendium.register(the_ritual, source=source)
-    for the_step in found.steps:
-        compendium.register_step(the_step)
+def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
+    for module in found:
+        for the_ritual in module.rituals:
+            compendium.register(the_ritual, origin=module.origin)
+        for the_step in module.steps:
+            compendium.register_step(the_step, origin=module.origin)
 
 
 def _build_compendium(cwd: Path) -> Compendium:
@@ -86,19 +112,16 @@ def _build_compendium(cwd: Path) -> Compendium:
     seen_files: set[Path] = set()
     seen_modules: set[str] = set()
 
-    def load_file(path: Path) -> None:
+    def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
-        # discovered file all collapse to one entry.
+        # discovered source all collapse to one entry — a package reached twice
+        # deduplicates here exactly as a file does.
         if (resolved := path.resolve()) not in seen_files:
             seen_files.add(resolved)
-            _register(
-                compendium=compendium,
-                found=load_rituals_file(resolved),
-                source=str(resolved),
-            )
+            _register(compendium=compendium, found=load_rituals_source(resolved))
 
-    if (implicit := _find_rituals_file(cwd)) is not None:
-        load_file(implicit)
+    if (implicit := _find_rituals_source(cwd)) is not None:
+        load_source(implicit)
     for config in _config_files(cwd):
         rituals = read_config(config).rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
@@ -106,14 +129,12 @@ def _build_compendium(cwd: Path) -> Compendium:
         # directory — resolving against the cwd would mean a different file
         # each time.
         for relative in rituals.files:
-            load_file(config.parent / relative)
+            load_source(config.parent / relative)
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
                 _register(
-                    compendium=compendium,
-                    found=load_rituals_module(module),
-                    source=f"module {module}",
+                    compendium=compendium, found=load_rituals_module(module, root=cwd)
                 )
     return compendium
 
@@ -130,11 +151,14 @@ def _help_text(cwd: Path) -> str:
     lines = [
         _USAGE.rstrip(),
         "",
-        "Run a ritual defined in rituals.py (or configured via .vekna.toml).",
+        (
+            "Run a ritual defined in rituals.py or a rituals/ package"
+            " (or configured via .vekna.toml)."
+        ),
         "Each ritual's component fields are passed as --options.",
         "",
         '--prompt/-p "<text>" casts a one-step ritual on the coding medium',
-        "instead, with no rituals.py required.",
+        "instead, with no ritual source required.",
         "",
     ]
     try:

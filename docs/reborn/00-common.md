@@ -282,7 +282,7 @@ payloads are separate **defined value types** (plain Pydantic models) validated
 at each step boundary — Components are specifically the ritual's external,
 CLI-facing interface, and both boundaries reject a value of the wrong model.
 
-(Until 0.4.0 `@ritual` reflected loose parameters into a model via
+(Until 0.3.0 `@ritual` reflected loose parameters into a model via
 `create_model`. A declared model is the same interface with the synthesis
 removed: defaults, validators and `Field(description=...)` are now the
 author's to write.)

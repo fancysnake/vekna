@@ -27,9 +27,11 @@ and casts on command, from a terminal or from Discord.
   early: the version is what orders it.
 - `04` — `folio/process`, **moved to Hand** as
   [`../hand/06-process.md`](../hand/06-process.md): owning a process is
-  cancellation plus bounds, and both of those are Hand's already. The slot keeps
-  its number rather than closing up, so the numbering below still means what it
-  did. `coding`'s session declaration, which was filed here as the other half of
+  cancellation plus bounds, and both of those are Hand's already. The doc slot
+  keeps its number rather than closing up, so the numbering below still means
+  what it did; the *version* it vacated went to
+  [10-ritual-modules.md](10-ritual-modules.md), which was built first.
+  `coding`'s session declaration, which was filed here as the other half of
   `0.4.0`, shipped in `0.3.0` instead — see
   [03-coding-folios.md](03-coding-folios.md).
 - [05-locks.md](05-locks.md) — `0.5.0` locks API, `warn` default (no
@@ -42,10 +44,10 @@ and casts on command, from a terminal or from Discord.
   library, clean audits.
 - [09-site.md](09-site.md) — `1.0.0` `vekna.dev`: landing page and user
   documentation, Astro in `www/`, shipped with the tag, not after it.
-- [10-ritual-modules.md](10-ritual-modules.md) — `0.5.0` a ritual source may be
+- [10-ritual-modules.md](10-ritual-modules.md) — `0.4.0` a ritual source may be
   a package the author splits as they like; recursive submodule sweep, empty
-  `__init__.py`. Numbered after 09 because the slots below it are spoken for;
-  the version is what orders it.
+  `__init__.py`. Numbered after 09 because the doc slots below it are spoken
+  for; the version is what orders it, and it took the one `04` vacated.
 
 ## Undecided
 
