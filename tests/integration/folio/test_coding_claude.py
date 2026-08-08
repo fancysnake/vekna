@@ -6,6 +6,7 @@ import types
 from dataclasses import dataclass
 
 import pytest
+from claude_agent_sdk import ClaudeSDKError, CLINotFoundError
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
 from vekna.lexicon._inits import main
@@ -208,6 +209,36 @@ def _sdk_stub(
     stub.create_sdk_mcp_server = create_sdk_mcp_server
     stub.tool = tool
     stub.query = query
+    # The real classes, not stand-ins: the folio catches these by identity, and
+    # a stub hierarchy of its own would let a broken `except` pass here.
+    stub.ClaudeSDKError = ClaudeSDKError
+    stub.CLINotFoundError = CLINotFoundError
+    return stub
+
+
+# The SDK reaches its subprocess on the first `anext`, not on the call, so a
+# failure to reach it at all has to surface from the iteration. An iterator
+# spelled out beats an `async def` that raises before its `yield`: that shape
+# needs an unreachable statement to stay a generator, and the pragma to go with
+# it.
+class _FailingStream:
+    def __init__(self, error):
+        self._error = error
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise self._error
+
+
+def _sdk_stub_failing_with(error):
+    stub = _sdk_stub({})
+
+    def query(**_kwargs):
+        return _FailingStream(error)
+
+    stub.query = query
     return stub
 
 
@@ -231,6 +262,45 @@ def _isolated():
     yield
     reset_registry()
     _purge_coding_claude()
+
+
+# Everything the SDK can raise arrives from someone else's library, mid-stream,
+# with a traceback that names neither the rite nor the ritual. A cast that
+# cannot reach its agent has failed; it has not crashed.
+class TestAgentUnreachable:
+    @staticmethod
+    def test_a_missing_claude_cli_says_so_and_fails_the_cast(
+        tmp_path, monkeypatch, capsys
+    ):
+        stub = _sdk_stub_failing_with(CLINotFoundError("Claude Code not found"))
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        # The one failure a fresh `pip install vekna` hits first: the CLI is a
+        # separate install, and nothing in the SDK's message says that.
+        assert "Claude Code CLI" in err
+        assert "docs.claude.com" in err
+
+    @staticmethod
+    def test_an_sdk_failure_mid_stream_ends_the_cast_with_its_name(
+        tmp_path, monkeypatch, capsys
+    ):
+        stub = _sdk_stub_failing_with(ClaudeSDKError("the transport went away"))
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        assert "cast failed: the agent failed" in err
+        assert "ClaudeSDKError: the transport went away" in err
 
 
 class TestCastWithClaudeFocus:

@@ -401,8 +401,12 @@ class TestRitualPackages:
 
         exit_code = rituals_list()
 
+        err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
-        assert "a_module_that_does_not_exist" in capsys.readouterr().err
+        assert "a_module_that_does_not_exist" in err
+        # Which submodule, not just which import: a package sweep can be twenty
+        # files deep, and the interpreter's message names none of them.
+        assert "rituals.broken failed to import" in err
 
 
 @pytest.mark.usefixtures("_home")
@@ -524,8 +528,10 @@ class TestRitualsUsage:
 
         exit_code = rituals_list()
 
+        err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
-        assert "a_module_that_does_not_exist" in capsys.readouterr().err
+        assert "a_module_that_does_not_exist" in err
+        assert f"{tmp_path / 'rituals.py'} failed to import" in err
 
     @staticmethod
     def test_showing_a_ritual_that_cannot_be_loaded_is_a_usage_error(
@@ -538,3 +544,48 @@ class TestRitualsUsage:
 
         assert exit_code == _USAGE_EXIT
         assert "a_module_that_does_not_exist" in capsys.readouterr().err
+
+    # "no rituals found (create a rituals.py or a rituals/ package)" printed
+    # next to a directory called `rituals` sends the reader to write the file
+    # they have already written. The missing piece is one empty `__init__.py`.
+    @staticmethod
+    def test_a_rituals_directory_that_is_not_a_package_says_what_is_missing(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(tmp_path / "rituals", {"steps.py": _RITUALS})
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert not exit_code
+        assert str(tmp_path / "rituals") in out
+        assert "__init__.py" in out
+
+    @staticmethod
+    def test_a_configured_file_that_does_not_exist_names_the_config(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = ["nope/gone.py"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        # The bare OSError names the path it tried and not the line that asked
+        # for it, which is the half the reader has to go and find.
+        assert str(tmp_path / ".vekna.toml") in err
+        assert "nope/gone.py" in err
+
+    @staticmethod
+    def test_an_unknown_ritual_name_lists_the_known_ones(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("cuontdown")
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "no ritual named 'cuontdown'" in err
+        assert "countdown, ping" in err

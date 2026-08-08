@@ -80,6 +80,22 @@ def _find_rituals_source(start: Path) -> Path | None:
     return None
 
 
+# Walking past a `rituals/` that is not a package is right — one may sit above a
+# project that has its own source, and stopping there would shadow it. Reporting
+# "no rituals found (create a rituals.py or a rituals/ package)" while standing
+# next to a directory called `rituals` is not: the answer is one empty file, and
+# nothing in that sentence says so.
+def _no_rituals(cwd: Path) -> str:
+    for directory in (cwd, *cwd.parents):
+        package = directory / _RITUALS_PACKAGE
+        if package.is_dir() and not _is_package(package):
+            return (
+                f"{_NO_RITUALS}\n"
+                f"({package} is not one — every level needs an __init__.py)"
+            )
+    return _NO_RITUALS
+
+
 def _config_files(cwd: Path) -> list[Path]:
     found: list[Path] = []
     global_config = Path.home() / ".config" / "vekna" / "config.toml"
@@ -112,13 +128,21 @@ def _build_compendium(cwd: Path) -> Compendium:
     seen_files: set[Path] = set()
     seen_modules: set[str] = set()
 
-    def load_source(path: Path) -> None:
+    def load_source(path: Path, *, named_by: Path | None = None) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
         # discovered source all collapse to one entry — a package reached twice
         # deduplicates here exactly as a file does.
-        if (resolved := path.resolve()) not in seen_files:
-            seen_files.add(resolved)
-            _register(compendium=compendium, found=load_rituals_source(resolved))
+        if (resolved := path.resolve()) in seen_files:
+            return
+        # The discovered source was found by looking, so it is there by
+        # construction; a configured one is a line somebody typed, and the
+        # bare `[Errno 2]` the loader would raise names the path it tried
+        # without naming the file that asked for it.
+        if named_by is not None and not resolved.exists():
+            msg = f"{named_by}: [rituals] names {path}, which does not exist"
+            raise RitualDefinitionError(msg)
+        seen_files.add(resolved)
+        _register(compendium=compendium, found=load_rituals_source(resolved))
 
     if (implicit := _find_rituals_source(cwd)) is not None:
         load_source(implicit)
@@ -129,7 +153,7 @@ def _build_compendium(cwd: Path) -> Compendium:
         # directory — resolving against the cwd would mean a different file
         # each time.
         for relative in rituals.files:
-            load_source(config.parent / relative)
+            load_source(config.parent / relative, named_by=config)
         for module in rituals.modules:
             if module not in seen_modules:
                 seen_modules.add(module)
@@ -167,7 +191,7 @@ def _help_text(cwd: Path) -> str:
         lines.append(f"(could not load rituals: {error})")
         return "\n".join(lines) + "\n"
     if not (names := compendium.names()):
-        lines.append(_NO_RITUALS)
+        lines.append(_no_rituals(cwd))
         return "\n".join(lines) + "\n"
     lines.append("available rituals:")
     lines += [
@@ -176,9 +200,9 @@ def _help_text(cwd: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _list_text(compendium: Compendium) -> str:
+def _list_text(compendium: Compendium, *, cwd: Path) -> str:
     if not (names := compendium.names()):
-        return f"{_NO_RITUALS}\n"
+        return f"{_no_rituals(cwd)}\n"
     return "".join(
         f"{name}{_component_options(compendium.ritual(name))}\n" for name in names
     )
@@ -230,7 +254,7 @@ def _compendium_or_usage() -> Compendium | None:
 def rituals_list() -> int:
     if (compendium := _compendium_or_usage()) is None:
         return 2
-    sys.stdout.write(_list_text(compendium))
+    sys.stdout.write(_list_text(compendium, cwd=Path.cwd()))
     return 0
 
 
