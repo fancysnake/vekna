@@ -1,21 +1,22 @@
 /*
  * Eldritch — a light theme for dark magic.
  *
- * Bone and parchment for the page, arcane violet for the chrome, verdigris for
- * anything that reacts to a cursor. The joke is that a grimoire is read by
+ * Bone and parchment for the page, a mossy grave-green for the chrome, and
+ * verdigris — the green copper turns after long enough underground — for
+ * anything that answers a cursor. The joke is that a grimoire is read by
  * candlelight, not in the dark; the constraint is that every pairing below
  * clears WCAG AA against the surface it sits on, because a palette nobody can
  * read is just a mood. Measured, not asserted: the tightest pairing is a code
- * string at 4.78:1, and the comment greys were moved off 4.55 to get there.
+ * string at 4.95:1.
  */
 
 :root {
   --eldritch-bone: #f3efe7;
   --eldritch-vellum: #fbf8f3;
-  --eldritch-ink: #221b2a;
-  --eldritch-violet: #3a2450;
-  --eldritch-violet-lit: #5c3b7a;
-  --eldritch-sigil: #6b2d8f;
+  --eldritch-ink: #1f241b;
+  --eldritch-moss: #3b4a2a;
+  --eldritch-moss-lit: #55693e;
+  --eldritch-sigil: #4a6127;
   --eldritch-verdigris: #12715a;
   --eldritch-oxblood: #8c2230;
 }
@@ -27,27 +28,27 @@
 
   --md-default-bg-color: var(--eldritch-bone);
   --md-default-fg-color: var(--eldritch-ink);
-  --md-default-fg-color--light: #4e4459;
-  --md-default-fg-color--lighter: #80768b;
-  --md-default-fg-color--lightest: #d9d2e0;
+  --md-default-fg-color--light: #4b5147;
+  --md-default-fg-color--lighter: #767e70;
+  --md-default-fg-color--lightest: #d4dacc;
 
-  --md-primary-fg-color: var(--eldritch-violet);
-  --md-primary-fg-color--light: var(--eldritch-violet-lit);
-  --md-primary-fg-color--dark: #291737;
+  --md-primary-fg-color: var(--eldritch-moss);
+  --md-primary-fg-color--light: var(--eldritch-moss-lit);
+  --md-primary-fg-color--dark: #2a331e;
   --md-primary-bg-color: var(--eldritch-vellum);
-  --md-primary-bg-color--light: #e8e0ef;
+  --md-primary-bg-color--light: #dfe6d6;
 
   --md-accent-fg-color: var(--eldritch-verdigris);
   --md-accent-fg-color--transparent: rgb(18 113 90 / 10%);
 
   --md-typeset-a-color: var(--eldritch-sigil);
-  --md-typeset-mark-color: rgb(107 45 143 / 18%);
+  --md-typeset-mark-color: rgb(74 97 39 / 18%);
 
-  --md-code-bg-color: #ebe4f0;
-  --md-code-fg-color: #2f2140;
+  --md-code-bg-color: #e8ece1;
+  --md-code-fg-color: #262d20;
 
-  --md-footer-bg-color: #291737;
-  --md-footer-bg-color--dark: #1d0f28;
+  --md-footer-bg-color: #2a331e;
+  --md-footer-bg-color--dark: #1c2214;
 }
 
 /* ---- Dark: for when the candles gutter ---- */
@@ -55,61 +56,62 @@
 [data-md-color-scheme="eldritch-dark"] {
   color-scheme: dark;
 
-  --md-default-bg-color: #16121c;
-  --md-default-fg-color: #e6dff0;
-  --md-default-fg-color--light: #b6abc7;
-  --md-default-fg-color--lighter: #7c7089;
-  --md-default-fg-color--lightest: #3a3145;
+  --md-default-bg-color: #131711;
+  --md-default-fg-color: #e2e8dc;
+  --md-default-fg-color--light: #b0b8a8;
+  --md-default-fg-color--lighter: #79806f;
+  --md-default-fg-color--lightest: #333a2e;
 
-  --md-primary-fg-color: #241832;
-  --md-primary-fg-color--light: #3a2450;
-  --md-primary-fg-color--dark: #120b19;
-  --md-primary-bg-color: #ede6f5;
-  --md-primary-bg-color--light: #b6abc7;
+  --md-primary-fg-color: #1e2618;
+  --md-primary-fg-color--light: var(--eldritch-moss);
+  --md-primary-fg-color--dark: #0f130d;
+  --md-primary-bg-color: #e7ecdf;
+  --md-primary-bg-color--light: #b0b8a8;
 
   --md-accent-fg-color: #4fd3a5;
   --md-accent-fg-color--transparent: rgb(79 211 165 / 12%);
 
-  --md-typeset-a-color: #c39bff;
-  --md-typeset-mark-color: rgb(195 155 255 / 22%);
+  --md-typeset-a-color: #a9cf7e;
+  --md-typeset-mark-color: rgb(169 207 126 / 22%);
 
-  --md-code-bg-color: #1e1728;
-  --md-code-fg-color: #ded4ec;
+  --md-code-bg-color: #191f16;
+  --md-code-fg-color: #d8e0d0;
 
-  --md-footer-bg-color: #120b19;
-  --md-footer-bg-color--dark: #0c0711;
+  --md-footer-bg-color: #0f130d;
+  --md-footer-bg-color--dark: #090c08;
 }
 
 /*
  * Syntax highlighting, both schemes. Material ships a sensible default; what it
  * does not do is agree with a palette it has never heard of, and a code block
- * is most of what these pages are.
+ * is most of what these pages are. Keywords take the page's own green, so the
+ * other two hues left — a cold blue and an oxblood — stay worth noticing.
  */
 
 [data-md-color-scheme="eldritch"] {
-  --md-code-hl-keyword-color: #7b2f9e;
+  --md-code-hl-keyword-color: var(--eldritch-sigil);
   --md-code-hl-function-color: #1b5f8c;
   --md-code-hl-string-color: var(--eldritch-verdigris);
   --md-code-hl-number-color: var(--eldritch-oxblood);
-  --md-code-hl-comment-color: #615868;
-  --md-code-hl-name-color: #2f2140;
-  --md-code-hl-operator-color: #615868;
-  --md-code-hl-punctuation-color: #615868;
+  --md-code-hl-comment-color: #5b6155;
+  --md-code-hl-name-color: #262d20;
+  --md-code-hl-operator-color: #5b6155;
+  --md-code-hl-punctuation-color: #5b6155;
   --md-code-hl-constant-color: var(--eldritch-oxblood);
-  --md-code-hl-special-color: #7b2f9e;
+  --md-code-hl-special-color: var(--eldritch-sigil);
 }
 
 [data-md-color-scheme="eldritch-dark"] {
-  --md-code-hl-keyword-color: #cf9bff;
+  --md-code-hl-keyword-color: #b3d98a;
   --md-code-hl-function-color: #7cc4f0;
   --md-code-hl-string-color: #4fd3a5;
   --md-code-hl-number-color: #ff9db0;
-  --md-code-hl-comment-color: #9d92ab;
-  --md-code-hl-name-color: #ded4ec;
-  --md-code-hl-operator-color: #9d92ab;
-  --md-code-hl-punctuation-color: #9d92ab;
+  --md-code-hl-comment-color: #8f9885;
+  --md-code-hl-name-color: #d8e0d0;
+  --md-code-hl-operator-color: #8f9885;
+  --md-code-hl-punctuation-color: #8f9885;
   --md-code-hl-constant-color: #ff9db0;
-  --md-code-hl-special-color: #cf9bff;
+  --md-code-hl-special-color: #b3d98a;
 }
 
 /*
