@@ -10,6 +10,8 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+## [0.5.0] - 2026-08-08
+
 ### Added
 
 - **`pip install vekna`.** The first release published to PyPI, which is what
