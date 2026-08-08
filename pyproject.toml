@@ -1,7 +1,7 @@
 [project]
 name = "vekna"
 version = "0.5.0"
-description = "Run coding agents as rituals: small Python programs whose steps you control"
+description = "Run coding agents as rituals: ordinary Python programs whose steps you control"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]

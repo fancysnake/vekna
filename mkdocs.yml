@@ -1,7 +1,7 @@
 ---
 site_name: vekna
 site_url: https://vekna.fancysnake.dev
-site_description: Run coding agents as rituals — small Python programs whose steps you control.
+site_description: Run coding agents as rituals — ordinary Python programs whose steps you control.
 repo_url: https://github.com/fancysnake/vekna
 repo_name: fancysnake/vekna
 copyright: BSD-3-Clause

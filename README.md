@@ -1,6 +1,6 @@
 # vekna
 
-Run coding agents as **rituals**: small Python programs whose steps you
+Run coding agents as **rituals**: ordinary Python programs whose steps you
 control and whose agent calls happen inside those steps. Agents run
 permissively *within* a step; determinism lives at the step boundaries.
 
