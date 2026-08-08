@@ -2,8 +2,7 @@
 
 **Vekna does not sandbox agents.** The agent edits your repository and runs
 your commands — that is the job, and a sandbox around it would defeat the
-point. This page says so plainly rather than leaving you to work it out after
-your first cast.
+point.
 
 What the process split does buy is containment of *failure*: a broken ritual or
 a misbehaving SDK kills one cast process and nothing else.

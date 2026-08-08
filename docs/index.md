@@ -9,10 +9,9 @@ decides the failing test was the problem. A ritual is the other arrangement:
 you write the loop, the branches and the stopping condition yourself, and hand
 the agent one bounded piece of work at a time.
 
-Nothing about that keeps a ritual short. The one below fits on a screen because
-it is an introduction; a ritual that has been in daily use for a while is a
-package with a test suite, and the [rituals page](rituals.md) is about splitting
-one up. What stays true at any size is that the control flow is yours to read.
+The one below fits on a screen because it is an introduction; a ritual in daily
+use is a package with a test suite. What stays true at any size is that the
+control flow is yours to read.
 
 ## Install
 
@@ -84,9 +83,9 @@ line is the cast's result, as JSON:
 result: {"outcome":"green"}
 ```
 
-That is the whole shape of the thing. The retry budget is a number you wrote,
-the stopping condition is an `if` you can read, and the agent is called once
-per attempt with exactly what you chose to tell it.
+The retry budget is a number you wrote, the stopping condition is an `if` you
+can read, and the agent is called once per attempt with exactly what you chose
+to tell it.
 
 ## Where to go next
 

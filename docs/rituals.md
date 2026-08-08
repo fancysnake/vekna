@@ -148,19 +148,9 @@ Two things to know:
   directory for the sweep to walk, so its submodules are invisible — the same
   rule as a local `rituals/`, with the same silence if you skip it.
 
-This is how a team shares rituals without copying files: one tome, versioned
-and released like anything else, and a two-line config in each repository that
-uses it. A tome that has been in use for a while carries its own test suite
-too — `vekna[trial]` runs against the rituals inside it, with no repository
-that casts them involved.
+A tome carries its own test suite — `vekna[trial]` runs against the rituals
+inside it, with no repository that casts them involved.
 
-The word is deliberate and narrow. A **folio** ships mediums and their backends
-(`vekna.folio.shell`); a **tome** ships rituals. A **grimoire** is neither — it
-is the event log of one cast, which is a thing that happens rather than a thing
-you install.
-
-It is a word for prose, though, and not a config key. `modules` resolves the
-cwd as well as the environment, so `mycompany.rites` loads whether it arrived
-from a wheel or sits in your own `src/` — and nothing at the config line tells
-those apart. Naming the key `tomes` would claim a distinction the loader does
-not make. It takes a Python module path, so it says `modules`.
+The word is for prose, not for the config key: `modules` takes a Python module
+path and resolves the cwd as well as the environment, so `mycompany.rites`
+loads whether it arrived from a wheel or sits in your own `src/`.
