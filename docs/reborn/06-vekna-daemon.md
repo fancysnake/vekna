@@ -1,6 +1,6 @@
 # Feature — Vekna daemon (lock coordination, journal, attach/replay)
 
-**Version:** `0.6.0`
+**Version:** `0.6.0` — **planned.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, replay rule,
 CLI surface.

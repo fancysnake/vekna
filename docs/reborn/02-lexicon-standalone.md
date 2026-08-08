@@ -1,6 +1,6 @@
 # Feature — Lexicon SDK + standalone runner
 
-**Version:** `0.2.0`
+**Version:** `0.2.0` — **shipped.**
 
 See [00-common.md](00-common.md) for vocabulary, package layout, wire schema,
 standalone mode.

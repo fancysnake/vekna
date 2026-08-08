@@ -1,6 +1,13 @@
 # Feature — 1.0 hardening
 
-**Version:** `1.0.0`
+**Version:** `1.0.0` — **in progress**; the publishing half ships at `0.4.1`.
+
+> **Split.** Publishing to PyPI, the documentation inventory below, the example
+> library and the `deptry` / `pip-audit` sweep come forward to `0.4.1` with
+> [09-site.md](09-site.md), because vekna is in use outside this repository
+> already. What stays on the 1.0 line is what needs features that are not
+> written: documenting the daemon and the lich, telemetry hooks, and removing
+> the transitional shims those releases will leave behind.
 
 See [00-common.md](00-common.md). Ships only once every feature above (0.1.0 –
 0.7.0) is ready. 1.0 is the readiness line, not a new capability.

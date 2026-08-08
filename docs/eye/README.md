@@ -1,6 +1,8 @@
 # Eye — `2.0.0`
 
-The visual surfaces. Parked until [Reborn](../reborn/README.md) ships.
+The visual surfaces. Parked until [Reborn](../reborn/README.md) ships. Status
+for these and every other feature is in the [roadmap](../README.md#roadmap);
+what each one *is* is below.
 
 The Eye of Vecna observes (see the Hand/Eye note in
 [`../reborn/00-common.md`](../reborn/00-common.md)); these are the surfaces that

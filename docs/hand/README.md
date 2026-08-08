@@ -16,7 +16,8 @@ acts.
 
 ## Contents
 
-The order among them is not fixed, though 06 wants 02 and 03 before it.
+The order among them is not fixed, though 06 wants 02 and 03 before it. Status
+for these and every other feature is in the [roadmap](../README.md#roadmap).
 
 - [01-failure.md](01-failure.md) — failure as a transition: `on_error`, a typed
   `Failure` payload, recovery as an ordinary step.

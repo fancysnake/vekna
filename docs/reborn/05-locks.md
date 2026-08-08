@@ -1,6 +1,6 @@
 # Feature — Locks API (`warn` default)
 
-**Version:** `0.5.0`
+**Version:** `0.5.0` — **planned.**
 
 See [00-common.md](00-common.md) — wire lock messages, replay rebuilds lock
 state, standalone modes.

@@ -1,11 +1,20 @@
 # Feature — the site
 
-**Version:** `1.0.0`
+**Version:** `0.4.1` — **in progress.**
+
+> Filed at `1.0.0` and pulled forward: vekna is in use outside this repository
+> before the daemon or the lich exist, and a checkout is no way to install it.
+> What moved with it is [08-hardening.md](08-hardening.md)'s publishing bullet —
+> a package on PyPI with no page to send anyone to is half a release. Three
+> decisions changed on the way, and each is a simplification: mkdocs-material
+> rather than Astro and Starlight, GitHub Pages rather than Cloudflare,
+> `vekna.fancysnake.dev` rather than a domain of its own. The hand-written
+> landing page is dropped — this is a documentation site, and a home page is
+> worth writing when there is an audience to write it for.
 
 See [00-common.md](00-common.md). A sibling to
-[08-hardening.md](08-hardening.md) on the 1.0 readiness line, not a step after
-it. 1.0 is the release that stops being for one person; a package on PyPI with
-no page to send anyone to is half of that.
+[08-hardening.md](08-hardening.md)'s publishing half, not a step after it: a
+package nobody can read about is half of being installable.
 
 ## Goal
 

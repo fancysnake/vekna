@@ -1,6 +1,6 @@
 # Feature — Lich (a named station, remote-controlled)
 
-**Version:** `0.7.0`
+**Version:** `0.7.0` — **planned.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, CLI surface —
 and [06-vekna-daemon.md](06-vekna-daemon.md), which this builds on.

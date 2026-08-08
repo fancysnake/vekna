@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
+What is planned rather than released is in the [roadmap](docs/README.md#roadmap),
+which links back to the version here that carried each shipped feature.
+
 ## [Unreleased] - ???
 
 ## [0.4.0] - 2026-08-08

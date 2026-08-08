@@ -1,6 +1,6 @@
 # Feature — `folio/coding` + `folio/coding_claude`
 
-**Version:** `0.3.0`
+**Version:** `0.3.0` — **shipped.**
 
 See [00-common.md](00-common.md) for Medium/Focus/Component and Component
 output direction.

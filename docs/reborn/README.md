@@ -10,44 +10,37 @@ and casts on command, from a terminal or from Discord.
   layout, layering, wire protocol, Components, config, standalone, CLI (incl.
   the Hand/Eye path), deps, resolved decisions, not-planned.
 
-## Roadmap
+Every feature, its version and whether it exists are in the
+[roadmap](../README.md#roadmap), across all three tracks at once. What is below
+is only what a table cannot hold: why the numbering reads the way it does. 1.0
+ships when every Reborn feature is ready — not when the daemon lands.
 
-1.0 ships when every feature below is ready — not when the daemon lands.
+## How the numbering came to be this
 
-- [01-cli-reroot.md](01-cli-reroot.md) — `0.1.0` re-root CLI under `vekna tmux`;
-  free top-level `vekna`. **Superseded**: the tmux subsystem it re-rooted was
-  removed in 0.3.0, so the subgroup no longer exists.
-- [02-lexicon-standalone.md](02-lexicon-standalone.md) — `0.2.0` lexicon SDK +
-  standalone runner; `folio/flow`, `folio/shell`. `vekna cast` runs rituals.
-- [03-coding-folios.md](03-coding-folios.md) — `0.3.0` `folio/coding` +
-  `folio/coding_claude`; `vekna cast "<prompt>"`.
-- [12-trial.md](12-trial.md) — `0.4.0` `vekna.trial`: run a ritual with the
-  mediums answering from a script. A complementary release, not a slot — it
-  waits on nothing below and nothing below waits on it. Numbered last, released
-  early: the version is what orders it.
-- `04` — `folio/process`, **moved to Hand** as
+- **`04` is an empty doc slot.** `folio/process` moved to Hand as
   [`../hand/06-process.md`](../hand/06-process.md): owning a process is
-  cancellation plus bounds, and both of those are Hand's already. The doc slot
-  keeps its number rather than closing up, so the numbering below still means
-  what it did; the *version* it vacated went to
-  [10-ritual-modules.md](10-ritual-modules.md), which was built first.
-  `coding`'s session declaration, which was filed here as the other half of
-  `0.4.0`, shipped in `0.3.0` instead — see
-  [03-coding-folios.md](03-coding-folios.md).
-- [05-locks.md](05-locks.md) — `0.5.0` locks API, `warn` default (no
-  coordination yet).
-- [06-vekna-daemon.md](06-vekna-daemon.md) — `0.6.0` daemon, lock coordination,
-  journal, attach/replay, resume; lock default → `deny`.
-- [07-lich.md](07-lich.md) — `0.7.0` the lich: a named, directory-scoped station
-  that casts on command; Discord channel per lich.
-- [08-hardening.md](08-hardening.md) — `1.0.0` robustness, docs, PyPI, example
-  library, clean audits.
-- [09-site.md](09-site.md) — `1.0.0` `vekna.dev`: landing page and user
-  documentation, Astro in `www/`, shipped with the tag, not after it.
-- [10-ritual-modules.md](10-ritual-modules.md) — `0.4.0` a ritual source may be
-  a package the author splits as they like; recursive submodule sweep, empty
-  `__init__.py`. Numbered after 09 because the doc slots below it are spoken
-  for; the version is what orders it, and it took the one `04` vacated.
+  cancellation plus bounds, and both of those are Hand's already. The slot keeps
+  its number rather than closing up, so every number below it still means what
+  it did. The *version* it vacated went to
+  [10-ritual-modules.md](10-ritual-modules.md), which was built first. `coding`'s
+  session declaration, filed here as the other half of `0.4.0`, shipped in
+  `0.3.0` instead — see [03-coding-folios.md](03-coding-folios.md).
+- **`10` and `12` are numbered last and shipped early.** Both took `0.4.0`. The
+  doc slots below them were spoken for by features that are not written; the
+  version is what orders a release, not the filename.
+- **`01` was superseded by the release after the one that shipped it.** The tmux
+  subsystem it re-rooted was removed in `0.3.0`, so the subgroup no longer
+  exists. What it was for — freeing the top-level `vekna` — still holds.
+- **`09` and the publishing half of `08` are `0.4.1`, off the 1.0 line.** Vekna
+  is in use somewhere that is not this repository, and a checkout is no way to
+  install it, so PyPI and the site come forward. A patch number rather than
+  `0.5.0`, which locks already holds: nothing below moves, and a release that
+  adds no ritual-facing API should not push three unwritten features down a slot
+  each. The rest of `08` stays where it is.
+- **Nothing below `0.4.1` has started, but some of it is in the tree.** The wire
+  already carries the lock messages, and a cast already probes for a daemon it
+  cannot yet find. Groundwork laid early by the feature that needed the seam,
+  not a feature half-shipped.
 
 ## Undecided
 
