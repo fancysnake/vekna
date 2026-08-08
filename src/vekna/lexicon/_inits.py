@@ -176,7 +176,11 @@ def _build_library(cwd: Path) -> _Library:
                 _register(
                     compendium=compendium, found=load_rituals_module(module, root=cwd)
                 )
-    return _Library(compendium, _no_rituals(discovered.near_miss))
+    # A near miss is only ever found when discovery came back empty, so
+    # anything seen here was named by a config — and a config that loaded is
+    # the answer to where the rituals were meant to come from.
+    loaded = bool(seen_files or seen_modules)
+    return _Library(compendium, _no_rituals(None if loaded else discovered.near_miss))
 
 
 def _component_options(ritual: Ritual) -> str:

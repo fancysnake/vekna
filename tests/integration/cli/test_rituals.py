@@ -579,6 +579,25 @@ class TestRitualsUsage:
         assert "no rituals found" in out
         assert "__init__.py" not in out
 
+    # And the same when the source was named rather than discovered: the walk
+    # still passed a `rituals` directory on its way, and it is still not the
+    # thing the reader got wrong.
+    @staticmethod
+    def test_a_configured_source_that_loaded_is_not_blamed_either(
+        tmp_path, monkeypatch, capsys
+    ):
+        _write(tmp_path, {".vekna.toml": '[rituals]\nfiles = ["lib/none.py"]\n'})
+        _write(tmp_path, {"lib/none.py": ""})
+        (tmp_path / "rituals").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert not exit_code
+        assert "no rituals found" in out
+        assert "__init__.py" not in out
+
     @staticmethod
     def test_a_configured_file_that_does_not_exist_names_the_config(
         tmp_path, monkeypatch, capsys
