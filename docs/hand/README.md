@@ -40,7 +40,7 @@ A track is where work is *discussed*, not a queue that has to drain in order —
 the number attaches at the tag. Two of these (02, 03) are small and cost almost
 nothing, and if a cast left running overnight makes either load-bearing before
 `1.0`, it moves into the release that needs it and this track shrinks. That is
-the same rule that let the lich take Eye's `0.7.0` slot.
+the same rule that let the lich take Eye's slot.
 
 What stays here regardless is anything that changes the shape of the lexicon's
 public surface. Reborn's job is to get one story finished and installable; a

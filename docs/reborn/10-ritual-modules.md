@@ -2,7 +2,7 @@
 
 **Version:** `0.4.0` — **shipped.**
 
-> Filed at `0.5.0` and built before [05-locks.md](05-locks.md), so it took the
+> Filed a slot lower and built before [05-locks.md](05-locks.md), so it took the
 > number `folio/process` left free on its way to Hand rather than sharing one
 > with a feature that is not written. Two things the spec did not say, settled
 > while building: a directory counts as a source only with an `__init__.py`, at

@@ -10,7 +10,7 @@ thing the user writes and keeps — and they are the least verified thing in the
 system: edit a step, and the only way to find out what you broke is to spend an
 agent run finding out.
 
-From `0.6.0` the journal holds every event of every cast. A recording is a
+From `0.7.0` the journal holds every event of every cast. A recording is a
 fixture. This turns the one into the other.
 
 ## What ships

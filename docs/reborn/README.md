@@ -31,13 +31,13 @@ ships when every Reborn feature is ready — not when the daemon lands.
 - **`01` was superseded by the release after the one that shipped it.** The tmux
   subsystem it re-rooted was removed in `0.3.0`, so the subgroup no longer
   exists. What it was for — freeing the top-level `vekna` — still holds.
-- **`09` and the publishing half of `08` are `0.4.1`, off the 1.0 line.** Vekna
-  is in use somewhere that is not this repository, and a checkout is no way to
-  install it, so PyPI and the site come forward. A patch number rather than
-  `0.5.0`, which locks already holds: nothing below moves, and a release that
-  adds no ritual-facing API should not push three unwritten features down a slot
-  each. The rest of `08` stays where it is.
-- **Nothing below `0.4.1` has started, but some of it is in the tree.** The wire
+- **`09` and the publishing half of `08` took `0.5.0`, off the 1.0 line, and
+  locks, the daemon and the lich each slid a slot to make room.** Vekna is in
+  use somewhere that is not this repository, and a checkout is no way to install
+  it, so PyPI and the site come forward. `0.5.0` rather than a patch number
+  because this is the first version anyone outside this repository installs by
+  name, and that is worth a minor. The rest of `08` stays where it is.
+- **Nothing below `0.5.0` has started, but some of it is in the tree.** The wire
   already carries the lock messages, and a cast already probes for a daemon it
   cannot yet find. Groundwork laid early by the feature that needed the seam,
   not a feature half-shipped.
@@ -58,7 +58,7 @@ ships when every Reborn feature is ready — not when the daemon lands.
 Textual TUI, web view, the lich's web page, the workflow graph drawn, and the
 lich's channels reshaped into adapters. Same wire, same events, another
 consumer, so they park without blocking anything here. WhatsApp notifications
-were dropped outright: Discord ships at 0.7.0 and does that job better.
+were dropped outright: Discord ships at 0.8.0 and does that job better.
 
 [`../hand/`](../hand/README.md) — **Hand** (`3.0.0`), the acting half: failure
 as a transition, `timeout`/`race`, cast budgets, loadable skills, and replaying

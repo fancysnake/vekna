@@ -1,6 +1,6 @@
 # Feature — the site
 
-**Version:** `0.4.1` — **in progress.**
+**Version:** `0.5.0` — **in progress.**
 
 > Filed at `1.0.0` and pulled forward: vekna is in use outside this repository
 > before the daemon or the lich exist, and a checkout is no way to install it.
