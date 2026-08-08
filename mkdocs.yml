@@ -18,19 +18,23 @@ exclude_docs: |
 
 theme:
   name: material
+  # Both schemes are defined in `docs/stylesheets/eldritch.css`. No `primary` or
+  # `accent` here on purpose: those generate their own rules, and two sources
+  # for one colour is one more than the number that can be right.
   palette:
     - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: deep purple
-      toggle: {icon: material/weather-night, name: Dark mode}
+      scheme: eldritch
+      toggle: {icon: material/candle, name: Let the candles gutter}
     - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: deep purple
-      toggle: {icon: material/weather-sunny, name: Light mode}
+      scheme: eldritch-dark
+      toggle: {icon: material/candelabra-fire, name: Light the candles}
   features:
     - content.code.copy
     - navigation.sections
     - navigation.top
+
+extra_css:
+  - stylesheets/eldritch.css
 
 markdown_extensions:
   - admonition
