@@ -25,13 +25,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4
       - run: mise install
-      - run: poetry install
+      - run: mise exec -- poetry install
 
       # Refuses to publish a wheel whose version is not the tag. Getting these
       # out of step means a release nobody can reproduce from the repository.
@@ -41,7 +41,7 @@ jobs:
         if: github.ref_type == 'tag'
         run: |
           tagged="${GITHUB_REF_NAME#v}"
-          declared=$(mise exec -- python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
+          declared=$(mise exec -- poetry version -s)
           if [ "$tagged" != "$declared" ]; then
             echo "tag $GITHUB_REF_NAME does not match pyproject version $declared" >&2
             exit 1
@@ -49,7 +49,7 @@ jobs:
 
       - run: mise run release:build
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: dist
           path: dist/
@@ -64,11 +64,11 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           # A retagged release, or a second rehearsal of the same version,
@@ -86,11 +86,11 @@ jobs:
       # short-lived one this mints is scoped to this workflow on this tag.
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   # The wheel importing from `dist/` proves the build; only this proves what
   # PyPI actually serves — metadata rejected at upload, a missing dependency,
@@ -99,20 +99,30 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
       - name: Install from PyPI and cast nothing
         run: |
           version="${GITHUB_REF_NAME#v}"
+          # `&&` exempts the install from errexit, so a run out of attempts
+          # would otherwise fall through and fail on the import below — as
+          # "the package is broken" rather than "it never showed up".
           for attempt in 1 2 3 4 5; do
             pip install --quiet "vekna[trial]==$version" && break
+            if [ "$attempt" = 5 ]; then
+              echo "vekna $version never appeared on the index" >&2
+              exit 1
+            fi
             echo "not on the index yet, retrying in 30s"
             sleep 30
           done
           python -c 'import vekna.lexicon, vekna.trial, vekna.wire'
           vekna --help > /dev/null
-          vekna rituals list || true
+          # An empty directory is the one library every runner has, and the
+          # sentence it prints is the discovery walk finishing — which is what
+          # this job exists to prove of an installed wheel.
+          vekna rituals list | grep -q "no rituals found"
 
   github-release:
     needs: verify
@@ -120,11 +130,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist/
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
           generate_release_notes: true
