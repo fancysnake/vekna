@@ -32,8 +32,10 @@ the way down, so its `__init__.py` stays empty. Every level needs an
 rule picking one.
 
 More sources can be named in `.vekna.toml` (project, found by walking up) or
-`~/.config/vekna/config.toml` (global). Paths resolve **relative to the config
-file**, not the cwd:
+`~/.config/vekna/config.toml` (global). `modules` names anything importable, so
+an installed package of rituals — a **tome** — is a source like any other, and
+the project casting from it needs nothing on disk but the config line. Paths
+resolve **relative to the config file**, not the cwd:
 
 ```toml
 [rituals]

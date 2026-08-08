@@ -109,6 +109,8 @@ result: {"outcome":"green"}
   Claude Agent SDK focus for `coding`.
 - **Grimoire** — the event log of a cast: rites started, output deltas, rites
   finished, each with its status.
+- **Tome** — a ritual library published as an installable package, named by
+  `[rituals] modules`. A folio ships mediums; a tome ships rituals.
 
 ## Where rituals come from
 

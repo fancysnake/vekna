@@ -21,6 +21,9 @@ and prints its result.
   Claude Agent SDK focus for `coding`.
 - **Grimoire** — the event log of a cast: rites started, output deltas, rites
   finished, each with its status.
+- **Tome** — a ritual library published as an installable package, so several
+  projects cast the same rituals from a versioned dependency rather than from
+  copied files. See [below](#tomes-rituals-you-install).
 
 ## Steps and transitions
 
@@ -111,11 +114,12 @@ These are additive: naming the file that would have been found anyway is how
 you are explicit about it, and loading it twice is not an error. Two
 *different* sources claiming one ritual name still is.
 
-## Rituals as an installed package
+## Tomes: rituals you install
 
-`modules` names something importable, not something on disk nearby — so a
-ritual library distributes like any other Python package. Build a wheel, put it
-on your index, and every project that installs it gets the same rituals:
+A **tome** is a ritual library published as a package. `modules` names something
+importable, not something on disk nearby — so a tome distributes like any other
+Python dependency. Build a wheel, put it on your index, and every project that
+installs it gets the same rituals:
 
 ```toml
 # .vekna.toml, in each project that wants them
@@ -144,6 +148,13 @@ Two things to know:
   directory for the sweep to walk, so its submodules are invisible — the same
   rule as a local `rituals/`, with the same silence if you skip it.
 
-This is how a team shares rituals without copying files: one package, versioned
+This is how a team shares rituals without copying files: one tome, versioned
 and released like anything else, and a two-line config in each repository that
-uses it.
+uses it. A tome that has been in use for a while carries its own test suite
+too — `vekna[trial]` runs against the rituals inside it, with no repository
+that casts them involved.
+
+The word is deliberate and narrow. A **folio** ships mediums and their backends
+(`vekna.folio.shell`); a **tome** ships rituals. A **grimoire** is neither — it
+is the event log of one cast, which is a thing that happens rather than a thing
+you install.

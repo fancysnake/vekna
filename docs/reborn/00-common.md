@@ -52,6 +52,7 @@ named `vekna`.
 | **Focus**  | Swappable backend a Medium channels. ≈ adapter (Claude SDK, pylint, bash). |
 | **Component** | What a ritual needs before it can be cast, the way a spell needs its material components. Typed value on its external interface (CLI in). `File`, `Directory`, `Text`. Declared as one field of the ritual's components model. |
 | **Folio**  | Bound bundle of Mediums and/or Foci, shaped like a future stand-alone dist. |
+| **Tome**   | A ritual library published as an installable package, named by `[rituals] modules`. Versioned and released like any other dependency; the project that casts from it needs nothing on disk but the config line. A folio ships mediums, a tome ships rituals. |
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
