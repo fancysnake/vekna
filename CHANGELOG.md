@@ -7,8 +7,35 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased] - ???
 
+## [0.4.0] - 2026-08-03
+
+### Added
+
+- **A ritual source may be a package.** `rituals/` is found by walking up from
+  the cwd exactly as `rituals.py` is, imported under its own name so relative
+  imports inside it resolve, and swept recursively for every `@ritual` and
+  `@step`. `__init__.py` stays empty — nothing needs re-exporting to be found,
+  and `rituals show` draws the whole graph rather than stopping at the first
+  step the package did not name. Every level needs its own empty `__init__.py`;
+  a directory without one is not a source and is not swept. This project's own
+  rituals ship that way now, one module per ritual with the prompt text beside
+  them in `prompts.py`.
+
 ### Changed
 
+- **`[rituals] modules` no longer needs `PYTHONPATH=.`** — the cwd goes on
+  `sys.path` before the import, since `vekna` is a console script and the
+  project being cast is on the path of nothing. A configured package is swept
+  to the bottom like a discovered one.
+- **A step name declared twice is an error** naming both modules, where the
+  first declaration used to win in silence. That was fair while every step
+  lived in one file; across the submodules of a package `measure` is a natural
+  name twice, and the loser vanishing means `rituals show` drawing the other
+  ritual's step under this one's name.
+- **A directory holding both `rituals.py` and `rituals/` stops the command**
+  naming both paths, rather than a precedence rule answering silently: a
+  half-finished move into `rituals/` would otherwise keep casting the file it
+  was moved out of.
 - **A step or entrypoint is written `def` when its body has nothing to await.**
   `@step` and `@ritual` used to require `async def` whatever the body did, so a
   step that only routes on its payload — or an entrypoint that only names the
@@ -17,18 +44,18 @@ and this project adheres to [Semantic Versioning].
   got back still needs awaiting — not which keyword the author used, which the
   value cannot tell it — so a `def` body that hands back a coroutine is awaited
   too: forgetting the `await` on a helper call gives working code rather than a
-  transition that is secretly a coroutine. The four
-  entrypoints in vekna's own `rituals.py` are `def`, and the `RUF029` exception
-  that existed to tolerate the old shape is gone.
+  transition that is secretly a coroutine. The four entrypoints in vekna's own
+  `rituals/` are `def`, and the `RUF029` exception that existed to tolerate the
+  old shape is gone.
 - **`@step` and `@ritual` take the author's own model.** Their parameter was
   typed `Callable[[BaseModel], ...]`; parameters are contravariant, so a step
   declared `(fetched: Fetched)` was an error on every decorator in a rituals
   file its author type-checked — 13 of the 22 errors `mypy rituals.py` reported.
   The decorators are generic in the payload now, which is what makes pointing a
   type checker at a rituals file worth doing.
-- **vekna type-checks its own `rituals.py`.** It sits in `SRC_PATHS` beside
-  `src`, under the same strict config, so the one file in this repo that uses
-  vekna the way an author does is checked the way an author would check it. This
+- **vekna type-checks its own rituals.** `rituals/` sits in `SRC_PATHS` beside
+  `src`, under the same strict config, so the code in this repo that uses vekna
+  the way an author does is checked the way an author would check it. This
   narrows, but does not retire, the reason the runtime boundary checks exist:
   whether *your* rituals file is type-checked is yours to decide, and
   `RitualBoundaryError`, `StepBoundaryError` and `MediumBoundaryError` are what
@@ -496,7 +523,8 @@ and this project adheres to [Semantic Versioning].
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/fancysnake/vekna/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/fancysnake/vekna/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fancysnake/vekna/compare/v0.0.4...v0.1.0

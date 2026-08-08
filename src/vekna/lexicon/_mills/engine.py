@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
@@ -88,45 +88,72 @@ class Grimoire:
         return list(self._events)
 
 
+_DeclaredT = TypeVar("_DeclaredT", Ritual, Step)
+
+
+# Rituals and steps are registered the same way: by name, remembering which
+# module declared each, so a genuine collision says which two rather than
+# leaving the author to guess. The *same* object arriving twice is not one — a
+# package is swept module by module, and a submodule that reaches a sibling's
+# ritual or step imports it, handing the sweep that object once per module that
+# names it.
+class _Declarations(Generic[_DeclaredT]):
+    def __init__(self, kind: str) -> None:
+        self._kind = kind
+        self._known: dict[str, _DeclaredT] = {}
+        self._origins: dict[str, str] = {}
+
+    # `name` is not a parameter: `_DeclaredT` is a Ritual or a Step, and both
+    # carry the name the caller would otherwise be handing back.
+    def add(self, declared: _DeclaredT, *, origin: str | None) -> None:
+        if (first := self._known.get(declared.name)) is not None:
+            if first is declared:
+                return
+            raise RitualDefinitionError(self._collision(declared.name, origin))
+        self._known[declared.name] = declared
+        if origin is not None:
+            self._origins[declared.name] = origin
+
+    def get(self, name: str) -> _DeclaredT | None:
+        return self._known.get(name)
+
+    def names(self) -> list[str]:
+        return sorted(self._known)
+
+    def _collision(self, name: str, origin: str | None) -> str:
+        msg = f"{self._kind} {name!r} is already registered"
+        first = self._origins.get(name)
+        if first is None or origin is None:
+            return msg
+        return f"{msg} — declared in both {first} and {origin}"
+
+
 class Compendium:
     def __init__(self) -> None:
-        self._rituals: dict[str, Ritual] = {}
-        self._sources: dict[str, str] = {}
-        self._steps: dict[str, Step] = {}
+        self._rituals: _Declarations[Ritual] = _Declarations("ritual")
+        self._steps: _Declarations[Step] = _Declarations("step")
 
-    # `source` names where the ritual came from, so a genuine collision between
-    # two different files says which two rather than leaving the author to guess.
-    def register(self, ritual: Ritual, *, source: str | None = None) -> None:
-        if ritual.name in self._rituals:
-            raise RitualDefinitionError(self._collision(ritual.name, source))
-        self._rituals[ritual.name] = ritual
-        if source is not None:
-            self._sources[ritual.name] = source
+    def register(self, ritual: Ritual, *, origin: str | None = None) -> None:
+        self._rituals.add(ritual, origin=origin)
 
-    def _collision(self, name: str, source: str | None) -> str:
-        msg = f"ritual {name!r} is already registered"
-        first = self._sources.get(name)
-        if first is None or source is None:
-            return msg
-        return f"{msg} — declared in both {first} and {source}"
-
-    # Steps are collected for `rituals show` only, so a name collision across
-    # modules is not worth an error — the first definition wins.
-    def register_step(self, the_step: Step) -> None:
-        self._steps.setdefault(the_step.name, the_step)
+    # Once a name collision was worth no more than the first definition winning
+    # — every step was in one file, where a duplicate is a visible mistake.
+    # Across the submodules of a package `measure` is a natural name twice, and
+    # the loser vanishing means `rituals show` drawing the other ritual's step.
+    def register_step(self, the_step: Step, *, origin: str | None = None) -> None:
+        self._steps.add(the_step, origin=origin)
 
     def step(self, name: str) -> Step | None:
         return self._steps.get(name)
 
     def ritual(self, name: str) -> Ritual:
-        try:
-            return self._rituals[name]
-        except KeyError:
+        if (found := self._rituals.get(name)) is None:
             msg = f"no ritual named {name!r}"
-            raise RitualDefinitionError(msg) from None
+            raise RitualDefinitionError(msg)
+        return found
 
     def names(self) -> list[str]:
-        return sorted(self._rituals)
+        return self._rituals.names()
 
 
 # What a medium package offers the lexicon, which may not import it: the Focus

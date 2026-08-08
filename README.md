@@ -111,9 +111,11 @@ result: {"outcome":"green"}
 
 `rituals.py` — or a `rituals/` package — in the current directory or any
 parent. A package is searched all the way down, so its `__init__.py` can stay
-empty and you can split it by ritual, by kind, or not at all. A `.vekna.toml`
-(project) or `~/.config/vekna/config.toml` (global) can name more, resolved
-relative to the config file:
+empty and you can split it by ritual, by kind, or not at all. Every level needs
+an `__init__.py` of its own to be searched, and one directory holding both a
+`rituals.py` and a `rituals/` is an error naming both rather than a precedence
+rule picking one. A `.vekna.toml` (project) or `~/.config/vekna/config.toml`
+(global) can name more, resolved relative to the config file:
 
 ```toml
 [rituals]
