@@ -79,8 +79,8 @@ repository setting still has to be told once.
       date, and open a fresh `Unreleased` above it
 - [ ] `mise run fullcheck` — green, no exceptions
 - [ ] `mise run site:check` — green
-- [ ] `mise run release:build` — builds both artifacts and installs the wheel
-      into a venv that has never seen this project
+- [ ] `mise run release:build` — builds both artifacts and installs each into a
+      venv that has never seen this project
 - [ ] Open the pull request, and let CI agree with what you ran locally
 - [ ] Optional rehearsal: *Actions* → *Release* → *Run workflow*. Builds and
       publishes to TestPyPI only — no tag spent, and whatever only an index can

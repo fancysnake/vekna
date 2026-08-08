@@ -17,9 +17,9 @@ which links back to the version here that carried each shipped feature.
 - **`pip install vekna`.** The first release published to PyPI, which is what
   every version number this project has spent so far was for. `vekna[trial]`
   brings the pytest fixture. Building it is `mise run release:build`, which
-  builds the wheel and the sdist and then installs the wheel into a venv that
-  has never seen this project — `poetry install` leaves an environment where
-  everything imports whether the wheel carries it or not, so the check has to
+  builds the wheel and the sdist and then installs each into a venv that has
+  never seen this project — `poetry install` leaves an environment where
+  everything imports whether the artifact carries it or not, so the check has to
   happen somewhere else. Publishing is a `v*` tag: CI refuses to publish a wheel
   whose version is not the tag, uploads through PyPI's trusted publishing with
   no token stored anywhere, then installs what the index actually serves and
@@ -34,8 +34,11 @@ which links back to the version here that carried each shipped feature.
   anyone who installed it. `vekna` gains an `__init__.py` at the same time: it
   was an implicit namespace package, which is the one shape where a PEP 561
   marker is not reliably honoured.
-- **`lint:deptry` and `lint:audit`** in `fullcheck`. Both tools were dev
-  dependencies wired to nothing.
+- **`lint:deptry`** in `fullcheck`, and **`lint:audit`** on a task and a weekly
+  workflow. Both tools were dev dependencies wired to nothing. Only deptry gates
+  a merge: an advisory arrives on somebody else's schedule, so `pip-audit` runs
+  weekly against what an install actually brings, where it is news rather than a
+  build everyone's change broke.
 - **[vekna.fancysnake.dev](https://vekna.fancysnake.dev)** — the documentation
   site, mkdocs with the Material theme, built by `site:build` and deployed to
   GitHub Pages on every push to `main`. Eight pages written for someone who has
