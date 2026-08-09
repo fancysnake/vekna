@@ -10,10 +10,11 @@ layer has a contract; nothing is exempt by accident.
 ## Packages
 
 ```text
-(root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.6.0.
+(root)    vekna's own GLIMPSE layers — the CLI and the daemon.
 lexicon   The SDK and the cast runtime: ritual/step/medium model, grimoire.
 folio     The mediums — coding, shell, flow — and their foci.
-wire      Daemon protocol DTOs and framing. Imports nothing internal.
+wire      Daemon protocol DTOs, framing, and the run record. Imports
+          nothing internal.
 ```
 
 ### Enforced package rules
@@ -35,10 +36,11 @@ A folio never imports another folio, and the lexicon never imports a folio: it
 loads them by name and asks each to `register()` what it offers — a Focus for a
 medium, and optionally a one-shot prompt entry.
 
-`vekna.wire` currently has no contract. It is also **dormant**: nothing in
-`src/` imports it. It holds the schema the daemon and a cast process will share
-over a socket at 0.6.0, which is why it must stay a top-level package — a
-daemon that may not import the lexicon could not reach it anywhere else.
+`vekna.wire` has no contract of its own, and needs none: it is the one package
+both sides import. It holds the schema the daemon and a cast process share over
+the socket — and `RunRecord`, which they share over the filesystem for the same
+reason — which is why it must stay a top-level package. A daemon that may not
+import the lexicon could not reach it anywhere else.
 
 ### The lexicon's one door
 
@@ -85,12 +87,28 @@ submodules cooperate.
 
 ```text
 (root)
-  gates/         # empty until 0.6.0 gives it daemon commands
-  links/ mills/ pacts/ specs/             # empty, awaiting the daemon
+  pacts/
+    casts.py     # CastView, RiteView, the Casts protocol a surface reads
+    routing.py   # the Surface protocol, Routed, SocketPathError
+    screen.py    # the Screen protocol a surface paints on
+  specs/         # empty
+  mills/
+    hub.py       # the daemon's model: views per cast, fan-out, replay
+    debug.py     # one Routed, one line
+  links/
+    socket_server.py  # the Unix socket, and Serving, which closes it whole
+    journal.py        # runs/<cast_id>/: run.json + events.jsonl
+    terminal.py       # the daemon's own screen and keys
+    debug_log.py      # --debug's file
+  gates/
+    cli/
+      screen.py   # painting: the cast list, one cast drilled into, `casts`
+      dashboard.py # what the keys do — over the two protocols, nothing else
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/
-    cli.py       # click root: cast, rituals — reaches lexicon dynamically
+    cli.py       # click root: the daemon, cast, rituals, casts — and the
+                 # lexicon reached dynamically
 rituals.py       # the rituals this project casts on itself, named by
                  # .vekna.toml so `src` is the one measured directory
 lexicon/
@@ -101,8 +119,12 @@ lexicon/
     engine.py    # Grimoire, Compendium, FocusSlot, rite ctx, run_cast
     dispatch.py  # @step/@ritual/@medium and signature reflection
     graph.py     # AST step-graph reader for `rituals show`
+    ledger.py    # what an interrupted cast already did, for `--resume`
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
+    daemon.py      # the wire client, the grimoire→wire projection, the
+                   # channel that tees a prompt onto it
+    resume.py      # reading a journal back for `--resume`
     loader.py      # rituals.py / rituals/ package / module loading,
                    # submodule sweep, .vekna.toml reading
   _inits.py      # main, rituals_list, rituals_show — binds the above

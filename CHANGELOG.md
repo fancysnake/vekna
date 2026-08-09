@@ -10,6 +10,57 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+## [0.6.0] - 2026-08-09
+
+### Added
+
+- **The daemon.** Bare `vekna` binds `/tmp/vekna-<uid>.sock` and renders every
+  cast running on this account, whatever directory each was started in: a tree
+  of casts, a number to drill into one, `b` back, `q` quit. A second `vekna`
+  attaches to the first as another surface and paints the same view, including
+  what is waiting. It observes and records; it starts nothing.
+- **A cast tells it what it is doing.** `vekna cast` projects its grimoire onto
+  `vekna.wire` and sends it — the protocol designed at `0.2.0` finally has both
+  ends. The cast's end is send-only and reads the socket for one thing, the EOF
+  that says the daemon has gone, so a daemon dying mid-cast cannot strand one. A
+  cast that starts with no daemon keeps probing, and one raised halfway through
+  is caught up on the whole cast rather than joining midway.
+- **The prompt stays where the cast is.** A `decide`, coding's tool gate and the
+  agent's own question are all answered on the stdin of the terminal that ran
+  the cast, attached or not. What the wire carries is that the cast is
+  *waiting*: the daemon raises it, with the prompt, and stops raising it when it
+  is answered. Answering from `vekna` itself is deferred — see
+  [the feature doc](docs/reborn/06-vekna-daemon.md) for what it costs.
+- **A durable journal.** Every event the daemon sees is written under
+  `~/.config/vekna/runs/<cast_id>/` — `run.json` for what the cast was and how
+  it ended, `events.jsonl` for the wire verbatim. `vekna casts` lists them,
+  newest first, and needs no daemon running to do it. A cast that ran with
+  nothing listening leaves no record: the journal is the daemon's.
+- **`vekna casts resume <cast_id>`.** A fresh process in the directory the
+  interrupted cast ran in, handed the journal. Its steps re-run — cheap, and the
+  same walk they took before — while every agent call, shell command and prompt
+  that had already finished comes back off the record instead of happening
+  twice. A coding rite that was interrupted mid-flight runs again on the session
+  the cast had already opened, so the agent remembers what it was told. Replay
+  stops at the first rite that does not match what was recorded and the cast
+  runs live from there, rather than being handed someone else's answers.
+- **`vekna --debug`.** A line per event to `~/.config/vekna/debug.log`: kind,
+  cast, and what the daemon did with it, including the ones it dropped and why.
+  The daemon is the one place every message passes, so it is the one place worth
+  instrumenting — and it writes to a file rather than to the view it would
+  otherwise paint over.
+
+### Changed
+
+- **Bare `vekna` no longer prints its help.** It is the daemon; `vekna --help`
+  is the help.
+- **Locks moved to `0.7.0`,** and got simpler for landing after the daemon that
+  coordinates them: there is no permissive default to ship and then flip, and no
+  release where `lock()` succeeds while promising nothing.
+- `CastGoodbye` gained a `disconnected` status, `CastHello` a `resumed_from`,
+  and the wire a `SurfaceHello` — a connection says which of the two things it
+  is, and nothing has to guess.
+
 ## [0.5.0] - 2026-08-08
 
 ### Added
@@ -650,7 +701,9 @@ which links back to the version here that carried each shipped feature.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.4.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/fancysnake/vekna/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/fancysnake/vekna/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fancysnake/vekna/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/fancysnake/vekna/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0

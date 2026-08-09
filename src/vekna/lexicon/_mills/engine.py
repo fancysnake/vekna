@@ -27,6 +27,7 @@ from vekna.lexicon._pacts import (
 )
 
 _FocusT = TypeVar("_FocusT")
+_REPLAYED = "(from the journal — this rite already ran)"
 
 
 def _now() -> datetime:
@@ -369,6 +370,11 @@ async def _rite(
     token = _current_rite.set(
         replace(parent, parent_id=rite_id, outcome=outcome, replay=replay)
     )
+    # Said out loud, because a rite that replayed and a rite that ran and
+    # printed nothing look identical otherwise — and "did it really skip the
+    # work?" is the question a resumed cast is watched for.
+    if replay is not None:
+        parent.grimoire.rite_delta(rite_id, _REPLAYED)
     finished = False
     try:
         yield

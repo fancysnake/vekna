@@ -43,6 +43,10 @@ def _line(index: int, view: CastView) -> str:
     )
 
 
+def _counted(total: int) -> str:
+    return "1 cast" if total == 1 else f"{total} casts"
+
+
 def _listing(casts: Sequence[CastView]) -> list[str]:
     if not casts:
         return ["", " no casts — run `vekna cast <ritual>` anywhere", ""]
@@ -112,7 +116,7 @@ def paint(*, casts: Sequence[CastView], focus: str | None, note: str = "") -> st
         body = _drilled(found[0])
         keys = _CAST_KEYS
     else:
-        body = [f"vekna — {len(casts)} casts", *_listing(casts)]
+        body = [f"vekna — {_counted(len(casts))}", *_listing(casts)]
         keys = _LIST_KEYS
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"

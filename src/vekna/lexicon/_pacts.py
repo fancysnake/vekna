@@ -53,7 +53,7 @@ GitRef = Annotated[str, AfterValidator(_nonempty_git_ref)]
 
 # The grimoire's own vocabulary, not the daemon's. These carry no `cast_id`:
 # correlating events to a cast is a transport concern, and in one process there
-# is one cast. `vekna.wire` projects these onto the socket at 0.6.0; keeping the
+# is one cast. `_links/daemon.py` projects these onto `vekna.wire`; keeping the
 # two apart is what lets either change without the other.
 @dataclass(frozen=True, kw_only=True)
 class RiteBegan:
@@ -70,7 +70,7 @@ class RiteStreamed:
     delta: str
 
 
-# `result` is JSON-shaped because 0.6.0 persists the grimoire to a durable
+# `result` is JSON-shaped because the daemon persists the grimoire to a durable
 # journal — a real requirement, not the transport leaking back in.
 @dataclass(frozen=True, kw_only=True)
 class RiteEnded:

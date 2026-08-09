@@ -44,7 +44,7 @@ status in its header and nowhere else.
 | [Rituals as modules](reborn/10-ritual-modules.md) | `0.4.0` | [shipped](../CHANGELOG.md#040---2026-08-08) |
 | [Trial: testing rituals](reborn/12-trial.md) | `0.4.0` | [shipped](../CHANGELOG.md#040---2026-08-08) |
 | [The site](reborn/09-site.md) | `0.5.0` | in progress |
-| [Vekna daemon](reborn/06-vekna-daemon.md) | `0.6.0` | in progress |
+| [Vekna daemon](reborn/06-vekna-daemon.md) | `0.6.0` | [shipped](../CHANGELOG.md#060---2026-08-09) |
 | [Locks API](reborn/05-locks.md) | `0.7.0` | planned |
 | [Lich](reborn/07-lich.md) | `0.8.0` | planned |
 | [1.0 hardening](reborn/08-hardening.md) | `1.0.0` | in progress |

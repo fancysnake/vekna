@@ -116,6 +116,18 @@ class TestResume:
         # The first shell rite came off the journal; only the second ran.
         assert (project / "ran.log").read_text() == "from-the-journal\nran-0\n"
 
+    # A rite that replayed and a rite that ran and printed nothing look the
+    # same in the tree otherwise.
+    @staticmethod
+    def test_a_replayed_rite_says_it_replayed(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+
+        main(["--resume", cast_id])
+
+        assert "already ran" in capsys.readouterr().out
+
     @staticmethod
     def test_it_ends_where_the_ritual_says_not_where_the_journal_stops(
         project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

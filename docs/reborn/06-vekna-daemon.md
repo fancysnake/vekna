@@ -1,6 +1,6 @@
 # Feature — Vekna daemon (journal, attach/replay, resume)
 
-**Version:** `0.6.0` — **in progress.**
+**Version:** `0.6.0` — **shipped.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, replay rule,
 CLI surface.

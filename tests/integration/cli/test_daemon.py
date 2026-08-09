@@ -101,7 +101,7 @@ class TestTheView:
         keys.press("q")
 
         assert await running == 0
-        assert keys.painted("1 casts")
+        assert keys.painted("vekna — 1 cast")
         writer.close()
 
     @staticmethod

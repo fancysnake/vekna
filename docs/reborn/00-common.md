@@ -254,8 +254,8 @@ never imports `vekna.wire` at all.
 compatible message kinds. That only holds because nothing else is built out of
 these types: the grimoire has its own vocabulary (`RiteBegan` / `RiteStreamed` /
 `RiteEnded` in `lexicon/_pacts`) and is projected onto the wire at the socket
-edge. Until 0.6.0 writes that projection, `vekna.wire` is dormant — a designed
-protocol with no consumer yet, which is deliberate.
+edge. 0.6.0 wrote that projection, in `lexicon/_links/daemon.py`, and it is the
+only place the two vocabularies meet.
 
 | Kind | Direction | Notes |
 |------|-----------|-------|
