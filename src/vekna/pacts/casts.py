@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from pydantic import BaseModel
+
 from vekna.wire import CastHello, DecideRequested, RiteStarted
 
 # The wire's three final statuses, plus the one a cast has while it is still
@@ -42,3 +44,12 @@ class CastView:
     detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, DecideRequested] = field(default_factory=dict)
+
+
+# `run.json`: what a cast was and how it ended, beside the event log that says
+# what it did. The same three fields the view carries, minus everything the log
+# can be read for — this is the index, not a second copy.
+class RunRecord(BaseModel):
+    hello: CastHello
+    status: CastStatus = "running"
+    detail: str | None = None

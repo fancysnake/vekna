@@ -10,6 +10,13 @@ class Surface(Protocol):
     def send(self, message: WireMessage) -> None: ...
 
 
+# Something that is not a socket is sitting where the daemon binds. Its own
+# error because the answer is a sentence naming the path, not the traceback out
+# of `bind()` that would otherwise reach the operator.
+class SocketPathError(Exception):
+    pass
+
+
 Action = Literal["applied", "attached", "detached", "dropped"]
 
 

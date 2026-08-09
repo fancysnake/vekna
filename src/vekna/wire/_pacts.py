@@ -6,6 +6,9 @@ from pydantic import BaseModel, Discriminator, JsonValue, TypeAdapter
 # --- cast lifecycle ---
 
 
+# A resumed cast is a new cast — new id, new journal — that says which one it is
+# carrying on from. Recording it on the hello rather than beside it means the
+# daemon, the journal and a surface all learn it from the same message.
 class CastHello(BaseModel):
     kind: Literal["cast_hello"] = "cast_hello"
     cast_id: str
@@ -13,6 +16,7 @@ class CastHello(BaseModel):
     ritual: str
     components: dict[str, JsonValue]
     started_at: datetime
+    resumed_from: str | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without

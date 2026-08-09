@@ -1,0 +1,118 @@
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from vekna.links.journal import Journal
+from vekna.wire import CastGoodbye, CastHello, RiteDelta, SurfaceHello
+
+_WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+
+
+def _hello(cast_id: str = "c1", *, started_at: datetime = _WHEN) -> CastHello:
+    return CastHello(
+        cast_id=cast_id,
+        project_root="/proj",
+        ritual="fix_demo",
+        components={"bound": 3},
+        started_at=started_at,
+    )
+
+
+class TestRecording:
+    @staticmethod
+    def test_a_hello_opens_a_run_directory(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        journal.record(_hello())
+
+        assert (tmp_path / "c1" / "run.json").is_file()
+        assert (tmp_path / "c1" / "events.jsonl").is_file()
+
+    @staticmethod
+    def test_events_are_the_wire_verbatim(tmp_path: Path):
+        journal = Journal(tmp_path)
+        delta = RiteDelta(cast_id="c1", rite_id="r1", delta="one")
+
+        journal.record(_hello())
+        journal.record(delta)
+
+        assert list(journal.events("c1")) == [_hello(), delta]
+
+    @staticmethod
+    def test_a_goodbye_closes_the_record(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+
+        journal.record(CastGoodbye(cast_id="c1", status="disconnected", detail="eof"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.status == "disconnected"
+        assert record.detail == "eof"
+
+    @staticmethod
+    def test_a_surface_leaves_nothing_behind(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        journal.record(SurfaceHello())
+
+        assert not list(tmp_path.iterdir())
+
+    @staticmethod
+    def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        journal.record(_hello("c2").model_copy(update={"resumed_from": "c1"}))
+
+        record = journal.read("c2")
+        assert record is not None
+        assert record.hello.resumed_from == "c1"
+
+
+class TestReading:
+    @staticmethod
+    def test_an_unknown_cast_reads_as_nothing(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        assert journal.read("nope") is None
+        assert not list(journal.events("nope"))
+
+    @staticmethod
+    def test_a_goodbye_for_a_cast_that_never_said_hello_closes_nothing(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        journal.record(CastGoodbye(cast_id="ghost", status="ok"))
+
+        assert journal.read("ghost") is None
+
+    @staticmethod
+    def test_a_blank_line_in_the_log_is_not_an_event(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        with (tmp_path / "c1" / "events.jsonl").open("ab") as events:
+            events.write(b"\n")
+
+        assert list(journal.events("c1")) == [_hello()]
+
+    @staticmethod
+    def test_recent_is_newest_first_and_bounded(tmp_path: Path):
+        journal = Journal(tmp_path)
+        for index in range(3):
+            journal.record(
+                _hello(f"c{index}", started_at=_WHEN + timedelta(minutes=index))
+            )
+
+        recent = journal.recent(limit=2)
+
+        assert [record.hello.cast_id for record in recent] == ["c2", "c1"]
+
+    @staticmethod
+    def test_recent_on_an_empty_root_is_empty(tmp_path: Path):
+        assert Journal(tmp_path / "nothing-here").recent(limit=5) == []
+
+    @staticmethod
+    def test_a_stray_file_beside_the_runs_is_not_one(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        (tmp_path / "notes.txt").write_text("mine")
+
+        assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c1"]
