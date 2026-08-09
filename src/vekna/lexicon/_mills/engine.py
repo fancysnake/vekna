@@ -153,6 +153,10 @@ class Compendium:
     def ritual(self, name: str) -> Ritual:
         if (found := self._rituals.get(name)) is None:
             msg = f"no ritual named {name!r}"
+            # A typo and an empty library are the same message otherwise, and
+            # they want opposite things done about them.
+            if known := self.names():
+                msg = f"{msg} — known rituals: {', '.join(known)}"
             raise RitualDefinitionError(msg)
         return found
 

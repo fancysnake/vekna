@@ -1,6 +1,8 @@
 # Eye — `2.0.0`
 
-The visual surfaces. Parked until [Reborn](../reborn/README.md) ships.
+The visual surfaces. Parked until [Reborn](../reborn/README.md) ships. Status
+for these and every other feature is in the [roadmap](../README.md#roadmap);
+what each one *is* is below.
 
 The Eye of Vecna observes (see the Hand/Eye note in
 [`../reborn/00-common.md`](../reborn/00-common.md)); these are the surfaces that
@@ -18,8 +20,8 @@ which is why they park cleanly instead of blocking the road to 1.0.
 - [05-channels.md](05-channels.md) — the lich's Discord code reshaped into a
   surface protocol, so a second channel is a file.
 
-The numbers 01 and 02 carried in the reborn roadmap (`0.7.0`, `0.8.0`) are
-stale; these ship in the `2.x` line. The order among the five is not fixed
+The numbers 01 and 02 carried in the reborn roadmap are stale; these ship in the
+`2.x` line. The order among the five is not fixed
 either.
 
 Two of them are not visual, and belong here anyway: 04 brings a small engine
@@ -28,6 +30,6 @@ it, and 05 is another consumer of the same events — one that talks back. The
 track's rule is the consumer, not the pixels.
 
 WhatsApp notifications were **dropped, not moved**. Discord ships as the lich's
-own channel at 0.7.0 and does the same job better: WhatsApp cannot give a lich
+own channel at 0.8.0 and does the same job better: WhatsApp cannot give a lich
 a channel of its own, so it could only ever have been a notification feed with
 commands routed by prefix.

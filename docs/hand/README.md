@@ -16,7 +16,8 @@ acts.
 
 ## Contents
 
-The order among them is not fixed, though 06 wants 02 and 03 before it.
+The order among them is not fixed, though 06 wants 02 and 03 before it. Status
+for these and every other feature is in the [roadmap](../README.md#roadmap).
 
 - [01-failure.md](01-failure.md) — failure as a transition: `on_error`, a typed
   `Failure` payload, recovery as an ordinary step.
@@ -39,7 +40,7 @@ A track is where work is *discussed*, not a queue that has to drain in order —
 the number attaches at the tag. Two of these (02, 03) are small and cost almost
 nothing, and if a cast left running overnight makes either load-bearing before
 `1.0`, it moves into the release that needs it and this track shrinks. That is
-the same rule that let the lich take Eye's `0.7.0` slot.
+the same rule that let the lich take Eye's slot.
 
 What stays here regardless is anything that changes the shape of the lexicon's
 public surface. Reborn's job is to get one story finished and installable; a

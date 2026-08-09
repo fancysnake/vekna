@@ -1,6 +1,6 @@
 # Feature — Trial: testing rituals
 
-**Version:** `0.4.0`
+**Version:** `0.4.0` — **shipped.**
 
 See [00-common.md](00-common.md) — package layout, layering, Components.
 
@@ -230,7 +230,7 @@ What it costs:
   the package from the project name, so it builds `src/vekna` and nothing else,
   but `rituals` is a name an author is very likely to own. Checking the built
   wheel is an acceptance item rather than an assumption.
-- **`0.5.0` inherits a slightly different move.**
+- **Rituals-as-modules inherits a slightly different move.**
   [10-ritual-modules.md](10-ritual-modules.md) turns this file into a `rituals/`
   package; from `src/` that package is reached by the `modules` route rather
   than the walk-up — precisely the route that doc puts the ritual root's parent

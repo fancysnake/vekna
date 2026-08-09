@@ -1,6 +1,6 @@
 # Feature — Lich (a named station, remote-controlled)
 
-**Version:** `0.7.0`
+**Version:** `0.8.0` — **planned.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, CLI surface —
 and [06-vekna-daemon.md](06-vekna-daemon.md), which this builds on.
@@ -125,7 +125,7 @@ loop waits on.
 This is the **lich's** rule, not the directory's. Several liches can stand in
 one project root and cast at the same time; the slot buys serial work per
 station, and keeping two stations out of each other's files is what the
-daemon's lock coordination (0.6.0) is for. `lock("project:edit")` is the tool,
+daemon's lock coordination (0.7.0) is for. `lock("project:edit")` is the tool,
 and this is the release that makes it load-bearing rather than theoretical.
 
 ### Detached by default

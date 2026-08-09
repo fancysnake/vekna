@@ -5,7 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
+What is planned rather than released is in the [roadmap](docs/README.md#roadmap),
+which links back to the version here that carried each shipped feature.
+
 ## [Unreleased] - ???
+
+## [0.5.0] - 2026-08-08
+
+### Added
+
+- **`pip install vekna`.** The first release published to PyPI, which is what
+  every version number this project has spent so far was for. `vekna[trial]`
+  brings the pytest fixture. Building it is `mise run release:build`, which
+  builds the wheel and the sdist and then installs each into a venv that has
+  never seen this project — `poetry install` leaves an environment where
+  everything imports whether the artifact carries it or not, so the check has to
+  happen somewhere else. Publishing is a `v*` tag: CI refuses to publish a wheel
+  whose version is not the tag, uploads through PyPI's trusted publishing with
+  no token stored anywhere, then installs what the index actually serves and
+  imports it before writing the GitHub release. Every tag rehearses on TestPyPI
+  first, and the workflow can be run by hand to rehearse without tagging at all
+  — a version on PyPI can never be replaced, so whatever only an index can
+  reject is worth finding while the number is still spendable.
+- **The package declares itself.** An SPDX licence expression, the project URLs,
+  keywords and classifiers — a PyPI page that says what vekna is rather than
+  showing `BSD-3-Clause license` as a literal string in the licence field.
+- **`py.typed`.** The codebase is `mypy --strict` and none of that reached
+  anyone who installed it. `vekna` gains an `__init__.py` at the same time: it
+  was an implicit namespace package, which is the one shape where a PEP 561
+  marker is not reliably honoured.
+- **`lint:deptry`** in `fullcheck`, and **`lint:audit`** on a task and a weekly
+  workflow. Both tools were dev dependencies wired to nothing. Only deptry gates
+  a merge: an advisory arrives on somebody else's schedule, so `pip-audit` runs
+  weekly against what an install actually brings, where it is news rather than a
+  build everyone's change broke.
+- **[vekna.fancysnake.dev](https://vekna.fancysnake.dev)** — the documentation
+  site, mkdocs with the Material theme, built by `site:build` and deployed to
+  GitHub Pages on every push to `main`. Eight pages written for someone who has
+  just installed the package: what a ritual is and one running, rituals,
+  mediums, testing with `vekna.trial`, the four example rituals with the
+  credentials each needs, safety, the CLI reference, and the architecture page
+  as it stands. It lives in `docs/` beside the plan, which `exclude_docs` keeps
+  out of the build. `ci.yml` and the new `site.yml` split by path, so a typo fix
+  in a page does not run the test matrix and a runtime change does not rebuild
+  the site.
+- **Two drift guards.** `site:check` is `mkdocs build --strict`, which fails on
+  a link to a page that is not there. The commands the CLI page documents are
+  checked against what click actually registers — a test rather than part of
+  `site:check`, because that drift comes from a Python change.
+
+### Fixed
+
+- **A ritual source that fails to import now says which one.** `rituals.py` and
+  every submodule of a `rituals/` package are named when they raise on import;
+  the interpreter's `No module named 'x'` named the typo and not the place,
+  which for a package sweep could be twenty files deep.
+- **A `rituals/` without an `__init__.py` says so.** It reported "no rituals
+  found (create a rituals.py or a rituals/ package in this directory)" while
+  standing next to a directory called `rituals`. Walking past it is still right
+  — one may sit above a project with its own source — but the message now names
+  the directory and the one empty file that fixes it.
+- **A `.vekna.toml` naming a path that is not there names the config**, rather
+  than raising a bare `[Errno 2]` that carried the path and not the line that
+  asked for it. An unknown ritual name lists the ones the source does declare.
+- **A missing Claude Code CLI is a failed cast, not a traceback.** The `coding`
+  folio caught nothing the SDK raised, so the first thing absent for anyone who
+  has only run `pip install vekna` arrived as a stack trace from someone else's
+  library. Everything else the SDK raises mid-stream now ends the cast with the
+  failure named.
+
+### Changed
+
+- **`setuptools` is a declared dev dependency**, pinned past a known advisory.
+  Nothing imports it and it is not in the wheel's dependency set — Python 3.11's
+  `venv` seeds it, and a fresh environment would otherwise reintroduce the
+  vulnerable version every time.
 
 ## [0.4.0] - 2026-08-08
 

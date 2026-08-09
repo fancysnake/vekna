@@ -1,6 +1,6 @@
 # Feature — Vekna daemon (lock coordination, journal, attach/replay)
 
-**Version:** `0.6.0`
+**Version:** `0.7.0` — **planned.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, replay rule,
 CLI surface.
@@ -67,7 +67,7 @@ surface and sees the same view. Lock default flips to `deny`.
 ## Out of scope
 
 Originating casts — the daemon observes and coordinates; the lich casts
-(0.7.0). Visual surfaces ([`../eye/`](../eye/README.md)). Cross-machine peers.
+(0.8.0). Visual surfaces ([`../eye/`](../eye/README.md)). Cross-machine peers.
 Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 
 ## Acceptance

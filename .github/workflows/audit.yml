@@ -1,0 +1,33 @@
+---
+name: Audit
+
+# A new advisory is news, not a broken build. It arrives on somebody else's
+# schedule, so it is asked for on ours — weekly, away from the merge path,
+# where a failure means "go and look" rather than "your change is wrong".
+#
+# The question is asked of what a user installs: the package built from this
+# tree and the dependencies it pulls, not the development environment, which is
+# full of tooling that never reaches anyone.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Audit what an install brings with it
+        run: |
+          python -m venv audit
+          ./audit/bin/pip install --quiet ".[trial]" pip-audit
+          ./audit/bin/python -m pip_audit

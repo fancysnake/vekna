@@ -10,7 +10,7 @@ One binary, `vekna`, three roles with separate lifetimes:
   folios, and the user's `rituals.py`. Runs one cast to completion, streams
   events to the daemon when attached, exits. Always fresh; never pooled. A
   crash kills one cast.
-- **lich** (0.7.0) — long-running, named, bound to one project directory (a
+- **lich** (0.8.0) — long-running, named, bound to one project directory (a
   directory may hold several). Started by `vekna lich`. Runs one cast at a time
   in its directory and takes orders from
   any surface — its terminal, another shell, its own Discord channel. Spawns
@@ -28,9 +28,9 @@ one cast process, not the daemon or sibling casts. Blast radius = one cast. The
 original soul (cross-attention surfacing) is the daemon's job, across casts.
 
 **Staging.** 0.x builds features up. The daemon (`vekna` dashboard + real lock
-coordination) arrives at **0.6.0**; before that, casts run standalone. Lock
-APIs ship at **0.5.0** with a permissive default; the daemon adds coordination
-and flips the default to `deny` at 0.6.0. The lich lands at **0.7.0** and is the
+coordination) arrives at **0.7.0**; before that, casts run standalone. Lock
+APIs ship at **0.6.0** with a permissive default; the daemon adds coordination
+and flips the default to `deny` at 0.7.0. The lich lands at **0.8.0** and is the
 first release that can start work remotely. **1.0 ships when all features are
 ready** (hardening), not when the daemon lands. The visual surfaces are parked
 past 1.0 in [`../eye/`](../eye/README.md).
@@ -52,10 +52,11 @@ named `vekna`.
 | **Focus**  | Swappable backend a Medium channels. ≈ adapter (Claude SDK, pylint, bash). |
 | **Component** | What a ritual needs before it can be cast, the way a spell needs its material components. Typed value on its external interface (CLI in). `File`, `Directory`, `Text`. Declared as one field of the ritual's components model. |
 | **Folio**  | Bound bundle of Mediums and/or Foci, shaped like a future stand-alone dist. |
+| **Tome**   | A ritual library published as an installable package, named by `[rituals] modules`. Versioned and released like any other dependency; the project that casts from it needs nothing on disk but the config line. A folio ships mediums, a tome ships rituals. |
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
-| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. (0.7.0.) |
+| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. (0.8.0.) |
 | **Phylactery** | A lich's row in the daemon's registry, beside `runs/`: name, root, created, last cast, Discord channel id. Outlives the process — a lich whose process died is dormant, not gone. Anything larger (session log, cast history) is the journal's already. |
 
 `cast` is the verb: `vekna cast write-tests`.
@@ -132,7 +133,7 @@ superset of the edges a cast walks. Rendering waits for the dashboard.)
 ## Process model
 
 ```text
-ritual library                cast process                     vekna daemon (0.6.0+)
+ritual library                cast process                     vekna daemon (0.7.0+)
 ──────────────                ────────────                     ─────────────────────
 rituals.py            ◄────── imports                          ┌──── CLI
 @ritual decorators                                             │
@@ -140,12 +141,12 @@ rituals.py            ◄────── imports                          ┌
                               standalone fallback              │
                               cast event log                   ├──── runs/ on disk
                               acquires/releases locks          │
-                              renders prompts on stdin         ├──── lich routing (0.7.0)
+                              renders prompts on stdin         ├──── lich routing (0.8.0)
                               when no daemon                   │
                                                                └──── eye surfaces (post-1.0)
 ```
 
-A lich (0.7.0) hangs off the same daemon, bound to one project directory —
+A lich (0.8.0) hangs off the same daemon, bound to one project directory —
 though a directory may hold several:
 
 ```text
@@ -182,7 +183,7 @@ phylactery: one registry row
 src/vekna/
   pacts/ specs/ mills/ links/ gates/ inits/ edges/   # vekna daemon: full GLIMPSE
     gates/cli/click/                                  # vekna CLI — vekna, vekna cast
-    gates/tui/textual/                                # vekna dashboard (0.7.0)
+    gates/tui/textual/                                # vekna dashboard (Eye)
 
   wire/                            # wire DTOs — only schema both sides share
     __init__.py  _pacts.py        # Pydantic models, framing. Versioned independently.
@@ -250,7 +251,7 @@ never imports `vekna.wire` at all.
 compatible message kinds. That only holds because nothing else is built out of
 these types: the grimoire has its own vocabulary (`RiteBegan` / `RiteStreamed` /
 `RiteEnded` in `lexicon/_pacts`) and is projected onto the wire at the socket
-edge. Until 0.6.0 writes that projection, `vekna.wire` is dormant — a designed
+edge. Until 0.7.0 writes that projection, `vekna.wire` is dormant — a designed
 protocol with no consumer yet, which is deliberate.
 
 | Kind | Direction | Notes |
@@ -262,8 +263,8 @@ protocol with no consumer yet, which is deliberate.
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
-| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | 0.7.0: name, project root, pid, idle-or-casting |
-| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | 0.7.0: the daemon routes by lich name |
+| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | 0.8.0: name, project root, pid, idle-or-casting |
+| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | 0.8.0: the daemon routes by lich name |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on
@@ -333,7 +334,7 @@ modules = ["myproj.rituals", "myproj.dev_rituals"]
 files   = ["scripts/rituals.py", "ops/rituals.py"]
 
 [locks]
-standalone = "warn"   # 0.5.0 default; flips to "deny" when the daemon lands (0.6.0)
+standalone = "warn"   # 0.6.0 default; flips to "deny" when the daemon lands (0.7.0)
 ```
 
 A config that does not validate stops the command with the path and the
@@ -362,16 +363,16 @@ vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only comm
 vekna cast --prompt "<text>"                  # one-step cast on the coding medium, no rituals.py needed — 0.3.0
 vekna rituals list                            # defined rituals + their Components — 0.3.0
 vekna rituals show <ritual>                   # Component schema + inferred step graph — 0.3.0
-vekna                                         # dashboard: observe running casts, drill in — 0.6.0
-vekna casts                                   # list active + recent casts — 0.6.0
-vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
-vekna locks                                   # current locks + holders — 0.6.0
-vekna unlock <key>                            # admin override (confirmation) — 0.6.0
-vekna --debug                                 # daemon: log every event it processes — 0.6.0
-vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.7.0
-vekna lich attach [<name>]                    # attach a shell to a lich's session — 0.7.0
-vekna lich dismiss <name>                     # end it; archive the channel, drop the row — 0.7.0
-vekna liches                                  # liches live and dormant, their roots and state — 0.7.0
+vekna                                         # dashboard: observe running casts, drill in — 0.7.0
+vekna casts                                   # list active + recent casts — 0.7.0
+vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.7.0
+vekna locks                                   # current locks + holders — 0.7.0
+vekna unlock <key>                            # admin override (confirmation) — 0.7.0
+vekna --debug                                 # daemon: log every event it processes — 0.7.0
+vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.8.0
+vekna lich attach [<name>]                    # attach a shell to a lich's session — 0.8.0
+vekna lich dismiss <name>                     # end it; archive the channel, drop the row — 0.8.0
+vekna liches                                  # liches live and dormant, their roots and state — 0.8.0
 vekna --help
 ```
 
@@ -426,15 +427,15 @@ run …` commands.
    as its only parameter. Output declared per call site (`output=`); an
    output-side Component is deferred. Telemetry in grimoire, not return value.
 6. Locks hierarchical colon-keyed. Cast holds, release token authorises.
-   Standalone modes allow/warn/deny. Default `warn` at 0.5.0; flips to `deny`
-   when the daemon lands (0.6.0).
+   Standalone modes allow/warn/deny. Default `warn` at 0.6.0; flips to `deny`
+   when the daemon lands (0.7.0).
 7. Lock state replays from grimoire events — no separate "current state" message.
 8. Always-fresh cast process per cast. No pooling. No duplicate-cast block —
    locks express it.
 9. Implicit `./rituals.py` **or `./rituals/`** discovery; project + global
    config augment. A package is swept recursively, so how it is split is the
    author's.
-10. Daemon arrives at 0.6.0; 1.0 ships when all features are ready.
+10. Daemon arrives at 0.7.0; 1.0 ships when all features are ready.
 11. Standalone is a feature. Every primitive works (locks degrade per setting).
 12. `folio/process` owns Process + Executable as mediums, not values.
 13. A lich runs **one cast at a time and refuses a second** — no queue. Control

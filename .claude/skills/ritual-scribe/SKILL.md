@@ -5,7 +5,7 @@ description: Write vekna rituals — the Python programs `vekna cast` runs, buil
 
 # Ritual Scribe
 
-You are writing a **ritual**: a small Python program whose steps a human
+You are writing a **ritual**: an ordinary Python program whose steps a human
 controls and whose agent calls happen inside those steps. The bargain vekna
 strikes, and every ritual you scribe must honour it:
 
@@ -16,7 +16,7 @@ asking the operator questions — and then the step ends, and a boundary decides
 what happens next. A gate passed or it did not. A budget ran out. A human
 answered. Nothing is left to the agent's discretion at the seam.
 
-Everything below is the shipped surface, read off the source of vekna `0.4.0`.
+Everything below is the shipped surface, read off the source of vekna `0.5.0`.
 What is planned but not yet bound is quarantined at the bottom under **Not yet
 bound** — do not summon it.
 
@@ -25,13 +25,17 @@ bound** — do not summon it.
 ## Where the incantation lives
 
 `rituals.py`, in the current directory or **any parent** — the cast walks up
-until it finds one. Nothing else is discovered implicitly *yet*: a `rituals/`
-package is found the same way from `0.5.0` on, which is the one item under
-**Not yet bound** likely to have landed by the time you read this.
+until it finds one. A `rituals/` package is found the same way and searched all
+the way down, so its `__init__.py` stays empty. Every level needs an
+`__init__.py` of its own to be swept, and one directory holding both a
+`rituals.py` and a `rituals/` is an error naming both rather than a precedence
+rule picking one.
 
 More sources can be named in `.vekna.toml` (project, found by walking up) or
-`~/.config/vekna/config.toml` (global). Paths resolve **relative to the config
-file**, not the cwd:
+`~/.config/vekna/config.toml` (global). `modules` names anything importable, so
+an installed package of rituals — a **tome** — is a source like any other, and
+the project casting from it needs nothing on disk but the config line. Paths
+resolve **relative to the config file**, not the cwd:
 
 ```toml
 [rituals]
@@ -374,7 +378,7 @@ reviewer under it could not even read `CLAUDE.md`.
 list is `Read` on any path the process can open; `permission_mode` inspects no
 arguments, and `cwd` is a working directory, not a jail. If an agent genuinely
 must not leave the repository, that is a sandbox or a `PreToolUse` validator —
-neither of which vekna ships at `0.3.0`. Say so in the prompt by all means, but
+neither of which vekna ships at `0.5.0`. Say so in the prompt by all means, but
 know that you asked rather than bound, and do not write a ritual whose safety
 rests on the asking.
 
@@ -642,22 +646,13 @@ Then `mise run fullcheck`, green.
 
 Planned, designed, **not on this branch**. Do not write against any of it.
 
-- **`rituals/` as a package** — **landing in `0.4.0`, written on the
-  `ritual-modules` branch, not on `main`.** Until it merges, discovery builds
-  `directory / "rituals.py"` and asks `.is_file()`, so a directory is never a
-  candidate and `.vekna.toml` `modules` is the only route. After it merges a
-  package is found by walking up, searched all the way down, every level needing
-  its own `__init__.py`, and a directory holding both `rituals.py` and
-  `rituals/` is an error naming both. Check which side of that merge you are on
-  before splitting a ritual source; `docs/reborn/10-ritual-modules.md` is the
-  design.
 - **`@step(max_visits=N)`.** Does not exist. `@step` is a bare decorator; the
   only engine bound is `max_steps` on the ritual.
 - **`@step(goes_to=[...])`** and declared edges. Rejected in favour of steps-as-DTOs
   (`docs/reborn/11-steps-as-dto.md`), which is itself unscheduled and would be a
   breaking change to `goto`/`Transition`.
-- **Locks.** `0.5.0`. Nothing lock-shaped is importable today.
-- **The daemon.** `0.6.0`. Casts run standalone: events to stdout, prompts on
+- **Locks.** `0.6.0`. Nothing lock-shaped is importable today.
+- **The daemon.** `0.7.0`. Casts run standalone: events to stdout, prompts on
   stdin. The socket probe exists and its answer is deliberately discarded.
 - **Annotation-gated dispatch** — `goto(payload)` with no named target. Deferred
   and additive; name the target.

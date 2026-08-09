@@ -1,16 +1,42 @@
 [project]
 name = "vekna"
-version = "0.4.0"
-description = "Coding agent overseer"
+version = "0.5.0"
+description = "Run coding agents as rituals: ordinary Python programs whose steps you control"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
-license = { text = "BSD-3-Clause license" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.11,<4"
+keywords = ["agents", "claude", "llm", "orchestration", "workflow"]
+# No `License ::` classifier: PEP 639 supersedes it with the `License-Expression`
+# metadata field that `license` above produces, and PyPI rejects carrying both.
+# The Python versions are listed by hand — poetry-core emits `Requires-Python`
+# from the constraint but no classifiers, and those are what PyPI filters on.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Build Tools",
+    "Typing :: Typed",
+]
 dependencies = [
     "click (>=8.3.2,<9.0.0)",
     "claude-agent-sdk (>=0.2,<1.0)",
     "pydantic (>=2.12.5,<3.0.0)",
 ]
+
+[project.urls]
+Homepage = "https://vekna.fancysnake.dev"
+Documentation = "https://vekna.fancysnake.dev"
+Repository = "https://github.com/fancysnake/vekna"
+Changelog = "https://github.com/fancysnake/vekna/blob/main/CHANGELOG.md"
+Issues = "https://github.com/fancysnake/vekna/issues"
 
 # `vekna.trial` is importable without pytest — `Trial` is a plain context
 # manager. Only the fixture needs it, and only a pytest run ever loads that.
@@ -47,6 +73,10 @@ dev = [
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
 ]
+
+# Only `site:*` and the site workflow install this one — nothing else needs a
+# static-site generator to run the tests.
+docs = ["mkdocs-material (>=9.6,<10.0)"]
 
 # BLACK
 

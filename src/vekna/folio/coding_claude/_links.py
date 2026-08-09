@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
+    ClaudeSDKError,
+    CLINotFoundError,
     TextBlock,
     create_sdk_mcp_server,
     query,
@@ -22,7 +24,14 @@ from claude_agent_sdk.types import (
 )
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon import AskFn, CodingCall, CodingFocusProtocol, FocusReply, GateFn
+from vekna.lexicon import (
+    AskFn,
+    CodingCall,
+    CodingFocusProtocol,
+    FocusReply,
+    GateFn,
+    RitualError,
+)
 
 from ._pacts import ClaudeOptions
 
@@ -32,6 +41,13 @@ if TYPE_CHECKING:
     from claude_agent_sdk import SdkMcpTool
 
 _DENY_MESSAGE = "denied by the vekna decide gate"
+# The `coding` medium runs through Claude Code, which installs separately from
+# this package and is the first thing missing for anyone who has only ever run
+# `pip install vekna`.
+_NO_CLI = (
+    "the coding medium needs the Claude Code CLI, which is not installed or not"
+    " on PATH — see https://docs.claude.com/en/docs/claude-code/setup"
+)
 
 _SERVER = "vekna"
 _ASK = "ask_human"
@@ -181,6 +197,32 @@ def _agent_options(
     )
 
 
+async def _streamed(
+    *, prompt: str, options: ClaudeAgentOptions, on_delta: Callable[[str], None]
+) -> FocusReply:
+    parts: list[str] = []
+    session_id: str | None = None
+    num_turns: int | None = None
+    cost_usd: float | None = None
+    result_text: str | None = None
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, _AssistantLike):
+            for text in _texts(message.content):
+                parts.append(text)
+                on_delta(text)
+        elif isinstance(message, _ResultLike):
+            session_id = message.session_id
+            num_turns = message.num_turns
+            cost_usd = message.total_cost_usd
+            result_text = message.result
+    return FocusReply(
+        text=result_text if result_text is not None else "".join(parts),
+        session_id=session_id,
+        num_turns=num_turns,
+        cost_usd=cost_usd,
+    )
+
+
 class ClaudeCodingFocus(CodingFocusProtocol):
     @staticmethod
     async def run(
@@ -191,24 +233,16 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         ask: AskFn,
     ) -> FocusReply:
         options = _agent_options(call=call, gate=gate, ask=ask)
-        parts: list[str] = []
-        session_id: str | None = None
-        num_turns: int | None = None
-        cost_usd: float | None = None
-        result_text: str | None = None
-        async for message in query(prompt=call.prompt, options=options):
-            if isinstance(message, _AssistantLike):
-                for text in _texts(message.content):
-                    parts.append(text)
-                    on_delta(text)
-            elif isinstance(message, _ResultLike):
-                session_id = message.session_id
-                num_turns = message.num_turns
-                cost_usd = message.total_cost_usd
-                result_text = message.result
-        return FocusReply(
-            text=result_text if result_text is not None else "".join(parts),
-            session_id=session_id,
-            num_turns=num_turns,
-            cost_usd=cost_usd,
-        )
+        try:
+            return await _streamed(
+                prompt=call.prompt, options=options, on_delta=on_delta
+            )
+        except CLINotFoundError as error:
+            raise RitualError(_NO_CLI) from error
+        # Everything else the SDK raises mid-stream — the subprocess dying, a
+        # dropped connection, a frame that will not decode. A traceback out of
+        # someone else's library says nothing about which rite was running, and
+        # the cast has to end as a failed cast rather than as a crash.
+        except ClaudeSDKError as error:
+            msg = f"the agent failed: {error.__class__.__name__}: {error}"
+            raise RitualError(msg) from error

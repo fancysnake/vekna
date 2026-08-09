@@ -1,6 +1,6 @@
 # Feature — Lexicon SDK + standalone runner
 
-**Version:** `0.2.0`
+**Version:** `0.2.0` — **shipped.**
 
 See [00-common.md](00-common.md) for vocabulary, package layout, wire schema,
 standalone mode.
@@ -26,7 +26,7 @@ work.
   flow/coding folios). (Static graph-inference + rendering deferred to
   `rituals show`/the dashboard, derived from `goto` targets + step input types.)
 - `vekna.wire` — Pydantic wire DTOs + framing helpers (versioned
-  independently). The single schema home; daemon-side handlers land at 0.6.0.
+  independently). The single schema home; daemon-side handlers land at 0.7.0.
 - `vekna.lexicon._links` — wire client + probe loop (probes the Unix socket,
   falls back to standalone if unreachable) and the standalone renderer
   (stdout events; stdin prompts for `decide`). Probe degrades
@@ -57,7 +57,7 @@ work.
 
 ## Out of scope
 
-The daemon. Coding medium. Claude. TUI. Persistence. Locks (0.5.0).
+The daemon. Coding medium. Claude. TUI. Persistence. Locks (0.6.0).
 `vekna cast "<prompt>"` sugar (0.3.0). Annotation-gated step dispatch
 (`goto(payload)` without a named target) — explicit `goto(step, payload)` only
 for now.

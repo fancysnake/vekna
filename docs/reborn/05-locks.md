@@ -1,6 +1,6 @@
 # Feature — Locks API (`warn` default)
 
-**Version:** `0.5.0`
+**Version:** `0.6.0` — **planned.**
 
 See [00-common.md](00-common.md) — wire lock messages, replay rebuilds lock
 state, standalone modes.
@@ -8,15 +8,15 @@ state, standalone modes.
 ## Goal
 
 Real concurrency primitive, not a coding-mode footnote. Ship the lock API with
-hierarchical keys and the `Scope` helper. At 0.5.0 there is **no real
+hierarchical keys and the `Scope` helper. At 0.6.0 there is **no real
 coordination yet** — locks are honest about it via the standalone banner. The
-daemon provides actual coordination at 0.6.0.
+daemon provides actual coordination at 0.7.0.
 
 ## What ships
 
 - Lock API: `lock(...)` async context manager + `Scope` helper.
 - Hierarchical colon-keyed resources, intention-lock semantics.
-- Standalone modes `allow` / `warn` / `deny`; **default `warn`** at 0.5.0.
+- Standalone modes `allow` / `warn` / `deny`; **default `warn`** at 0.6.0.
 - One-time-per-cast banner on first lock acquisition.
 
 ## Keys + semantics
@@ -54,7 +54,7 @@ works too — helper is sugar.
 | `warn`  | Locks succeed with red banner + log line | Interactive |
 | `deny`  | Locks block with retry/quit prompt       | With vekna  |
 
-**Default `warn` at 0.5.0; flips to `deny` when the daemon lands (0.6.0).**
+**Default `warn` at 0.6.0; flips to `deny` when the daemon lands (0.7.0).**
 Banner appears once per cast on first acquisition (not per lock):
 
 ```text
@@ -83,7 +83,7 @@ acquires and the cast continues.
 
 ## Out of scope
 
-Real cross-cast coordination (0.6.0 daemon lock manager). `deny` requiring a
+Real cross-cast coordination (0.7.0 daemon lock manager). `deny` requiring a
 live daemon is correct — it blocks without one.
 
 ## Acceptance

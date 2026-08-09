@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import importlib
 import importlib.util
@@ -46,6 +47,19 @@ def _package_directory(module: ModuleType) -> Path | None:
     return Path(file).parent
 
 
+# What a ritual source raises on import is the author's own error, and the
+# traceback is theirs to read — but the message that reaches the terminal has to
+# say which file produced it. `No module named 'reqeusts'` names the typo and
+# not the place, and a package sweep can be twenty files deep by then.
+@contextlib.contextmanager
+def _blamed(origin: str) -> Iterator[None]:
+    try:
+        yield
+    except Exception as error:
+        msg = f"{origin} failed to import: {error.__class__.__name__}: {error}"
+        raise RitualDefinitionError(msg) from error
+
+
 # Every module, not just the package's own namespace: `__init__.py` stays empty,
 # so a step it does not re-export would otherwise be invisible to the compendium
 # — and an unregistered step is drawn as a leaf, which truncates the graph
@@ -61,7 +75,9 @@ def _modules(*, name: str, module: ModuleType) -> Iterator[tuple[str, ModuleType
         return
     for info in pkgutil.iter_modules([str(directory)]):
         sub = f"{name}.{info.name}"
-        yield from _modules(name=sub, module=importlib.import_module(sub))
+        with _blamed(sub):
+            imported = importlib.import_module(sub)
+        yield from _modules(name=sub, module=imported)
 
 
 # So that a ritual package can be imported by its own name, which is what
@@ -80,7 +96,8 @@ def load_rituals_file(path: Path) -> list[RitualSource]:
         msg = f"cannot import rituals from {path}"
         raise RitualDefinitionError(msg)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    with _blamed(str(path)):
+        spec.loader.exec_module(module)
     return [_found(origin=str(path), module=module)]
 
 
@@ -89,7 +106,8 @@ def load_rituals_file(path: Path) -> list[RitualSource]:
 # relative import inside it fails on a name no package has.
 def load_rituals_package(path: Path) -> list[RitualSource]:
     _on_path(path.parent)
-    module = importlib.import_module(path.name)
+    with _blamed(str(path)):
+        module = importlib.import_module(path.name)
     # `import_module` answers from `sys.modules` before it consults `sys.path`,
     # so a package of this name already loaded — an installed distribution, a
     # test that imported one earlier — would hand back its rituals under the
@@ -109,7 +127,8 @@ def load_rituals_package(path: Path) -> list[RitualSource]:
 # cast, and nothing puts that project on the path of a console script.
 def load_rituals_module(name: str, *, root: Path) -> list[RitualSource]:
     _on_path(root)
-    module = importlib.import_module(name)
+    with _blamed(name):
+        module = importlib.import_module(name)
     return [
         _found(origin=found_name, module=found)
         for found_name, found in _modules(name=name, module=module)

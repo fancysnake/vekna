@@ -1,6 +1,6 @@
 # Feature — `folio/coding` + `folio/coding_claude`
 
-**Version:** `0.3.0`
+**Version:** `0.3.0` — **shipped.**
 
 See [00-common.md](00-common.md) for Medium/Focus/Component and Component
 output direction.
@@ -89,7 +89,7 @@ agent that helped write the code is not a reviewer of it, and silent sharing
 makes that step quietly worthless while looking like it ran.
 
 **Default `new`.** A step is a task boundary, and carrying context across one by
-default contradicts what the boundary is for. Resume (0.6.0) reusing the prior
+default contradicts what the boundary is for. Resume (0.7.0) reusing the prior
 SDK session when re-entering an interrupted rite is unaffected — that is the
 *same* rite continuing, not a new one inheriting.
 

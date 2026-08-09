@@ -1,6 +1,6 @@
 # Vekna
 
-Vekna runs coding agents as **rituals**: small Python programs whose steps the
+Vekna runs coding agents as **rituals**: ordinary Python programs whose steps the
 author controls and whose agent calls happen inside those steps. `vekna cast
 <ritual>` runs one; output streams live as a tree of rites. Agents run
 permissively within a step; determinism lives at the step boundaries.

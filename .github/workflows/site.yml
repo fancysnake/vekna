@@ -1,0 +1,69 @@
+---
+name: Site
+
+# `ci.yml` ignores `docs/**`, so a documentation-only change runs none of the
+# test matrix — and this is the workflow that change does run.
+#
+# `pyproject.toml` is in the list because it holds the `docs` dependency group,
+# and `mise.toml` because it holds `site:build`: a site can break without a
+# single page changing.
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "mise.toml"
+      - ".github/workflows/site.yml"
+
+  push:
+    branches: ["main"]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "mise.toml"
+      - ".github/workflows/site.yml"
+
+concurrency:
+  group: site-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4
+      - run: mise install
+      # Builds with `--strict`, so a link to a page that is not there fails
+      # here rather than being published.
+      - run: mise run site:check
+      # The other half of the drift: deleting a command's section from
+      # `docs/cli.md` is a documentation-only change, which `ci.yml` ignores.
+      # The guard has to run where that change runs.
+      - run: mise exec -- pytest tests/integration/cli/test_cli_reference.py
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: site/
+
+  # Pages has no per-pull-request preview, so a pull request builds and stops
+  # there. The build is the review; the deploy waits for main.
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

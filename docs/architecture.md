@@ -1,14 +1,16 @@
 # Architecture
 
-Vekna uses the **GLIMPSE** layering model. Import boundaries are enforced by
-`import-linter` (contracts in `pyproject.toml`) — 31 of them, covering both the
-boundaries *between* packages and the layering *inside* each one. Every module
-sits in a layer and every layer has a contract; nothing is exempt by accident.
+Vekna uses the [**GLIMPSE**](https://glimpse.fancysnake.dev/) layering model.
+Import boundaries are enforced by
+[`import-linter`](https://import-linter.readthedocs.io/) (contracts in
+`pyproject.toml`) — 31 of them, covering both the boundaries *between* packages
+and the layering *inside* each one. Every module sits in a layer and every
+layer has a contract; nothing is exempt by accident.
 
 ## Packages
 
 ```text
-(root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.6.0.
+(root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.7.0.
 lexicon   The SDK and the cast runtime: ritual/step/medium model, grimoire.
 folio     The mediums — coding, shell, flow — and their foci.
 wire      Daemon protocol DTOs and framing. Imports nothing internal.
@@ -35,16 +37,14 @@ medium, and optionally a one-shot prompt entry.
 
 `vekna.wire` currently has no contract. It is also **dormant**: nothing in
 `src/` imports it. It holds the schema the daemon and a cast process will share
-over a socket at 0.6.0, which is why it must stay a top-level package — a
+over a socket at 0.7.0, which is why it must stay a top-level package — a
 daemon that may not import the lexicon could not reach it anywhere else.
 
 ### The lexicon's one door
 
 `vekna.lexicon` is the whole public surface: `ritual`, `step`, `medium`,
 `goto`/`done`, the component types, the errors, and the medium/focus boundary
-types. The `vekna.lexicon.entry` second door is gone — six of its nine exports
-had no consumer, and the other three were CLI entry points a `rituals.py` can
-never use. The cast runtime is private.
+types. There is no second door, and the cast runtime is private.
 
 ## Layers within a package
 
@@ -85,7 +85,7 @@ submodules cooperate.
 
 ```text
 (root)
-  gates/         # empty until 0.6.0 gives it daemon commands
+  gates/         # empty until 0.7.0 gives it daemon commands
   links/ mills/ pacts/ specs/             # empty, awaiting the daemon
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
@@ -184,22 +184,20 @@ Everything else, including the AST reader in `_mills/graph.py`, is strict.
 ## The trial's two exceptions
 
 `vekna.trial` imports the lexicon's internals — `Grimoire`, `run_cast`, the
-rite `ContextVar` — because a test harness has to drive a cast. The second
-public door was closed for having no consumer; this is one, one module in one
-wheel versioned with the lexicon, and a public cast-runtime door would also be
-reachable from a `rituals.py`, which is the thing that must not happen. A
-`nothing-imports-trial` contract keeps the door one-way.
+rite `ContextVar` — because a test harness has to drive a cast. A public
+cast-runtime door would also be reachable from a `rituals.py`, which is the
+thing that must not happen, so a `nothing-imports-trial` contract keeps this
+door one-way instead.
 
 Its pytest plugin sits in the root `edges/` rather than in `trial/_gates.py`,
 for two reasons that both had to hold. A gate may import only `pacts`, and a
 fixture must build what it hands out. And pytest loads an entry-point plugin
 *before* pytest-cov starts measuring, so importing anything under `vekna.trial`
-runs that package's `__init__` on the way in — which reported the whole lexicon
-as unexecuted and cost 16 points of coverage. From `edges/`, importing inside
-the fixture body, the report is right; that is what the `PLC0415` per-file
-ignore on that one module buys. `vekna.edges` is the single source excluded
-from `nothing-imports-trial`, and the root `edges` contract checks direct
-imports only, an edge being a door to one thing.
+at module level reports the whole lexicon as unexecuted. From `edges/`,
+importing inside the fixture body, the report is right — that is what the
+`PLC0415` per-file ignore on that one module buys. `vekna.edges` is the single
+source excluded from `nothing-imports-trial`, and the root `edges` contract
+checks direct imports only, an edge being a door to one thing.
 
 ## Lint exemption
 

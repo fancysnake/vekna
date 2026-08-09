@@ -1,0 +1,140 @@
+---
+name: Release
+
+# The tag is the trigger, and `release:build` is the same task run before
+# tagging — so what CI publishes has already been built and import-checked
+# locally by the person who tagged it.
+#
+# `workflow_dispatch` runs everything up to TestPyPI and stops. A version on
+# PyPI can never be replaced, so the rehearsal exists to find whatever only an
+# index can reject — a classifier it does not know, a long description it will
+# not render — while the number is still spendable.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4
+      - run: mise install
+      - run: mise exec -- poetry install
+
+      # Refuses to publish a wheel whose version is not the tag. Getting these
+      # out of step means a release nobody can reproduce from the repository.
+      # A rehearsal has no tag to disagree with, so it skips this and nothing
+      # else.
+      - name: Check the tag matches the package version
+        if: github.ref_type == 'tag'
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared=$(mise exec -- poetry version -s)
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag $GITHUB_REF_NAME does not match pyproject version $declared" >&2
+            exit 1
+          fi
+
+      - run: mise run release:build
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: dist
+          path: dist/
+
+  # The dress rehearsal. TestPyPI applies the same metadata rules as PyPI and
+  # forgets the package on its own schedule, so a rejection lands here instead
+  # of on a version number that can never be reused.
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # A retagged release, or a second rehearsal of the same version,
+          # would otherwise fail on an upload TestPyPI already has. There is
+          # nothing to learn from that failure.
+          skip-existing: true
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: testpypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Trusted publishing. No token is stored in this repository, and the
+      # short-lived one this mints is scoped to this workflow on this tag.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+
+  # The wheel importing from `dist/` proves the build; only this proves what
+  # PyPI actually serves — metadata rejected at upload, a missing dependency,
+  # an sdist that does not install.
+  verify:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Install from PyPI and cast nothing
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # `&&` exempts the install from errexit, so a run out of attempts
+          # would otherwise fall through and fail on the import below — as
+          # "the package is broken" rather than "it never showed up".
+          for attempt in 1 2 3 4 5; do
+            pip install --quiet "vekna[trial]==$version" && break
+            if [ "$attempt" = 5 ]; then
+              echo "vekna $version never appeared on the index" >&2
+              exit 1
+            fi
+            echo "not on the index yet, retrying in 30s"
+            sleep 30
+          done
+          python -c 'import vekna.lexicon, vekna.trial, vekna.wire'
+          vekna --help > /dev/null
+          # An empty directory is the one library every runner has, and the
+          # sentence it prints is the discovery walk finishing — which is what
+          # this job exists to prove of an installed wheel.
+          vekna rituals list | grep -q "no rituals found"
+
+  github-release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: dist
+          path: dist/
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true

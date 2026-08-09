@@ -1,0 +1,135 @@
+/*
+ * Eldritch — a light theme for dark magic.
+ *
+ * Bone and parchment for the page, a mossy grave-green for the chrome, and
+ * verdigris — the green copper turns after long enough underground — for
+ * anything that answers a cursor. The joke is that a grimoire is read by
+ * candlelight, not in the dark; the constraint is that every pairing below
+ * clears WCAG AA against the surface it sits on, because a palette nobody can
+ * read is just a mood. Measured, not asserted: the tightest pairing is a code
+ * string at 4.95:1.
+ */
+
+:root {
+  --eldritch-bone: #f3efe7;
+  --eldritch-vellum: #fbf8f3;
+  --eldritch-ink: #1f241b;
+  --eldritch-moss: #3b4a2a;
+  --eldritch-moss-lit: #55693e;
+  --eldritch-sigil: #4a6127;
+  --eldritch-verdigris: #12715a;
+  --eldritch-oxblood: #8c2230;
+}
+
+/* ---- Light: read by candlelight ---- */
+
+[data-md-color-scheme="eldritch"] {
+  color-scheme: light;
+
+  --md-default-bg-color: var(--eldritch-bone);
+  --md-default-fg-color: var(--eldritch-ink);
+  --md-default-fg-color--light: #4b5147;
+  --md-default-fg-color--lighter: #767e70;
+  --md-default-fg-color--lightest: #d4dacc;
+
+  --md-primary-fg-color: var(--eldritch-moss);
+  --md-primary-fg-color--light: var(--eldritch-moss-lit);
+  --md-primary-fg-color--dark: #2a331e;
+  --md-primary-bg-color: var(--eldritch-vellum);
+  --md-primary-bg-color--light: #dfe6d6;
+
+  --md-accent-fg-color: var(--eldritch-verdigris);
+  --md-accent-fg-color--transparent: rgb(18 113 90 / 10%);
+
+  --md-typeset-a-color: var(--eldritch-sigil);
+  --md-typeset-mark-color: rgb(74 97 39 / 18%);
+
+  --md-code-bg-color: #e8ece1;
+  --md-code-fg-color: #262d20;
+
+  --md-footer-bg-color: #2a331e;
+  --md-footer-bg-color--dark: #1c2214;
+}
+
+/* ---- Dark: for when the candles gutter ---- */
+
+[data-md-color-scheme="eldritch-dark"] {
+  color-scheme: dark;
+
+  --md-default-bg-color: #131711;
+  --md-default-fg-color: #e2e8dc;
+  --md-default-fg-color--light: #b0b8a8;
+  --md-default-fg-color--lighter: #79806f;
+  --md-default-fg-color--lightest: #333a2e;
+
+  --md-primary-fg-color: #1e2618;
+  --md-primary-fg-color--light: var(--eldritch-moss);
+  --md-primary-fg-color--dark: #0f130d;
+  --md-primary-bg-color: #e7ecdf;
+  --md-primary-bg-color--light: #b0b8a8;
+
+  --md-accent-fg-color: #4fd3a5;
+  --md-accent-fg-color--transparent: rgb(79 211 165 / 12%);
+
+  --md-typeset-a-color: #a9cf7e;
+  --md-typeset-mark-color: rgb(169 207 126 / 22%);
+
+  --md-code-bg-color: #191f16;
+  --md-code-fg-color: #d8e0d0;
+
+  --md-footer-bg-color: #0f130d;
+  --md-footer-bg-color--dark: #090c08;
+}
+
+/*
+ * Syntax highlighting, both schemes. Material ships a sensible default; what it
+ * does not do is agree with a palette it has never heard of, and a code block
+ * is most of what these pages are. Keywords take the page's own green, so the
+ * other two hues left — a cold blue and an oxblood — stay worth noticing.
+ */
+
+[data-md-color-scheme="eldritch"] {
+  --md-code-hl-keyword-color: var(--eldritch-sigil);
+  --md-code-hl-function-color: #1b5f8c;
+  --md-code-hl-string-color: var(--eldritch-verdigris);
+  --md-code-hl-number-color: var(--eldritch-oxblood);
+  --md-code-hl-comment-color: #5b6155;
+  --md-code-hl-name-color: #262d20;
+  --md-code-hl-operator-color: #5b6155;
+  --md-code-hl-punctuation-color: #5b6155;
+  --md-code-hl-constant-color: var(--eldritch-oxblood);
+  --md-code-hl-special-color: var(--eldritch-sigil);
+}
+
+[data-md-color-scheme="eldritch-dark"] {
+  --md-code-hl-keyword-color: #b3d98a;
+  --md-code-hl-function-color: #7cc4f0;
+  --md-code-hl-string-color: #4fd3a5;
+  --md-code-hl-number-color: #ff9db0;
+  --md-code-hl-comment-color: #8f9885;
+  --md-code-hl-name-color: #d8e0d0;
+  --md-code-hl-operator-color: #8f9885;
+  --md-code-hl-punctuation-color: #8f9885;
+  --md-code-hl-constant-color: #ff9db0;
+  --md-code-hl-special-color: #b3d98a;
+}
+
+/*
+ * A sigil on every heading anchor. `¶` is the web's own mark for "this piece of
+ * text"; this one only changes which alphabet it is drawn in.
+ */
+
+.md-typeset .headerlink::before {
+  content: "❖";
+}
+
+.md-typeset .headerlink {
+  font-size: 0.7em;
+}
+
+/* The rule under a page title, as a line ruled in ink rather than a border. */
+
+.md-typeset h1 {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  padding-bottom: 0.3em;
+}

@@ -38,12 +38,74 @@ run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
 description = "Check Markdown files"
 run = "markdownlint-cli2"
 
+[tasks."lint:deptry"]
+description = "Find declared-but-unused and used-but-undeclared dependencies"
+run = "deptry src tests"
+
+# Deliberately not in `fullcheck`. What this reports changes when somebody else
+# publishes an advisory, on a day this repository did not change — a gate that
+# goes red on its own schedule, offline never, and always about the development
+# environment rather than about what a user installs. `.github/workflows/
+# audit.yml` runs the version of the question that matters, weekly, against the
+# wheel's own dependency set. This one is here for asking it by hand.
+[tasks."lint:audit"]
+description = "Check installed dependencies against known vulnerabilities"
+run = "pip-audit"
+
+# `lint:py` comes from the shared config and cannot be appended to from here, so
+# `lint:deptry` hangs off `fullcheck` instead — which is the gate that matters.
+# It belongs here and `lint:audit` does not: deptry reads this repository and
+# nothing else, so it answers the same on any two days.
 [tasks.fullcheck]
 run = [
     "poetry install",
     { task = "format:py" },
     { task = "lint:py" },
+    { task = "lint:deptry" },
     { task = "lint:markdown" },
     { task = "test:py:cov:diff" },
     { task = "lint:tingle" },
 ]
+
+[tasks."site:dev"]
+description = "Serve the documentation site with live reload"
+run = "poetry install --with docs --quiet && mkdocs serve"
+
+[tasks."site:build"]
+description = "Build the documentation site into site/"
+run = "poetry install --with docs --quiet && mkdocs build --strict"
+
+# `--strict` is the whole check: it fails the build on a link to a page that is
+# not there, which is what rots first when a page is renamed. The other thing
+# that rots — the CLI reference drifting from what `vekna --help` prints — is
+# guarded by a test instead, because that breaks on a Python change and the
+# suite is what runs on those.
+[tasks."site:check"]
+description = "Build the site and fail on broken internal links"
+run = { task = "site:build" }
+
+# What the tag does, minus the publish: each artifact is built and then
+# installed somewhere that has never seen this project, because `poetry install`
+# leaves a venv where everything imports whether the artifact carries it or not.
+# Both get a venv of their own — the sdist is a different file list built a
+# different way, and it is what `pip install` falls back to wherever the wheel
+# does not fit.
+[tasks."release:build"]
+description = "Build the wheel and sdist, then import-check each in a bare venv"
+run = """
+set -euo pipefail
+rm -rf dist
+poetry build
+bare=$(mktemp -d)
+trap 'rm -rf "$bare"' EXIT
+installs() {
+    python -m venv "$1"
+    "$1/bin/pip" install --quiet --disable-pip-version-check "$2"
+    "$1/bin/python" -c 'import vekna.lexicon, vekna.trial, vekna.wire'
+    "$1/bin/vekna" --help > /dev/null
+}
+installs "$bare/wheel" dist/*.whl
+installs "$bare/sdist" dist/*.tar.gz
+python -c 'import sys, zipfile; assert "vekna/py.typed" in zipfile.ZipFile(sys.argv[1]).namelist(), "py.typed missing from the wheel"' dist/*.whl
+echo "ok: $(ls dist/*.whl dist/*.tar.gz)"
+"""

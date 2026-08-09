@@ -78,7 +78,7 @@ not this doc's to revisit.
 
 ## Acceptance
 
-- Discord behaves exactly as it did at `0.7.0` — same pinned status, same
+- Discord behaves exactly as it did at `0.8.0` — same pinned status, same
   buttons, same refusals, same silent ignore for a sender off the allowlist.
 - A second channel is implemented in its own `links/` module with no change to
   `mills/lich/`, and carries the full vocabulary.
