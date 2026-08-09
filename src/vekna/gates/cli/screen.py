@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from itertools import starmap
 
-from vekna.pacts.casts import CastView, RiteView, RunRecord
+from vekna.pacts.casts import CastView, RiteView
+from vekna.wire import RunRecord
 
 _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
 _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol, cast
@@ -22,6 +23,11 @@ from vekna.wire import SurfaceHello, WireMessage, encode_frame, read_frames
 
 _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
 _RUNTIME = "vekna.lexicon._inits"
+# Spawned through the interpreter running this one rather than through whatever
+# `vekna` is on PATH, which in a venv, a `pipx` install or a test is not always
+# the same binary.
+_CLI_MODULE = "vekna.inits.cli"
+_RESUME = "--resume"
 _RECENT = 20
 _DEBUG_LOG = Path.home() / ".config" / "vekna" / "debug.log"
 _DAEMON_ENDED = "the daemon ended"
@@ -73,10 +79,42 @@ def _rituals() -> None:
     pass
 
 
-@click.command("casts", help="List the casts the daemon has seen, newest first.")
-def _casts() -> None:
+async def _spawn_cast(cast_id: str, *, cwd: str) -> int:
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", _CLI_MODULE, "cast", _RESUME, cast_id, cwd=cwd
+    )
+    return await process.wait()
+
+
+@click.command("list", help="List the casts the daemon has seen, newest first.")
+def _casts_list() -> None:
     records = Journal(default_runs_root()).recent(limit=_RECENT)
     click.echo(listing(records), nl=False)
+
+
+# Always a fresh process, in the directory the interrupted cast ran in: the
+# ritual source is found by walking up from there, and a resume that ran here
+# would cast a different project's ritual of the same name. The journal is
+# handed over by name — the cast process reads it itself, being the only one
+# that needs what is in it.
+@click.command("resume", help="Run a cast on from where it was interrupted.")
+@click.argument("cast_id")
+def _casts_resume(cast_id: str) -> None:
+    if (record := Journal(default_runs_root()).read(cast_id)) is None:
+        message = f"no cast {cast_id!r} in the journal — `vekna casts list` has the ids"
+        raise click.ClickException(message)
+    raise SystemExit(asyncio.run(_spawn_cast(cast_id, cwd=record.hello.project_root)))
+
+
+@click.group("casts", invoke_without_command=True, help="The casts on record.")
+def _casts() -> None:
+    ctx = click.get_current_context()
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(_casts_list)
+
+
+_casts.add_command(_casts_list)
+_casts.add_command(_casts_resume)
 
 
 _rituals.add_command(_rituals_list)

@@ -8,6 +8,8 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, JsonValue
 
+from vekna.wire import RunRecord, WireMessage
+
 
 # Component types — the typed values on a ritual's external interface. They are
 # boundary contracts, so they live here; that their validators touch the
@@ -93,6 +95,15 @@ class RitualSource:
     origin: str
     rituals: list["Ritual"]
     steps: list["Step"]
+
+
+# What a resumed cast is handed: the record of what the interrupted cast was,
+# and every event the daemon saw it emit. The link reads them; deciding what is
+# replayable out of them is the ledger's job in `_mills`.
+@dataclass(frozen=True, kw_only=True)
+class Resumption:
+    record: RunRecord
+    events: list[WireMessage]
 
 
 class Channel(Protocol):

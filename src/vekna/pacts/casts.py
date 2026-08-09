@@ -3,14 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted
 
-from vekna.wire import CastHello, DecideRequested, RiteStarted
-
-# The wire's three final statuses, plus the one a cast has while it is still
-# going. Deliberately the same words `CastGoodbye` carries, so nothing has to
-# translate between the message and the view it lands in.
-CastStatus = Literal["running", "ok", "error", "disconnected"]
 RiteStatus = Literal["running", "ok", "error"]
 
 # The tail of a rite's output, not all of it. The journal has the whole stream
@@ -51,12 +45,3 @@ class CastView:
 class Casts(Protocol):
     @property
     def casts(self) -> dict[str, CastView]: ...
-
-
-# `run.json`: what a cast was and how it ended, beside the event log that says
-# what it did. The same three fields the view carries, minus everything the log
-# can be read for — this is the index, not a second copy.
-class RunRecord(BaseModel):
-    hello: CastHello
-    status: CastStatus = "running"
-    detail: str | None = None

@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Literal, TypeVar, overload
 
-from vekna.lexicon import current_rite, medium
+from vekna.lexicon import current_rite, medium, record_result, replayed
 
 # An answer is one of the options it was offered — the channel returns a member
 # or raises, never a string of its own — so a ritual offering
@@ -22,9 +22,18 @@ async def decide(prompt: str, *, free: Literal[True]) -> str: ...
 async def decide(
     prompt: str, *, options: Sequence[str] | None = None, free: bool = False
 ) -> bool | str:
-    answer = await current_rite().channel.decide(
-        prompt=prompt, options=options, free=free
+    # A question this cast already asked is not asked again: the operator
+    # answered it before the interruption, and a resumed cast that re-asked
+    # would be making them defend a decision they had already made.
+    prior = replayed()
+    answer = (
+        str(prior)
+        if prior is not None
+        else await current_rite().channel.decide(
+            prompt=prompt, options=options, free=free
+        )
     )
+    record_result(answer)
     if options is None and not free:
         return answer == "yes"
     return answer

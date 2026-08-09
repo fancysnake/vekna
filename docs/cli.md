@@ -97,7 +97,26 @@ The casts the daemon has recorded, newest first — running, finished and gone.
 
 ```bash
 vekna casts
+vekna casts list
 ```
 
 A cast that ran with no daemon listening leaves no record: the journal is the
 daemon's, and there was none.
+
+### `vekna casts resume`
+
+Runs a cast on from where it was interrupted, in the directory it ran in.
+
+```bash
+vekna casts resume 6f1c2a9e
+```
+
+A fresh process, always. It re-runs the ritual's steps — cheap, and the same
+walk it took before — while every agent call, shell command and prompt it had
+already finished comes back off the journal instead of happening twice. An
+agent rite that was interrupted mid-flight runs again, on the session the cast
+had already opened, so it remembers what it was told.
+
+Replay stops at the first rite that does not match what was recorded, and the
+cast runs live from there. A ritual that takes a different path this time is
+not made to pretend otherwise.

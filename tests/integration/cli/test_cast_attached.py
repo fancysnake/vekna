@@ -3,14 +3,17 @@ import textwrap
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from vekna.lexicon._inits import main
+from vekna.links.journal import Journal
 from vekna.links.socket_server import serve
 from vekna.mills.hub import Hub
 from vekna.pacts.casts import CastView
+from vekna.wire import CastHello
 
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
@@ -154,6 +157,30 @@ class TestAttachedCast:
         daemon.wait_for(lambda: bool(daemon.hub.casts))
         daemon.wait_for(lambda: daemon.only_cast().status == "error")
         assert "max_steps" in (daemon.only_cast().detail or "")
+
+    # Which cast this one carries on from is on the hello, so the daemon and
+    # anything watching it learn it the same way they learn everything else.
+    @staticmethod
+    def test_a_resumed_cast_says_what_it_carries_on_from(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, daemon: _DaemonThread
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        monkeypatch.chdir(tmp_path)
+        Journal(tmp_path / "runs").record(
+            CastHello(
+                cast_id="first",
+                project_root=str(tmp_path),
+                ritual="countdown",
+                components={"start": 1},
+                started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
+            )
+        )
+
+        assert main(["--resume", "first"]) == 0
+
+        daemon.wait_for(lambda: bool(daemon.hub.casts))
+        assert daemon.only_cast().hello.resumed_from == "first"
 
     @staticmethod
     def test_the_cast_still_prints_its_own_tree(

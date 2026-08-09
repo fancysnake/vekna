@@ -149,6 +149,21 @@ WireMessage = (
 )
 
 
+# --- the record on disk ---
+
+# `run.json`, beside the event log. It lives here rather than with the daemon's
+# own types because it is shared exactly the way a message is: the daemon writes
+# it, and a resumed cast process — which may not import the daemon's layers —
+# reads it back to learn what it is carrying on.
+CastStatus = Literal["running", "ok", "error", "disconnected"]
+
+
+class RunRecord(BaseModel):
+    hello: CastHello
+    status: CastStatus = "running"
+    detail: str | None = None
+
+
 # --- framing ---
 
 # The codec sits with the messages it encodes: it is the serialised form of

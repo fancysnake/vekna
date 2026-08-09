@@ -2,6 +2,7 @@ from ._links import read_frames
 from ._pacts import (
     CastGoodbye,
     CastHello,
+    CastStatus,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -13,6 +14,7 @@ from ._pacts import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
+    RunRecord,
     SurfaceHello,
     WireMessage,
     decode_frame,
@@ -22,6 +24,7 @@ from ._pacts import (
 __all__ = [
     "CastGoodbye",
     "CastHello",
+    "CastStatus",
     "DecideRequested",
     "DecideResolved",
     "GrimoireBegin",
@@ -33,6 +36,7 @@ __all__ = [
     "RiteDelta",
     "RiteFinished",
     "RiteStarted",
+    "RunRecord",
     "SurfaceHello",
     "WireMessage",
     "decode_frame",

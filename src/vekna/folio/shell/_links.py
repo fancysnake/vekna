@@ -9,6 +9,8 @@ from vekna.lexicon import (
     ShellReply,
     emit_delta,
     medium,
+    record_result,
+    replayed,
 )
 
 from ._pacts import ShellResult
@@ -110,10 +112,24 @@ class BashFocus(ShellFocusProtocol):
 async def shell(
     command: str, *, cwd: str | None = None, stream: bool = True
 ) -> ShellResult:
-    focus = SHELL_FOCUS.resolve(default=BashFocus)
-    reply = await focus.run(
-        ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
+    # A command this cast already ran comes back off the journal rather than
+    # being run a second time — a resumed cast should not rebuild, re-push or
+    # re-delete anything it had already finished doing.
+    if (prior := replayed()) is not None:
+        result = ShellResult.model_validate(prior)
+    else:
+        focus = SHELL_FOCUS.resolve(default=BashFocus)
+        reply = await focus.run(
+            ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
+        )
+        result = ShellResult(
+            stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
+        )
+    record_result(
+        {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.exit_code,
+        }
     )
-    return ShellResult(
-        stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
-    )
+    return result

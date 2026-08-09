@@ -2,10 +2,10 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
-from vekna.pacts.casts import RunRecord
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    RunRecord,
     SurfaceHello,
     WireMessage,
     decode_frame,

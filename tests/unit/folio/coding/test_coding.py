@@ -27,7 +27,9 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, reset_registry, run_cast
-from vekna.lexicon._pacts import RiteEnded, RiteStreamed
+from vekna.lexicon._mills.ledger import Ledger
+from vekna.lexicon._pacts import Resumption, RiteEnded, RiteStreamed
+from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
 
 
 def _fixed_clock() -> datetime:
@@ -84,7 +86,7 @@ def _isolated_registry():
     reset_registry()
 
 
-def _cast(the_ritual, *, stdin: str = "") -> tuple[object, Grimoire]:
+def _cast(the_ritual, *, stdin: str = "", ledger=None) -> tuple[object, Grimoire]:
     renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO(stdin))
     grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
     result = asyncio.run(
@@ -93,9 +95,44 @@ def _cast(the_ritual, *, stdin: str = "") -> tuple[object, Grimoire]:
             components=the_ritual.components(),
             grimoire=grimoire,
             channel=renderer,
+            ledger=ledger,
         )
     )
     return result, grimoire
+
+
+# One recorded coding rite, as the daemon would have journalled it.
+def _journalled(result, *, rite_id: str = "r2", name: str = "coding") -> Ledger:
+    return Ledger.from_resumption(
+        Resumption(
+            record=RunRecord(
+                hello=CastHello(
+                    cast_id="c0",
+                    project_root="/proj",
+                    ritual="job",
+                    components={},
+                    started_at=_fixed_clock(),
+                )
+            ),
+            events=[
+                RiteStarted(
+                    cast_id="c0",
+                    rite_id=rite_id,
+                    parent_id=None,
+                    name=name,
+                    category="medium",
+                    started_at=_fixed_clock(),
+                ),
+                RiteFinished(
+                    cast_id="c0",
+                    rite_id=rite_id,
+                    status="ok",
+                    result=result,
+                    finished_at=_fixed_clock(),
+                ),
+            ],
+        )
+    )
 
 
 class TestCodingMedium:
@@ -148,6 +185,7 @@ class TestCodingMedium:
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
+            "text": "all done",
         }
 
     @staticmethod
@@ -382,6 +420,7 @@ class TestSessionDeclaration:
             "session_id": None,
             "num_turns": 2,
             "cost_usd": 0.5,
+            "text": "all done",
         }
 
     @staticmethod
@@ -474,6 +513,7 @@ class TestSessionDeclaration:
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
+            "text": "all done",
         }
 
     @staticmethod
@@ -489,4 +529,85 @@ class TestSessionDeclaration:
             "session_id": "s1",
             "num_turns": 2,
             "cost_usd": 0.5,
+            "text": "all done",
         }
+
+
+class TestResumedRites:
+    @staticmethod
+    def test_a_finished_call_comes_off_the_journal_instead_of_the_agent():
+        focus = FakeFocus()
+        CODING_FOCUS.register(focus)
+        recorded = {
+            "session": "new",
+            "key": None,
+            "session_id": "s9",
+            "num_turns": 7,
+            "cost_usd": 1.5,
+            "text": "what it said last time",
+        }
+
+        @step
+        async def work(_: Answer) -> Transition:
+            return done(await coding("fix it"))
+
+        result, _ = _cast(
+            entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded)
+        )
+
+        assert not focus.calls
+        assert result == CodingResult(
+            text="what it said last time", session_id="s9", num_turns=7, cost_usd=1.5
+        )
+
+    # The thread is filed as if the call had happened, so the next one on it
+    # resumes the session the interrupted cast had already opened.
+    @staticmethod
+    def test_a_replayed_call_still_files_its_session():
+        focus = FakeFocus()
+        CODING_FOCUS.register(focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("first")
+            return done(await coding("second", session=Session.CONTINUE))
+
+        recorded = {"session": "new", "key": None, "session_id": "s9", "text": "done"}
+
+        _cast(entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded))
+
+        assert [call.resume for call in focus.calls] == ["s9"]
+
+    @staticmethod
+    def test_a_typed_return_is_validated_out_of_the_recorded_text():
+        CODING_FOCUS.register(FakeFocus())
+
+        @step
+        async def work(_: Answer) -> Transition:
+            return done(await coding("port?", output=Answer))
+
+        recorded = {"session": "new", "text": '{"port": 8080}'}
+
+        result, _ = _cast(
+            entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded)
+        )
+
+        assert result == Answer(port=8080)
+
+    @staticmethod
+    def test_a_journal_holding_something_else_says_so():
+        CODING_FOCUS.register(FakeFocus())
+
+        with pytest.raises(CodingOutputError, match="journaled as something else"):
+            _cast(_one_call_ritual(), ledger=_journalled("not a reply at all"))
+
+    @staticmethod
+    def test_a_rite_the_journal_does_not_know_is_run():
+        focus = FakeFocus()
+        CODING_FOCUS.register(focus)
+
+        # The recorded rite was a `shell`, so this coding rite matches nothing
+        # and the ledger is spent rather than misread.
+        _cast(_one_call_ritual(), ledger=_journalled({"text": "x"}, name="shell"))
+
+        assert len(focus.calls) == 1

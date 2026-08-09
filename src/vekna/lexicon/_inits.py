@@ -13,10 +13,12 @@ from vekna.wire import CastHello, WireMessage
 
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
+from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, default_socket_path
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import step_graph
+from ._mills.ledger import Ledger
 from ._pacts import (
     FocusMissingError,
     NoComponents,
@@ -32,7 +34,9 @@ from ._pacts import (
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
+    "       vekna cast --resume <cast_id>\n"
 )
+_RESUME_FLAG = "--resume"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -340,12 +344,40 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
     return parsed
 
 
-def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
+class _Plan(NamedTuple):
+    ritual: Ritual
+    components: BaseModel
+    # What the interrupted cast already did, and which cast that was. Both None
+    # for a cast that is starting rather than carrying one on.
+    ledger: Ledger | None = None
+    resumed_from: str | None = None
+
+
+# The record holds the components as the CLI already validated them once, so
+# they are validated again against the same model rather than re-derived into
+# flags and parsed back out.
+def _resume(cast_id: str) -> _Plan:
+    resumption = read_run(cast_id)
+    hello = resumption.record.hello
+    the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
+    return _Plan(
+        ritual=the_ritual,
+        components=the_ritual.components.model_validate(hello.components),
+        ledger=Ledger.from_resumption(resumption),
+        resumed_from=cast_id,
+    )
+
+
+def _resolve_cast(argv: list[str]) -> _Plan:
     if (prompt := _prompt_text(argv)) is not None:
-        return _prompt_ritual(prompt), NoComponents()
+        return _Plan(_prompt_ritual(prompt), NoComponents())
     name, *flags = argv
+    if name == _RESUME_FLAG:
+        if not flags:
+            raise ValueError(_USAGE.rstrip())
+        return _resume(flags[0])
     the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
-    return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))
+    return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
 
 
 # A cast returns a model or nothing, so its result renders as JSON rather than
@@ -354,13 +386,14 @@ def _rendered(result: BaseModel | None) -> str:
     return "null" if result is None else result.model_dump_json()
 
 
-def _hello(*, cast_id: str, ritual: Ritual, components: BaseModel) -> CastHello:
+def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root=str(Path.cwd()),
-        ritual=ritual.name,
-        components=_COMPONENTS.validate_json(components.model_dump_json()),
+        ritual=plan.ritual.name,
+        components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
         started_at=datetime.now(tz=UTC),
+        resumed_from=plan.resumed_from,
     )
 
 
@@ -376,16 +409,15 @@ def _backlog(
 
 
 async def _cast(
-    *,
-    the_ritual: Ritual,
-    components: BaseModel,
-    grimoire: Grimoire,
-    channel: TeeChannel,
-    link: DaemonLink,
+    *, plan: _Plan, grimoire: Grimoire, channel: TeeChannel, link: DaemonLink
 ) -> int:
     try:
         result = await run_cast(
-            ritual=the_ritual, components=components, grimoire=grimoire, channel=channel
+            ritual=plan.ritual,
+            components=plan.components,
+            grimoire=grimoire,
+            channel=channel,
+            ledger=plan.ledger,
         )
     except FocusMissingError as error:
         await link.close(status="error", detail=str(error))
@@ -402,15 +434,15 @@ async def _cast(
 
 # The renderer and the wire both, in that order: what the operator sees does not
 # wait on a socket, and a cast with no daemon behaves exactly as it did.
-async def _run(*, the_ritual: Ritual, components: BaseModel) -> int:
-    # Unique per cast, not per ritual: cast_id is the wire's correlation key
-    # for deltas, decisions and locks, and CastHello carries the ritual name
-    # in its own field.
+async def _run(plan: _Plan) -> int:
+    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
+    # is the wire's correlation key, and which cast this one carries on from is
+    # a field of its own on the hello.
     cast_id = uuid4().hex
     renderer = StandaloneRenderer()
     link = DaemonLink(
         socket_path=Path(default_socket_path()),
-        hello=_hello(cast_id=cast_id, ritual=the_ritual, components=components),
+        hello=_hello(cast_id=cast_id, plan=plan),
     )
     channel = TeeChannel(
         inner=renderer,
@@ -434,13 +466,7 @@ async def _run(*, the_ritual: Ritual, components: BaseModel) -> int:
     await link.attach(backlog=backlog())
     watcher = asyncio.create_task(link.keep_attached(backlog))
     try:
-        return await _cast(
-            the_ritual=the_ritual,
-            components=components,
-            grimoire=grimoire,
-            channel=channel,
-            link=link,
-        )
+        return await _cast(plan=plan, grimoire=grimoire, channel=channel, link=link)
     finally:
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -456,11 +482,11 @@ async def _drive(argv: list[str]) -> int:
         return 2
     _load_folios()
     try:
-        the_ritual, components = _resolve_cast(argv)
+        plan = _resolve_cast(argv)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
-    return await _run(the_ritual=the_ritual, components=components)
+    return await _run(plan)
 
 
 def main(argv: list[str]) -> int:
