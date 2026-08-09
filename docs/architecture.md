@@ -10,7 +10,7 @@ layer has a contract; nothing is exempt by accident.
 ## Packages
 
 ```text
-(root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.7.0.
+(root)    vekna's own GLIMPSE layers — the CLI now, the daemon at 0.6.0.
 lexicon   The SDK and the cast runtime: ritual/step/medium model, grimoire.
 folio     The mediums — coding, shell, flow — and their foci.
 wire      Daemon protocol DTOs and framing. Imports nothing internal.
@@ -37,7 +37,7 @@ medium, and optionally a one-shot prompt entry.
 
 `vekna.wire` currently has no contract. It is also **dormant**: nothing in
 `src/` imports it. It holds the schema the daemon and a cast process will share
-over a socket at 0.7.0, which is why it must stay a top-level package — a
+over a socket at 0.6.0, which is why it must stay a top-level package — a
 daemon that may not import the lexicon could not reach it anywhere else.
 
 ### The lexicon's one door
@@ -85,7 +85,7 @@ submodules cooperate.
 
 ```text
 (root)
-  gates/         # empty until 0.7.0 gives it daemon commands
+  gates/         # empty until 0.6.0 gives it daemon commands
   links/ mills/ pacts/ specs/             # empty, awaiting the daemon
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
