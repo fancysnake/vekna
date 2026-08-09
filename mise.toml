@@ -93,7 +93,7 @@ run = { task = "site:build" }
 [tasks."release:build"]
 description = "Build the wheel and sdist, then import-check each in a bare venv"
 run = """
-set -euo pipefail
+set -eu
 rm -rf dist
 poetry build
 bare=$(mktemp -d)
