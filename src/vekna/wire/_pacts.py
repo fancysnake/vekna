@@ -15,10 +15,13 @@ class CastHello(BaseModel):
     started_at: datetime
 
 
+# `disconnected` is the daemon's own word for a cast whose socket closed without
+# one of these: it is a final status like the other two, and spelling it here is
+# what lets a peer surface learn it the same way it learns everything else.
 class CastGoodbye(BaseModel):
     kind: Literal["cast_goodbye"] = "cast_goodbye"
     cast_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error", "disconnected"]
     detail: str | None = None
 
 
