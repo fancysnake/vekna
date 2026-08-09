@@ -370,6 +370,8 @@ vekna                                         # dashboard: observe running casts
 vekna casts                                   # list active + recent casts — 0.6.0
 vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
 vekna --debug                                 # daemon: log every event it processes — 0.6.0
+vekna rituals check                           # unreachable steps, hidden transitions, name collisions — 0.7.0
+vekna cast <ritual> --unattended              # a decide fails at the boundary instead of waiting on nobody — 0.7.0
 vekna locks                                   # current locks + holders — 0.7.0
 vekna unlock <key>                            # admin override (confirmation) — 0.7.0
 vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.8.0

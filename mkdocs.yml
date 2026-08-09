@@ -36,6 +36,16 @@ theme:
     - navigation.sections
     - navigation.top
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fancysnake/vekna
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/vekna/
+    - icon: fontawesome/solid/globe
+      link: https://fancysnake.dev
+      name: fancysnake.dev
+
 extra_css:
   - stylesheets/eldritch.css
 

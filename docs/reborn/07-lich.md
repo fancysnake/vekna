@@ -128,6 +128,42 @@ station, and keeping two stations out of each other's files is what the
 daemon's lock coordination (0.7.0) is for. `lock("project:edit")` is the tool,
 and this is the release that makes it load-bearing rather than theoretical.
 
+### The status line
+
+"Casting `merge_ready` for 4 minutes" is all the lich can say on its own, and
+it is not enough to act on: which branch, which of eight PRs, which attempt.
+That context is the **ritual author's** — vekna cannot derive it and should not
+try — so the ritual publishes it and every framed surface shows it:
+
+```python
+@step
+async def gates(payload: MergeReady) -> Transition:
+    status(f"{payload.branch} · lint + tests")
+    ...
+```
+
+- **`status(text)` in `vekna.lexicon`**, beside `emit_delta`. Free text, set
+  from a step or a medium body, latest wins, `status()` clears it. One grimoire
+  event, `StatusSet(text, at)`, cast-level — no `rite_id`, because it is a
+  level and not a stream — projected onto the wire as `CastStatus`.
+- **`LichStatus` says idle-or-casting; this is the ritual's own words.** Two
+  different sentences by two different authors, and the pinned message carries
+  both: the lich's line, then the ritual's under it.
+- **Author-set, never derived.** "Current branch" is one guess of many — a
+  ritual may work in a worktree, a temp clone, a PR number, no repo at all. The
+  moment vekna derives one it is wrong somewhere and needs a knob to say so.
+- **Free text, not fields.** A `dict` of `branch`/`command`/`attempt` buys
+  nothing an f-string does not and costs every surface a layout decision.
+- **No medium sets it.** `shell` and `coding` already stream what they run into
+  their own rite. A medium writing the status would overwrite the author's line
+  every call and the author would have no way to win.
+
+It ships here because here is the first surface with a **frame** to pin a line
+to — `vekna cast` is an append-only stream, where a status is just another
+line. The 0.7.0 dashboard gains a column for it retroactively, from the same
+event, and Eye's TUI and the lich's web page get it for free
+([`../eye/`](../eye/README.md)).
+
 ### Detached by default
 
 `vekna lich` forks and returns; the terminal that raised it attaches as a
@@ -146,9 +182,10 @@ addressing for free: a message's channel says which lich it means, so no
 command ever needs a `--lich` flag.
 
 - Commands are plain messages in the lich's channel.
-- **One pinned status message, edited in place.** Rite deltas do not stream —
-  Discord's rate limits and your notification tray both lose. `log` returns a
-  tail on demand.
+- **One pinned status message, edited in place**, carrying the ritual, its
+  runtime, and the ritual's own status line under it. Rite deltas do not
+  stream — Discord's rate limits and your notification tray both lose. `log`
+  returns a tail on demand.
 - A decide arrives as a message with buttons and blocks until pressed. No
   auto-approval, no timeout default: a decide is a choice the ritual author
   declared, and guessing it is worse than waiting.
@@ -189,6 +226,7 @@ lich name**. New kinds:
 | `CastRequested` | surface → daemon → lich | ritual + components, or a bare prompt |
 | `CastRefused` | lich → daemon → surface | busy: what runs, since when |
 | `CastKillRequested` | surface → daemon → lich | |
+| `CastStatus` | cast → daemon → surface | the ritual's own line; empty = cleared |
 
 The casts a lich spawns are ordinary casts: they attach to the daemon
 themselves and emit the events they always did. The lich does not proxy the
@@ -204,6 +242,9 @@ routing in the middle, "the button did nothing" has three possible homes.
 ## Scope
 
 - `wire/_pacts.py` — the message kinds above.
+- `lexicon/` — `status()` in `_mills/engine.py` and exported; `StatusSet` in
+  `_pacts.py`; the standalone renderer prints it as a stream line, having no
+  frame to pin it to; `trial.statuses` records it.
 - `pacts/lich/` — lich protocols and DTOs.
 - `mills/lich/` — session state, cast slot, command dispatch, name generator
   (the word list is `specs/`).
@@ -219,6 +260,10 @@ routing in the middle, "the button did nothing" has three possible homes.
 
 ## Out of scope
 
+Progress in the status line — percentages, counters, spinners, an ETA: a
+different event nobody has asked for. Markup, colour or a second line in it; a
+surface that wants to truncate one line truncates it. A history of statuses —
+the journal holds every `CastStatus` in order and nothing needs to show them.
 Two casts in one lich. One lich over several project roots (the reverse — many
 liches in one root — is supported). A web surface for the lich
 ([`../eye/`](../eye/README.md)). Anything visual — the daemon's CLI view is the
@@ -244,6 +289,9 @@ local surface at this release.
 - From Discord, `cast fix_demo --bound=3` starts it and the pinned status
   updates; a second `cast` is refused, naming the running ritual and its
   runtime; `kill` stops it — including while it is blocked on a decide.
+- A ritual calling `status(...)` twice leaves the second text on the pinned
+  message and on `status`; `status()` clears it; `status()` outside a cast
+  raises, naming the call. `trial.statuses` holds both texts in order.
 - A decide reaches the channel as buttons; pressing one unblocks the cast, and
   the answer shows on the terminal surface too.
 - A message from a user not on the allowlist changes nothing and gets no reply.

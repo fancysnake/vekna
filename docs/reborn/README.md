@@ -43,6 +43,10 @@ ships when every Reborn feature is ready — not when the daemon lands.
   coordinator rather than before it deletes a whole stage from
   [05-locks.md](05-locks.md) — there is no permissive default to ship and then
   flip, and no release where `lock()` succeeds while promising nothing.
+- **`13` is numbered last because it was found last.** Casting a real ritual
+  from outside this repository turned up six places the shipped surface has to
+  be worked around; they are small, independent of everything else on the line,
+  and filed at `0.7.0` beside locks rather than given a slot of their own.
 - **Nothing below `0.5.0` has started, but some of it is in the tree.** The wire
   already carries the lock messages, and a cast already probes for a daemon it
   cannot yet find. Groundwork laid early by the feature that needed the seam,
