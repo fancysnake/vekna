@@ -39,8 +39,18 @@ class TestProbe:
 
 class TestDefaultSocketPath:
     @staticmethod
-    def test_is_user_scoped_under_tempdir():
+    def test_is_user_scoped_under_tempdir(monkeypatch):
+        monkeypatch.delenv("VEKNA_SOCKET", raising=False)
+
         path = default_socket_path()
 
         assert path.endswith(".sock")
         assert "vekna-" in path
+
+    # The daemon reads the same variable, and a cast that ignored it would
+    # attach to the wrong socket or to none.
+    @staticmethod
+    def test_the_environment_names_it(monkeypatch):
+        monkeypatch.setenv("VEKNA_SOCKET", "/tmp/mine.sock")
+
+        assert default_socket_path() == "/tmp/mine.sock"

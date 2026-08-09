@@ -78,10 +78,13 @@ class RiteFinished(BaseModel):
 # --- prompts ---
 
 
+# `rite_id` says which rite is asking, when one is — a surface groups the prompt
+# under it. Optional because the answer never depends on it: the cast that asked
+# is what a prompt has to be routed by, and that is `cast_id`.
 class DecideRequested(BaseModel):
     kind: Literal["decide_requested"] = "decide_requested"
     cast_id: str
-    rite_id: str
+    rite_id: str | None = None
     request_id: str
     prompt: str
     options: list[str] | None = None

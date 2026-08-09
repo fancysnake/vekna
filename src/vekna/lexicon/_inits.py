@@ -2,20 +2,25 @@ import asyncio
 import contextlib
 import importlib
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from vekna.wire import CastHello, WireMessage
+
+from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
-from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
+from ._links.standalone import StandaloneRenderer, default_socket_path
 from ._mills.dispatch import component_flags
-from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
+from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import step_graph
 from ._pacts import (
     FocusMissingError,
     NoComponents,
+    RiteEvent,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -38,6 +43,9 @@ _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
 _PROMPT_MEDIUM = "coding"
 _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
+# Validated rather than dumped: `model_dump()` hands back `dict[str, Any]`, and
+# what the wire carries is JSON.
+_COMPONENTS: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 # The lexicon may not import a folio, so each one is loaded by name and asked
 # to register what it offers.
 _FOLIOS = ("vekna.folio.coding", "vekna.folio.coding_claude")
@@ -346,6 +354,99 @@ def _rendered(result: BaseModel | None) -> str:
     return "null" if result is None else result.model_dump_json()
 
 
+def _hello(*, cast_id: str, ritual: Ritual, components: BaseModel) -> CastHello:
+    return CastHello(
+        cast_id=cast_id,
+        project_root=str(Path.cwd()),
+        ritual=ritual.name,
+        components=_COMPONENTS.validate_json(components.model_dump_json()),
+        started_at=datetime.now(tz=UTC),
+    )
+
+
+# What a daemon arriving mid-cast has to be told: everything the grimoire has
+# recorded, and any prompt already on screen, which is not in it.
+def _backlog(
+    *, cast_id: str, grimoire: Grimoire, channel: TeeChannel
+) -> list[WireMessage]:
+    replayed: list[WireMessage] = [
+        to_wire(event, cast_id=cast_id) for event in grimoire.events
+    ]
+    return replayed + channel.open_prompts()
+
+
+async def _cast(
+    *,
+    the_ritual: Ritual,
+    components: BaseModel,
+    grimoire: Grimoire,
+    channel: TeeChannel,
+    link: DaemonLink,
+) -> int:
+    try:
+        result = await run_cast(
+            ritual=the_ritual, components=components, grimoire=grimoire, channel=channel
+        )
+    except FocusMissingError as error:
+        await link.close(status="error", detail=str(error))
+        sys.stderr.write(f"{error}\n")
+        return 2
+    except RitualError as error:
+        await link.close(status="error", detail=str(error))
+        sys.stderr.write(f"cast failed: {error}\n")
+        return 1
+    await link.close(status="ok")
+    sys.stdout.write(f"result: {_rendered(result)}\n")
+    return 0
+
+
+# The renderer and the wire both, in that order: what the operator sees does not
+# wait on a socket, and a cast with no daemon behaves exactly as it did.
+async def _run(*, the_ritual: Ritual, components: BaseModel) -> int:
+    # Unique per cast, not per ritual: cast_id is the wire's correlation key
+    # for deltas, decisions and locks, and CastHello carries the ritual name
+    # in its own field.
+    cast_id = uuid4().hex
+    renderer = StandaloneRenderer()
+    link = DaemonLink(
+        socket_path=Path(default_socket_path()),
+        hello=_hello(cast_id=cast_id, ritual=the_ritual, components=components),
+    )
+    channel = TeeChannel(
+        inner=renderer,
+        link=link,
+        cast_id=cast_id,
+        rite_id=lambda: current_rite().parent_id,
+    )
+
+    def emit(event: RiteEvent) -> None:
+        renderer.render(event)
+        link.send(to_wire(event, cast_id=cast_id))
+
+    grimoire = Grimoire(cast_id=cast_id, on_event=emit)
+
+    # The same backlog either way: at the start it is empty, and a daemon that
+    # turns up later gets whatever has happened by then. One path, so the
+    # mid-cast attach is not a road only a rare timing takes.
+    def backlog() -> list[WireMessage]:
+        return _backlog(cast_id=cast_id, grimoire=grimoire, channel=channel)
+
+    await link.attach(backlog=backlog())
+    watcher = asyncio.create_task(link.keep_attached(backlog))
+    try:
+        return await _cast(
+            the_ritual=the_ritual,
+            components=components,
+            grimoire=grimoire,
+            channel=channel,
+            link=link,
+        )
+    finally:
+        watcher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher
+
+
 async def _drive(argv: list[str]) -> int:
     if argv and argv[0] in _HELP_FLAGS:
         sys.stdout.write(_help_text(Path.cwd()))
@@ -359,30 +460,7 @@ async def _drive(argv: list[str]) -> int:
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
-    # The answer is deliberately discarded until 0.6.0: the probe exists so the
-    # attach path is already on the hot path, but nothing consumes a reachable
-    # daemon yet. See docs/reborn/06-vekna-daemon.md.
-    await probe_daemon(socket_path=default_socket_path())
-    renderer = StandaloneRenderer()
-    # Unique per cast, not per ritual: cast_id is the wire's correlation key
-    # for deltas, decisions and locks, and CastHello carries the ritual name
-    # in its own field.
-    grimoire = Grimoire(cast_id=uuid4().hex, on_event=renderer.render)
-    try:
-        result = await run_cast(
-            ritual=the_ritual,
-            components=components,
-            grimoire=grimoire,
-            channel=renderer,
-        )
-    except FocusMissingError as error:
-        sys.stderr.write(f"{error}\n")
-        return 2
-    except RitualError as error:
-        sys.stderr.write(f"cast failed: {error}\n")
-        return 1
-    sys.stdout.write(f"result: {_rendered(result)}\n")
-    return 0
+    return await _run(the_ritual=the_ritual, components=components)
 
 
 def main(argv: list[str]) -> int:
