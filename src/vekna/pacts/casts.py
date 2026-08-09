@@ -1,7 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -44,6 +44,13 @@ class CastView:
     detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, DecideRequested] = field(default_factory=dict)
+
+
+# What a surface reads the daemon for. Ordered, because the number an operator
+# types is a position in what they are looking at.
+class Casts(Protocol):
+    @property
+    def casts(self) -> dict[str, CastView]: ...
 
 
 # `run.json`: what a cast was and how it ended, beside the event log that says

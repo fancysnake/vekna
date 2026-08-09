@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from vekna.links.socket_server import alive, attach, default_socket_path, serve
+from vekna.links.socket_server import Serving, alive, attach, default_socket_path, serve
 from vekna.pacts.routing import SocketPathError
 from vekna.wire import (
     CastGoodbye,
@@ -41,7 +41,7 @@ class _Daemon:
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
 
-    async def start(self, path: Path) -> asyncio.Server | None:
+    async def start(self, path: Path) -> Serving | None:
         return await serve(
             path=path,
             on_message=self.messages.append,
@@ -80,7 +80,7 @@ class TestServing:
             "cast_hello",
             "rite_delta",
         ]
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_the_socket_is_the_users_alone(socket_path: Path):
@@ -90,7 +90,7 @@ class TestServing:
         mode = (await asyncio.to_thread(socket_path.stat)).st_mode
 
         assert mode & _PERMISSION_BITS == _OWNER_ONLY
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_a_surface_attaches_and_is_sent_to(socket_path: Path):
@@ -107,7 +107,7 @@ class TestServing:
 
         assert heard == _hello()
         writer.close()
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_a_surface_leaving_is_noticed(socket_path: Path):
@@ -123,7 +123,7 @@ class TestServing:
         await _settle()
 
         assert daemon.detached == daemon.attached
-        server.close()
+        await server.close()
 
 
 @pytest.mark.asyncio
@@ -146,7 +146,7 @@ class TestUncleanExits:
             status="disconnected",
             detail="socket closed without a goodbye",
         )
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_a_cast_that_said_goodbye_is_not_said_for(socket_path: Path):
@@ -163,7 +163,7 @@ class TestUncleanExits:
         await _settle()
 
         assert daemon.messages[-1] == CastGoodbye(cast_id="c1", status="ok")
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_an_unreadable_frame_ends_one_connection_and_says_why(
@@ -185,7 +185,7 @@ class TestUncleanExits:
         assert goodbye.detail is not None
         assert goodbye.detail.startswith("unreadable frame:")
         writer.close()
-        server.close()
+        await server.close()
 
 
 @pytest.mark.asyncio
@@ -196,19 +196,19 @@ class TestBinding:
         assert first is not None
 
         assert await _Daemon().start(socket_path) is None
-        first.close()
+        await first.close()
 
     @staticmethod
     async def test_a_socket_nobody_answers_is_cleared_away(socket_path: Path):
         killed = await _Daemon().start(socket_path)
         assert killed is not None
-        killed.close()
+        await killed.close()
 
         server = await _Daemon().start(socket_path)
 
         assert server is not None
         assert await alive(socket_path)
-        server.close()
+        await server.close()
 
     @staticmethod
     async def test_a_path_held_by_something_else_says_so(socket_path: Path):

@@ -41,6 +41,23 @@ class SocketSurface(Surface):
         self._writer.write(encode_frame(message))
 
 
+# Closing the server only stops it accepting; the connections it already handed
+# out stay open. A daemon that ends has to take them with it, or a peer surface
+# is left painting a view nobody will ever change again.
+class Serving:
+    def __init__(
+        self, server: asyncio.Server, writers: set[asyncio.StreamWriter]
+    ) -> None:
+        self._server = server
+        self._writers = writers
+
+    async def close(self) -> None:
+        self._server.close()
+        for writer in list(self._writers):
+            writer.close()
+        await self._server.wait_closed()
+
+
 async def alive(path: Path) -> bool:
     try:
         _, writer = await asyncio.open_unix_connection(str(path))
@@ -73,17 +90,23 @@ async def serve(
     on_message: Callable[[WireMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
-) -> asyncio.Server | None:
+) -> Serving | None:
+    writers: set[asyncio.StreamWriter] = set()
+
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        await _handle(
-            reader,
-            writer,
-            on_message=on_message,
-            on_attach=on_attach,
-            on_detach=on_detach,
-        )
+        writers.add(writer)
+        try:
+            await _handle(
+                reader,
+                writer,
+                on_message=on_message,
+                on_attach=on_attach,
+                on_detach=on_detach,
+            )
+        finally:
+            writers.discard(writer)
 
     if await alive(path):
         return None
@@ -92,7 +115,7 @@ async def serve(
         raise SocketPathError(msg)
     server = await asyncio.start_unix_server(handle, path=str(path))
     await asyncio.to_thread(path.chmod, _SOCKET_MODE)
-    return server
+    return Serving(server, writers)
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything

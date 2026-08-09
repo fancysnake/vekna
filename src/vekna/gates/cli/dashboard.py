@@ -1,0 +1,98 @@
+import asyncio
+import itertools
+
+from vekna.pacts.casts import Casts
+from vekna.pacts.screen import Screen
+
+from .screen import paint
+
+# Long enough that a streaming rite does not repaint per line, short enough that
+# the view reads as live.
+_COALESCE_SECONDS = 0.1
+_QUIT = frozenset({"q", "quit"})
+_BACK = frozenset({"b", "back"})
+_KEYS = "a number, b, or q"
+
+
+# What the operator does with the view, and nothing about where the events came
+# from: the daemon that owns the socket and a peer surface attached to it drive
+# the same one, over the same two protocols.
+class Dashboard:
+    def __init__(self, *, casts: Casts, screen: Screen) -> None:
+        self._casts = casts
+        self._screen = screen
+        self._focus: str | None = None
+        self._note = ""
+        self._changed = asyncio.Event()
+        self._done = asyncio.Event()
+
+    def changed(self) -> None:
+        self._changed.set()
+
+    def say(self, note: str) -> None:
+        self._note = note
+        self.changed()
+
+    # Painted here rather than left to the loop: whatever ended the view is the
+    # last thing worth saying about it, and the loop is about to be cancelled.
+    def stop(self, *, note: str = "") -> None:
+        self._note = note or self._note
+        self._done.set()
+        self._changed.set()
+        self._show()
+
+    @property
+    def stopped(self) -> bool:
+        return self._done.is_set()
+
+    async def wait(self) -> None:
+        await self._done.wait()
+
+    async def painting(self) -> None:
+        for _ in self._until_done():
+            self._show()
+            await self._changed.wait()
+            self._changed.clear()
+            # A burst of deltas is one repaint, not one each.
+            await asyncio.sleep(_COALESCE_SECONDS)
+
+    async def typing(self) -> None:
+        for _ in self._until_done():
+            if (line := await self._screen.read_line()) is None:
+                # Nobody is typing: the view is still worth painting, and the
+                # daemon still has casts to serve.
+                return
+            self._read(line)
+            self.changed()
+
+    def _until_done(self) -> "itertools.takewhile[int]":
+        return itertools.takewhile(lambda _: not self._done.is_set(), itertools.count())
+
+    def _read(self, line: str) -> None:
+        lowered = line.lower()
+        if lowered in _QUIT:
+            self.stop()
+        elif lowered in _BACK:
+            self._focus = None
+        elif lowered.isdigit():
+            self._focus = self._nth(int(lowered))
+        elif lowered:
+            self._note = f"{line!r} is not a cast — {_KEYS}"
+
+    def _nth(self, index: int) -> str | None:
+        found = list(self._casts.casts)
+        if 1 <= index <= len(found):
+            return found[index - 1]
+        self._note = f"there is no cast {index}"
+        return None
+
+    # The note is shown once and then it has been said.
+    def _show(self) -> None:
+        self._screen.show(
+            paint(
+                casts=list(self._casts.casts.values()),
+                focus=self._focus,
+                note=self._note,
+            )
+        )
+        self._note = ""

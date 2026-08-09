@@ -70,4 +70,34 @@ find — usually a submodule that was never swept because it is missing an
 
 ## `vekna`
 
-With no subcommand, prints the help.
+With no subcommand, the daemon. The first `vekna` binds
+`/tmp/vekna-<uid>.sock` and renders every cast running anywhere on this
+account; each one after attaches to it as another surface, and sees the same
+view.
+
+```bash
+vekna
+vekna --debug
+```
+
+`--debug` writes a line per event to `~/.config/vekna/debug.log` — the daemon is
+the one place every message passes, and the log says what it did with each one,
+including the ones it dropped.
+
+A number drills into a cast, `b` comes back, `q` quits. A cast blocked on a
+prompt is marked as waiting, with the prompt — it is answered in the terminal
+that started it, not here.
+
+Casts are not started from here. `vekna cast` is how a cast begins, and it runs
+in the directory it was typed in, attached or not.
+
+## `vekna casts`
+
+The casts the daemon has recorded, newest first — running, finished and gone.
+
+```bash
+vekna casts
+```
+
+A cast that ran with no daemon listening leaves no record: the journal is the
+daemon's, and there was none.

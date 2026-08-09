@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from vekna.links.journal import Journal
+import pytest
+
+from vekna.links.journal import Journal, default_runs_root
 from vekna.wire import CastGoodbye, CastHello, RiteDelta, SurfaceHello
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -66,6 +68,20 @@ class TestRecording:
         record = journal.read("c2")
         assert record is not None
         assert record.hello.resumed_from == "c1"
+
+
+class TestWhereItLives:
+    @staticmethod
+    def test_the_environment_names_it(monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("VEKNA_RUNS", "/tmp/mine")
+
+        assert default_runs_root() == Path("/tmp/mine")
+
+    @staticmethod
+    def test_otherwise_it_is_the_config_namespace(monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("VEKNA_RUNS", raising=False)
+
+        assert default_runs_root().parts[-3:] == (".config", "vekna", "runs")
 
 
 class TestReading:

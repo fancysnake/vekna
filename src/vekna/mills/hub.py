@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterator
 
-from vekna.pacts.casts import CastView, RiteView
+from vekna.pacts.casts import Casts, CastView, RiteView
 from vekna.pacts.routing import Action, Routed, Surface
 from vekna.wire import (
     CastGoodbye,
@@ -29,7 +29,7 @@ _NOT_SENT = "a surface attaches, it does not send"
 # an hour of scrollback.
 # ponytail: one hub, no locking — the socket server drives it from a single
 # event loop. Per-cast locking is the upgrade if it ever runs threaded.
-class Hub:
+class Hub(Casts):
     def __init__(
         self,
         *,

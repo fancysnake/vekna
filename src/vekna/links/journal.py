@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -13,6 +14,15 @@ from vekna.wire import (
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
+_RUNS_ENV = "VEKNA_RUNS"
+
+
+# `~/.config/vekna/runs` is the namespace 00-common fixes; the variable is what
+# lets a test — and a second user on one machine — keep their own.
+def default_runs_root() -> Path:
+    if (named := os.environ.get(_RUNS_ENV)) is not None:
+        return Path(named)
+    return Path.home() / ".config" / "vekna" / "runs"
 
 
 # Everything the daemon saw, on disk, keyed by cast. `run.json` is the index —

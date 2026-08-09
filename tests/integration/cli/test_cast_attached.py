@@ -109,8 +109,7 @@ class _DaemonThread:
         assert server is not None
         self._ready.set()
         await self._stop.wait()
-        server.close()
-        await server.wait_closed()
+        await server.close()
 
 
 @pytest.fixture(name="daemon")

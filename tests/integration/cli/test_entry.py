@@ -47,12 +47,15 @@ def _project(tmp_path, monkeypatch) -> None:
 
 @pytest.mark.usefixtures("_project")
 class TestEntry:
+    # Bare `vekna` is the daemon and blocks, so what is checked here is that
+    # the tree is reachable — the daemon itself is exercised in test_daemon.py.
     @staticmethod
-    def test_the_bare_command_prints_its_help():
-        result = CliRunner().invoke(init_command(), [])
+    def test_the_help_lists_the_commands():
+        result = CliRunner().invoke(init_command(), ["--help"])
 
         assert not result.exit_code
         assert "cast" in result.output
+        assert "casts" in result.output
 
     @staticmethod
     def test_casting_a_ritual_reaches_the_runtime():

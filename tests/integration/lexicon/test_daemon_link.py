@@ -6,7 +6,7 @@ import pytest
 
 from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, to_wire
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
-from vekna.links.socket_server import serve
+from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
 from vekna.wire import CastHello, WireMessage
 
@@ -42,7 +42,7 @@ async def _settle() -> None:
 class _Daemon:
     def __init__(self) -> None:
         self.hub = Hub()
-        self.server: asyncio.Server | None = None
+        self.server: Serving | None = None
 
     async def start(self, path: Path) -> None:
         self.server = await serve(
@@ -54,8 +54,7 @@ class _Daemon:
 
     async def stop(self) -> None:
         assert self.server is not None
-        self.server.close()
-        await self.server.wait_closed()
+        await self.server.close()
         self.server = None
 
 
@@ -151,6 +150,22 @@ class TestAttaching:
         view = daemon.hub.casts[_CAST]
         assert list(view.rites["r1"].deltas) == ["one"]
         watcher.cancel()
+        await daemon.stop()
+
+    # The probe is a probe, not a reconnector: an attached link is left alone.
+    @staticmethod
+    async def test_an_attached_link_is_not_attached_again(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
+        probing = asyncio.create_task(link.keep_attached(list, every=0.01))
+
+        await asyncio.sleep(0.05)
+
+        assert link.attached
+        assert list(daemon.hub.casts[_CAST].rites) == ["r1"]
+        probing.cancel()
         await daemon.stop()
 
     @staticmethod
