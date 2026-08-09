@@ -22,6 +22,13 @@ class CastGoodbye(BaseModel):
     detail: str | None = None
 
 
+# What a connection opens with is what it is. A cast says `CastHello`; anything
+# watching says this, and is sent the live casts and everything they do next. No
+# fields: a surface is not addressed, only fanned out to.
+class SurfaceHello(BaseModel):
+    kind: Literal["surface_hello"] = "surface_hello"
+
+
 class GrimoireBegin(BaseModel):
     kind: Literal["grimoire_begin"] = "grimoire_begin"
     cast_id: str
@@ -117,6 +124,7 @@ class LockReleased(BaseModel):
 WireMessage = (
     CastHello
     | CastGoodbye
+    | SurfaceHello
     | GrimoireBegin
     | GrimoireEnd
     | RiteStarted
