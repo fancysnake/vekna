@@ -11,7 +11,7 @@ _MEDIUM = "medium"
 @dataclass(frozen=True, kw_only=True)
 class _Entry:
     name: str
-    result: JsonValue | None
+    result: JsonValue
 
 
 # What an interrupted cast already did, keyed by the rite that did it. Only
@@ -37,11 +37,17 @@ class Ledger:
             for event in resumption.events
             if isinstance(event, RiteStarted) and event.category == _MEDIUM
         }
+        # A rite that finished having recorded nothing is not held here at all.
+        # `take` answers "nothing recorded" and "recorded a null" with the same
+        # `None`, so keeping it would let a rite run a second time while the
+        # ledger stayed unspent — the one thing replay is for. Left out, it is
+        # a miss like any other: the resume runs live from that rite on.
         entries = {
             event.rite_id: _Entry(name=names[event.rite_id], result=event.result)
             for event in resumption.events
             if isinstance(event, RiteFinished)
             and event.status == "ok"
+            and event.result is not None
             and event.rite_id in names
         }
         return cls(entries)
