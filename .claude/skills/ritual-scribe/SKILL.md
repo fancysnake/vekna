@@ -202,13 +202,9 @@ Three ship. Each opens a rite of its own in the grimoire, so the tree shows what
 actually happened. **Mediums may only be called inside a running cast** — inside
 a step body, or inside a medium a step called.
 
-A rite is one line, and it quotes the first string the medium was called with,
-cut to 60 characters — the command for `shell`, the prompt's opening for
-`coding`, the question for `decide`. That is the whole of what the operator
-sees a call doing, so **write prompts whose first line names the job**: a
-constant opening with `` `mise run lint:py` and `mise run test:py` are this
-project's gates `` reads as a gate repair in the tree; one opening with a
-paragraph of preamble does not.
+A rite is one line: the first string the call was given, cut to 60 characters —
+a `shell`'s command, a prompt's opening. That is all the operator sees of the
+call, so **open a prompt constant with a line that names the job.**
 
 ### `shell` — deterministic work
 

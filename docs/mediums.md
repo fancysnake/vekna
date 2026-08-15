@@ -4,9 +4,8 @@ A medium is what a step reaches out to. Three ship: `coding` (an agent),
 `shell`, and `decide` (ask the operator). Each call opens a rite of its own, so
 the grimoire records what happened and in what order.
 
-That rite is one line on the surface, and it quotes the first string the medium
-was called with — cut to 60 characters. Whatever a call leads with is what the
-tree shows it doing, so lead with the part worth reading.
+On the surface that rite is one line, quoting the first string the call was
+given, cut to 60 characters — so lead with the part worth reading.
 
 ## `shell`
 

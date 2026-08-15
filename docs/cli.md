@@ -35,10 +35,8 @@ per medium call, with the call's own output indented beneath:
 result: {"green":true}
 ```
 
-A medium's line quotes the first string it was called with — a `shell`'s
-command, a `coding` prompt — on one line, cut to 60 characters. Two rites of
-the same medium are told apart by that, so it rides both the opening and the
-closing line.
+A medium's line quotes the first string it was called with, cut to 60
+characters, on the line that opens the rite and the one that closes it.
 
 The last line is the result as JSON, or `null` for a ritual that finishes
 without one.
