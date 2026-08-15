@@ -166,6 +166,58 @@ class TestUncleanExits:
         await server.close()
 
     @staticmethod
+    async def test_a_connection_that_was_both_says_goodbye_and_detaches(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        assert server is not None
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(SurfaceHello()))
+        writer.write(encode_frame(_hello()))
+        await writer.drain()
+        await _settle()
+
+        writer.close()
+        await _settle()
+
+        assert daemon.detached == daemon.attached
+        assert daemon.messages[-1] == CastGoodbye(
+            cast_id="c1",
+            status="disconnected",
+            detail="socket closed without a goodbye",
+        )
+        await server.close()
+
+    @staticmethod
+    async def test_an_os_error_out_of_the_read_loop_is_a_goodbye(socket_path: Path):
+        daemon = _Daemon()
+
+        def unwritable(message: WireMessage) -> None:
+            daemon.messages.append(message)
+            if isinstance(message, RiteDelta):
+                raise OSError(28, "No space left on device")
+
+        server = await serve(
+            path=socket_path,
+            on_message=unwritable,
+            on_attach=daemon.attached.append,
+            on_detach=daemon.detached.append,
+        )
+        assert server is not None
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_hello()))
+        writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
+        await writer.drain()
+        await _settle()
+
+        goodbye = daemon.messages[-1]
+        assert isinstance(goodbye, CastGoodbye)
+        assert goodbye.detail == "connection lost: [Errno 28] No space left on device"
+        writer.close()
+        await server.close()
+
+    @staticmethod
     async def test_an_unreadable_frame_ends_one_connection_and_says_why(
         socket_path: Path,
     ):

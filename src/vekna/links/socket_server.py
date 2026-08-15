@@ -17,6 +17,7 @@ from vekna.wire import (
 )
 
 _SOCKET_MODE = 0o600
+_CONNECT_SECONDS = 2.0
 _GONE = "socket closed without a goodbye"
 _SOCKET_ENV = "VEKNA_SOCKET"
 
@@ -52,16 +53,25 @@ class Serving:
         self._server = server
         self._writers = writers
 
+    # Awaited one by one rather than left to `wait_closed`, which on 3.11 comes
+    # back the moment the server stops accepting: what is buffered for a peer
+    # surface is written as the daemon ends, not dropped with it.
     async def close(self) -> None:
         self._server.close()
-        for writer in list(self._writers):
+        closing = list(self._writers)
+        for writer in closing:
             writer.close()
         await self._server.wait_closed()
+        for writer in closing:
+            with contextlib.suppress(OSError):
+                await writer.wait_closed()
 
 
 async def alive(path: Path) -> bool:
+    # `TimeoutError` is an `OSError` from 3.11 on, so the bound `attach` puts on
+    # the connect needs nothing said about it here.
     try:
-        _, writer = await asyncio.open_unix_connection(str(path))
+        _, writer = await attach(path)
     except OSError:
         return False
     writer.close()
@@ -70,8 +80,13 @@ async def alive(path: Path) -> bool:
     return True
 
 
+# Bounded, because a connect to a listening socket whose backlog is full waits
+# rather than failing: a daemon wedged that way would otherwise hang the next
+# `vekna` — on its liveness probe, with nothing on screen to say why.
 async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-    return await asyncio.open_unix_connection(str(path))
+    return await asyncio.wait_for(
+        asyncio.open_unix_connection(str(path)), timeout=_CONNECT_SECONDS
+    )
 
 
 # None when another daemon already holds the socket — the caller attaches to it
@@ -157,6 +172,11 @@ async def _handle(
     # cast down with it.
     except ValueError as error:
         detail = f"unreadable frame: {error}"
+    # A peer that dies mid-frame resets the connection rather than closing it.
+    # The goodbye is the same either way, and carrying the cause in it beats
+    # letting asyncio log a traceback for a routine disconnect.
+    except OSError as error:
+        detail = f"connection lost: {error}"
     finally:
         _close(connection, on_message=on_message, on_detach=on_detach, detail=detail)
         writer.close()
@@ -194,7 +214,6 @@ def _close(
 ) -> None:
     if connection.surface is not None:
         on_detach(connection.surface)
-        return
     if connection.cast_id is not None and not connection.said_goodbye:
         on_message(
             CastGoodbye(
