@@ -56,11 +56,20 @@ def _listing(casts: Sequence[CastView]) -> list[str]:
 # Depth by walking parents rather than by remembering one: a rite's place in the
 # tree is its parent chain, and the daemon is handed the rites in the order they
 # began, not in the shape they make.
+# The chain is what a peer said it was, and nothing on the way in checks it for
+# loops. Walked recursively, a rite that is its own ancestor painted until the
+# recursion limit and took the painting task with it; walked over the rites
+# themselves, the tree is its own bound — no chain through it is longer than the
+# number of rites in it.
 def _depth(rite: RiteView, view: CastView) -> int:
+    depth = 0
     parent = rite.started.parent_id
-    if parent is None or (found := view.rites.get(parent)) is None:
-        return 0
-    return 1 + _depth(found, view)
+    for _ in view.rites:
+        if parent is None or (found := view.rites.get(parent)) is None:
+            break
+        depth += 1
+        parent = found.started.parent_id
+    return depth
 
 
 def _rite_lines(view: CastView) -> list[str]:
@@ -99,9 +108,12 @@ def _drilled(view: CastView) -> list[str]:
 def listing(records: Sequence[RunRecord]) -> str:
     if not records:
         return "no casts recorded\n"
+    # In the reader's own time: the record carries UTC, and an operator east of
+    # it reading a bare wall clock has no way to tell.
     return "".join(
         f"{record.hello.cast_id[:8]}  {_CAST_GLYPH[record.status]}"
-        f"  {record.hello.ritual:<16}  {record.hello.started_at:%Y-%m-%d %H:%M}"
+        f"  {record.hello.ritual:<16}"
+        f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
         f"  {record.hello.project_root}\n"
         for record in records
     )

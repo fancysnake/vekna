@@ -98,6 +98,7 @@ class DaemonLink:
         *,
         every: float = _REATTACH_SECONDS,
     ) -> None:
+        # A `while` in disguise: pylint's `while_used` bans the statement.
         for _ in itertools.takewhile(lambda _: not self._closed, itertools.count()):
             await asyncio.sleep(every)
             if not self.attached:

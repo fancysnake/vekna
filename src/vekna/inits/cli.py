@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import importlib
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -147,26 +147,6 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
     return record
 
 
-async def _live(
-    dashboard: Dashboard, *, alongside: Sequence[asyncio.Task[None]] = ()
-) -> None:
-    tasks = [
-        asyncio.create_task(dashboard.painting()),
-        asyncio.create_task(dashboard.typing()),
-        *alongside,
-    ]
-    try:
-        await dashboard.wait()
-    finally:
-        for task in tasks:
-            task.cancel()
-        # Gathered rather than awaited one by one under `suppress`: the
-        # cancellation comes back as a value instead of an exception raised into
-        # this frame, which is both shorter and the only form `coverage` keeps
-        # tracing through (see TODO.md).
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-
 # A second `vekna` in the same account is a surface on the first: it says so, is
 # replayed every live cast, and paints the same view. It journals nothing — the
 # daemon that owns the socket owns the record.
@@ -187,7 +167,7 @@ async def _as_peer(*, path: Path, screen: Screen) -> int:
             dashboard.changed()
         dashboard.stop(note=_DAEMON_ENDED)
 
-    await _live(dashboard, alongside=[asyncio.create_task(listen())])
+    await dashboard.run(alongside=[asyncio.create_task(listen())])
     writer.close()
     with contextlib.suppress(OSError):
         await writer.wait_closed()
@@ -217,7 +197,7 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
     if debug is not None:
         dashboard.say(f"logging every event to {debug}")
     try:
-        await _live(dashboard)
+        await dashboard.run()
     finally:
         await server.close()
     return 0

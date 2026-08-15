@@ -64,3 +64,23 @@ class TestLoops:
         await asyncio.wait_for(dashboard.typing(), timeout=2)
 
         assert not any("is not a cast" in frame for frame in keys.frames)
+
+    # `"²".isdigit()` is true and `int("²")` raises, which ended the input task
+    # and left a view that painted but took no more keys.
+    @staticmethod
+    async def test_a_digit_int_will_not_take_is_just_a_bad_key():
+        dashboard, keys = _dashboard("²", "q")
+
+        await asyncio.wait_for(dashboard.typing(), timeout=2)
+
+        assert dashboard.stopped
+        assert any("is not a cast" in frame for frame in keys.frames)
+
+    @staticmethod
+    async def test_run_ends_when_the_view_does():
+        dashboard, keys = _dashboard("q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert dashboard.stopped
+        assert keys.frames

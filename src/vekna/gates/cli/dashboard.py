@@ -1,5 +1,6 @@
 import asyncio
 import itertools
+from collections.abc import Sequence
 
 from vekna.pacts.casts import Casts
 from vekna.pacts.screen import Screen
@@ -48,6 +49,27 @@ class Dashboard:
     async def wait(self) -> None:
         await self._done.wait()
 
+    # The view's own two coroutines and whatever the caller has to run beside
+    # them — a peer's socket reader, say. Here rather than in the composition
+    # root, which would otherwise have to know the assembly order to start a
+    # dashboard at all.
+    async def run(self, *, alongside: Sequence[asyncio.Task[None]] = ()) -> None:
+        tasks = [
+            asyncio.create_task(self.painting()),
+            asyncio.create_task(self.typing()),
+            *alongside,
+        ]
+        try:
+            await self.wait()
+        finally:
+            for task in tasks:
+                task.cancel()
+            # Gathered rather than awaited one by one under `suppress`: the
+            # cancellation comes back as a value instead of an exception raised
+            # into this frame, which is both shorter and the only form
+            # `coverage` keeps tracing through (see TODO.md).
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def painting(self) -> None:
         for _ in self._until_done():
             self._show()
@@ -65,6 +87,8 @@ class Dashboard:
             self._read(line)
             self.changed()
 
+    # A `while` in disguise, and pylint's `while_used` is why: this repository
+    # bans the statement, so the loop is spelled as the condition it is.
     def _until_done(self) -> "itertools.takewhile[int]":
         return itertools.takewhile(lambda _: not self._done.is_set(), itertools.count())
 
@@ -74,7 +98,7 @@ class Dashboard:
             self.stop()
         elif lowered in _BACK:
             self._focus = None
-        elif lowered.isdigit():
+        elif lowered.isdecimal():
             self._focus = self._nth(int(lowered))
         elif lowered:
             self._note = f"{line!r} is not a cast — {_KEYS}"
