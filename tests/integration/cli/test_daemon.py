@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,8 +16,10 @@ from vekna.wire import (
     DecideRequested,
     RiteFinished,
     RiteStarted,
+    SurfaceHello,
     WireMessage,
     encode_frame,
+    read_frames,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -227,6 +230,32 @@ class TestPeers:
 
         await _eventually(lambda: peer_keys.painted("the daemon ended"))
         assert await peer == 0
+
+    # The handshake this end wrote is the one frame kind that cannot come back,
+    # and a peer that took it for a cast would paint one that is not there. The
+    # daemon on the other end is a stub, because a real one never sends it.
+    @staticmethod
+    async def test_a_peer_ignores_its_own_handshake_coming_back(socket_path: Path):
+        async def echoes(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            with contextlib.suppress(OSError):
+                async for _ in read_frames(reader):
+                    writer.write(encode_frame(SurfaceHello()))
+                    writer.write(encode_frame(_hello()))
+                    await writer.drain()
+
+        server = await asyncio.start_unix_server(echoes, path=str(socket_path))
+        peer_keys = _Keys()
+        peer = asyncio.create_task(daemon(screen=peer_keys))
+        await _eventually(lambda: peer_keys.painted("fix_demo"))
+
+        peer_keys.press("q")
+
+        assert await peer == 0
+        assert peer_keys.painted("vekna — 1 cast")
+        server.close()
+        await server.wait_closed()
 
 
 @pytest.mark.asyncio

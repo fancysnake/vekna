@@ -36,9 +36,8 @@ class Journal:
         except OSError:
             # Marked before the caller hears about it, because what is on disk
             # is now a log with a hole in it and nothing in the log says so.
-            # Best effort by nature: the write that would record the gap is the
-            # same kind of write that just failed. The raise still goes on, so
-            # the daemon reports the failure rather than swallowing it here.
+            # The raise still goes on, so the daemon reports the failure rather
+            # than swallowing it here.
             self._mark_gapped(message.cast_id)
             raise
         if isinstance(message, CastHello):
@@ -55,11 +54,20 @@ class Journal:
     # Read back and written on rather than rebuilt field by field: what `read`
     # hands over is parsed fresh off the disk each time, so it is nobody else's
     # to hold, and a field added to `RunRecord` needs nothing said here.
+    # The write that would record the gap is the same kind of write that just
+    # failed, so it can fail too — and a record that survives ungapped over a
+    # log with a hole in it is worse than no record at all, because that is the
+    # one `vekna casts resume` accepts. The record goes instead: unlinking is
+    # the one thing a disk with no room left still does, and what a resume then
+    # finds is nothing to resume from, said in a sentence.
     def _mark_gapped(self, cast_id: str) -> None:
-        with contextlib.suppress(OSError):
+        try:
             if (record := self.read(cast_id)) is not None:
                 record.gapped = True
                 self._write(record)
+        except OSError:
+            with contextlib.suppress(OSError):
+                run_file(self._root, cast_id).unlink(missing_ok=True)
 
     # A record that will not parse is one the daemon was killed halfway through
     # writing. Skipped rather than raised, because the command that reads these

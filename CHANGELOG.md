@@ -36,7 +36,10 @@ which links back to the version here that carried each shipped feature.
   `~/.config/vekna/runs/<cast_id>/` — `run.json` for what the cast was and how
   it ended, `events.jsonl` for the wire verbatim. `vekna casts` lists them,
   newest first, and needs no daemon running to do it. A cast that ran with
-  nothing listening leaves no record: the journal is the daemon's.
+  nothing listening leaves no record: the journal is the daemon's. A write that
+  fails fails closed: the run is marked as having a hole in it, and if the disk
+  cannot take that mark either, the record goes, so a resume says there is
+  nothing to resume from rather than replaying a log that is missing a rite.
 - **`vekna casts resume <cast_id>`.** A fresh process in the directory the
   interrupted cast ran in, handed the journal. Its steps re-run — cheap, and the
   same walk they took before — while every agent call, shell command and prompt

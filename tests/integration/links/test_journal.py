@@ -9,6 +9,18 @@ from vekna.wire import CastGoodbye, CastHello, RiteDelta
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
 
+# A directory refuses to open for append whoever asks, where a read-only file
+# still opens for a process running as root.
+def _no_appends(log: Path) -> None:
+    log.unlink()
+    log.mkdir()
+
+
+def _appends_again(log: Path) -> None:
+    log.rmdir()
+    log.touch()
+
+
 def _hello(cast_id: str = "c1", *, started_at: datetime = _WHEN) -> CastHello:
     return CastHello(
         cast_id=cast_id,
@@ -57,9 +69,9 @@ class TestRecording:
     def test_an_append_that_fails_marks_the_run_gapped(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello())
-        (tmp_path / "c1" / "events.jsonl").chmod(0o400)
+        _no_appends(tmp_path / "c1" / "events.jsonl")
 
-        with pytest.raises(OSError, match="Permission denied"):
+        with pytest.raises(IsADirectoryError):
             journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
 
         record = journal.read("c1")
@@ -70,10 +82,11 @@ class TestRecording:
     def test_a_gap_survives_the_goodbye_that_closes_the_run(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello())
-        (tmp_path / "c1" / "events.jsonl").chmod(0o400)
-        with pytest.raises(OSError, match="Permission denied"):
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        with pytest.raises(IsADirectoryError):
             journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
-        (tmp_path / "c1" / "events.jsonl").chmod(0o600)
+        _appends_again(events)
 
         journal.record(CastGoodbye(cast_id="c1", status="ok"))
 
@@ -81,6 +94,20 @@ class TestRecording:
         assert record is not None
         assert record.status == "ok"
         assert record.gapped
+
+    # The disk that lost the event is the disk the gap marker is written to, so
+    # both go at once. What is left must not read back as a run to resume.
+    @staticmethod
+    def test_a_gap_that_cannot_be_written_takes_the_record_with_it(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        _no_appends(tmp_path / "c1" / "events.jsonl")
+        (tmp_path / "c1" / "run.part").mkdir()
+
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+
+        assert journal.read("c1") is None
 
     @staticmethod
     def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):
