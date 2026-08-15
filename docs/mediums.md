@@ -4,8 +4,11 @@ A medium is what a step reaches out to. Three ship: `coding` (an agent),
 `shell`, and `decide` (ask the operator). Each call opens a rite of its own, so
 the grimoire records what happened and in what order.
 
-On the surface that rite is one line, quoting the first string the call was
-given, cut to 60 characters — so lead with the part worth reading.
+On the surface that rite is one line, quoting the medium's first argument — a
+`shell`'s command, a prompt — with its whitespace collapsed and cut to 60
+characters, so lead with the part worth reading. The first argument as the
+medium *declares* it, not as the call happened to spell it: `shell(cwd=...,
+command=...)` still quotes the command.
 
 ## `shell`
 

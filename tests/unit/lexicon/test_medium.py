@@ -22,6 +22,11 @@ from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
+# What a rite's line has room for. Stated here rather than imported, so
+# retuning the medium's own width fails the test that owns the width, not this
+# one — which only asks that a long call still fits a line.
+_LINE_WIDTH = 60
+
 
 def _fixed_clock() -> datetime:
     return datetime(2026, 1, 1, tzinfo=UTC)
@@ -47,6 +52,24 @@ async def choose(_state: Start) -> Transition:
 
 
 chooser = entry(name="chooser", target=choose, payload=Start())
+
+
+# `shell`'s shape: a positional-or-keyword string first, another string behind
+# a keyword. Calling it keywords-first is legal, and is where reading call-site
+# order instead of the signature picks the wrong one.
+@medium
+async def sh(command: str, *, cwd: str | None = None) -> str:
+    await asyncio.sleep(0)
+    return f"{cwd}: {command}"
+
+
+@step
+async def run_backwards(_state: Start) -> Transition:
+    await sh(cwd="/very/long/repo/path", command="mise run lint:py")
+    return done(None)
+
+
+backwards = entry(name="backwards", target=run_backwards, payload=Start())
 
 
 @medium
@@ -209,15 +232,24 @@ class TestMediumSummary:
 
         summary = _summary_of("pick", grimoire)
         assert summary is not None
-        assert (len(summary), summary.endswith("…")) == (60, True)
+        assert len(summary) <= _LINE_WIDTH
+        assert summary.endswith("…")
 
     @staticmethod
-    def test_arguments_before_the_first_string_are_passed_over():
+    def test_a_keyword_only_first_argument_is_found_by_name():
         grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
 
         _cast(_caller({"options": ["a", "b"], "prompt": "which?"}), grimoire)
 
         assert _summary_of("pick", grimoire) == "which?"
+
+    @staticmethod
+    def test_a_later_string_written_first_does_not_take_the_line():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        _cast(backwards, grimoire)
+
+        assert _summary_of("sh", grimoire) == "mise run lint:py"
 
     @staticmethod
     def test_a_medium_called_with_no_string_has_none():
