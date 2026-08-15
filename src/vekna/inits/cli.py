@@ -13,7 +13,7 @@ from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing
 from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal, default_runs_root
-from vekna.links.socket_server import attach, default_socket_path, serve
+from vekna.links.socket_server import alive, attach, default_socket_path, serve
 from vekna.links.terminal import Terminal
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
@@ -186,6 +186,8 @@ async def _as_peer(*, path: Path, screen: Screen) -> int:
 async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> int:
     where: Screen = screen if screen is not None else Terminal()
     path = default_socket_path()
+    if await alive(path):
+        return await _as_peer(path=path, screen=where)
     hub = Hub(on_routed=_sink(debug), on_journal=Journal(default_runs_root()).record)
     dashboard = Dashboard(casts=hub, screen=where)
 
@@ -199,8 +201,6 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
         on_attach=hub.attach_surface,
         on_detach=hub.detach_surface,
     )
-    if server is None:
-        return await _as_peer(path=path, screen=where)
     if debug is not None:
         dashboard.say(f"logging every event to {debug}")
     try:

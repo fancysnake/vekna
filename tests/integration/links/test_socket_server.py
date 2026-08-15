@@ -41,7 +41,7 @@ class _Daemon:
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
 
-    async def start(self, path: Path) -> Serving | None:
+    async def start(self, path: Path) -> Serving:
         return await serve(
             path=path,
             on_message=self.messages.append,
@@ -68,7 +68,6 @@ class TestServing:
     async def test_a_cast_is_heard(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
 
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
@@ -85,7 +84,6 @@ class TestServing:
     @staticmethod
     async def test_the_socket_is_the_users_alone(socket_path: Path):
         server = await _Daemon().start(socket_path)
-        assert server is not None
 
         mode = (await asyncio.to_thread(socket_path.stat)).st_mode
 
@@ -96,7 +94,6 @@ class TestServing:
     async def test_a_surface_attaches_and_is_sent_to(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
 
         reader, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
@@ -113,7 +110,6 @@ class TestServing:
     async def test_a_surface_leaving_is_noticed(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
         await writer.drain()
@@ -132,7 +128,6 @@ class TestUncleanExits:
     async def test_a_cast_that_vanishes_says_goodbye_for_itself(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         await writer.drain()
@@ -152,7 +147,6 @@ class TestUncleanExits:
     async def test_a_cast_that_said_goodbye_is_not_said_for(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(CastGoodbye(cast_id="c1", status="ok")))
@@ -166,12 +160,9 @@ class TestUncleanExits:
         await server.close()
 
     @staticmethod
-    async def test_a_connection_that_was_both_says_goodbye_and_detaches(
-        socket_path: Path,
-    ):
+    async def test_what_opened_as_a_surface_stays_one(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
         writer.write(encode_frame(_hello()))
@@ -181,12 +172,8 @@ class TestUncleanExits:
         writer.close()
         await _settle()
 
+        assert not daemon.messages
         assert daemon.detached == daemon.attached
-        assert daemon.messages[-1] == CastGoodbye(
-            cast_id="c1",
-            status="disconnected",
-            detail="socket closed without a goodbye",
-        )
         await server.close()
 
     @staticmethod
@@ -204,7 +191,6 @@ class TestUncleanExits:
             on_attach=daemon.attached.append,
             on_detach=daemon.detached.append,
         )
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
@@ -223,7 +209,6 @@ class TestUncleanExits:
     ):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
-        assert server is not None
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         writer.write(b'{"kind": "not_a_kind"}\n')
@@ -245,20 +230,18 @@ class TestBinding:
     @staticmethod
     async def test_a_second_daemon_finds_the_socket_taken(socket_path: Path):
         first = await _Daemon().start(socket_path)
-        assert first is not None
 
-        assert await _Daemon().start(socket_path) is None
+        assert await alive(socket_path)
         await first.close()
 
     @staticmethod
     async def test_a_socket_nobody_answers_is_cleared_away(socket_path: Path):
         killed = await _Daemon().start(socket_path)
-        assert killed is not None
         await killed.close()
+        assert not await alive(socket_path)
 
         server = await _Daemon().start(socket_path)
 
-        assert server is not None
         assert await alive(socket_path)
         await server.close()
 

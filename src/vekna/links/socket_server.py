@@ -2,13 +2,12 @@ import asyncio
 import contextlib
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 from vekna.pacts.routing import SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
-    CastHello,
     CastMessage,
     SurfaceHello,
     WireMessage,
@@ -89,14 +88,13 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
     )
 
 
-# None when another daemon already holds the socket — the caller attaches to it
-# as a peer instead. A socket file nobody answers is the leftover of a daemon
-# that was killed, and is unlinked rather than left to refuse every start from
-# here on.
-# Asked before binding rather than after a failure, because `create_unix_server`
-# unlinks an existing socket file for us: bind never reports the address as
-# taken, so a second daemon would silently steal the first one's socket and
-# leave it listening where nothing can reach it.
+# Binds, having been asked. Whether there is already a daemon here is `alive`'s
+# question and the caller's decision — the answer is what makes it a peer
+# instead, so it belongs where that branch is taken.
+# The check has to come first either way, because `create_unix_server` unlinks
+# an existing socket file for us: bind never reports the address as taken, so a
+# second daemon would silently steal the first one's socket and leave it
+# listening where nothing can reach it.
 # ponytail: a live check then a bind, so two daemons starting in the same
 # millisecond can still race. A lock file opened O_EXCL is the upgrade, and it
 # costs a stale-lock story that this does not.
@@ -106,7 +104,7 @@ async def serve(
     on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
-) -> Serving | None:
+) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
 
     async def handle(
@@ -124,8 +122,6 @@ async def serve(
         finally:
             writers.discard(writer)
 
-    if await alive(path):
-        return None
     if await asyncio.to_thread(_occupied, path):
         msg = f"{path} is not a socket — vekna has nowhere to bind"
         raise SocketPathError(msg)
@@ -140,19 +136,10 @@ def _occupied(path: Path) -> bool:
     return path.exists() and not path.is_socket()
 
 
-class _Connection:
-    def __init__(self) -> None:
-        self.surface: SocketSurface | None = None
-        self.cast_id: str | None = None
-        self.said_goodbye = False
-
-    def note(self, message: CastMessage) -> None:
-        if isinstance(message, CastHello):
-            self.cast_id = message.cast_id
-        elif isinstance(message, CastGoodbye):
-            self.said_goodbye = True
-
-
+# What a connection opens with is what it is, and that is settled once: a
+# surface is fanned out to, anything else is a cast and is routed. The first
+# frame is the only place the two can be told apart, so it is the only place
+# that asks.
 async def _handle(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
@@ -161,62 +148,75 @@ async def _handle(
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
 ) -> None:
-    connection = _Connection()
-    detail = _GONE
+    frames = aiter(read_frames(reader))
     try:
-        await _pump(
-            reader, writer, connection, on_message=on_message, on_attach=on_attach
-        )
-    # A frame this daemon cannot read ends that one connection and says why in
-    # the cast's own goodbye. Killing the daemon over it would take every other
-    # cast down with it.
-    except ValueError as error:
-        detail = f"unreadable frame: {error}"
-    # A peer that dies mid-frame resets the connection rather than closing it.
-    # The goodbye is the same either way, and carrying the cause in it beats
-    # letting asyncio log a traceback for a routine disconnect.
-    except OSError as error:
-        detail = f"connection lost: {error}"
+        opened = await _opening(frames)
+        if isinstance(opened, SurfaceHello):
+            await _as_surface(frames, writer, on_attach=on_attach, on_detach=on_detach)
+        elif opened is not None:
+            await _as_cast(opened, frames, on_message=on_message)
     finally:
-        _close(connection, on_message=on_message, on_detach=on_detach, detail=detail)
         writer.close()
         with contextlib.suppress(OSError):
             await writer.wait_closed()
 
 
-async def _pump(
-    reader: asyncio.StreamReader,
+# A connection that says nothing readable is nobody, and there is no cast to
+# tell about it — which is the one case the goodbye below cannot cover.
+async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
+    with contextlib.suppress(StopAsyncIteration, ValueError, OSError):
+        return await anext(frames)
+    return None
+
+
+# A surface is sent to and not heard from: answering a prompt from `vekna`
+# itself is `docs/reborn/06-vekna-daemon.md`'s deferred half, so what arrives
+# after the handshake is read to notice the disconnect and nothing else.
+async def _as_surface(
+    frames: AsyncIterator[WireMessage],
     writer: asyncio.StreamWriter,
-    connection: _Connection,
     *,
-    on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
+    on_detach: Callable[[Surface], None],
 ) -> None:
-    # The one place a `SurfaceHello` is a message rather than a handshake, and
-    # where it stops: everything downstream takes a `CastMessage`, so a surface
-    # saying hello twice is the same attachment, not something to route.
-    async for message in read_frames(reader):
-        if isinstance(message, SurfaceHello):
-            if connection.surface is None:
-                connection.surface = SocketSurface(writer)
-                on_attach(connection.surface)
-            continue
-        connection.note(message)
-        on_message(message)
+    surface = SocketSurface(writer)
+    on_attach(surface)
+    try:
+        with contextlib.suppress(ValueError, OSError):
+            async for _ in frames:
+                pass
+    finally:
+        on_detach(surface)
 
 
-def _close(
-    connection: _Connection,
+# A cast that goes without a goodbye gets one anyway, or the daemon would hold
+# it as running for as long as it runs.
+# A frame this daemon cannot read, and a connection lost mid-frame, both end
+# this one connection and say so in that goodbye: killing the daemon over
+# either would take every other cast down with it.
+async def _as_cast(
+    opened: CastMessage,
+    frames: AsyncIterator[WireMessage],
     *,
     on_message: Callable[[CastMessage], None],
-    on_detach: Callable[[Surface], None],
-    detail: str,
 ) -> None:
-    if connection.surface is not None:
-        on_detach(connection.surface)
-    if connection.cast_id is not None and not connection.said_goodbye:
-        on_message(
-            CastGoodbye(
-                cast_id=connection.cast_id, status="disconnected", detail=detail
+    detail = _GONE
+    last: WireMessage = opened
+    try:
+        on_message(opened)
+        async for message in frames:
+            if isinstance(message, SurfaceHello):
+                continue
+            on_message(message)
+            last = message
+    except ValueError as error:
+        detail = f"unreadable frame: {error}"
+    except OSError as error:
+        detail = f"connection lost: {error}"
+    finally:
+        if not isinstance(last, CastGoodbye):
+            on_message(
+                CastGoodbye(
+                    cast_id=opened.cast_id, status="disconnected", detail=detail
+                )
             )
-        )
