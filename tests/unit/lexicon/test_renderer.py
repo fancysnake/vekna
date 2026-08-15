@@ -227,15 +227,15 @@ class _Tty(io.StringIO):
         return True
 
 
-def _notifying(events, text=""):
+def _notifying(text=""):
     out = _Tty()
-    return StandaloneRenderer(out=out, inp=io.StringIO(text), notify_on=events), out
+    return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
 
 
 class TestNotify:
     @staticmethod
     def test_a_question_raises_a_desktop_notification():
-        renderer, out = _notifying(["decide"], "y\n")
+        renderer, out = _notifying("y\n")
 
         asyncio.run(renderer.decide(prompt="deploy?"))
 
@@ -243,7 +243,7 @@ class TestNotify:
 
     @staticmethod
     def test_each_event_carries_its_own_title():
-        renderer, out = _notifying(["done", "failed"])
+        renderer, out = _notifying()
 
         renderer.notify("done", "countdown")
         renderer.notify("failed", "countdown: out of steps")
@@ -254,19 +254,9 @@ class TestNotify:
         )
 
     @staticmethod
-    def test_an_unconfigured_event_stays_silent():
-        renderer, out = _notifying(["decide"])
-
-        renderer.notify("done", "countdown")
-
-        assert not out.getvalue()
-
-    @staticmethod
     def test_a_stream_that_is_not_a_terminal_gets_no_escape_codes():
         out = io.StringIO()
-        renderer = StandaloneRenderer(
-            out=out, inp=io.StringIO("y\n"), notify_on=["decide"]
-        )
+        renderer = StandaloneRenderer(out=out, inp=io.StringIO("y\n"))
 
         asyncio.run(renderer.decide(prompt="deploy?"))
 
@@ -274,7 +264,7 @@ class TestNotify:
 
     @staticmethod
     def test_the_body_cannot_end_the_sequence_early():
-        renderer, out = _notifying(["decide"], "y\n")
+        renderer, out = _notifying("y\n")
 
         asyncio.run(renderer.decide(prompt="one\ntwo\x07three\x1b[2J"))
 
@@ -282,7 +272,7 @@ class TestNotify:
 
     @staticmethod
     def test_a_long_body_is_truncated():
-        renderer, out = _notifying(["done"])
+        renderer, out = _notifying()
 
         renderer.notify("done", "x" * 500)
 

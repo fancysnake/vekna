@@ -75,22 +75,12 @@ OSC 777, which Ghostty, kitty, wezterm and foot turn into an OSD. A terminal
 that does not know the sequence drops it, and a redirected cast never sees one:
 notifications go to a tty and nowhere else.
 
-Three kinds, and a config picks which of them fire:
-
-```toml
-# .vekna.toml, or ~/.config/vekna/config.toml
-[notify]
-on = ["decide", "done", "failed"]
-```
+Three kinds:
 
 - `decide` — a question waiting on you: the `decide` medium's own, coding's
-  tool gate, or the agent asking mid-rite. The loud one, on a cast that gates
-  every tool.
+  tool gate, or the agent asking mid-rite.
 - `done` — the cast finished.
 - `failed` — the cast failed, with the error in the body.
-
-`on = []` turns them off. A project config that has no `[notify]` table leaves
-whatever the global one chose standing; writing `on` replaces it.
 
 ## `vekna`
 

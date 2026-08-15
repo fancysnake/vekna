@@ -355,28 +355,11 @@ class TestCastNotify:
         assert "\x1b]777;notify;vekna failed;spinner: " in tty.getvalue()
 
     @staticmethod
-    def test_config_turns_notifications_off(tmp_path, monkeypatch):
+    def test_a_redirected_cast_collects_no_escape_codes(tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "rituals.py").write_text(_RITUALS)
-        (tmp_path / ".vekna.toml").write_text("[notify]\non = []\n")
         monkeypatch.chdir(tmp_path)
 
-        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
+        main(["countdown", "--start", "1"])
 
-        assert "\x1b]777" not in tty.getvalue()
-
-    @staticmethod
-    def test_a_project_config_silent_on_notify_leaves_the_global_one_standing(
-        tmp_path, monkeypatch
-    ):
-        global_config = tmp_path / "home" / ".config" / "vekna"
-        global_config.mkdir(parents=True)
-        (global_config / "config.toml").write_text("[notify]\non = []\n")
-        monkeypatch.setenv("HOME", str(tmp_path / "home"))
-        (tmp_path / "rituals.py").write_text(_RITUALS)
-        (tmp_path / ".vekna.toml").write_text("[rituals]\nfiles = []\n")
-        monkeypatch.chdir(tmp_path)
-
-        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
-
-        assert "\x1b]777" not in tty.getvalue()
+        assert "\x1b]777" not in capsys.readouterr().out

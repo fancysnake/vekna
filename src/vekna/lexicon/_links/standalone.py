@@ -3,7 +3,7 @@ import os
 import socket
 import sys
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
@@ -77,18 +77,11 @@ class _Rite:
 # surface that *can* re-render — the TUI — wants the opposite and will say so
 # itself; that decision belongs to the sink, not here.
 class StandaloneRenderer:
-    def __init__(
-        self,
-        *,
-        out: TextIO | None = None,
-        inp: TextIO | None = None,
-        notify_on: Iterable[NotifyEvent] = (),
-    ) -> None:
+    def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
-        self._notify_on = frozenset(notify_on)
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -98,7 +91,7 @@ class StandaloneRenderer:
     # wezterm and foot; a terminal that does not know the sequence drops it.
     # Only to a tty: `vekna cast > log` must not collect escape codes.
     def notify(self, event: NotifyEvent, body: str) -> None:
-        if event not in self._notify_on or not self._out.isatty():
+        if not self._out.isatty():
             return
         self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
