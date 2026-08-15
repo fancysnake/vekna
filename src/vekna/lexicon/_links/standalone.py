@@ -6,10 +6,9 @@ import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
+from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
-    NotifyEvent,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -20,6 +19,12 @@ from vekna.lexicon._pacts import (
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
+
+# What this renderer raises a desktop notification for. `decide` is any question
+# that stops for a human — the flow medium's own, coding's tool gate, the
+# agent's — not a rite category; the other two are how a cast ended.
+NotifyEvent = Literal["decide", "done", "failed"]
+
 _NOTIFY_TITLES: dict[NotifyEvent, str] = {
     "decide": "vekna needs you",
     "done": "vekna finished",

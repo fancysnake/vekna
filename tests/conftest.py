@@ -1,7 +1,18 @@
+import io
+
 from pydantic import BaseModel
 
 from vekna.lexicon import NoComponents, Transition, goto, ritual
 from vekna.lexicon._pacts import Ritual, Step
+
+
+# A notification is an escape sequence written only to a tty, and neither
+# pytest's capture nor a plain StringIO is one. Both suites need a stream that
+# says it is a terminal.
+class Tty(io.StringIO):
+    @staticmethod
+    def isatty() -> bool:
+        return True
 
 
 # Most tests need a ritual only to reach the step they are actually about — an

@@ -4,13 +4,16 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.conftest import Tty
 from vekna.lexicon import StandalonePromptError
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
-def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
-    out = io.StringIO()
+def _renderer(
+    text: str, *, tty: bool = False
+) -> tuple[StandaloneRenderer, io.StringIO]:
+    out = Tty() if tty else io.StringIO()
     return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
 
 
@@ -221,21 +224,10 @@ class TestDecideFree:
         assert answer == "a branch name"
 
 
-class _Tty(io.StringIO):
-    @staticmethod
-    def isatty() -> bool:
-        return True
-
-
-def _notifying(text=""):
-    out = _Tty()
-    return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
-
-
 class TestNotify:
     @staticmethod
     def test_a_question_raises_a_desktop_notification():
-        renderer, out = _notifying("y\n")
+        renderer, out = _renderer("y\n", tty=True)
 
         asyncio.run(renderer.decide(prompt="deploy?"))
 
@@ -243,7 +235,7 @@ class TestNotify:
 
     @staticmethod
     def test_each_event_carries_its_own_title():
-        renderer, out = _notifying()
+        renderer, out = _renderer("", tty=True)
 
         renderer.notify("done", "countdown")
         renderer.notify("failed", "countdown: out of steps")
@@ -255,8 +247,7 @@ class TestNotify:
 
     @staticmethod
     def test_a_stream_that_is_not_a_terminal_gets_no_escape_codes():
-        out = io.StringIO()
-        renderer = StandaloneRenderer(out=out, inp=io.StringIO("y\n"))
+        renderer, out = _renderer("y\n")
 
         asyncio.run(renderer.decide(prompt="deploy?"))
 
@@ -264,7 +255,7 @@ class TestNotify:
 
     @staticmethod
     def test_the_body_cannot_end_the_sequence_early():
-        renderer, out = _notifying("y\n")
+        renderer, out = _renderer("y\n", tty=True)
 
         asyncio.run(renderer.decide(prompt="one\ntwo\x07three\x1b[2J"))
 
@@ -272,7 +263,7 @@ class TestNotify:
 
     @staticmethod
     def test_a_long_body_is_truncated():
-        renderer, out = _notifying()
+        renderer, out = _renderer("", tty=True)
 
         renderer.notify("done", "x" * 500)
 
