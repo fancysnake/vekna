@@ -6,7 +6,7 @@ import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
+from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
     RiteBegan,
@@ -18,6 +18,25 @@ from vekna.lexicon._pacts import (
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
+_NOTIFY_BODY_MAX = 120
+
+# What this renderer raises a desktop notification for. `decide` is any question
+# that stops for a human — the flow medium's own, coding's tool gate, the
+# agent's — not a rite category; the other two are how a cast ended.
+NotifyEvent = Literal["decide", "done", "failed"]
+
+_NOTIFY_TITLES: dict[NotifyEvent, str] = {
+    "decide": "vekna needs you",
+    "done": "vekna finished",
+    "failed": "vekna failed",
+}
+
+
+# The body is a prompt or an error, so arbitrary text, and the sequence ends at
+# the first BEL: an escape or a newline in there would end the notification
+# early or paint the rest of it into the terminal.
+def _one_line(text: str) -> str:
+    return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
 
 
 def default_socket_path() -> str:
@@ -73,6 +92,14 @@ class StandaloneRenderer:
     def _say(self, line: str) -> None:
         self._out.write(line)
         self._out.flush()
+
+    # OSC 777, which Ghostty turns into a desktop notification — as do kitty,
+    # wezterm and foot; a terminal that does not know the sequence drops it.
+    # Only to a tty: `vekna cast > log` must not collect escape codes.
+    def notify(self, event: NotifyEvent, body: str) -> None:
+        if not self._out.isatty():
+            return
+        self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
     async def _readline(self) -> str:
         return (await asyncio.to_thread(self._inp.readline)).strip()
@@ -162,6 +189,7 @@ class StandaloneRenderer:
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
+        self.notify("decide", prompt)
         if free:
             return await self._free_text(prompt)
         if options is None:

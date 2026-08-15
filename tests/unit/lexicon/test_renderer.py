@@ -4,13 +4,16 @@ from datetime import UTC, datetime
 
 import pytest
 
+from tests.conftest import Tty
 from vekna.lexicon import StandalonePromptError
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 
-def _renderer(text: str) -> tuple[StandaloneRenderer, io.StringIO]:
-    out = io.StringIO()
+def _renderer(
+    text: str, *, tty: bool = False
+) -> tuple[StandaloneRenderer, io.StringIO]:
+    out = Tty() if tty else io.StringIO()
     return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
 
 
@@ -235,3 +238,49 @@ class TestDecideFree:
         answer = asyncio.run(renderer.decide(prompt="name?", free=True))
 
         assert answer == "a branch name"
+
+
+class TestNotify:
+    @staticmethod
+    def test_a_question_raises_a_desktop_notification():
+        renderer, out = _renderer("y\n", tty=True)
+
+        asyncio.run(renderer.decide(prompt="deploy?"))
+
+        assert "\x1b]777;notify;vekna needs you;deploy?\x07" in out.getvalue()
+
+    @staticmethod
+    def test_each_event_carries_its_own_title():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.notify("done", "countdown")
+        renderer.notify("failed", "countdown: out of steps")
+
+        assert out.getvalue() == (
+            "\x1b]777;notify;vekna finished;countdown\x07"
+            "\x1b]777;notify;vekna failed;countdown: out of steps\x07"
+        )
+
+    @staticmethod
+    def test_a_stream_that_is_not_a_terminal_gets_no_escape_codes():
+        renderer, out = _renderer("y\n")
+
+        asyncio.run(renderer.decide(prompt="deploy?"))
+
+        assert "\x1b" not in out.getvalue()
+
+    @staticmethod
+    def test_the_body_cannot_end_the_sequence_early():
+        renderer, out = _renderer("y\n", tty=True)
+
+        asyncio.run(renderer.decide(prompt="one\ntwo\x07three\x1b[2J"))
+
+        assert "\x1b]777;notify;vekna needs you;onetwothree[2J\x07" in out.getvalue()
+
+    @staticmethod
+    def test_a_long_body_is_truncated():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.notify("done", "x" * 500)
+
+        assert out.getvalue() == f"\x1b]777;notify;vekna finished;{'x' * 120}\x07"
