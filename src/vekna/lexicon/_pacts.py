@@ -60,6 +60,11 @@ class RiteBegan:
     name: str
     category: Literal["step", "medium"]
     started_at: datetime
+    # One short line saying what this rite is *doing* — the command a shell
+    # ran, the prompt an agent was given. A name alone says which medium
+    # answered and nothing about the call, which is every `↳ shell` in a tree
+    # looking like every other.
+    summary: str | None = None
 
 
 @dataclass(frozen=True)

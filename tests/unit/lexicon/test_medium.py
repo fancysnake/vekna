@@ -185,6 +185,49 @@ class TestMediumBoundary:
         )
 
 
+def _summary_of(name: str, grimoire: Grimoire) -> str | None:
+    began = next(
+        e for e in grimoire.events if isinstance(e, RiteBegan) and e.name == name
+    )
+    return began.summary
+
+
+class TestMediumSummary:
+    @staticmethod
+    def test_the_first_string_argument_on_one_line():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        _cast(_caller({"prompt": "which\n  one?", "options": ["a", "b"]}), grimoire)
+
+        assert _summary_of("pick", grimoire) == "which one?"
+
+    @staticmethod
+    def test_a_long_one_is_cut_to_fit_a_line():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        _cast(_caller({"prompt": "loud " * 40, "options": ["a", "b"]}), grimoire)
+
+        summary = _summary_of("pick", grimoire)
+        assert summary is not None
+        assert (len(summary), summary.endswith("…")) == (60, True)
+
+    @staticmethod
+    def test_arguments_before_the_first_string_are_passed_over():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        _cast(_caller({"options": ["a", "b"], "prompt": "which?"}), grimoire)
+
+        assert _summary_of("pick", grimoire) == "which?"
+
+    @staticmethod
+    def test_a_medium_called_with_no_string_has_none():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        _cast(identifier, grimoire)
+
+        assert _summary_of("whoami", grimoire) is None
+
+
 class TestEmitDelta:
     @staticmethod
     def test_inside_a_medium_it_hangs_off_the_medium_rite():

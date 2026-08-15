@@ -48,6 +48,18 @@ _Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
 # the `Task[str]` it inferred then spread through everything read off the
 # result. `str` for the send and yield types rather than `str`, which this
 # project disallows and which nothing here needs.
+_SUMMARY_WIDTH = 60
+
+
+# One line, cut to fit, of what the call was actually given. Cut here rather
+# than at the surface: `summary` is what the journal keeps, and a 5KB prompt
+# under that name is not a summary.
+def _cut(text: str) -> str:
+    if len(text) <= _SUMMARY_WIDTH:
+        return text
+    return text[: _SUMMARY_WIDTH - 1] + "…"
+
+
 def medium(
     func: Callable[_P, Awaitable[_MediumT]],
 ) -> Callable[_P, Coroutine[str, str, _MediumT]]:
@@ -57,9 +69,23 @@ def medium(
     signature = inspect.signature(func)
 
     async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
+        # What a rite's line says the call is *doing*: the first string the
+        # medium was given — a shell's command, an agent's prompt. A rule
+        # rather than a per-medium hook, because every medium's first string is
+        # already the interesting one, and a hook would be a second thing to
+        # keep in step with the signature. Read here rather than in a helper,
+        # which could not be typed without widening these to `object`.
+        summary = next(
+            (
+                _cut(" ".join(value.split()))
+                for value in (*args, *kwargs.values())
+                if isinstance(value, str) and value.strip()
+            ),
+            None,
+        )
         # Inside the rite, not before it: the call is what failed, so the rite
         # that names the medium is where the failure belongs.
-        async with medium_rite(name):
+        async with medium_rite(name, summary=summary):
             try:
                 signature.bind(*args, **kwargs)
             except TypeError as error:

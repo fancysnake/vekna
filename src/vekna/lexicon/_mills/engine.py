@@ -57,6 +57,7 @@ class Grimoire:
         name: str,
         parent_id: str | None = None,
         category: Literal["step", "medium"] = "step",
+        summary: str | None = None,
     ) -> str:
         self._counter += 1
         rite_id = f"r{self._counter}"
@@ -67,6 +68,7 @@ class Grimoire:
                 name=name,
                 category=category,
                 started_at=self._clock(),
+                summary=summary,
             )
         )
         return rite_id
@@ -337,11 +339,11 @@ def emit_delta(text: str) -> None:
 # reason both call sites share this.
 @contextlib.asynccontextmanager
 async def _rite(
-    *, name: str, category: Literal["step", "medium"]
+    *, name: str, category: Literal["step", "medium"], summary: str | None = None
 ) -> AsyncIterator[None]:
     parent = current_rite()
     rite_id = parent.grimoire.rite_started(
-        name=name, parent_id=parent.parent_id, category=category
+        name=name, parent_id=parent.parent_id, category=category, summary=summary
     )
     outcome = RiteOutcome()
     token = _current_rite.set(replace(parent, parent_id=rite_id, outcome=outcome))
@@ -356,8 +358,10 @@ async def _rite(
         )
 
 
-def medium_rite(name: str) -> contextlib.AbstractAsyncContextManager[None]:
-    return _rite(name=name, category="medium")
+def medium_rite(
+    name: str, *, summary: str | None = None
+) -> contextlib.AbstractAsyncContextManager[None]:
+    return _rite(name=name, category="medium", summary=summary)
 
 
 # What a cast needs standing before a step can run. Extracted because the trial

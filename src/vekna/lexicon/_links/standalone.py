@@ -48,6 +48,7 @@ class _Rite:
     name: str
     depth: int
     parent_id: str | None
+    summary: str | None = None
     # Where this rite's lines go: None to print live, otherwise the rite whose
     # buffer collects them until it ends.
     sink: str | None = None
@@ -88,6 +89,13 @@ class StandaloneRenderer:
         parent = self._rites.get(parent_id)
         return 1 if parent is None else parent.depth + 1
 
+    # The summary rides both lines: two gates running at once end as two ✓
+    # shell lines, and the command is the only thing telling them apart.
+    @staticmethod
+    def _headline(mark: str, rite: _Rite) -> str:
+        tail = f"  {rite.summary}" if rite.summary else ""
+        return f"{'  ' * rite.depth}{mark} {rite.name}{tail}"
+
     def _open_siblings(self, rite_id: str, parent_id: str | None) -> list[str]:
         return [
             other
@@ -99,12 +107,15 @@ class StandaloneRenderer:
     # contiguous; a rite that is itself the top of one still announces live, so
     # both gates are visibly under way.
     def _began(self, event: RiteBegan) -> None:
-        depth = self._depth(event.parent_id)
-        rite = _Rite(name=event.name, depth=depth, parent_id=event.parent_id)
+        rite = _Rite(
+            name=event.name,
+            depth=self._depth(event.parent_id),
+            parent_id=event.parent_id,
+            summary=event.summary,
+        )
         self._rites[event.rite_id] = rite
         self._open.add(event.rite_id)
-        mark = "▶" if event.category == "step" else "↳"
-        line = f"{'  ' * depth}{mark} {event.name}"
+        line = self._headline("▶" if event.category == "step" else "↳", rite)
         parent = self._rites.get(event.parent_id) if event.parent_id else None
         if parent is not None and parent.sink is not None:
             rite.sink = parent.sink
@@ -129,7 +140,7 @@ class StandaloneRenderer:
         if (rite := self._rites.get(event.rite_id)) is None:
             self._say(f"{mark} {event.rite_id}\n")
             return
-        line = f"{'  ' * rite.depth}{mark} {rite.name}"
+        line = self._headline(mark, rite)
         if rite.sink != event.rite_id:
             self._emit(rite.sink, line)
             return

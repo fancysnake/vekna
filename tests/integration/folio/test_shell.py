@@ -163,7 +163,15 @@ class TestShellStreaming:
         result, grimoire, out = _run(quiet)
 
         assert not _deltas(grimoire)
-        assert "hush" not in out.getvalue()
+        # Matched whole, because the command is quoted in the rite's own line:
+        # what has to stay off the surface is the *output*, and here the two
+        # are the same word.
+        assert out.getvalue() == (
+            "▶ run_quiet\n"
+            "  ↳ shell  echo hush\n"
+            "  ✓ shell  echo hush\n"
+            "✓ run_quiet\n"
+        )
         assert result.stdout.strip() == "hush"
 
     @staticmethod
@@ -171,7 +179,12 @@ class TestShellStreaming:
         result, grimoire, out = _run(quiet_partial)
 
         assert not _deltas(grimoire)
-        assert "hushed" not in out.getvalue()
+        assert out.getvalue() == (
+            "▶ run_quiet_partial\n"
+            "  ↳ shell  printf 'hushed'\n"
+            "  ✓ shell  printf 'hushed'\n"
+            "✓ run_quiet_partial\n"
+        )
         assert result.stdout == "hushed"
 
 

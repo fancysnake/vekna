@@ -10,6 +10,15 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+### Added
+
+- **A rite says what it is doing.** A tree of `↳ shell` lines named the medium
+  and nothing about the call; a `RiteBegan` now carries a `summary` — the first
+  string the medium was called with, whitespace collapsed and cut to 60
+  characters — and the standalone surface prints it after the name on the lines
+  that open and close the rite, where two gates running at once are told apart
+  by their commands rather than by guesswork. One line per rite, as before.
+
 ## [0.5.0] - 2026-08-08
 
 ### Added
