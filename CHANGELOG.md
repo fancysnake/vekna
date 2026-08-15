@@ -10,6 +10,21 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+### Added
+
+- **A cast says it to the desktop when it stops for you or ends.** OSC 777,
+  which Ghostty, kitty, wezterm and foot turn into an OSD; a terminal that does
+  not know the sequence drops it. Three kinds, and no configuration to pick
+  between them: `decide` when a question is waiting — the `decide` medium's own,
+  coding's tool gate, the agent asking mid-rite — `done`, and `failed` with the
+  error in the body. Only to a tty, so `vekna cast > log` collects no escape
+  codes, and the body is stripped of anything unprintable, because a prompt or
+  an error is arbitrary text and the sequence ends at the first BEL. Every way a
+  cast can end goes through one notify, including the `AttributeError` a
+  rituals.py under development raises — an `except` per error type would leave
+  whatever it does not name silent, which is the walked-away-from-the-terminal
+  case the notification exists for.
+
 ## [0.5.0] - 2026-08-08
 
 ### Added

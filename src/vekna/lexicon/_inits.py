@@ -368,6 +368,10 @@ async def _drive(argv: list[str]) -> int:
     # for deltas, decisions and locks, and CastHello carries the ritual name
     # in its own field.
     grimoire = Grimoire(cast_id=uuid4().hex, on_event=renderer.render)
+    # Every way a cast can end goes through one notify: an `except` per error
+    # type would leave whatever it does not name — the AttributeError a step
+    # raises — silent, which is the walked-away-from-the-terminal case the
+    # notification exists for. `detail` outlives its block; `error` does not.
     try:
         result = await run_cast(
             ritual=the_ritual,
@@ -377,12 +381,21 @@ async def _drive(argv: list[str]) -> int:
         )
     except FocusMissingError as error:
         sys.stderr.write(f"{error}\n")
-        return 2
+        code, detail = 2, str(error)
     except RitualError as error:
         sys.stderr.write(f"cast failed: {error}\n")
-        return 1
-    sys.stdout.write(f"result: {_rendered(result)}\n")
-    return 0
+        code, detail = 1, str(error)
+    except Exception as error:
+        # A rituals.py under development dies here, and its traceback is the
+        # whole diagnosis — say it to the desktop, then let it out unchanged.
+        renderer.notify("failed", f"{the_ritual.name}: {error}")
+        raise
+    else:
+        renderer.notify("done", the_ritual.name)
+        sys.stdout.write(f"result: {_rendered(result)}\n")
+        return 0
+    renderer.notify("failed", f"{the_ritual.name}: {detail}")
+    return code
 
 
 def main(argv: list[str]) -> int:
