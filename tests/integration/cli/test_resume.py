@@ -42,7 +42,8 @@ _RITUALS = textwrap.dedent("""
     @step
     async def work(state: State) -> Transition:
         result = await shell("echo ran-" + str(state.left))
-        Path("ran.log").open("a").write(result.stdout)
+        with Path("ran.log").open("a") as log:
+            log.write(result.stdout)
         if state.left == 0:
             return done(Report(said=result.stdout.strip()))
         return goto(work, State(left=state.left - 1))

@@ -54,8 +54,14 @@ class TestEntry:
         result = CliRunner().invoke(init_command(), ["--help"])
 
         assert not result.exit_code
-        assert "cast" in result.output
-        assert "casts" in result.output
+        # By the command token, because "cast" is a substring of "casts" and an
+        # output with only the group would satisfy both assertions.
+        listed = {
+            line.strip().split(maxsplit=1)[0]
+            for line in result.output.splitlines()
+            if line.startswith("  ") and line.strip()
+        }
+        assert {"cast", "casts", "rituals"} <= listed
 
     @staticmethod
     def test_casting_a_ritual_reaches_the_runtime():

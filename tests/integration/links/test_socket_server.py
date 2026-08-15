@@ -1,4 +1,6 @@
 import asyncio
+import socket
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,6 +24,9 @@ if TYPE_CHECKING:
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _OWNER_ONLY = 0o600
+_PATIENCE = 200
+_TICK = 0.01
+_TWO = 2
 _PERMISSION_BITS = 0o777
 
 
@@ -33,6 +38,10 @@ def _hello() -> CastHello:
         components={},
         started_at=_WHEN,
     )
+
+
+def _said_goodbye(daemon: "_Daemon") -> bool:
+    return bool(daemon.messages) and isinstance(daemon.messages[-1], CastGoodbye)
 
 
 class _Daemon:
@@ -50,8 +59,21 @@ class _Daemon:
         )
 
 
-# The daemon reacts on its own event loop turn, so a client that has written and
-# closed has not necessarily been heard yet.
+# The daemon reacts on its own turn of the event loop, so a client that has
+# written and closed has not necessarily been heard yet. Waited for by what
+# arrives rather than by a count of turns, which is the same wait until the
+# machine is busy.
+async def _eventually(ready: Callable[[], bool]) -> None:
+    for _ in range(_PATIENCE):
+        if ready():
+            return
+        await asyncio.sleep(_TICK)
+    msg = f"gave up after {_PATIENCE * _TICK:.1f}s waiting for the daemon to catch up"
+    raise AssertionError(msg)
+
+
+# Only where the assertion is that nothing arrived: there is no state to wait
+# for, so what is left is to give it the chance and look.
 async def _settle() -> None:
     for _ in range(10):
         await asyncio.sleep(0)
@@ -73,7 +95,7 @@ class TestServing:
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: len(daemon.messages) == _TWO)
 
         assert [message.kind for message in daemon.messages] == [
             "cast_hello",
@@ -98,7 +120,7 @@ class TestServing:
         reader, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: bool(daemon.attached))
         daemon.attached[0].send(_hello())
         heard = await anext(aiter(read_frames(reader)))
 
@@ -113,10 +135,10 @@ class TestServing:
         _, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: bool(daemon.attached))
 
         writer.close()
-        await _settle()
+        await _eventually(lambda: bool(daemon.detached))
 
         assert daemon.detached == daemon.attached
         await server.close()
@@ -131,10 +153,10 @@ class TestUncleanExits:
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: bool(daemon.messages))
 
         writer.close()
-        await _settle()
+        await _eventually(lambda: len(daemon.messages) == _TWO)
 
         assert daemon.messages[-1] == CastGoodbye(
             cast_id="c1",
@@ -151,7 +173,7 @@ class TestUncleanExits:
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(CastGoodbye(cast_id="c1", status="ok")))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: len(daemon.messages) == _TWO)
 
         writer.close()
         await _settle()
@@ -195,7 +217,7 @@ class TestUncleanExits:
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: _said_goodbye(daemon))
 
         goodbye = daemon.messages[-1]
         assert isinstance(goodbye, CastGoodbye)
@@ -213,7 +235,7 @@ class TestUncleanExits:
         writer.write(encode_frame(_hello()))
         writer.write(b'{"kind": "not_a_kind"}\n')
         await writer.drain()
-        await _settle()
+        await _eventually(lambda: _said_goodbye(daemon))
 
         goodbye = daemon.messages[-1]
 
@@ -234,10 +256,17 @@ class TestBinding:
         assert await alive(socket_path)
         await first.close()
 
+    # A socket file whose server is gone, left where a killed daemon leaves it:
+    # closing a `Serving` unlinks its own path, so binding over that would be
+    # testing a path with nothing at it.
     @staticmethod
     async def test_a_socket_nobody_answers_is_cleared_away(socket_path: Path):
-        killed = await _Daemon().start(socket_path)
-        await killed.close()
+        stale = socket.socket(socket.AF_UNIX)
+        try:
+            stale.bind(str(socket_path))
+        finally:
+            stale.close()
+        assert await asyncio.to_thread(socket_path.is_socket)
         assert not await alive(socket_path)
 
         server = await _Daemon().start(socket_path)

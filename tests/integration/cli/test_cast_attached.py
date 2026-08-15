@@ -92,7 +92,9 @@ class _DaemonThread:
             if ready():
                 return
             time.sleep(_POLL_SECONDS)
-        raise AssertionError(ready)
+        waited = _PATIENCE * _POLL_SECONDS
+        msg = f"the daemon did not reach that state within {waited:.1f}s"
+        raise AssertionError(msg)
 
     def only_cast(self) -> CastView:
         return next(iter(self.hub.casts.values()))

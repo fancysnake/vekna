@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from vekna.wire import CastHello, WireMessage
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c1"
+_PATIENCE = 200
+_TICK = 0.01
 
 
 def _hello() -> CastHello:
@@ -34,6 +37,20 @@ def _began(rite_id: str = "r1") -> RiteBegan:
     )
 
 
+# Socket work lands on the daemon's own turn of the event loop, so a test that
+# has written waits for what it wrote to arrive rather than for a fixed number
+# of turns — which is the same wait everywhere but flaky under load.
+async def _eventually(ready: Callable[[], bool]) -> None:
+    for _ in range(_PATIENCE):
+        if ready():
+            return
+        await asyncio.sleep(_TICK)
+    msg = f"gave up after {_PATIENCE * _TICK:.1f}s waiting for the daemon to catch up"
+    raise AssertionError(msg)
+
+
+# Only where the assertion is that nothing arrived: there is no state to wait
+# for, so what is left is to give it the chance and look.
 async def _settle() -> None:
     for _ in range(20):
         await asyncio.sleep(0)
@@ -47,6 +64,11 @@ def _watchers() -> list[asyncio.Task[None]]:
         for task in asyncio.all_tasks()
         if task.get_coro().__qualname__.endswith("_watch")
     ]
+
+
+def _waiting(daemon: "_Daemon") -> list[WireMessage]:
+    view = daemon.hub.casts.get(_CAST)
+    return [] if view is None else list(view.waiting.values())
 
 
 class _Daemon:
@@ -99,7 +121,8 @@ class TestAttaching:
         assert await link.attach()
         link.send(to_wire(_began(), cast_id=_CAST))
         await link.close(status="ok")
-        await _settle()
+        await _eventually(lambda: daemon.hub.casts.get(_CAST) is not None)
+        await _eventually(lambda: daemon.hub.casts[_CAST].status == "ok")
 
         view = daemon.hub.casts[_CAST]
         assert view.hello.ritual == "fix_demo"
@@ -131,7 +154,7 @@ class TestAttaching:
         link = DaemonLink(socket_path=socket_path, hello=_hello())
         await link.attach()
 
-        await _settle()
+        await _eventually(lambda: not link.attached)
         # The cast carries on; the send is what a link with nobody at the other
         # end quietly does nothing about.
         link.send(to_wire(_began(), cast_id=_CAST))
@@ -151,11 +174,8 @@ class TestAttaching:
 
         daemon = _Daemon()
         await daemon.start(socket_path)
-        for _ in range(50):
-            await asyncio.sleep(0.01)
-            if link.attached:
-                break
-        await _settle()
+        await _eventually(lambda: bool(daemon.hub.casts))
+        await _eventually(lambda: bool(daemon.hub.casts[_CAST].rites))
 
         view = daemon.hub.casts[_CAST]
         assert list(view.rites["r1"].deltas) == ["one"]
@@ -213,14 +233,40 @@ class TestAttaching:
         await daemon.start(socket_path)
         link = DaemonLink(socket_path=socket_path, hello=_hello())
         await link.attach()
-        await _settle()
-        assert _watchers()
+        await _eventually(lambda: bool(_watchers()))
 
         await link.close(status="ok")
-        await _settle()
+        await _eventually(lambda: not _watchers())
 
         assert not _watchers()
         await daemon.stop()
+
+    # The path `keep_attached` exists for: the daemon goes, the watcher sees the
+    # EOF, and the probe puts the cast back on a replacement — which is told the
+    # whole cast, not the half that happened after it started.
+    @staticmethod
+    async def test_the_probe_reattaches_after_the_daemon_really_went(socket_path: Path):
+        first = _Daemon()
+        await first.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
+        await _eventually(lambda: bool(first.hub.casts))
+        await first.stop()
+        await _eventually(lambda: not link.attached)
+
+        second = _Daemon()
+        await second.start(socket_path)
+        probing = asyncio.create_task(
+            link.keep_attached(
+                lambda: [to_wire(_began("r2"), cast_id=_CAST)], every=0.01
+            )
+        )
+        await _eventually(lambda: bool(second.hub.casts))
+
+        assert link.attached
+        assert list(second.hub.casts[_CAST].rites) == ["r2"]
+        probing.cancel()
+        await second.stop()
 
     @staticmethod
     async def test_a_reattach_replaces_what_the_daemon_held(socket_path: Path):
@@ -228,10 +274,10 @@ class TestAttaching:
         await daemon.start(socket_path)
         link = DaemonLink(socket_path=socket_path, hello=_hello())
         await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
-        await _settle()
+        await _eventually(lambda: bool(daemon.hub.casts))
 
         await link.attach(backlog=[to_wire(_began("r2"), cast_id=_CAST)])
-        await _settle()
+        await _eventually(lambda: "r2" in daemon.hub.casts[_CAST].rites)
 
         assert list(daemon.hub.casts[_CAST].rites) == ["r2"]
         await daemon.stop()
@@ -251,11 +297,11 @@ class TestPrompts:
         )
 
         asking = asyncio.create_task(channel.decide(prompt="ok?"))
-        await _settle()
-        waiting = list(daemon.hub.casts[_CAST].waiting.values())
+        await _eventually(lambda: bool(_waiting(daemon)))
+        waiting = _waiting(daemon)
         renderer.released.set()
         answer = await asking
-        await _settle()
+        await _eventually(lambda: not _waiting(daemon))
 
         assert renderer.asked == ["ok?"]
         assert answer == "yes"
@@ -273,16 +319,14 @@ class TestPrompts:
             inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
         asking = asyncio.create_task(channel.decide(prompt="ok?"))
-        await _settle()
+        await _eventually(lambda: bool(renderer.asked))
 
         daemon = _Daemon()
         await daemon.start(socket_path)
         await link.attach(backlog=channel.open_prompts())
-        await _settle()
+        await _eventually(lambda: bool(_waiting(daemon)))
 
-        assert [
-            message.prompt for message in daemon.hub.casts[_CAST].waiting.values()
-        ] == ["ok?"]
+        assert [message.prompt for message in _waiting(daemon)] == ["ok?"]
         renderer.released.set()
         await asking
         await daemon.stop()

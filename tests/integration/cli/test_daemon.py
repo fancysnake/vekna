@@ -64,13 +64,20 @@ class _Keys(Screen):
     def painted(self, text: str) -> bool:
         return any(text in frame for frame in self.frames)
 
+    # What is on screen now, as opposed to what has ever been on it: going back
+    # to the list is only visible in the last frame, since the frame that
+    # drilled in is still in `frames` either way.
+    def showing(self, text: str) -> bool:
+        return bool(self.frames) and text in self.frames[-1]
+
 
 async def _eventually(ready: Callable[[], bool]) -> None:
     for _ in range(_PATIENCE):
         if ready():
             return
         await asyncio.sleep(_TICK)
-    raise AssertionError(ready)
+    msg = f"gave up after {_PATIENCE * _TICK:.1f}s waiting for the view to catch up"
+    raise AssertionError(msg)
 
 
 async def _say(path: Path, *messages: WireMessage) -> asyncio.StreamWriter:
@@ -127,13 +134,15 @@ class TestTheView:
 
         keys.press("1")
         # The medium sits under the step that opened it.
-        await _eventually(lambda: keys.painted("   ↳ shell"))
+        await _eventually(lambda: keys.showing("   ↳ shell"))
+        assert keys.showing("/home/someone/proj")
         keys.press("b")
-        await _eventually(lambda: keys.painted("b back") is not None)
+        # Back where it started: the cast list, not the cast.
+        await _eventually(lambda: keys.showing("number to drill in"))
         keys.press("q")
 
         await running
-        assert keys.painted("/home/someone/proj")
+        assert not keys.frames[-1].endswith("b back · q quit\n")
         writer.close()
 
     @staticmethod
