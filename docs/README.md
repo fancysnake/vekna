@@ -46,6 +46,7 @@ status in its header and nowhere else.
 | [The site](reborn/09-site.md) | `0.5.0` | in progress |
 | [Locks API](reborn/05-locks.md) | `0.6.0` | planned |
 | [Ritual craft](reborn/13-ritual-craft.md) | `0.6.0` | planned |
+| [Ritual defaults](reborn/14-ritual-defaults.md) | `0.6.0` | planned |
 | [Vekna daemon](reborn/06-vekna-daemon.md) | `0.7.0` | planned |
 | [Lich](reborn/07-lich.md) | `0.8.0` | planned |
 | [1.0 hardening](reborn/08-hardening.md) | `1.0.0` | in progress |

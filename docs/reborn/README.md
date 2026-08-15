@@ -41,6 +41,10 @@ ships when every Reborn feature is ready — not when the daemon lands.
   from outside this repository turned up six places the shipped surface has to
   be worked around; they are small, independent of everything else on the line,
   and filed at `0.6.0` beside locks rather than given a slot of their own.
+- **`14` shares `13`'s number-neighbourhood and its provenance.** The same
+  outside tome that turned up the six workarounds wants one component answered
+  per repository rather than per run. Filed separately because it is a config
+  surface rather than a ritual-authoring one, at `0.6.0` beside it.
 - **Nothing below `0.5.0` has started, but some of it is in the tree.** The wire
   already carries the lock messages, and a cast already probes for a daemon it
   cannot yet find. Groundwork laid early by the feature that needed the seam,
