@@ -1,3 +1,4 @@
+import contextlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +11,13 @@ class DebugLog:
         self._path = path
         path.parent.mkdir(parents=True, exist_ok=True)
 
+    # The one failure with nowhere to be reported: this is the reporting
+    # channel, and the daemon writes it from the path every event takes. A log
+    # that cannot be written must not be able to end the cast being logged.
     def write(self, line: str) -> None:
         stamp = datetime.now(tz=UTC).isoformat(timespec="milliseconds")
-        with self._path.open("a", encoding="utf-8") as log:
+        with (
+            contextlib.suppress(OSError),
+            self._path.open("a", encoding="utf-8") as log,
+        ):
             log.write(f"{stamp} {line}\n")

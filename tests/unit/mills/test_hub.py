@@ -5,6 +5,7 @@ from vekna.pacts.routing import Routed, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -208,6 +209,23 @@ class TestFanOut:
         assert journaled == [_hello()]
         assert first.sent == [_hello()]
         assert second.sent == [_hello()]
+
+    @staticmethod
+    def test_a_journal_that_cannot_write_keeps_the_cast_running():
+        seen: list[Routed] = []
+
+        def full_disk(_: CastMessage) -> None:
+            raise OSError(28, "No space left on device")
+
+        hub = Hub(on_routed=seen.append, on_journal=full_disk)
+        surface = _Surface()
+        hub.attach_surface(surface)
+
+        hub.apply(_hello())
+
+        assert surface.sent == [_hello()]
+        assert seen[-2].reason == "not journaled: [Errno 28] No space left on device"
+        assert seen[-1].action == "applied"
 
     @staticmethod
     def test_a_dropped_message_reaches_neither():

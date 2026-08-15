@@ -80,10 +80,20 @@ class Hub(Casts):
             self._accept(message)
 
     def _accept(self, message: CastMessage) -> None:
-        self._on_journal(message)
+        self._journal(message)
         for surface in self._surfaces:
             surface.send(message)
         self._say(kind=message.kind, cast_id=message.cast_id, action="applied")
+
+    # A disk that is full is the daemon's problem and not the cast's. The
+    # journal is called from inside a socket read loop, so an OSError let out of
+    # here ends that connection and tells the cast it disconnected — over
+    # something the cast did nothing about and can do nothing about.
+    def _journal(self, message: CastMessage) -> None:
+        try:
+            self._on_journal(message)
+        except OSError as error:
+            self._drop(message, reason=f"not journaled: {error}")
 
     def _drop(self, message: CastMessage, *, reason: str) -> None:
         self._say(
