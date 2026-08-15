@@ -19,8 +19,29 @@ vekna cast fix_tests --bound 5
 vekna cast review --base=main --only src/
 ```
 
-Output streams live as a tree of rites. The last line is the result as JSON,
-or `null` for a ritual that finishes without one.
+Output streams live as a tree of rites — one node per step, one nested under it
+per medium call, with the call's own output indented beneath:
+
+```text
+▶ gates
+  ↳ shell  mise run lint:py
+  ↳ shell  echo hi; sleep 1; echo bye
+    All checks passed!
+  ✓ shell  mise run lint:py
+    hi
+    bye
+  ✓ shell  echo hi; sleep 1; echo bye
+✓ gates
+result: {"green":true}
+```
+
+A medium's line quotes the first string it was called with — a `shell`'s
+command, a `coding` prompt — on one line, cut to 60 characters. Two rites of
+the same medium are told apart by that, so it rides both the opening and the
+closing line.
+
+The last line is the result as JSON, or `null` for a ritual that finishes
+without one.
 
 Exit codes: `0` cast finished, `1` cast failed, `2` the arguments or the ritual
 source were wrong.

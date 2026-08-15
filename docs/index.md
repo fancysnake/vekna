@@ -76,8 +76,8 @@ vekna cast fix_tests --bound 5
 ```
 
 Output streams live as a tree of rites — one node per step, one nested under
-it per medium call, with the agent's own output indented beneath. The last
-line is the cast's result, as JSON:
+it per medium call, each quoting what it was asked to do, with the agent's own
+output indented beneath. The last line is the cast's result, as JSON:
 
 ```text
 result: {"outcome":"green"}

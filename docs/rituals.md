@@ -72,7 +72,8 @@ each step's body.
 
 A step may hold several medium calls at once — an `asyncio.TaskGroup` over two
 `shell` calls runs both and waits for both — and each still gets its own rite,
-so the grimoire records what actually happened concurrently.
+so the grimoire records what actually happened concurrently. Each rite quotes
+its own command, which is what tells two lines of the same medium apart.
 
 ```python
 @step
