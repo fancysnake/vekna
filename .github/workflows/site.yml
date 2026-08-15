@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4
       - run: mise install
       # Builds with `--strict`, so a link to a page that is not there fails
       # here rather than being published.
@@ -48,7 +48,7 @@ jobs:
       # `docs/cli.md` is a documentation-only change, which `ci.yml` ignores.
       # The guard has to run where that change runs.
       - run: mise exec -- pytest tests/integration/cli/test_cli_reference.py
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: site/
 
@@ -66,4 +66,4 @@ jobs:
       id-token: write
     steps:
       - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
