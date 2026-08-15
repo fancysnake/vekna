@@ -250,14 +250,58 @@ class TestWhereTheJournalLives:
 
 
 class TestFramesOnDisk:
+    # The frame after the blank line is the second shell rite, so replaying it
+    # is what proves the reader carried on rather than stopping there.
     @staticmethod
-    def test_the_reader_skips_a_blank_line(project: Path, tmp_path: Path):
+    def test_the_reader_carries_on_past_a_blank_line(project: Path, tmp_path: Path):
         cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
         events = tmp_path / "runs" / cast_id / "events.jsonl"
         with events.open("ab") as log:
             log.write(b"\n")
             log.write(
-                encode_frame(_rite(cast_id, rite_id="r9", name="x", category="step"))
+                encode_frame(
+                    _rite(cast_id, rite_id="r4", name="shell", category="medium")
+                )
+            )
+            log.write(
+                encode_frame(
+                    RiteFinished(
+                        cast_id=cast_id,
+                        rite_id="r4",
+                        status="ok",
+                        result={
+                            "stdout": "past-the-blank\n",
+                            "stderr": "",
+                            "exit_code": 0,
+                        },
+                        finished_at=_WHEN,
+                    )
+                )
             )
 
         assert main(["--resume", cast_id]) == 0
+
+        assert (project / "ran.log").read_text() == "from-the-journal\npast-the-blank\n"
+
+    @staticmethod
+    def test_a_torn_record_names_the_file(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        (tmp_path / "runs" / cast_id / "run.json").write_text('{"hello": {"cast_i')
+
+        assert main(["--resume", cast_id]) == _USAGE_EXIT
+
+        assert "run.json cannot be read" in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_half_written_frame_names_the_log(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        with (tmp_path / "runs" / cast_id / "events.jsonl").open("ab") as log:
+            log.write(b'{"kind": "rite_star\n')
+
+        assert main(["--resume", cast_id]) == _USAGE_EXIT
+
+        assert "events.jsonl cannot be read" in capsys.readouterr().err
