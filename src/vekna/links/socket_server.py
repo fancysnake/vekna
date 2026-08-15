@@ -1,7 +1,5 @@
 import asyncio
 import contextlib
-import os
-import tempfile
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
@@ -18,16 +16,6 @@ from vekna.wire import (
 _SOCKET_MODE = 0o600
 _CONNECT_SECONDS = 2.0
 _GONE = "socket closed without a goodbye"
-_SOCKET_ENV = "VEKNA_SOCKET"
-
-
-# The same path the lexicon's probe computes, written twice because the daemon
-# may not import the lexicon. Both read `VEKNA_SOCKET` first, which is what lets
-# a test — or two users on one machine — stand up a socket of their own.
-def default_socket_path() -> Path:
-    if (named := os.environ.get(_SOCKET_ENV)) is not None:
-        return Path(named)
-    return Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock"
 
 
 # Writes are buffered, never awaited: a surface that has stopped reading must

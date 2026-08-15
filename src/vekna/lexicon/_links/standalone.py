@@ -1,11 +1,8 @@
 import asyncio
-import os
 import socket
 import sys
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TextIO
 
 from vekna.lexicon._pacts import (
@@ -18,17 +15,6 @@ from vekna.lexicon._pacts import (
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
-_SOCKET_ENV = "VEKNA_SOCKET"
-
-
-# The same path the daemon's own binder computes, written twice because a cast
-# process and the daemon share no code but `vekna.wire`. Both read
-# `VEKNA_SOCKET` first, which is what lets a test — or two users on one machine
-# — stand up a socket of their own.
-def default_socket_path() -> str:
-    if (named := os.environ.get(_SOCKET_ENV)) is not None:
-        return named
-    return str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
 
 
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:

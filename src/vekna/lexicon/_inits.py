@@ -9,12 +9,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from vekna.wire import CastHello, WireMessage
+from vekna.wire import CastHello, WireMessage, default_socket_path
 
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
-from ._links.standalone import StandaloneRenderer, default_socket_path
+from ._links.standalone import StandaloneRenderer
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import step_graph
@@ -441,8 +441,7 @@ async def _run(plan: _Plan) -> int:
     cast_id = uuid4().hex
     renderer = StandaloneRenderer()
     link = DaemonLink(
-        socket_path=Path(default_socket_path()),
-        hello=_hello(cast_id=cast_id, plan=plan),
+        socket_path=default_socket_path(), hello=_hello(cast_id=cast_id, plan=plan)
     )
     channel = TeeChannel(
         inner=renderer,

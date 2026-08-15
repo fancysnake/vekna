@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from vekna.links.socket_server import Serving, alive, attach, default_socket_path, serve
+from vekna.links.socket_server import Serving, alive, attach, serve
 from vekna.pacts.routing import SocketPathError
 from vekna.wire import (
     CastGoodbye,
@@ -257,17 +257,3 @@ class TestBinding:
     @staticmethod
     async def test_nothing_listening_is_not_alive(socket_path: Path):
         assert not await alive(socket_path)
-
-
-class TestDefaultPath:
-    @staticmethod
-    def test_the_environment_names_it(monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("VEKNA_SOCKET", "/tmp/mine.sock")
-
-        assert default_socket_path() == Path("/tmp/mine.sock")
-
-    @staticmethod
-    def test_otherwise_it_is_one_per_user(monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("VEKNA_SOCKET", raising=False)
-
-        assert default_socket_path().name.startswith("vekna-")

@@ -71,7 +71,8 @@ find — usually a submodule that was never swept because it is missing an
 ## `vekna`
 
 With no subcommand, the daemon. The first `vekna` binds
-`/tmp/vekna-<uid>.sock` and renders every cast running anywhere on this
+`$XDG_RUNTIME_DIR/vekna.sock` (falling back to `/tmp/vekna-<uid>/vekna.sock`,
+in a directory of the user's own) and renders every cast running anywhere on this
 account; each one after attaches to it as another surface, and sees the same
 view.
 

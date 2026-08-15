@@ -20,7 +20,8 @@ lands on top of this at [0.7.0](05-locks.md).
 ## What ships
 
 - `vekna` (no subcommand) — daemon. First invocation binds
-  `/tmp/vekna-<uid>.sock` (`0600`) and renders active casts to the terminal;
+  `$XDG_RUNTIME_DIR/vekna.sock` (`0600`, in a directory only this user can
+  reach) and renders active casts to the terminal;
   later invocations attach as peer surfaces.
 - Vekna-side handlers for every wire message kind.
 - CLI Grimoire renderer: tree of running casts, drill-in to one, and a cast

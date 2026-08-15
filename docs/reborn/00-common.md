@@ -165,7 +165,7 @@ phylactery: one registry row
 2. The cast process loads `./rituals.py` or `./rituals/` (+ config modules),
    finds `@ritual('write-tests')`, validates Components against the entrypoint's
    components model, and registers its `@step`s + mediums in the compendium.
-3. It probes `/tmp/vekna-<uid>.sock`. Reachable → attach + `CastHello`.
+3. It probes `$XDG_RUNTIME_DIR/vekna.sock`. Reachable → attach + `CastHello`.
    Not → standalone. Either way the cast renders to its own stdout and takes
    its prompts on its own stdin; attaching adds a listener, not an owner.
 4. It runs the ritual: the engine fires the opening transition and trampolines
@@ -241,8 +241,9 @@ Enforced by 31 `import-linter` contracts; see
 
 ## Wire protocol
 
-Newline-framed JSON over Unix domain socket. Default `/tmp/vekna-<uid>.sock`
-(one per user, cross-project; configurable). Pydantic DTOs live in `vekna.wire`,
+Newline-framed JSON over Unix domain socket. Default `$XDG_RUNTIME_DIR/vekna.sock`,
+or `/tmp/vekna-<uid>/vekna.sock` where there is no runtime directory (one per
+user, cross-project; configurable). Pydantic DTOs live in `vekna.wire`,
 defined once: both sides import them from there and neither mirrors the schema.
 
 That is a rule about the *schema*, not about either process's imports — the

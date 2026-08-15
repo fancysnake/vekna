@@ -14,9 +14,10 @@ which links back to the version here that carried each shipped feature.
 
 ### Added
 
-- **The daemon.** Bare `vekna` binds `/tmp/vekna-<uid>.sock` and renders every
-  cast running on this account, whatever directory each was started in: a tree
-  of casts, a number to drill into one, `b` back, `q` quit. A second `vekna`
+- **The daemon.** Bare `vekna` binds `$XDG_RUNTIME_DIR/vekna.sock` — or
+  `/tmp/vekna-<uid>/vekna.sock`, in a directory of the user's own — and renders
+  every cast running on this account, whatever directory each was started in: a
+  tree of casts, a number to drill into one, `b` back, `q` quit. A second `vekna`
   attaches to the first as another surface and paints the same view, including
   what is waiting. It observes and records; it starts nothing.
 - **A cast tells it what it is doing.** `vekna cast` projects its grimoire onto

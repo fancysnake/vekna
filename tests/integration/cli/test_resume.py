@@ -8,9 +8,14 @@ from click.testing import CliRunner
 
 from vekna.inits.cli import init_command
 from vekna.lexicon._inits import main
-from vekna.lexicon._links.resume import default_runs_root
 from vekna.links.journal import Journal
-from vekna.wire import CastHello, RiteFinished, RiteStarted, encode_frame
+from vekna.wire import (
+    CastHello,
+    RiteFinished,
+    RiteStarted,
+    default_runs_root,
+    encode_frame,
+)
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _USAGE_EXIT = 2
