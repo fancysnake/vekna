@@ -183,9 +183,9 @@ command ever needs a `--lich` flag.
 
 - Commands are plain messages in the lich's channel.
 - **One pinned status message, edited in place**, carrying the ritual, its
-  runtime, and the ritual's own status line under it. Rite deltas do not stream —
-  Discord's rate limits and your notification tray both lose. `log` returns a
-  tail on demand.
+  runtime, and the ritual's own status line under it. Rite deltas do not
+  stream — Discord's rate limits and your notification tray both lose. `log`
+  returns a tail on demand.
 - A decide arrives as a message with buttons and blocks until pressed. No
   auto-approval, no timeout default: a decide is a choice the ritual author
   declared, and guessing it is worse than waiting.

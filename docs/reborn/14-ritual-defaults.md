@@ -57,7 +57,7 @@ whole point, and it makes `rituals show` lie: a field printed `--base-branch
 <str>` reads as something the operator must supply. `show` prints the effective
 value and where it came from:
 
-```
+```text
 components:
   --base-branch <str>  = main (.vekna.toml)
   --pull-request <int>
