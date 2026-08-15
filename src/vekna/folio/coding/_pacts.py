@@ -64,6 +64,11 @@ def _refusal(*, bundle: str, error: ValidationError) -> str:
 # thread named "None". StrEnum so the plain spelling still lands on the member:
 # `Session("continue")` is `Session.CONTINUE`, and `Session("New")` raises,
 # which is the same refusal an author gets for any other word.
+class Session(StrEnum):
+    NEW = "new"
+    CONTINUE = "continue"
+
+
 # What a coding rite leaves in the grimoire, and therefore what a resumed cast
 # reads back: the reply itself beside the declaration that produced it. Extra
 # fields are ignored rather than forbidden — a journal written by an older vekna
@@ -75,11 +80,6 @@ class CodingRecord(BaseModel):
     num_turns: int | None = None
     cost_usd: float | None = None
     text: str = ""
-
-
-class Session(StrEnum):
-    NEW = "new"
-    CONTINUE = "continue"
 
 
 # What bundles here is *configuration*: reusing one `CodingOpts` across calls is

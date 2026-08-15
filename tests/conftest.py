@@ -1,7 +1,14 @@
-from pydantic import BaseModel
+from datetime import UTC, datetime
+from typing import Literal
+
+from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon import NoComponents, Transition, goto, ritual
-from vekna.lexicon._pacts import Ritual, Step
+from vekna.lexicon._mills.ledger import Ledger
+from vekna.lexicon._pacts import Resumption, Ritual, Step
+from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
+
+_WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 # Most tests need a ritual only to reach the step they are actually about — an
@@ -15,3 +22,45 @@ def entry(*, name: str = "r", target: Step, payload: BaseModel) -> Ritual:
         return goto(target, payload)
 
     return _enter
+
+
+# One recorded medium rite, as the daemon would have journalled it — which is
+# all a resumed cast reads. `rite_id` is a counter in the cast being resumed, so
+# "r2" is the first medium inside the first step.
+def journalled(
+    result: JsonValue,
+    *,
+    rite_id: str = "r2",
+    name: str,
+    status: Literal["ok", "error"] = "ok",
+) -> Ledger:
+    return Ledger.from_resumption(
+        Resumption(
+            record=RunRecord(
+                hello=CastHello(
+                    cast_id="c0",
+                    project_root="/proj",
+                    ritual="job",
+                    components={},
+                    started_at=_WHEN,
+                )
+            ),
+            events=[
+                RiteStarted(
+                    cast_id="c0",
+                    rite_id=rite_id,
+                    parent_id=None,
+                    name=name,
+                    category="medium",
+                    started_at=_WHEN,
+                ),
+                RiteFinished(
+                    cast_id="c0",
+                    rite_id=rite_id,
+                    status=status,
+                    result=result,
+                    finished_at=_WHEN,
+                ),
+            ],
+        )
+    )

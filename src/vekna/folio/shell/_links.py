@@ -2,6 +2,8 @@ import asyncio
 import codecs
 from collections.abc import Callable
 
+from pydantic import JsonValue, TypeAdapter, ValidationError
+
 from vekna.lexicon import (
     SHELL_FOCUS,
     ShellCall,
@@ -13,9 +15,13 @@ from vekna.lexicon import (
     replayed,
 )
 
-from ._pacts import ShellResult
+from ._pacts import ShellOutputError, ShellResult
 
 _CHUNK = 1 << 16
+# Read through the model and written through it too, so a field added to
+# `ShellResult` cannot land on one side of the round trip only. `model_dump()`
+# hands back `dict[str, Any]`; this is what says the journal holds JSON.
+_JOURNALLED: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 
 # A StreamReader iterates itself by *lines*, which is the very thing that
@@ -116,7 +122,7 @@ async def shell(
     # being run a second time — a resumed cast should not rebuild, re-push or
     # re-delete anything it had already finished doing.
     if (prior := replayed()) is not None:
-        result = ShellResult.model_validate(prior)
+        result = _recorded(prior)
     else:
         focus = SHELL_FOCUS.resolve(default=BashFocus)
         reply = await focus.run(
@@ -125,11 +131,13 @@ async def shell(
         result = ShellResult(
             stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
         )
-    record_result(
-        {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "exit_code": result.exit_code,
-        }
-    )
+    record_result(_JOURNALLED.validate_json(result.model_dump_json()))
     return result
+
+
+def _recorded(prior: JsonValue) -> ShellResult:
+    try:
+        return ShellResult.model_validate(prior)
+    except ValidationError as error:
+        msg = f"a shell rite was journaled as something else: {error}"
+        raise ShellOutputError(msg) from error

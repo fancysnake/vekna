@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from tests.conftest import entry
+from tests.conftest import entry, journalled
 from vekna.folio.coding import (
     CodingOpts,
     CodingOptsError,
@@ -27,9 +27,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, reset_registry, run_cast
-from vekna.lexicon._mills.ledger import Ledger
-from vekna.lexicon._pacts import Resumption, RiteEnded, RiteStreamed
-from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
+from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
 
 def _fixed_clock() -> datetime:
@@ -99,40 +97,6 @@ def _cast(the_ritual, *, stdin: str = "", ledger=None) -> tuple[object, Grimoire
         )
     )
     return result, grimoire
-
-
-# One recorded coding rite, as the daemon would have journalled it.
-def _journalled(result, *, rite_id: str = "r2", name: str = "coding") -> Ledger:
-    return Ledger.from_resumption(
-        Resumption(
-            record=RunRecord(
-                hello=CastHello(
-                    cast_id="c0",
-                    project_root="/proj",
-                    ritual="job",
-                    components={},
-                    started_at=_fixed_clock(),
-                )
-            ),
-            events=[
-                RiteStarted(
-                    cast_id="c0",
-                    rite_id=rite_id,
-                    parent_id=None,
-                    name=name,
-                    category="medium",
-                    started_at=_fixed_clock(),
-                ),
-                RiteFinished(
-                    cast_id="c0",
-                    rite_id=rite_id,
-                    status="ok",
-                    result=result,
-                    finished_at=_fixed_clock(),
-                ),
-            ],
-        )
-    )
 
 
 class TestCodingMedium:
@@ -552,7 +516,8 @@ class TestResumedRites:
             return done(await coding("fix it"))
 
         result, _ = _cast(
-            entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded)
+            entry(target=work, payload=Answer(port=1)),
+            ledger=journalled(recorded, name="coding"),
         )
 
         assert not focus.calls
@@ -574,7 +539,10 @@ class TestResumedRites:
 
         recorded = {"session": "new", "key": None, "session_id": "s9", "text": "done"}
 
-        _cast(entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded))
+        _cast(
+            entry(target=work, payload=Answer(port=1)),
+            ledger=journalled(recorded, name="coding"),
+        )
 
         assert [call.resume for call in focus.calls] == ["s9"]
 
@@ -589,7 +557,8 @@ class TestResumedRites:
         recorded = {"session": "new", "text": '{"port": 8080}'}
 
         result, _ = _cast(
-            entry(target=work, payload=Answer(port=1)), ledger=_journalled(recorded)
+            entry(target=work, payload=Answer(port=1)),
+            ledger=journalled(recorded, name="coding"),
         )
 
         assert result == Answer(port=8080)
@@ -599,7 +568,10 @@ class TestResumedRites:
         CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(CodingOutputError, match="journaled as something else"):
-            _cast(_one_call_ritual(), ledger=_journalled("not a reply at all"))
+            _cast(
+                _one_call_ritual(),
+                ledger=journalled("not a reply at all", name="coding"),
+            )
 
     @staticmethod
     def test_a_rite_the_journal_does_not_know_is_run():
@@ -608,6 +580,40 @@ class TestResumedRites:
 
         # The recorded rite was a `shell`, so this coding rite matches nothing
         # and the ledger is spent rather than misread.
-        _cast(_one_call_ritual(), ledger=_journalled({"text": "x"}, name="shell"))
+        _cast(_one_call_ritual(), ledger=journalled({"text": "x"}, name="shell"))
 
         assert len(focus.calls) == 1
+
+    # A rite that failed is not a rite that is done, and a resume that replayed
+    # its result would carry an error forward as if it had succeeded.
+    @staticmethod
+    def test_a_rite_that_failed_is_run_again():
+        focus = FakeFocus()
+        CODING_FOCUS.register(focus)
+
+        recorded = {"session": "new", "text": "what failed"}
+
+        _cast(
+            _one_call_ritual(),
+            ledger=journalled(recorded, name="coding", status="error"),
+        )
+
+        assert len(focus.calls) == 1
+
+    # Nothing is asked of the agent, so nothing needs the SDK that answers for
+    # it: a cast interrupted on one machine can be resumed on another.
+    @staticmethod
+    def test_a_replayed_rite_needs_no_focus_at_all():
+        register()
+        recorded = {"session": "new", "text": "what it said last time"}
+
+        @step
+        async def work(_: Answer) -> Transition:
+            return done(await coding("fix it"))
+
+        result, _ = _cast(
+            entry(target=work, payload=Answer(port=1)),
+            ledger=journalled(recorded, name="coding"),
+        )
+
+        assert result == CodingResult(text="what it said last time")

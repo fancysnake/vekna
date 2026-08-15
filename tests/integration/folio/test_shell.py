@@ -1,10 +1,11 @@
 import asyncio
 import io
 
-from pydantic import BaseModel
+import pytest
+from pydantic import BaseModel, JsonValue
 
-from tests.conftest import entry
-from vekna.folio.shell import ShellResult, shell
+from tests.conftest import entry, journalled
+from vekna.folio.shell import ShellOutputError, ShellResult, shell
 from vekna.lexicon import (
     SHELL_FOCUS,
     ShellCall,
@@ -96,6 +97,36 @@ def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
 def _cast(the_ritual: Ritual) -> ShellResult:
     result, _, _ = _run(the_ritual)
     return result
+
+
+def _resumed(recorded: JsonValue) -> object:
+    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+    return asyncio.run(
+        run_cast(
+            ritual=echoer,
+            components=echoer.components(),
+            grimoire=Grimoire(cast_id="c1"),
+            channel=renderer,
+            ledger=journalled(recorded, name="shell"),
+        )
+    )
+
+
+class TestResumedRites:
+    # `echo hello` never runs: what comes back is what the interrupted cast
+    # recorded, which is the whole point of not re-running a shell command.
+    @staticmethod
+    def test_a_command_that_already_ran_comes_off_the_journal():
+        recorded = {"stdout": "from the journal\n", "stderr": "", "exit_code": 0}
+
+        assert _resumed(recorded) == ShellResult(
+            stdout="from the journal\n", stderr="", exit_code=0
+        )
+
+    @staticmethod
+    def test_a_journal_holding_something_else_says_so():
+        with pytest.raises(ShellOutputError, match="journaled as something else"):
+            _resumed({"text": "that was a coding rite"})
 
 
 def _deltas(grimoire: Grimoire) -> list[str]:

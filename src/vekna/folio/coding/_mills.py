@@ -34,6 +34,10 @@ _OutputT = TypeVar("_OutputT")
 MEDIUM = "coding"
 INSTALL_HINT = "the Claude Focus needs claude-agent-sdk: pip install claude-agent-sdk"
 
+# `model_dump()` hands back `dict[str, Any]`; this is what says the journal only
+# ever holds JSON, in the one place that puts something in it.
+_JOURNALLED: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+
 
 def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | None:
     if gate_tools is None:
@@ -136,15 +140,18 @@ def _record(*, context: RiteContext, thread: _Thread, session_id: str | None) ->
 # What a coding rite is worth keeping: the reply itself, and the declaration
 # that produced it. The text is here because a resumed cast rebuilds its return
 # value out of this and nothing else — the same reply, not a second call.
+# Written through the same model `_recorded` reads it back through, so the two
+# halves of the round trip cannot come to hold different field lists.
 def _telemetry(*, thread: _Thread, reply: FocusReply) -> dict[str, JsonValue]:
-    return {
-        "session": thread.declared.value,
-        "key": thread.key,
-        "session_id": reply.session_id,
-        "num_turns": reply.num_turns,
-        "cost_usd": reply.cost_usd,
-        "text": reply.text,
-    }
+    record = CodingRecord(
+        session=thread.declared.value,
+        key=thread.key,
+        session_id=reply.session_id,
+        num_turns=reply.num_turns,
+        cost_usd=reply.cost_usd,
+        text=reply.text,
+    )
+    return _JOURNALLED.validate_json(record.model_dump_json())
 
 
 def _recorded(prior: JsonValue) -> FocusReply:
@@ -200,7 +207,6 @@ async def coding(
     session: Session = Session.NEW,
     key: str | None = None,
 ) -> CodingResult | _OutputT:
-    focus = CODING_FOCUS.resolve()
     context = current_rite()
     resolved = opts if opts is not None else CodingOpts()
     thread = _thread(context=context, session=session, key=key)
@@ -219,11 +225,14 @@ async def coding(
     # A rite this cast already ran before it was interrupted: the agent is not
     # called again, and the session it opened is filed as if it had been, so a
     # later call on that thread carries on where this one left off.
+    # The focus is resolved on that branch and not before it, or a cast being
+    # resumed on a machine with no agent SDK would be refused for work it had
+    # already done.
     prior = replayed()
     reply = (
         _recorded(prior)
         if prior is not None
-        else await focus.run(
+        else await CODING_FOCUS.resolve().run(
             call,
             on_delta=emit_delta,
             gate=_make_gate(context.channel, resolved.gate_tools),
