@@ -5,6 +5,7 @@ from vekna.pacts.routing import Action, Routed, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -12,7 +13,6 @@ from vekna.wire import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
-    SurfaceHello,
     WireMessage,
 )
 
@@ -20,7 +20,6 @@ _LOCKS_LATER = "locks arrive at 0.7.0"
 _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
-_NOT_SENT = "a surface attaches, it does not send"
 
 
 # The daemon's whole model of what is happening. It holds views, not frames: a
@@ -34,7 +33,7 @@ class Hub(Casts):
         self,
         *,
         on_routed: Callable[[Routed], None] | None = None,
-        on_journal: Callable[[WireMessage], None] | None = None,
+        on_journal: Callable[[CastMessage], None] | None = None,
     ) -> None:
         self._casts: dict[str, CastView] = {}
         self._surfaces: list[Surface] = []
@@ -56,10 +55,7 @@ class Hub(Casts):
             self._surfaces.remove(surface)
         self._say(kind="surface_hello", cast_id=None, action="detached")
 
-    def apply(self, message: WireMessage) -> None:
-        if isinstance(message, SurfaceHello):
-            self._drop(message, reason=_NOT_SENT)
-            return
+    def apply(self, message: CastMessage) -> None:
         if isinstance(message, CastHello):
             self._casts[message.cast_id] = CastView(hello=message)
             self._accept(message)
@@ -71,19 +67,16 @@ class Hub(Casts):
         else:
             self._accept(message)
 
-    def _accept(self, message: WireMessage) -> None:
+    def _accept(self, message: CastMessage) -> None:
         if self._on_journal is not None:
             self._on_journal(message)
         for surface in self._surfaces:
             surface.send(message)
-        self._say(kind=message.kind, cast_id=_cast_id(message), action="applied")
+        self._say(kind=message.kind, cast_id=message.cast_id, action="applied")
 
-    def _drop(self, message: WireMessage, *, reason: str) -> None:
+    def _drop(self, message: CastMessage, *, reason: str) -> None:
         self._say(
-            kind=message.kind,
-            cast_id=_cast_id(message),
-            action="dropped",
-            reason=reason,
+            kind=message.kind, cast_id=message.cast_id, action="dropped", reason=reason
         )
 
     def _say(
@@ -112,14 +105,10 @@ class Hub(Casts):
             yield from _replay_goodbye(view)
 
 
-def _cast_id(message: WireMessage) -> str | None:
-    return None if isinstance(message, SurfaceHello) else message.cast_id
-
-
 # `view`, not `cast`, throughout: the domain word collides with `typing.cast` in
 # the repository's own debt metrics, and a view is what these actually hold.
 # Returns why the message was refused, or None once it has been applied.
-def _update(view: CastView, message: WireMessage) -> str | None:
+def _update(view: CastView, message: CastMessage) -> str | None:
     refused: str | None = None
     match message:
         case GrimoireBegin():

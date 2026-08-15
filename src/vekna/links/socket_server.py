@@ -9,6 +9,7 @@ from vekna.pacts.routing import SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -87,7 +88,7 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
 async def serve(
     *,
     path: Path,
-    on_message: Callable[[WireMessage], None],
+    on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
 ) -> Serving | None:
@@ -130,7 +131,7 @@ class _Connection:
         self.cast_id: str | None = None
         self.said_goodbye = False
 
-    def note(self, message: WireMessage) -> None:
+    def note(self, message: CastMessage) -> None:
         if isinstance(message, CastHello):
             self.cast_id = message.cast_id
         elif isinstance(message, CastGoodbye):
@@ -141,7 +142,7 @@ async def _handle(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     *,
-    on_message: Callable[[WireMessage], None],
+    on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
 ) -> None:
@@ -168,13 +169,17 @@ async def _pump(
     writer: asyncio.StreamWriter,
     connection: _Connection,
     *,
-    on_message: Callable[[WireMessage], None],
+    on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
 ) -> None:
+    # The one place a `SurfaceHello` is a message rather than a handshake, and
+    # where it stops: everything downstream takes a `CastMessage`, so a surface
+    # saying hello twice is the same attachment, not something to route.
     async for message in read_frames(reader):
-        if isinstance(message, SurfaceHello) and connection.surface is None:
-            connection.surface = SocketSurface(writer)
-            on_attach(connection.surface)
+        if isinstance(message, SurfaceHello):
+            if connection.surface is None:
+                connection.surface = SocketSurface(writer)
+                on_attach(connection.surface)
             continue
         connection.note(message)
         on_message(message)
@@ -183,7 +188,7 @@ async def _pump(
 def _close(
     connection: _Connection,
     *,
-    on_message: Callable[[WireMessage], None],
+    on_message: Callable[[CastMessage], None],
     on_detach: Callable[[Surface], None],
     detail: str,
 ) -> None:

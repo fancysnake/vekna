@@ -19,7 +19,7 @@ from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed
 from vekna.pacts.screen import Screen
-from vekna.wire import SurfaceHello, WireMessage, encode_frame, read_frames
+from vekna.wire import CastMessage, SurfaceHello, encode_frame, read_frames
 
 _CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
 _RUNTIME = "vekna.lexicon._inits"
@@ -162,8 +162,12 @@ async def _as_peer(*, path: Path, screen: Screen) -> int:
     dashboard = Dashboard(casts=hub, screen=screen)
     dashboard.say(_PEER)
 
+    # What a daemon sends a surface is what it heard from its casts, so the
+    # handshake this end wrote is the only frame kind that cannot come back.
     async def listen() -> None:
         async for message in read_frames(reader):
+            if isinstance(message, SurfaceHello):
+                continue
             hub.apply(message)
             dashboard.changed()
         dashboard.stop(note=_DAEMON_ENDED)
@@ -181,7 +185,7 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
     hub = Hub(on_routed=_sink(debug), on_journal=Journal(default_runs_root()).record)
     dashboard = Dashboard(casts=hub, screen=where)
 
-    def heard(message: WireMessage) -> None:
+    def heard(message: CastMessage) -> None:
         hub.apply(message)
         dashboard.changed()
 

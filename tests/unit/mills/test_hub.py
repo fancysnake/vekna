@@ -13,7 +13,6 @@ from vekna.wire import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
-    SurfaceHello,
     WireMessage,
 )
 
@@ -193,16 +192,6 @@ class TestDrops:
 
         assert seen[-1].action == "dropped"
         assert seen[-1].reason == "locks arrive at 0.7.0"
-
-    @staticmethod
-    def test_a_surface_hello_is_not_something_the_hub_applies():
-        seen: list[Routed] = []
-        hub = Hub(on_routed=seen.append)
-
-        hub.apply(SurfaceHello())
-
-        assert seen[-1].action == "dropped"
-        assert seen[-1].cast_id is None
 
 
 class TestFanOut:

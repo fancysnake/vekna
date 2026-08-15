@@ -2,6 +2,7 @@ from ._links import read_frames
 from ._pacts import (
     CastGoodbye,
     CastHello,
+    CastMessage,
     CastStatus,
     DecideRequested,
     DecideResolved,
@@ -24,6 +25,7 @@ from ._pacts import (
 __all__ = [
     "CastGoodbye",
     "CastHello",
+    "CastMessage",
     "CastStatus",
     "DecideRequested",
     "DecideResolved",

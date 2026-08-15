@@ -131,10 +131,14 @@ class LockReleased(BaseModel):
     token: str
 
 
-WireMessage = (
+# Everything a cast says about itself, and the one thing that does not. Split so
+# that `cast_id` is a field of the type rather than something each consumer
+# re-establishes: the daemon's hub, the journal and the debug log all take
+# `CastMessage`, and the only place a `SurfaceHello` can arrive is the handshake
+# that reads the first frame off a connection.
+CastMessage = (
     CastHello
     | CastGoodbye
-    | SurfaceHello
     | GrimoireBegin
     | GrimoireEnd
     | RiteStarted
@@ -147,6 +151,8 @@ WireMessage = (
     | LockDenied
     | LockReleased
 )
+
+WireMessage = CastMessage | SurfaceHello
 
 
 # --- the record on disk ---

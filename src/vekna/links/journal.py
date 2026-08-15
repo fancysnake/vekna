@@ -5,8 +5,8 @@ from pathlib import Path
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
     RunRecord,
-    SurfaceHello,
     WireMessage,
     decode_frame,
     encode_frame,
@@ -34,9 +34,7 @@ class Journal:
     def __init__(self, root: Path) -> None:
         self._root = root
 
-    def record(self, message: WireMessage) -> None:
-        if isinstance(message, SurfaceHello):
-            return
+    def record(self, message: CastMessage) -> None:
         directory = self._root / message.cast_id
         directory.mkdir(parents=True, exist_ok=True)
         with (directory / _EVENTS).open("ab") as events:

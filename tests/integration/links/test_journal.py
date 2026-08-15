@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from vekna.links.journal import Journal, default_runs_root
-from vekna.wire import CastGoodbye, CastHello, RiteDelta, SurfaceHello
+from vekna.wire import CastGoodbye, CastHello, RiteDelta
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
@@ -50,14 +50,6 @@ class TestRecording:
         assert record is not None
         assert record.status == "disconnected"
         assert record.detail == "eof"
-
-    @staticmethod
-    def test_a_surface_leaves_nothing_behind(tmp_path: Path):
-        journal = Journal(tmp_path)
-
-        journal.record(SurfaceHello())
-
-        assert not list(tmp_path.iterdir())
 
     @staticmethod
     def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):
