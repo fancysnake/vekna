@@ -36,6 +36,10 @@ _RUNTIME = "vekna.lexicon._inits"
 _CLI_MODULE = "vekna.inits.cli"
 _RESUME = "--resume"
 _RECENT = 20
+# What the daemon keeps on disk, trimmed once at startup rather than on every
+# write: a cast is a directory of a few kilobytes, and this is about a machine
+# that has been running vekna for a year, not about the last hour.
+_KEPT = 200
 _DEBUG_LOG = Path.home() / ".config" / "vekna" / "debug.log"
 _DAEMON_ENDED = "the daemon ended"
 _PEER = "attached to the vekna already running here"
@@ -195,7 +199,9 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
     path = default_socket_path()
     if await alive(path):
         return await _as_peer(path=path, screen=where)
-    hub = Hub(on_routed=_sink(debug), on_journal=Journal(default_runs_root()).record)
+    journal = Journal(default_runs_root())
+    await asyncio.to_thread(journal.prune, keep=_KEPT)
+    hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
     dashboard = Dashboard(casts=hub, screen=where)
 
     def heard(message: CastMessage) -> None:

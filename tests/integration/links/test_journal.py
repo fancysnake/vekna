@@ -108,3 +108,41 @@ class TestReading:
         (tmp_path / "notes.txt").write_text("mine")
 
         assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c1"]
+
+    # What a daemon killed mid-write leaves behind, which is exactly when an
+    # operator runs `vekna casts`.
+    @staticmethod
+    def test_a_torn_record_hides_neither_itself_nor_the_others(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0"))
+        journal.record(_hello("c1", started_at=_WHEN + timedelta(minutes=1)))
+        (tmp_path / "c1" / "run.json").write_text('{"hello": {"cast_i')
+
+        assert journal.read("c1") is None
+        assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c0"]
+
+
+class TestPruning:
+    @staticmethod
+    def test_only_the_newest_are_kept(tmp_path: Path):
+        journal = Journal(tmp_path)
+        for index in range(4):
+            journal.record(
+                _hello(f"c{index}", started_at=_WHEN + timedelta(minutes=index))
+            )
+            journal.record(CastGoodbye(cast_id=f"c{index}", status="ok"))
+
+        journal.prune(keep=2)
+
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["c2", "c3"]
+
+    @staticmethod
+    def test_a_cast_still_running_is_left_alone(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("running"))
+        journal.record(_hello("done", started_at=_WHEN + timedelta(minutes=1)))
+        journal.record(CastGoodbye(cast_id="done", status="ok"))
+
+        journal.prune(keep=0)
+
+        assert [path.name for path in tmp_path.iterdir()] == ["running"]

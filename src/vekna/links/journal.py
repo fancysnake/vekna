@@ -1,5 +1,8 @@
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from vekna.wire import (
     CastGoodbye,
@@ -36,8 +39,15 @@ class Journal:
         elif isinstance(message, CastGoodbye):
             self._close(message)
 
+    # A record that will not parse is one the daemon was killed halfway through
+    # writing. Skipped rather than raised, because the command that reads these
+    # is what an operator runs after a daemon died: one torn file must not be
+    # able to hide every healthy cast behind a traceback.
     def read(self, cast_id: str) -> RunRecord | None:
-        return read_record(self._root, cast_id)
+        try:
+            return read_record(self._root, cast_id)
+        except (OSError, ValidationError):
+            return None
 
     def events(self, cast_id: str) -> Iterator[WireMessage]:
         return read_events(self._root, cast_id)
@@ -46,9 +56,24 @@ class Journal:
     # was written: a resumed cast and the one it resumed sit next to each other
     # in the order they were run.
     def recent(self, *, limit: int) -> list[RunRecord]:
+        return self._newest_first()[:limit]
+
+    # Nothing else ever removes a cast, so without this the runs root grows for
+    # as long as the machine lives and every `vekna casts` pays for all of it.
+    # A cast still running is left alone whatever its age, and so is a record
+    # this cannot read: deleting what it could not read back is not its call.
+    def prune(self, *, keep: int) -> None:
+        for record in self._newest_first()[keep:]:
+            if record.status != "running":
+                shutil.rmtree(
+                    run_file(self._root, record.hello.cast_id).parent,
+                    ignore_errors=True,
+                )
+
+    def _newest_first(self) -> list[RunRecord]:
         found = [record for record in self._all() if record is not None]
         found.sort(key=lambda record: record.hello.started_at, reverse=True)
-        return found[:limit]
+        return found
 
     def _all(self) -> Iterator[RunRecord | None]:
         if not self._root.is_dir():
@@ -57,10 +82,16 @@ class Journal:
             if directory.is_dir():
                 yield self.read(directory.name)
 
+    # Written beside itself and moved into place, because a plain write
+    # truncates first: a daemon killed between the two leaves half a record
+    # where `vekna casts` and `vekna casts resume` both look. `os.replace` is
+    # atomic within a directory, so what is there is either the last record or
+    # this one.
     def _write(self, record: RunRecord) -> None:
-        run_file(self._root, record.hello.cast_id).write_text(
-            record.model_dump_json(indent=2)
-        )
+        path = run_file(self._root, record.hello.cast_id)
+        half = path.with_suffix(".part")
+        half.write_text(record.model_dump_json(indent=2))
+        half.replace(path)
 
     # A goodbye for a cast whose hello never landed leaves nothing to close —
     # the daemon would have dropped it, so this is only reachable by a journal
