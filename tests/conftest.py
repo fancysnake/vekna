@@ -1,3 +1,4 @@
+import io
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -9,6 +10,15 @@ from vekna.lexicon._pacts import Resumption, Ritual, Step
 from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+# A notification is an escape sequence written only to a tty, and neither
+# pytest's capture nor a plain StringIO is one. Both suites need a stream that
+# says it is a terminal.
+class Tty(io.StringIO):
+    @staticmethod
+    def isatty() -> bool:
+        return True
 
 
 # Most tests need a ritual only to reach the step they are actually about — an

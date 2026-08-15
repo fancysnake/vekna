@@ -413,8 +413,17 @@ def _backlog(
     return replayed + channel.open_prompts()
 
 
+# Every way a cast can end goes through one notify: an `except` per error type
+# would leave whatever it does not name — the AttributeError a step raises —
+# silent, which is the walked-away-from-the-terminal case the notification
+# exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *, plan: _Plan, grimoire: Grimoire, channel: TeeChannel, link: DaemonLink
+    *,
+    plan: _Plan,
+    grimoire: Grimoire,
+    channel: TeeChannel,
+    link: DaemonLink,
+    renderer: StandaloneRenderer,
 ) -> int:
     try:
         result = await run_cast(
@@ -425,16 +434,24 @@ async def _cast(
             ledger=plan.ledger,
         )
     except FocusMissingError as error:
-        await link.close(status="error", detail=str(error))
         sys.stderr.write(f"{error}\n")
-        return 2
+        code, detail = 2, str(error)
     except RitualError as error:
-        await link.close(status="error", detail=str(error))
         sys.stderr.write(f"cast failed: {error}\n")
-        return 1
-    await link.close(status="ok")
-    sys.stdout.write(f"result: {_rendered(result)}\n")
-    return 0
+        code, detail = 1, str(error)
+    except Exception as error:
+        # A rituals.py under development dies here, and its traceback is the
+        # whole diagnosis — say it to the desktop, then let it out unchanged.
+        renderer.notify("failed", f"{plan.ritual.name}: {error}")
+        raise
+    else:
+        await link.close(status="ok")
+        renderer.notify("done", plan.ritual.name)
+        sys.stdout.write(f"result: {_rendered(result)}\n")
+        return 0
+    await link.close(status="error", detail=detail)
+    renderer.notify("failed", f"{plan.ritual.name}: {detail}")
+    return code
 
 
 # The renderer and the wire both, in that order: what the operator sees does not
@@ -470,7 +487,9 @@ async def _run(plan: _Plan) -> int:
     await link.attach(backlog=backlog())
     watcher = asyncio.create_task(link.keep_attached(backlog))
     try:
-        return await _cast(plan=plan, grimoire=grimoire, channel=channel, link=link)
+        return await _cast(
+            plan=plan, grimoire=grimoire, channel=channel, link=link, renderer=renderer
+        )
     finally:
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):

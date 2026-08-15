@@ -68,6 +68,20 @@ A `?` in place of a target means a `goto` naming a step the graph could not
 find — usually a submodule that was never swept because it is missing an
 `__init__.py`.
 
+## Notifications
+
+A cast that stops for an answer, or that ends, raises a desktop notification —
+OSC 777, which Ghostty, kitty, wezterm and foot turn into an OSD. A terminal
+that does not know the sequence drops it, and a redirected cast never sees one:
+notifications go to a tty and nowhere else.
+
+Three kinds:
+
+- `decide` — a question waiting on you: the `decide` medium's own, coding's
+  tool gate, or the agent asking mid-rite.
+- `done` — the cast finished.
+- `failed` — the cast failed, with the error in the body.
+
 ## `vekna`
 
 With no subcommand, the daemon. The first `vekna` binds

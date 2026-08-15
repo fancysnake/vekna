@@ -1,5 +1,9 @@
+import sys
 import textwrap
 
+import pytest
+
+from tests.conftest import Tty
 from vekna.lexicon import _inits
 from vekna.lexicon._inits import main
 
@@ -84,6 +88,28 @@ _BUDGET = textwrap.dedent("""
     @ritual("spinner", max_steps=2)
     async def spinner(_: NoComponents) -> Transition:
         return goto(spin, Spin())
+    """)
+
+# The ordinary way a rituals.py under development dies: not a RitualError, and
+# not the ritual saying anything about it.
+_BOOM = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import NoComponents, Transition, goto, ritual, step
+
+
+    class Bang(BaseModel):
+        pass
+
+
+    @step
+    async def blow(state: Bang) -> Transition:
+        raise ValueError("the ritual body itself raised")
+
+
+    @ritual("boom")
+    async def boom(_: NoComponents) -> Transition:
+        return goto(blow, Bang())
     """)
 
 
@@ -314,3 +340,62 @@ class TestCastConfig:
 
         assert exit_code == _USAGE_EXIT
         assert "cannot import rituals from" in capsys.readouterr().err
+
+
+# stdout as the terminal it is in real use: the notification is an escape
+# sequence written only to a tty, and pytest's capture is not one.
+def _cast_on_a_tty(argv: list[str], monkeypatch) -> Tty:
+    tty = Tty()
+    monkeypatch.setattr(sys, "stdout", tty)
+    main(argv)
+    return tty
+
+
+class TestCastNotify:
+    @staticmethod
+    def test_a_finished_cast_raises_a_notification(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
+
+        assert "\x1b]777;notify;vekna finished;countdown\x07" in tty.getvalue()
+
+    @staticmethod
+    def test_a_failed_cast_says_which_ritual_failed(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_BUDGET)
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["spinner"], monkeypatch)
+
+        assert "\x1b]777;notify;vekna failed;spinner: " in tty.getvalue()
+
+    @staticmethod
+    def test_a_step_raising_anything_else_notifies_and_keeps_the_traceback(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_BOOM)
+        monkeypatch.chdir(tmp_path)
+        tty = Tty()
+        monkeypatch.setattr(sys, "stdout", tty)
+
+        with pytest.raises(ValueError, match="the ritual body itself raised"):
+            main(["boom"])
+
+        assert (
+            "\x1b]777;notify;vekna failed;boom: the ritual body itself raised\x07"
+            in tty.getvalue()
+        )
+
+    @staticmethod
+    def test_a_redirected_cast_collects_no_escape_codes(tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        main(["countdown", "--start", "1"])
+
+        assert "\x1b]777" not in capsys.readouterr().out
