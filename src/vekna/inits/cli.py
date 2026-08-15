@@ -121,9 +121,13 @@ _rituals.add_command(_rituals_list)
 _rituals.add_command(_rituals_show)
 
 
-def _sink(debug: Path | None) -> Callable[[Routed], None] | None:
+def _nothing(_: Routed) -> None:
+    pass
+
+
+def _sink(debug: Path | None) -> Callable[[Routed], None]:
     if debug is None:
-        return None
+        return _nothing
     log = DebugLog(debug)
 
     def record(routed: Routed) -> None:

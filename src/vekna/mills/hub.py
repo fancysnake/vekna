@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterator
+from typing import assert_never
 
 from vekna.pacts.casts import Casts, CastView, RiteView
 from vekna.pacts.routing import Action, Routed, Surface
@@ -6,10 +7,15 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastUpdate,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
     GrimoireEnd,
+    LockAcquireRequested,
+    LockDenied,
+    LockGranted,
+    LockReleased,
     RiteDelta,
     RiteFinished,
     RiteStarted,
@@ -22,6 +28,12 @@ _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
 
 
+# A hub with no journal and one with a journal that does nothing behave the
+# same, so the default is the second and every use site is one straight line.
+def _quiet(_: object) -> None:
+    pass
+
+
 # The daemon's whole model of what is happening. It holds views, not frames: a
 # surface arriving late is sent a replay derived from the view, so a cast that
 # has been streaming for an hour costs one screenful to catch up on rather than
@@ -32,8 +44,8 @@ class Hub(Casts):
     def __init__(
         self,
         *,
-        on_routed: Callable[[Routed], None] | None = None,
-        on_journal: Callable[[CastMessage], None] | None = None,
+        on_routed: Callable[[Routed], None] = _quiet,
+        on_journal: Callable[[CastMessage], None] = _quiet,
     ) -> None:
         self._casts: dict[str, CastView] = {}
         self._surfaces: list[Surface] = []
@@ -68,8 +80,7 @@ class Hub(Casts):
             self._accept(message)
 
     def _accept(self, message: CastMessage) -> None:
-        if self._on_journal is not None:
-            self._on_journal(message)
+        self._on_journal(message)
         for surface in self._surfaces:
             surface.send(message)
         self._say(kind=message.kind, cast_id=message.cast_id, action="applied")
@@ -87,10 +98,9 @@ class Hub(Casts):
         action: Action,
         reason: str | None = None,
     ) -> None:
-        if self._on_routed is not None:
-            self._on_routed(
-                Routed(kind=kind, cast_id=cast_id, action=action, reason=reason)
-            )
+        self._on_routed(
+            Routed(kind=kind, cast_id=cast_id, action=action, reason=reason)
+        )
 
     # Derived, not recorded: each cast's own `CastHello` opens it, the rites
     # replay in the order they began, and every open prompt is asked again —
@@ -108,7 +118,14 @@ class Hub(Casts):
 # `view`, not `cast`, throughout: the domain word collides with `typing.cast` in
 # the repository's own debt metrics, and a view is what these actually hold.
 # Returns why the message was refused, or None once it has been applied.
-def _update(view: CastView, message: CastMessage) -> str | None:
+def _update(view: CastView, message: CastUpdate) -> str | None:
+    # Answered here rather than by a catch-all under the match: the reason is
+    # true of these four and of nothing else, and what is left over is what the
+    # match then has to cover for `assert_never` to hold.
+    if isinstance(
+        message, (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
+    ):
+        return _LOCKS_LATER
     refused: str | None = None
     match message:
         case GrimoireBegin():
@@ -125,16 +142,21 @@ def _update(view: CastView, message: CastMessage) -> str | None:
         case DecideRequested():
             view.waiting[message.request_id] = message
         case DecideResolved():
-            if view.waiting.pop(message.request_id, None) is None:
-                refused = _NO_PROMPT
+            refused = _answer(view, message)
         case CastGoodbye():
             view.status = message.status
             view.detail = message.detail
             # A cast that is gone is not still asking.
             view.waiting.clear()
         case _:
-            refused = _LOCKS_LATER
+            assert_never(message)
     return refused
+
+
+def _answer(view: CastView, message: DecideResolved) -> str | None:
+    if view.waiting.pop(message.request_id, None) is None:
+        return _NO_PROMPT
+    return None
 
 
 def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | None:

@@ -136,9 +136,11 @@ class LockReleased(BaseModel):
 # re-establishes: the daemon's hub, the journal and the debug log all take
 # `CastMessage`, and the only place a `SurfaceHello` can arrive is the handshake
 # that reads the first frame off a connection.
-CastMessage = (
-    CastHello
-    | CastGoodbye
+# A hello opens a cast and an update changes one already open, which is the
+# split the daemon acts on: it looks the cast up for an update and has nothing
+# to look up for a hello.
+CastUpdate = (
+    CastGoodbye
     | GrimoireBegin
     | GrimoireEnd
     | RiteStarted
@@ -151,6 +153,8 @@ CastMessage = (
     | LockDenied
     | LockReleased
 )
+
+CastMessage = CastHello | CastUpdate
 
 WireMessage = CastMessage | SurfaceHello
 
