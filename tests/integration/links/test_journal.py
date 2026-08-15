@@ -109,6 +109,18 @@ class TestRecording:
 
         assert journal.read("c1") is None
 
+    # The first event is the one with no record behind it yet, so there is
+    # nothing to mark and nothing to take away.
+    @staticmethod
+    def test_a_hello_that_cannot_be_written_leaves_nothing_behind(tmp_path: Path):
+        journal = Journal(tmp_path)
+        (tmp_path / "c1").write_text("where the run directory would go")
+
+        with pytest.raises(FileExistsError):
+            journal.record(_hello())
+
+        assert journal.read("c1") is None
+
     @staticmethod
     def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):
         journal = Journal(tmp_path)
