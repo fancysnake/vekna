@@ -3,12 +3,13 @@ import os
 import socket
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
 from vekna.lexicon._pacts import (
+    NotifyEvent,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -18,6 +19,19 @@ from vekna.lexicon._pacts import (
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
+_NOTIFY_BODY_MAX = 120
+_NOTIFY_TITLES: dict[NotifyEvent, str] = {
+    "decide": "vekna needs you",
+    "done": "vekna finished",
+    "failed": "vekna failed",
+}
+
+
+# The body is a prompt or an error, so arbitrary text, and the sequence ends at
+# the first BEL: an escape or a newline in there would end the notification
+# early or paint the rest of it into the terminal.
+def _one_line(text: str) -> str:
+    return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
 
 
 def default_socket_path() -> str:
@@ -63,15 +77,30 @@ class _Rite:
 # surface that *can* re-render — the TUI — wants the opposite and will say so
 # itself; that decision belongs to the sink, not here.
 class StandaloneRenderer:
-    def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        out: TextIO | None = None,
+        inp: TextIO | None = None,
+        notify_on: Iterable[NotifyEvent] = (),
+    ) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
+        self._notify_on = frozenset(notify_on)
 
     def _say(self, line: str) -> None:
         self._out.write(line)
         self._out.flush()
+
+    # OSC 777, which Ghostty turns into a desktop notification — as do kitty,
+    # wezterm and foot; a terminal that does not know the sequence drops it.
+    # Only to a tty: `vekna cast > log` must not collect escape codes.
+    def notify(self, event: NotifyEvent, body: str) -> None:
+        if event not in self._notify_on or not self._out.isatty():
+            return
+        self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
     async def _readline(self) -> str:
         return (await asyncio.to_thread(self._inp.readline)).strip()
@@ -151,6 +180,7 @@ class StandaloneRenderer:
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
+        self.notify("decide", prompt)
         if free:
             return await self._free_text(prompt)
         if options is None:

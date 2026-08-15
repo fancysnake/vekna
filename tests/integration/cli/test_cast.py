@@ -1,3 +1,5 @@
+import io
+import sys
 import textwrap
 
 from vekna.lexicon import _inits
@@ -314,3 +316,67 @@ class TestCastConfig:
 
         assert exit_code == _USAGE_EXIT
         assert "cannot import rituals from" in capsys.readouterr().err
+
+
+# stdout as the terminal it is in real use: the notification is an escape
+# sequence written only to a tty, and pytest's capture is not one.
+class _Tty(io.StringIO):
+    @staticmethod
+    def isatty() -> bool:
+        return True
+
+
+def _cast_on_a_tty(argv: list[str], monkeypatch) -> _Tty:
+    tty = _Tty()
+    monkeypatch.setattr(sys, "stdout", tty)
+    main(argv)
+    return tty
+
+
+class TestCastNotify:
+    @staticmethod
+    def test_a_finished_cast_raises_a_notification(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
+
+        assert "\x1b]777;notify;vekna finished;countdown\x07" in tty.getvalue()
+
+    @staticmethod
+    def test_a_failed_cast_says_which_ritual_failed(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_BUDGET)
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["spinner"], monkeypatch)
+
+        assert "\x1b]777;notify;vekna failed;spinner: " in tty.getvalue()
+
+    @staticmethod
+    def test_config_turns_notifications_off(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text("[notify]\non = []\n")
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
+
+        assert "\x1b]777" not in tty.getvalue()
+
+    @staticmethod
+    def test_a_project_config_silent_on_notify_leaves_the_global_one_standing(
+        tmp_path, monkeypatch
+    ):
+        global_config = tmp_path / "home" / ".config" / "vekna"
+        global_config.mkdir(parents=True)
+        (global_config / "config.toml").write_text("[notify]\non = []\n")
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text("[rituals]\nfiles = []\n")
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["countdown", "--start", "1"], monkeypatch)
+
+        assert "\x1b]777" not in tty.getvalue()

@@ -16,6 +16,8 @@ from ._mills.graph import step_graph
 from ._pacts import (
     FocusMissingError,
     NoComponents,
+    NotifyConfig,
+    NotifyEvent,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -181,6 +183,16 @@ def _build_library(cwd: Path) -> _Library:
     # the answer to where the rituals were meant to come from.
     loaded = bool(seen_files or seen_modules)
     return _Library(compendium, _no_rituals(None if loaded else discovered.near_miss))
+
+
+def _notify_events(cwd: Path) -> tuple[NotifyEvent, ...]:
+    configured = NotifyConfig()
+    for config in _config_files(cwd):
+        # A project config that says nothing about notifications leaves a
+        # global one standing; only writing `on` replaces what it chose.
+        if "on" in (found := read_config(config).notify).model_fields_set:
+            configured = found
+    return tuple(configured.on)
 
 
 def _component_options(ritual: Ritual) -> str:
@@ -356,6 +368,7 @@ async def _drive(argv: list[str]) -> int:
     _load_folios()
     try:
         the_ritual, components = _resolve_cast(argv)
+        notify_on = _notify_events(Path.cwd())
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
@@ -363,7 +376,7 @@ async def _drive(argv: list[str]) -> int:
     # attach path is already on the hot path, but nothing consumes a reachable
     # daemon yet. See docs/reborn/06-vekna-daemon.md.
     await probe_daemon(socket_path=default_socket_path())
-    renderer = StandaloneRenderer()
+    renderer = StandaloneRenderer(notify_on=notify_on)
     # Unique per cast, not per ritual: cast_id is the wire's correlation key
     # for deltas, decisions and locks, and CastHello carries the ritual name
     # in its own field.
@@ -376,11 +389,14 @@ async def _drive(argv: list[str]) -> int:
             channel=renderer,
         )
     except FocusMissingError as error:
+        renderer.notify("failed", f"{the_ritual.name}: {error}")
         sys.stderr.write(f"{error}\n")
         return 2
     except RitualError as error:
+        renderer.notify("failed", f"{the_ritual.name}: {error}")
         sys.stderr.write(f"cast failed: {error}\n")
         return 1
+    renderer.notify("done", the_ritual.name)
     sys.stdout.write(f"result: {_rendered(result)}\n")
     return 0
 

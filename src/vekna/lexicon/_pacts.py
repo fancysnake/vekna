@@ -279,8 +279,21 @@ class RitualsConfig(BaseModel):
     modules: list[str] = []
 
 
+# What a surface can raise a desktop notification for. `decide` is any question
+# that stops for a human — the flow medium's own, coding's tool gate, the
+# agent's — not a rite category; the other two are how a cast ended.
+NotifyEvent = Literal["decide", "done", "failed"]
+
+
+class NotifyConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    on: list[NotifyEvent] = ["decide", "done", "failed"]
+
+
 class Config(BaseModel):
     rituals: RitualsConfig = RitualsConfig()
+    notify: NotifyConfig = NotifyConfig()
 
 
 class StringOutput(BaseModel):

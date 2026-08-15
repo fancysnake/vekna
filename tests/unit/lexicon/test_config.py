@@ -2,7 +2,7 @@ import pytest
 
 from vekna.lexicon import RitualDefinitionError
 from vekna.lexicon._links.loader import read_config
-from vekna.lexicon._pacts import Config, RitualsConfig
+from vekna.lexicon._pacts import Config, NotifyConfig, RitualsConfig
 
 
 class TestReadConfig:
@@ -46,4 +46,30 @@ class TestReadConfig:
         config.write_text('[rituals]\nmodule = ["pkg.rites"]\n')
 
         with pytest.raises(RitualDefinitionError, match="extra"):
+            read_config(config)
+
+
+class TestNotifyConfig:
+    @staticmethod
+    def test_reads_the_events_to_notify_on(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text('[notify]\non = ["done", "failed"]\n')
+
+        assert read_config(config).notify == NotifyConfig(on=["done", "failed"])
+
+    @staticmethod
+    def test_every_event_notifies_by_default(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text('[rituals]\nfiles = ["rituals.py"]\n')
+
+        assert read_config(config).notify == NotifyConfig(
+            on=["decide", "done", "failed"]
+        )
+
+    @staticmethod
+    def test_an_unknown_event_is_an_error(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text('[notify]\non = ["finished"]\n')
+
+        with pytest.raises(RitualDefinitionError, match="finished"):
             read_config(config)

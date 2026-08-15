@@ -68,6 +68,30 @@ A `?` in place of a target means a `goto` naming a step the graph could not
 find — usually a submodule that was never swept because it is missing an
 `__init__.py`.
 
+## Notifications
+
+A cast that stops for an answer, or that ends, raises a desktop notification —
+OSC 777, which Ghostty, kitty, wezterm and foot turn into an OSD. A terminal
+that does not know the sequence drops it, and a redirected cast never sees one:
+notifications go to a tty and nowhere else.
+
+Three kinds, and a config picks which of them fire:
+
+```toml
+# .vekna.toml, or ~/.config/vekna/config.toml
+[notify]
+on = ["decide", "done", "failed"]
+```
+
+- `decide` — a question waiting on you: the `decide` medium's own, coding's
+  tool gate, or the agent asking mid-rite. The loud one, on a cast that gates
+  every tool.
+- `done` — the cast finished.
+- `failed` — the cast failed, with the error in the body.
+
+`on = []` turns them off. A project config that has no `[notify]` table leaves
+whatever the global one chose standing; writing `on` replaces it.
+
 ## `vekna`
 
 With no subcommand, prints the help.
