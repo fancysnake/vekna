@@ -372,10 +372,15 @@ def _resolve_cast(argv: list[str]) -> _Plan:
     if (prompt := _prompt_text(argv)) is not None:
         return _Plan(_prompt_ritual(prompt), NoComponents())
     name, *flags = argv
-    if name == _RESUME_FLAG:
-        if not flags:
+    # Both spellings, because `--prompt` takes both: `--resume=c1` otherwise
+    # reached the compendium and came back as "no ritual named '--resume=c1'",
+    # which names everything except what was actually wrong.
+    flag, separator, inline = name.partition("=")
+    if flag == _RESUME_FLAG:
+        wanted = [inline] if separator else flags
+        if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
-        return _resume(flags[0])
+        return _resume(wanted[0])
     the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
     return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
 

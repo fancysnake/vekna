@@ -195,6 +195,21 @@ class TestResume:
     def test_resume_needs_a_cast_id():
         assert main(["--resume"]) == _USAGE_EXIT
 
+    # `--prompt` takes both spellings, and a `--resume=` that landed in the
+    # compendium reported that no ritual was named that.
+    @staticmethod
+    def test_the_cast_id_can_be_written_inline(project: Path, tmp_path: Path):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+
+        assert main([f"--resume={cast_id}"]) == 0
+
+        assert (project / "ran.log").read_text() == "from-the-journal\nran-0\n"
+
+    @staticmethod
+    @pytest.mark.usefixtures("project")
+    def test_an_inline_cast_id_that_is_empty_is_usage():
+        assert main(["--resume="]) == _USAGE_EXIT
+
 
 class TestResumeCommand:
     @staticmethod

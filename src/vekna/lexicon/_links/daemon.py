@@ -65,10 +65,17 @@ class DaemonLink:
         if (writer := self._writer) is not None:
             writer.write(encode_frame(message))
 
+    # Asked again once the connection is up, because `close` can run while this
+    # is waiting for it: a cast that ended mid-connect would otherwise leave a
+    # socket the daemon never hears a goodbye on, and hold it open until the
+    # process exits.
     async def attach(self, *, backlog: Sequence[WireMessage] = ()) -> bool:
         try:
             reader, writer = await asyncio.open_unix_connection(str(self._path))
         except OSError:
+            return False
+        if self._closed:
+            await self._shut(writer)
             return False
         self._writer = writer
         # Every (re)attach replays the whole cast, bracketed — the daemon wipes
@@ -102,6 +109,11 @@ class DaemonLink:
         self, *, status: Literal["ok", "error"], detail: str | None = None
     ) -> None:
         self._closed = True
+        if (watcher := self._watcher) is not None:
+            # It is waiting on an EOF that is not coming: this end is the one
+            # ending, and the read would outlive the cast that started it.
+            watcher.cancel()
+            self._watcher = None
         if self._writer is None:
             return
         self.send(

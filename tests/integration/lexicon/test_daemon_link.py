@@ -39,6 +39,16 @@ async def _settle() -> None:
         await asyncio.sleep(0)
 
 
+# The link's read of the socket, which is the task a closed link must not leave
+# behind: it waits on an EOF that the daemon has no reason to send.
+def _watchers() -> list[asyncio.Task[None]]:
+    return [
+        task
+        for task in asyncio.all_tasks()
+        if task.get_coro().__qualname__.endswith("_watch")
+    ]
+
+
 class _Daemon:
     def __init__(self) -> None:
         self.hub = Hub()
@@ -178,6 +188,39 @@ class TestAttaching:
 
         await asyncio.wait_for(probing, timeout=1)
         assert probing.done()
+
+    # `close` can land while the probe is inside `attach`, and a link that
+    # attached after its own goodbye holds a socket the daemon never hears
+    # anything more on.
+    @staticmethod
+    async def test_a_link_that_has_closed_does_not_attach(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.close(status="ok")
+
+        attached = await link.attach()
+        await _settle()
+
+        assert not attached
+        assert not link.attached
+        assert not daemon.hub.casts
+        await daemon.stop()
+
+    @staticmethod
+    async def test_closing_takes_the_watcher_with_it(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        await _settle()
+        assert _watchers()
+
+        await link.close(status="ok")
+        await _settle()
+
+        assert not _watchers()
+        await daemon.stop()
 
     @staticmethod
     async def test_a_reattach_replaces_what_the_daemon_held(socket_path: Path):
