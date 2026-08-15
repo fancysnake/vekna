@@ -199,6 +199,25 @@ class TestUncleanExits:
         await server.close()
 
     @staticmethod
+    async def test_a_cast_saying_hello_as_a_surface_is_still_a_cast(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_hello()))
+        writer.write(encode_frame(SurfaceHello()))
+        writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
+        await writer.drain()
+        await _eventually(lambda: len(daemon.messages) == _TWO)
+
+        assert [message.kind for message in daemon.messages] == [
+            "cast_hello",
+            "rite_delta",
+        ]
+        assert not daemon.attached
+        writer.close()
+        await server.close()
+
+    @staticmethod
     async def test_an_os_error_out_of_the_read_loop_is_a_goodbye(socket_path: Path):
         daemon = _Daemon()
 

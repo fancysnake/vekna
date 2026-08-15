@@ -30,7 +30,11 @@ _NO_PROMPT = "no such prompt"
 
 # A hub with no journal and one with a journal that does nothing behave the
 # same, so the default is the second and every use site is one straight line.
-def _quiet(_: object) -> None:
+def _unrouted(_: Routed) -> None:
+    pass
+
+
+def _unjournalled(_: CastMessage) -> None:
     pass
 
 
@@ -44,8 +48,8 @@ class Hub(Casts):
     def __init__(
         self,
         *,
-        on_routed: Callable[[Routed], None] = _quiet,
-        on_journal: Callable[[CastMessage], None] = _quiet,
+        on_routed: Callable[[Routed], None] = _unrouted,
+        on_journal: Callable[[CastMessage], None] = _unjournalled,
     ) -> None:
         self._casts: dict[str, CastView] = {}
         self._surfaces: list[Surface] = []
