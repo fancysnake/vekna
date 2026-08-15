@@ -241,12 +241,12 @@ class TestDebug:
         await _eventually(socket_path.exists)
 
         writer = await _say(
-            socket_path,
-            _hello(),
-            _started(),
-            CastGoodbye(cast_id="c1", status="ok"),
-            _started("gone"),
+            socket_path, _hello(), _started(), CastGoodbye(cast_id="c1", status="ok")
         )
+        # Its own connection, because a rite for a cast this daemon never met is
+        # only reachable as an opening frame — a connection that has said which
+        # cast it is cannot then speak for another one.
+        stray = await _say(socket_path, _started("gone"))
         await _eventually(lambda: log.is_file() and "no such cast" in log.read_text())
         keys.press("q")
 
@@ -256,6 +256,7 @@ class TestDebug:
         assert "gone rite_started dropped (no such cast)" in written
         assert keys.painted(f"logging every event to {log}")
         writer.close()
+        stray.close()
 
     @staticmethod
     async def test_without_the_flag_nothing_is_written(socket_path: Path, tmp_path):

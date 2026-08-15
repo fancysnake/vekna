@@ -61,11 +61,19 @@ class TestWhatReplays:
 
     # Recorded-nothing and recorded-a-null are the same answer from `take`, so a
     # rite held with no result would run again while the ledger stayed unspent.
+    # The second `take` is what proves that: a ledger that had simply been empty
+    # would answer `None` to the first call too.
     @staticmethod
     def test_a_medium_that_recorded_nothing_is_not_replayed():
-        ledger = _ledger(_started("r1", name="shell"), _finished("r1"))
+        ledger = _ledger(
+            _started("r1", name="shell"),
+            _finished("r1"),
+            _started("r2", name="coding"),
+            _finished("r2", result={"text": "done"}),
+        )
 
         assert ledger.take(rite_id="r1", name="shell") is None
+        assert ledger.take(rite_id="r2", name="coding") is None
 
     @staticmethod
     def test_a_rite_that_failed_is_not_replayed():

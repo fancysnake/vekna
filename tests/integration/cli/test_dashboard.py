@@ -84,3 +84,35 @@ class TestLoops:
 
         assert dashboard.stopped
         assert keys.frames
+
+    # A peer's reader hitting a frame it cannot decode is this: the task dies
+    # and sets nothing, so without the watch the view waits for a stop that is
+    # never coming.
+    @staticmethod
+    async def test_run_ends_when_a_task_beside_it_fails():
+        dashboard, keys = _dashboard()
+
+        async def breaks() -> None:
+            await asyncio.sleep(0)
+            msg = "no such kind"
+            raise ValueError(msg)
+
+        await asyncio.wait_for(
+            dashboard.run(alongside=[asyncio.create_task(breaks())]), timeout=2
+        )
+
+        assert dashboard.stopped
+        assert any("no such kind" in frame for frame in keys.frames)
+
+    # Nobody is typing, which is not a failure: the daemon still has casts to
+    # serve, and the view is still worth painting.
+    @staticmethod
+    async def test_a_task_that_ends_on_its_own_does_not_stop_the_view():
+        dashboard, _ = _dashboard()
+        running = asyncio.create_task(dashboard.run())
+        await asyncio.sleep(0)
+
+        assert not dashboard.stopped
+
+        dashboard.stop()
+        await asyncio.wait_for(running, timeout=2)

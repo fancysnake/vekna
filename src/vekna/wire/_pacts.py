@@ -168,10 +168,16 @@ WireMessage = CastMessage | SurfaceHello
 CastStatus = Literal["running", "ok", "error", "disconnected"]
 
 
+# `gapped` is what a resume has to know that the event log cannot say for
+# itself: an append the daemon could not make leaves a hole a reader cannot see,
+# because a log missing a rite reads exactly like a log that never had one. A
+# cast resumed across that hole re-runs the medium whose result fell in it —
+# the shell command, the agent call — so the answer is to refuse instead.
 class RunRecord(BaseModel):
     hello: CastHello
     status: CastStatus = "running"
     detail: str | None = None
+    gapped: bool = False
 
 
 # --- framing ---

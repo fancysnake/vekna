@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from vekna.links.debug_log import DebugLog
 
 
@@ -17,12 +19,21 @@ class TestWriting:
             "second",
         ]
 
+    # A log that cannot be written must not end the cast being logged, but an
+    # operator watching a file that stopped growing has no way to tell that from
+    # a daemon with nothing to say. Once, then never again.
     @staticmethod
-    def test_a_log_that_cannot_be_written_is_not_an_error(tmp_path: Path):
+    def test_a_log_that_cannot_be_written_says_so_once(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
         path = tmp_path / "debug.log"
         log = DebugLog(path)
         path.mkdir()
 
         log.write("into a directory")
+        log.write("and again")
 
         assert path.is_dir()
+        said = capsys.readouterr().err.splitlines()
+        assert len(said) == 1
+        assert str(path) in said[0]

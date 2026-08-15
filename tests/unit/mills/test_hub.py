@@ -28,6 +28,16 @@ class _Surface(Surface):
         self.sent.append(message)
 
 
+# A viewer whose socket has closed under it: the write is what finds out.
+class _Gone(Surface):
+    def __init__(self) -> None:
+        self.tried: list[WireMessage] = []
+
+    def send(self, message: WireMessage) -> None:
+        self.tried.append(message)
+        raise BrokenPipeError(32, "Broken pipe")
+
+
 def _hello(cast_id: str = "c1") -> CastHello:
     return CastHello(
         cast_id=cast_id,
@@ -225,6 +235,24 @@ class TestFanOut:
 
         assert surface.sent == [_hello()]
         assert seen[-2].reason == "not journaled: [Errno 28] No space left on device"
+        assert seen[-1].action == "applied"
+
+    @staticmethod
+    def test_a_surface_that_has_gone_is_dropped_and_the_rest_are_sent_to():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+        gone, healthy = _Gone(), _Surface()
+        hub.attach_surface(gone)
+        hub.attach_surface(healthy)
+
+        hub.apply(_hello())
+        hub.apply(_started())
+
+        assert healthy.sent == [_hello(), _started()]
+        assert gone.tried == [_hello()]
+        assert [line.reason for line in seen if line.reason is not None] == [
+            "surface gone: [Errno 32] Broken pipe"
+        ]
         assert seen[-1].action == "applied"
 
     @staticmethod

@@ -34,11 +34,21 @@ lands on top of this at [0.7.0](05-locks.md).
   already records every event for replay. A standalone cast writes none: the
   durable half is the daemon's, and a second writer would be a second format to
   keep right.
+
+  A write that fails — a full disk, an unwritable directory — does not end the
+  cast producing it. The cast did nothing about the daemon's disk and can do
+  nothing about it, and killing its connection over one would be the daemon
+  reporting its own fault as the cast's. The failure is reported through
+  `--debug` and the run is marked `gapped` in `run.json`, which is what makes
+  the journal's durability a claim about complete runs rather than about every
+  run.
 - **Resume** — `vekna casts resume <cast_id>` spawns a fresh cast process and
   hands it the journal; it replays completed rite state, re-enters the current
   rite. Always-fresh process (no pooling). Medium rites come back from the
   journal, so no agent is called twice; step rites re-run, a `Transition` being
-  a function reference no journal can hold.
+  a function reference no journal can hold. A run marked `gapped` is refused
+  rather than resumed: the rite whose result fell in the hole would run a second
+  time, and so would everything after it.
 - **Attention surfacing** across casts — a cast blocked on a `decide` is
   raised to the operator wherever they are looking. The idea vekna started
   with, expressed in casts and rites rather than tmux panes.

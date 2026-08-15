@@ -16,6 +16,7 @@ from vekna.wire import (
 _SOCKET_MODE = 0o600
 _CONNECT_SECONDS = 2.0
 _GONE = "socket closed without a goodbye"
+_NOT_ITS_OWN = "sent a frame for cast"
 
 
 # Writes are buffered, never awaited: a surface that has stopped reading must
@@ -182,29 +183,54 @@ async def _as_surface(
 # A frame this daemon cannot read, and a connection lost mid-frame, both end
 # this one connection and say so in that goodbye: killing the daemon over
 # either would take every other cast down with it.
+# Whose cast this is was settled by the opening frame, so a frame naming another
+# one is not routed: it would otherwise let any process on this account write
+# into a cast it is not — and a `CastGoodbye` for somebody else would count as
+# this connection's own, leaving the cast that did open it running forever.
 async def _as_cast(
     opened: CastMessage,
     frames: AsyncIterator[WireMessage],
     *,
     on_message: Callable[[CastMessage], None],
 ) -> None:
+    said_goodbye = isinstance(opened, CastGoodbye)
+
+    # Noted on the way past rather than read back off the loop, because reading
+    # is what raises: a cast that said goodbye and then lost its socket must not
+    # be told it disconnected on top of the ending it gave itself.
+    def heard(message: CastMessage) -> None:
+        nonlocal said_goodbye
+        on_message(message)
+        said_goodbye = isinstance(message, CastGoodbye)
+
     detail = _GONE
-    last: WireMessage = opened
     try:
-        on_message(opened)
-        async for message in frames:
-            if isinstance(message, SurfaceHello):
-                continue
-            on_message(message)
-            last = message
+        heard(opened)
+        detail = await _reading(opened, frames, on_message=heard)
     except ValueError as error:
         detail = f"unreadable frame: {error}"
     except OSError as error:
         detail = f"connection lost: {error}"
     finally:
-        if not isinstance(last, CastGoodbye):
+        if not said_goodbye:
             on_message(
                 CastGoodbye(
                     cast_id=opened.cast_id, status="disconnected", detail=detail
                 )
             )
+
+
+# Why the reading ended, for the goodbye above to carry.
+async def _reading(
+    opened: CastMessage,
+    frames: AsyncIterator[WireMessage],
+    *,
+    on_message: Callable[[CastMessage], None],
+) -> str:
+    async for message in frames:
+        if isinstance(message, SurfaceHello):
+            continue
+        if message.cast_id != opened.cast_id:
+            return f"{_NOT_ITS_OWN} {message.cast_id!r}"
+        on_message(message)
+    return _GONE

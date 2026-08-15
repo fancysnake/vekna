@@ -1,3 +1,4 @@
+import contextlib
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -30,14 +31,35 @@ class Journal:
         self._root = root
 
     def record(self, message: CastMessage) -> None:
-        log = events_log(self._root, message.cast_id)
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with log.open("ab") as events:
-            events.write(encode_frame(message))
+        try:
+            self._append(message)
+        except OSError:
+            # Marked before the caller hears about it, because what is on disk
+            # is now a log with a hole in it and nothing in the log says so.
+            # Best effort by nature: the write that would record the gap is the
+            # same kind of write that just failed. The raise still goes on, so
+            # the daemon reports the failure rather than swallowing it here.
+            self._mark_gapped(message.cast_id)
+            raise
         if isinstance(message, CastHello):
             self._write(RunRecord(hello=message))
         elif isinstance(message, CastGoodbye):
             self._close(message)
+
+    def _append(self, message: CastMessage) -> None:
+        log = events_log(self._root, message.cast_id)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("ab") as events:
+            events.write(encode_frame(message))
+
+    # Read back and written on rather than rebuilt field by field: what `read`
+    # hands over is parsed fresh off the disk each time, so it is nobody else's
+    # to hold, and a field added to `RunRecord` needs nothing said here.
+    def _mark_gapped(self, cast_id: str) -> None:
+        with contextlib.suppress(OSError):
+            if (record := self.read(cast_id)) is not None:
+                record.gapped = True
+                self._write(record)
 
     # A record that will not parse is one the daemon was killed halfway through
     # writing. Skipped rather than raised, because the command that reads these
@@ -99,6 +121,6 @@ class Journal:
     def _close(self, goodbye: CastGoodbye) -> None:
         if (record := self.read(goodbye.cast_id)) is None:
             return
-        self._write(
-            RunRecord(hello=record.hello, status=goodbye.status, detail=goodbye.detail)
-        )
+        record.status = goodbye.status
+        record.detail = goodbye.detail
+        self._write(record)

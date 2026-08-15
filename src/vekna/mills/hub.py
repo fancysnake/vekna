@@ -85,8 +85,7 @@ class Hub(Casts):
 
     def _accept(self, message: CastMessage) -> None:
         self._journal(message)
-        for surface in self._surfaces:
-            surface.send(message)
+        self._fan_out(message)
         self._say(kind=message.kind, cast_id=message.cast_id, action="applied")
 
     # A disk that is full is the daemon's problem and not the cast's. The
@@ -98,6 +97,19 @@ class Hub(Casts):
             self._on_journal(message)
         except OSError as error:
             self._drop(message, reason=f"not journaled: {error}")
+
+    # The same rule one layer over: a viewer that has gone is the daemon's
+    # problem, and the cast writing when it went must not be the one that pays.
+    # The dead surface is dropped rather than tried again on the next event —
+    # its socket is not coming back, and the detach it never got to send is
+    # exactly what this stands in for.
+    def _fan_out(self, message: CastMessage) -> None:
+        for surface in list(self._surfaces):
+            try:
+                surface.send(message)
+            except OSError as error:
+                self.detach_surface(surface)
+                self._drop(message, reason=f"surface gone: {error}")
 
     def _drop(self, message: CastMessage, *, reason: str) -> None:
         self._say(

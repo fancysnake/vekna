@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from vekna.links.journal import Journal
 from vekna.wire import CastGoodbye, CastHello, RiteDelta
 
@@ -48,6 +50,37 @@ class TestRecording:
         assert record is not None
         assert record.status == "disconnected"
         assert record.detail == "eof"
+
+    # The log now has a hole nothing in the log can show, so the record is where
+    # it gets said. The raise goes on, because the daemon reports the failure.
+    @staticmethod
+    def test_an_append_that_fails_marks_the_run_gapped(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        (tmp_path / "c1" / "events.jsonl").chmod(0o400)
+
+        with pytest.raises(OSError, match="Permission denied"):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.gapped
+
+    @staticmethod
+    def test_a_gap_survives_the_goodbye_that_closes_the_run(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        (tmp_path / "c1" / "events.jsonl").chmod(0o400)
+        with pytest.raises(OSError, match="Permission denied"):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        (tmp_path / "c1" / "events.jsonl").chmod(0o600)
+
+        journal.record(CastGoodbye(cast_id="c1", status="ok"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.status == "ok"
+        assert record.gapped
 
     @staticmethod
     def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):

@@ -13,6 +13,7 @@ _COALESCE_SECONDS = 0.1
 _QUIT = frozenset({"q", "quit"})
 _BACK = frozenset({"b", "back"})
 _KEYS = "a number, b, or q"
+_BROKE = "the view stopped"
 
 
 # What the operator does with the view, and nothing about where the events came
@@ -53,12 +54,19 @@ class Dashboard:
     # them — a peer's socket reader, say. Here rather than in the composition
     # root, which would otherwise have to know the assembly order to start a
     # dashboard at all.
+    # A task that dies sets nothing, so every one of these is watched: a peer
+    # whose reader hit a frame it could not decode would otherwise leave the
+    # view sitting on a picture nobody will ever change again, with no way out
+    # but a signal. Ending normally is not a failure — `typing` returns when
+    # there is no stdin to read, and the daemon still has casts to serve.
     async def run(self, *, alongside: Sequence[asyncio.Task[None]] = ()) -> None:
         tasks = [
             asyncio.create_task(self.painting()),
             asyncio.create_task(self.typing()),
             *alongside,
         ]
+        for task in tasks:
+            task.add_done_callback(self._ended)
         try:
             await self.wait()
         finally:
@@ -69,6 +77,10 @@ class Dashboard:
             # into this frame, which is both shorter and the only form
             # `coverage` keeps tracing through (see TODO.md).
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _ended(self, task: asyncio.Task[None]) -> None:
+        if not task.cancelled() and (error := task.exception()) is not None:
+            self.stop(note=f"{_BROKE}: {error!r}")
 
     async def painting(self) -> None:
         for _ in self._until_done():

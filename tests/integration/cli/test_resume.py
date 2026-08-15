@@ -1,3 +1,4 @@
+import shutil
 import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from vekna.wire import (
     CastHello,
     RiteFinished,
     RiteStarted,
+    RunRecord,
     default_runs_root,
     encode_frame,
 )
@@ -225,6 +227,21 @@ class TestResumeCommand:
         assert result.exit_code == 1
         assert "no cast 'nope' in the journal" in result.output
 
+    # The directory is the record's, not this shell's, so a project moved or
+    # deleted between the two casts is the likeliest thing to have changed.
+    @staticmethod
+    def test_it_refuses_a_project_that_is_not_there_any_more(
+        project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        monkeypatch.chdir(tmp_path)
+        shutil.rmtree(project)
+
+        result = CliRunner().invoke(init_command(), ["casts", "resume", cast_id])
+
+        assert result.exit_code == 1
+        assert f"{project} is not there any more" in result.output
+
     # The whole way round: a real process, in the recorded directory.
     @staticmethod
     def test_it_spawns_a_cast_in_the_directory_the_first_one_ran_in(
@@ -321,3 +338,21 @@ class TestFramesOnDisk:
         assert main(["--resume", cast_id]) == _USAGE_EXIT
 
         assert "events.jsonl cannot be read" in capsys.readouterr().err
+
+    # The hole the reader cannot see for itself. Resuming across it would run
+    # the medium whose result fell in it a second time, so it is refused.
+    @staticmethod
+    def test_a_gapped_journal_is_refused(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        run = tmp_path / "runs" / cast_id / "run.json"
+        run.write_text(
+            RunRecord.model_validate_json(run.read_text())
+            .model_copy(update={"gapped": True})
+            .model_dump_json()
+        )
+
+        assert main(["--resume", cast_id]) == _USAGE_EXIT
+
+        assert "could not write part of" in capsys.readouterr().err

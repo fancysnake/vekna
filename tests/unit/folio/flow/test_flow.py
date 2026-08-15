@@ -3,13 +3,14 @@ import io
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from tests.conftest import entry, journalled
 from vekna.folio.flow import decide
 from vekna.lexicon import RitualError, Transition, done, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
+from vekna.lexicon._pacts import Ritual
 
 
 def _fixed_clock() -> datetime:
@@ -69,12 +70,36 @@ async def choose(_state: State) -> Transition:
 picker = entry(name="picker", target=choose, payload=State())
 
 
-def _resumed(recorded: str) -> object:
+class Verdict(BaseModel):
+    agreed: bool
+
+
+@step
+async def confirm(_state: State) -> Transition:
+    return done(Verdict(agreed=await decide("ok?")))
+
+
+confirmer = entry(name="confirmer", target=confirm, payload=State())
+
+
+class Note(BaseModel):
+    text: str
+
+
+@step
+async def jot(_state: State) -> Transition:
+    return done(Note(text=await decide("note?", free=True)))
+
+
+jotter = entry(name="jotter", target=jot, payload=State())
+
+
+def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
     grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
     return asyncio.run(
         run_cast(
-            ritual=picker,
-            components=picker.components(),
+            ritual=ritual,
+            components=ritual.components(),
             grimoire=grimoire,
             channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
             ledger=journalled(recorded, name="decide"),
@@ -95,3 +120,27 @@ class TestResumedDecisions:
     def test_an_answer_outside_the_options_is_refused():
         with pytest.raises(RitualError, match="'ignore' is not one of: fix, file"):
             _resumed("ignore")
+
+    @staticmethod
+    def test_a_bare_decision_comes_back_as_the_truth_it_was_recorded_as():
+        assert _resumed("yes", confirmer) == Verdict(agreed=True)
+
+    # A bare `decide` is read for truth, so anything but yes or no would come
+    # back `False` — a recorded yes answered as a no with nothing to show for
+    # it. This is the one refusal that stops a wrong answer rather than a
+    # missing one.
+    @staticmethod
+    def test_a_bare_decision_recorded_as_neither_is_refused():
+        with pytest.raises(RitualError, match="'maybe' is not one of: yes, no"):
+            _resumed("maybe", confirmer)
+
+    # Free text is the case with nothing to check against: whatever was typed
+    # is the answer, and "maybe" is a perfectly good one.
+    @staticmethod
+    def test_free_text_is_taken_as_it_was_recorded():
+        assert _resumed("maybe", jotter) == Note(text="maybe")
+
+    @staticmethod
+    def test_an_answer_that_is_not_text_is_refused():
+        with pytest.raises(RitualError, match="answer 3 is not text"):
+            _resumed(3, jotter)

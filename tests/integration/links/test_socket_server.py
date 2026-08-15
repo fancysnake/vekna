@@ -245,6 +245,26 @@ class TestUncleanExits:
         await server.close()
 
     @staticmethod
+    async def test_a_frame_for_another_cast_ends_the_connection(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_hello()))
+        writer.write(encode_frame(CastGoodbye(cast_id="c2", status="ok")))
+        await writer.drain()
+        await _eventually(lambda: _said_goodbye(daemon))
+
+        goodbye = daemon.messages[-1]
+
+        assert isinstance(goodbye, CastGoodbye)
+        assert goodbye.cast_id == "c1"
+        assert goodbye.status == "disconnected"
+        assert goodbye.detail == "sent a frame for cast 'c2'"
+        assert daemon.messages == [_hello(), goodbye]
+        writer.close()
+        await server.close()
+
+    @staticmethod
     async def test_an_unreadable_frame_ends_one_connection_and_says_why(
         socket_path: Path,
     ):
