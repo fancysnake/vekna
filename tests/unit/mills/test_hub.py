@@ -1,4 +1,9 @@
 from datetime import UTC, datetime
+from typing import Literal
+from typing import cast as as_type
+
+import pytest
+from pydantic import BaseModel
 
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Surface
@@ -36,6 +41,13 @@ class _Gone(Surface):
     def send(self, message: WireMessage) -> None:
         self.tried.append(message)
         raise BrokenPipeError(32, "Broken pipe")
+
+
+# A wire type the hub was never taught — what a message added to the protocol
+# and not to the match would look like arriving here.
+class _Unknown(BaseModel):
+    kind: Literal["unknown"] = "unknown"
+    cast_id: str
 
 
 def _hello(cast_id: str = "c1") -> CastHello:
@@ -190,6 +202,19 @@ class TestDrops:
 
         assert seen[-1].action == "dropped"
         assert seen[-1].reason == "no such prompt"
+
+    @staticmethod
+    def test_a_message_the_hub_cannot_read_is_not_silently_applied():
+        hub = Hub()
+        hub.apply(_hello())
+        surface = _Surface()
+        hub.attach_surface(surface)
+        surface.sent.clear()
+
+        with pytest.raises(AssertionError):
+            hub.apply(as_type("CastMessage", _Unknown(cast_id="c1")))
+
+        assert not surface.sent
 
     @staticmethod
     def test_a_lock_message_says_when_it_will_mean_something():
