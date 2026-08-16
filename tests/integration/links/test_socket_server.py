@@ -28,6 +28,7 @@ _PATIENCE = 200
 _TICK = 0.01
 _TWO = 2
 _PERMISSION_BITS = 0o777
+_PAST_DEFAULT = 128 * 1024
 
 
 def _hello() -> CastHello:
@@ -101,6 +102,24 @@ class TestServing:
             "cast_hello",
             "rite_delta",
         ]
+        await server.close()
+
+    # A shell medium's result is everything the command printed, so a `git diff`
+    # arrives as one frame past asyncio's 64KiB stream default.
+    @staticmethod
+    async def test_a_frame_past_the_stream_default_is_heard(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        big = RiteDelta(cast_id="c1", rite_id="r1", delta="x" * _PAST_DEFAULT)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_hello()))
+        writer.write(encode_frame(big))
+        await writer.drain()
+        await _eventually(lambda: len(daemon.messages) == _TWO)
+
+        assert daemon.messages == [_hello(), big]
+        writer.close()
         await server.close()
 
     @staticmethod
