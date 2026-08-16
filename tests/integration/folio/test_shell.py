@@ -22,6 +22,8 @@ from vekna.lexicon._pacts import RiteStreamed, Ritual
 _FAILURE_EXIT = 3
 # Comfortably past the 1 MiB readline limit that used to crash the cast here.
 _LONG_LINE = 2_000_000
+# The ↳ that opens a rite and the ✓ that closes it, both quoting the command.
+_RITE_LINES = 2
 
 
 class State(BaseModel):
@@ -194,7 +196,10 @@ class TestShellStreaming:
         result, grimoire, out = _run(quiet)
 
         assert not _deltas(grimoire)
-        assert "hush" not in out.getvalue()
+        # Counted, not matched: the command is quoted in the rite's own two
+        # lines, so what has to stay off the surface is the *output* — and here
+        # the two are the same word. The tree's format is the renderer's test.
+        assert out.getvalue().count("hush") == _RITE_LINES
         assert result.stdout.strip() == "hush"
 
     @staticmethod
@@ -202,7 +207,7 @@ class TestShellStreaming:
         result, grimoire, out = _run(quiet_partial)
 
         assert not _deltas(grimoire)
-        assert "hushed" not in out.getvalue()
+        assert out.getvalue().count("hushed") == _RITE_LINES
         assert result.stdout == "hushed"
 
 

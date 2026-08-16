@@ -60,6 +60,12 @@ which links back to the version here that carried each shipped feature.
   The daemon is the one place every message passes, so it is the one place worth
   instrumenting — and it writes to a file rather than to the view it would
   otherwise paint over.
+- **A rite says what it is doing.** A tree of `↳ shell` lines named the medium
+  and nothing about the call; a `RiteBegan` now carries a `summary` — the
+  medium's first argument when it is a string, whitespace collapsed and cut to
+  60 characters — and the standalone surface prints it after the name on the lines
+  that open and close the rite, where two gates running at once are told apart
+  by their commands rather than by guesswork. One line per rite, as before.
 - **A cast says it to the desktop when it stops for you or ends.** OSC 777,
   which Ghostty, kitty, wezterm and foot turn into an OSD; a terminal that does
   not know the sequence drops it. Three kinds, and no configuration to pick

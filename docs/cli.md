@@ -28,8 +28,28 @@ vekna cast --continue 6f1c2a9e     # vekna carries a cast on
 vekna cast release --continue      # the release ritual's own flag
 ```
 
-Output streams live as a tree of rites. The last line is the result as JSON,
-or `null` for a ritual that finishes without one.
+Output streams live as a tree of rites — one node per step, one nested under it
+per medium call, with the call's own output indented beneath:
+
+```text
+▶ gates
+  ↳ shell  mise run lint:py
+  ↳ shell  echo hi; sleep 1; echo bye
+    All checks passed!
+  ✓ shell  mise run lint:py
+    hi
+    bye
+  ✓ shell  echo hi; sleep 1; echo bye
+✓ gates
+result: {"green":true}
+```
+
+A medium's line quotes its first argument when that is a string, whitespace
+collapsed and cut to 60 characters, on the line that opens the rite and the one
+that closes it.
+
+The last line is the result as JSON, or `null` for a ritual that finishes
+without one.
 
 Exit codes: `0` cast finished, `1` cast failed, `2` the arguments or the ritual
 source were wrong.

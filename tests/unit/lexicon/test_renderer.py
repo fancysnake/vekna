@@ -51,6 +51,17 @@ class TestRender:
         assert "  one\n  two\n" in out.getvalue()
 
     @staticmethod
+    def test_a_summary_rides_the_lines_that_open_and_close_the_rite():
+        renderer, out = _renderer("")
+
+        renderer.render(_began("r2", parent="r1", summary="mise run lint:py"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == (
+            "  ↳ shell  mise run lint:py\n  ✓ shell  mise run lint:py\n"
+        )
+
+    @staticmethod
     def test_marks_a_failed_rite_and_names_an_unseen_one_by_id():
         renderer, out = _renderer("")
         ended = RiteEnded(
@@ -66,7 +77,11 @@ class TestRender:
 
 
 def _began(
-    rite_id: str, *, parent: str | None = None, name: str = "shell"
+    rite_id: str,
+    *,
+    parent: str | None = None,
+    name: str = "shell",
+    summary: str | None = None,
 ) -> RiteBegan:
     return RiteBegan(
         rite_id=rite_id,
@@ -74,6 +89,7 @@ def _began(
         name=name,
         category="medium" if parent else "step",
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        summary=summary,
     )
 
 
