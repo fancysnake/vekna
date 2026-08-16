@@ -202,6 +202,12 @@ Three ship. Each opens a rite of its own in the grimoire, so the tree shows what
 actually happened. **Mediums may only be called inside a running cast** — inside
 a step body, or inside a medium a step called.
 
+A rite is one line: the medium's first argument when it is a string —
+a `shell`'s command, a prompt's opening — whitespace collapsed and cut to 60
+characters. Declaration order, not call order, so keywords may be written in
+any order. That is all the operator sees of the call, so **open a prompt
+constant with a line that names the job.**
+
 ### `shell` — deterministic work
 
 ```python

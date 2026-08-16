@@ -38,6 +38,20 @@ _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 # nothing about the return, so the call side names it here.
 _Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
 
+_SUMMARY_WIDTH = 60
+
+
+# One line, cut to fit, of what the call was actually given. Cut here rather
+# than at the surface: `summary` is what the journal keeps, and a 5KB prompt
+# under that name is not a summary. Not `textwrap.shorten`, which drops a token
+# longer than the width entirely — a no-space command or URL would summarize to
+# a bare `…`.
+def _cut(text: str) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= _SUMMARY_WIDTH:
+        return collapsed
+    return collapsed[: _SUMMARY_WIDTH - 1] + "…"
+
 
 # Signature-forwarding via ParamSpec is str-tainted the same way the rest of
 # this module is, so `medium` stays here rather than next to `medium_rite` in
@@ -55,11 +69,21 @@ def medium(
     # Once, at decoration time: a signature rebuilt per call would put a
     # reflection cost on every medium a cast reaches.
     signature = inspect.signature(func)
+    head = next(iter(signature.parameters), "")
 
     async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
+        # What a rite's line says the call is *doing*: the medium's first
+        # argument — a shell's command, an agent's prompt. The declared first
+        # parameter, not the first string the caller happened to write:
+        # `shell(cwd=..., command=...)` is legal, and kwargs keep call-site
+        # order, so scanning would summarize the cwd. Named through `head` so a
+        # keyword-only first parameter — `pick(*, prompt, options)` — reads the
+        # same as a positional one.
+        first = args[0] if args else kwargs.get(head)
+        summary = _cut(first) if isinstance(first, str) and first.strip() else None
         # Inside the rite, not before it: the call is what failed, so the rite
         # that names the medium is where the failure belongs.
-        async with medium_rite(name):
+        async with medium_rite(name, summary=summary):
             try:
                 signature.bind(*args, **kwargs)
             except TypeError as error:
