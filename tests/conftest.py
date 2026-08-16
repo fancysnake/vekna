@@ -1,7 +1,9 @@
 import io
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
+import pytest
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon import NoComponents, Transition, goto, ritual
@@ -10,6 +12,17 @@ from vekna.lexicon._pacts import Resumption, Ritual, Step
 from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+# A cast with nothing said to it dials `$XDG_RUNTIME_DIR/vekna.sock` and writes
+# to `~/.config/vekna/runs`, which is the operator's own daemon and the
+# operator's own journal: a suite run beside a live `vekna` fills their
+# dashboard with test casts. Every test gets its own instead — one that is
+# *about* the default path unsets these itself.
+@pytest.fixture(autouse=True)
+def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("VEKNA_SOCKET", str(tmp_path / "vekna.sock"))
+    monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
 
 
 # A notification is an escape sequence written only to a tty, and neither
