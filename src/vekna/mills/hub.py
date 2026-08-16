@@ -215,7 +215,7 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
 
 
 # A cast that ended before this surface arrived still shows, and shows how it
-# ended — `vekna casts` lists recent casts, and the daemon has not forgotten
+# ended — `vekna log` lists recent casts, and the daemon has not forgotten
 # this one yet.
 def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
     if (status := view.status) != "running":

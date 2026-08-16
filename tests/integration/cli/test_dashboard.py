@@ -1,10 +1,12 @@
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
+from vekna.wire import CastGoodbye, CastHello
 
 
 class _Keys(Screen):
@@ -24,6 +26,34 @@ class _Keys(Screen):
 def _dashboard(*typed: str) -> tuple[Dashboard, _Keys]:
     keys = _Keys(*typed)
     return Dashboard(casts=Hub(), screen=keys), keys
+
+
+def _hello(cast_id: str, ritual: str) -> CastHello:
+    return CastHello(
+        cast_id=cast_id,
+        project_root="/proj",
+        ritual=ritual,
+        components={},
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+@pytest.mark.asyncio
+class TestPicking:
+    # The listing puts running casts first and the hub holds them in the order
+    # they arrived. Numbered off the hub, `1` drilled into whichever cast was
+    # heard first — not the one printed on the line the operator read.
+    @staticmethod
+    async def test_the_number_typed_is_the_line_painted():
+        hub = Hub()
+        hub.apply(_hello("c1", "finished_first"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        hub.apply(_hello("c2", "still_going"))
+        keys = _Keys("1", "q")
+
+        await asyncio.wait_for(Dashboard(casts=hub, screen=keys).run(), timeout=2)
+
+        assert any("vekna — still_going" in frame for frame in keys.frames)
 
 
 @pytest.mark.asyncio

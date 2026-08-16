@@ -1,15 +1,19 @@
 import asyncio
+import contextlib
 import itertools
 from collections.abc import Sequence
 
 from vekna.pacts.casts import Casts
 from vekna.pacts.screen import Screen
 
-from .screen import paint
+from .screen import ordered, paint
 
 # Long enough that a streaming rite does not repaint per line, short enough that
 # the view reads as live.
 _COALESCE_SECONDS = 0.1
+# How often a view with nothing happening in it repaints anyway, which is what
+# makes the elapsed columns a clock rather than a timestamp.
+_TICK_SECONDS = 1.0
 _QUIT = frozenset({"q", "quit"})
 _BACK = frozenset({"b", "back"})
 _KEYS = "a number, b, or q"
@@ -82,10 +86,13 @@ class Dashboard:
         if not task.cancelled() and (error := task.exception()) is not None:
             self.stop(note=f"{_BROKE}: {error!r}")
 
+    # The elapsed columns move whether or not a cast has anything to say, so the
+    # wait is bounded: a view of casts that are all thinking still counts up.
     async def painting(self) -> None:
         for _ in self._until_done():
             self._show()
-            await self._changed.wait()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._changed.wait(), timeout=_TICK_SECONDS)
             self._changed.clear()
             # A burst of deltas is one repaint, not one each.
             await asyncio.sleep(_COALESCE_SECONDS)
@@ -115,10 +122,12 @@ class Dashboard:
         elif lowered:
             self._note = f"{line!r} is not a cast — {_KEYS}"
 
+    # The same order the listing paints, or the number typed picks the cast
+    # above the one it is next to.
     def _nth(self, index: int) -> str | None:
-        found = list(self._casts.casts)
+        found = ordered(list(self._casts.casts.values()))
         if 1 <= index <= len(found):
-            return found[index - 1]
+            return found[index - 1].hello.cast_id
         self._note = f"there is no cast {index}"
         return None
 

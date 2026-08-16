@@ -111,7 +111,7 @@ class TestTheView:
         keys.press("q")
 
         assert await running == 0
-        assert keys.painted("vekna — 1 cast")
+        assert keys.painted("vekna — 1 running")
         writer.close()
 
     @staticmethod
@@ -162,7 +162,8 @@ class TestTheView:
                 cast_id="c1", rite_id="r1", request_id="q1", prompt="allow Bash?"
             ),
         )
-        await _eventually(lambda: keys.painted("waiting: allow Bash?"))
+        await _eventually(lambda: keys.painted("waiting"))
+        await _eventually(lambda: keys.painted("allow Bash?"))
         keys.press("1")
         await _eventually(lambda: keys.painted("answer it where the cast was started"))
         keys.press("q")
@@ -253,7 +254,7 @@ class TestPeers:
         peer_keys.press("q")
 
         assert await peer == 0
-        assert peer_keys.painted("vekna — 1 cast")
+        assert peer_keys.painted("vekna — 1 running")
         server.close()
         await server.wait_closed()
 
@@ -317,7 +318,7 @@ class TestTheBareCommand:
         assert "no casts" in result.output
 
 
-class TestCastsCommand:
+class TestTheLogCommand:
     @staticmethod
     def test_it_lists_what_the_daemon_wrote_down(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -330,7 +331,7 @@ class TestCastsCommand:
             f'{{"hello": {_hello().model_dump_json()}, "status": "ok"}}'
         )
 
-        result = CliRunner().invoke(init_command(), ["casts"])
+        result = CliRunner().invoke(init_command(), ["log"])
 
         assert result.exit_code == 0
         assert "fix_demo" in result.output
@@ -342,7 +343,7 @@ class TestCastsCommand:
     ):
         monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
 
-        result = CliRunner().invoke(init_command(), ["casts"])
+        result = CliRunner().invoke(init_command(), ["log"])
 
         assert result.exit_code == 0
         assert result.output.strip() == "no casts recorded"
