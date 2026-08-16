@@ -222,7 +222,7 @@ class TestResumeCommand:
     ):
         monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
 
-        result = CliRunner().invoke(init_command(), ["casts", "resume", "nope"])
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", "nope"])
 
         assert result.exit_code == 1
         assert "no cast 'nope' in the journal" in result.output
@@ -237,7 +237,7 @@ class TestResumeCommand:
         monkeypatch.chdir(tmp_path)
         shutil.rmtree(project)
 
-        result = CliRunner().invoke(init_command(), ["casts", "resume", cast_id])
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", cast_id])
 
         assert result.exit_code == 1
         assert f"{project} is not there any more" in result.output
@@ -250,7 +250,7 @@ class TestResumeCommand:
         cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
         monkeypatch.chdir(tmp_path)
 
-        result = CliRunner().invoke(init_command(), ["casts", "resume", cast_id])
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", cast_id])
 
         assert result.exit_code == 0
         assert (project / "ran.log").read_text() == "from-the-journal\nran-0\n"

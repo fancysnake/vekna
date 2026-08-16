@@ -34,7 +34,7 @@ from ._pacts import (
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
-    "       vekna cast --resume <cast_id>\n"
+    "       vekna cast --continue <cast_id>\n"
 )
 _RESUME_FLAG = "--resume"
 _NO_RITUALS = (

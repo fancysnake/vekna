@@ -28,7 +28,14 @@ from vekna.wire import (
     read_frames,
 )
 
-_CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
+# Docker's rule: what comes before the positional belongs to the outer command,
+# what comes after belongs to what it runs. `allow_interspersed_args` off is
+# what draws that line — without it a ritual's own `--continue` would be eaten
+# here, and vekna's would be honoured wherever it happened to appear.
+_CAST_CONTEXT: dict[str, bool] = {
+    "ignore_unknown_options": True,
+    "allow_interspersed_args": False,
+}
 _RUNTIME = "vekna.lexicon._inits"
 # Spawned through the interpreter running this one rather than through whatever
 # `vekna` is on PATH, which in a venv, a `pipx` install or a test is not always
@@ -69,8 +76,16 @@ def _runtime() -> _Runtime:
     add_help_option=False,
     help="Run a ritual from rituals.py (try `vekna cast --help`).",
 )
+@click.option(
+    "--continue",
+    "continued",
+    metavar="CAST_ID",
+    help="Carry an interrupted cast on from where it stopped.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
-def _cast(ritual_args: tuple[str, ...]) -> None:
+def _cast(ritual_args: tuple[str, ...], continued: str | None = None) -> None:
+    if continued is not None:
+        raise SystemExit(_continue(continued))
     raise SystemExit(_runtime().main(list(ritual_args)))
 
 
@@ -97,8 +112,11 @@ async def _spawn_cast(cast_id: str, *, cwd: str) -> int:
     return await process.wait()
 
 
-@click.command("list", help="List the casts the daemon has seen, newest first.")
-def _casts_list() -> None:
+# `log` rather than `casts`, which sat one letter from `cast` and did something
+# else entirely: the verb an operator types all day is the one that must not
+# have a near-homograph waiting for a slip of the finger.
+@click.command("log", help="List the casts the daemon has seen, newest first.")
+def _log() -> None:
     records = Journal(default_runs_root()).recent(limit=_RECENT)
     click.echo(listing(records), nl=False)
 
@@ -108,11 +126,11 @@ def _casts_list() -> None:
 # would cast a different project's ritual of the same name. The journal is
 # handed over by name — the cast process reads it itself, being the only one
 # that needs what is in it.
-@click.command("resume", help="Run a cast on from where it was interrupted.")
-@click.argument("cast_id")
-def _casts_resume(cast_id: str) -> None:
+# The child is handed `_RESUME`, which is the runtime's own flag and skips this
+# layer: reaching `--continue` again is how it would spawn itself forever.
+def _continue(cast_id: str) -> int:
     if (record := Journal(default_runs_root()).read(cast_id)) is None:
-        message = f"no cast {cast_id!r} in the journal — `vekna casts list` has the ids"
+        message = f"no cast {cast_id!r} in the journal — `vekna log` has the ids"
         raise click.ClickException(message)
     # The directory is the record's, not this shell's, and a project that has
     # been moved or deleted since is the likeliest thing to have gone wrong
@@ -122,18 +140,7 @@ def _casts_resume(cast_id: str) -> None:
     if not Path(root).is_dir():
         message = f"{root} is not there any more — cast {cast_id!r} ran in it"
         raise click.ClickException(message)
-    raise SystemExit(asyncio.run(_spawn_cast(cast_id, cwd=root)))
-
-
-@click.group("casts", invoke_without_command=True, help="The casts on record.")
-def _casts() -> None:
-    ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(_casts_list)
-
-
-_casts.add_command(_casts_list)
-_casts.add_command(_casts_resume)
+    return asyncio.run(_spawn_cast(cast_id, cwd=root))
 
 
 _rituals.add_command(_rituals_list)
@@ -228,7 +235,7 @@ def init_command() -> Group:
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)
-    vekna.add_command(_casts)
+    vekna.add_command(_log)
     return vekna
 
 

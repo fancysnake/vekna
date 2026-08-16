@@ -16,10 +16,14 @@ which links back to the version here that carried each shipped feature.
 
 - **The daemon.** Bare `vekna` binds `$XDG_RUNTIME_DIR/vekna.sock` — or
   `/tmp/vekna-<uid>/vekna.sock`, in a directory of the user's own — and renders
-  every cast running on this account, whatever directory each was started in: a
-  tree of casts, a number to drill into one, `b` back, `q` quit. A second `vekna`
-  attaches to the first as another surface and paints the same view, including
-  what is waiting. It observes and records; it starts nothing.
+  every cast running on this account, whatever directory each was started in.
+  One row per cast and no output in any of them — status, how long it has been
+  going, how many steps it has finished, and what it is doing this second, which
+  is the running step, the medium inside it, and how long that step has been
+  running. Casts waiting on an answer sort to the top; a number drills into one
+  for its rite tree, live output and the error it ended on, `b` back, `q` quit.
+  A second `vekna` attaches to the first as another surface and paints the same
+  view. It observes and records; it starts nothing.
 - **A cast tells it what it is doing.** `vekna cast` projects its grimoire onto
   `vekna.wire` and sends it — the protocol designed at `0.2.0` finally has both
   ends. The cast's end is send-only and reads the socket for one thing, the EOF
@@ -34,13 +38,13 @@ which links back to the version here that carried each shipped feature.
   [the feature doc](docs/reborn/06-vekna-daemon.md) for what it costs.
 - **A durable journal.** Every event the daemon sees is written under
   `~/.config/vekna/runs/<cast_id>/` — `run.json` for what the cast was and how
-  it ended, `events.jsonl` for the wire verbatim. `vekna casts` lists them,
+  it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them,
   newest first, and needs no daemon running to do it. A cast that ran with
   nothing listening leaves no record: the journal is the daemon's. A write that
   fails fails closed: the run is marked as having a hole in it, and if the disk
   cannot take that mark either, the record goes, so a resume says there is
   nothing to resume from rather than replaying a log that is missing a rite.
-- **`vekna casts resume <cast_id>`.** A fresh process in the directory the
+- **`vekna cast --continue <cast_id>`.** A fresh process in the directory the
   interrupted cast ran in, handed the journal. Its steps re-run — cheap, and the
   same walk they took before — while every agent call, shell command and prompt
   that had already finished comes back off the record instead of happening
@@ -48,6 +52,9 @@ which links back to the version here that carried each shipped feature.
   the cast had already opened, so the agent remembers what it was told. Replay
   stops at the first rite that does not match what was recorded and the cast
   runs live from there, rather than being handed someone else's answers.
+- **Options before the ritual name are vekna's, everything after is the
+  ritual's.** Docker's rule, and what lets `vekna cast --continue <id>` and a
+  ritual with a `--continue` of its own both exist without either guessing.
 - **`vekna --debug`.** A line per event to `~/.config/vekna/debug.log`: kind,
   cast, and what the daemon did with it, including the ones it dropped and why.
   The daemon is the one place every message passes, so it is the one place worth

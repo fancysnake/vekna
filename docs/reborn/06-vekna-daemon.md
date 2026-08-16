@@ -42,7 +42,7 @@ lands on top of this at [0.7.0](05-locks.md).
   `--debug` and the run is marked `gapped` in `run.json`, which is what makes
   the journal's durability a claim about complete runs rather than about every
   run.
-- **Resume** — `vekna casts resume <cast_id>` spawns a fresh cast process and
+- **Resume** — `vekna cast --continue <cast_id>` spawns a fresh cast process and
   hands it the journal; it replays completed rite state, re-enters the current
   rite. Always-fresh process (no pooling). Medium rites come back from the
   journal, so no agent is called twice; step rites re-run, a `Transition` being
@@ -62,7 +62,7 @@ lands on top of this at [0.7.0](05-locks.md).
   Grimoire for the terminal.
 - Clean disconnect: a cast process closing the socket marks the cast ended; an
   unclean exit surfaces as "cast disconnected", not a traceback.
-- `vekna casts` (list active + recent).
+- `vekna log` (list active + recent).
 
 ## Scope
 
@@ -74,7 +74,7 @@ lands on top of this at [0.7.0](05-locks.md).
   adapter spoke a line-based request/response protocol, not the wire's, and
   was removed with the rest of the tmux subsystem in 0.3.0.)
 - `links/` filesystem journal (JSON + JSONL writer/reader).
-- `gates/cli/click/` — daemon renderer + input loop; `casts`, `casts resume`.
+- `gates/cli/click/` — daemon renderer + input loop; `log`, `cast --continue`.
 - `inits/` — wires the daemon.
 - Lexicon wires its probe to actually attach: a send-only wire client, and a
   `Channel` that tees the prompt it is opening onto the wire and the answer
@@ -105,7 +105,7 @@ Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
   waiting.
 - Vekna killed: B keeps running standalone, prompts included. Vekna restarted:
   B re-attaches and replays from `GrimoireBegin`.
-- Interrupt a cast mid-rite, `vekna casts resume <cast_id>` — picks up at that
+- Interrupt a cast mid-rite, `vekna cast --continue <cast_id>` — picks up at that
   rite; completed rites aren't re-run; agent rites reuse the prior SDK session
   (validate with a context-dependent question across resume).
 - `vekna --debug` logs every event of a full cast — hello, rites, a decide

@@ -368,8 +368,8 @@ vekna cast --prompt "<text>"                  # one-step cast on the coding medi
 vekna rituals list                            # defined rituals + their Components — 0.3.0
 vekna rituals show <ritual>                   # Component schema + inferred step graph — 0.3.0
 vekna                                         # dashboard: observe running casts, drill in — 0.6.0
-vekna casts                                   # list active + recent casts — 0.6.0
-vekna casts resume <cast_id>                  # spawn a fresh cast process, hand it the journal — 0.6.0
+vekna log                                     # list active + recent casts — 0.6.0
+vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal — 0.6.0
 vekna --debug                                 # daemon: log every event it processes — 0.6.0
 vekna rituals check                           # unreachable steps, hidden transitions, name collisions — 0.7.0
 vekna cast <ritual> --unattended              # a decide fails at the boundary instead of waiting on nobody — 0.7.0

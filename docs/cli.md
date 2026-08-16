@@ -19,6 +19,15 @@ vekna cast fix_tests --bound 5
 vekna cast review --base=main --only src/
 ```
 
+Options before the ritual name are vekna's; everything after it belongs to the
+ritual, `--`-prefixed or not. So a ritual is free to take a `--continue` of its
+own, and vekna's never has to guess which was meant:
+
+```bash
+vekna cast --continue 6f1c2a9e     # vekna carries a cast on
+vekna cast release --continue      # the release ritual's own flag
+```
+
 Output streams live as a tree of rites. The last line is the result as JSON,
 or `null` for a ritual that finishes without one.
 
@@ -90,6 +99,18 @@ in a directory of the user's own) and renders every cast running anywhere on thi
 account; each one after attaches to it as another surface, and sees the same
 view.
 
+Both ends have to compute the same path, and `XDG_RUNTIME_DIR` is what decides
+it. A sandbox that cannot write to the session's runtime directory exports a
+private one of its own instead — [fence](https://github.com/fencesandbox/fence)
+does, and it deletes it again on the way out — so a cast started under one looks
+for a socket in a directory nothing outside can name, and `vekna` in the shell
+never sees that cast. Nothing is blocked: unix sockets cross a sandbox fine, the
+two ends were simply dialing different paths. `VEKNA_SOCKET` is read before
+`XDG_RUNTIME_DIR` and settles it, exported on both sides. This is a development
+concern rather than an operating one — a cast belongs in the shell, where it is
+the one running the agent — but a suite or a cast run from inside a sandbox will
+otherwise look like it vanished.
+
 ```bash
 vekna
 vekna --debug
@@ -99,31 +120,53 @@ vekna --debug
 the one place every message passes, and the log says what it did with each one,
 including the ones it dropped.
 
-A number drills into a cast, `b` comes back, `q` quits. A cast blocked on a
-prompt is marked as waiting, with the prompt — it is answered in the terminal
-that started it, not here.
+One row per cast, and no output in any of them — the row is for deciding which
+cast to go and look at:
+
+```text
+vekna — 1 running · 1 waiting · 1 done · 1 aborted
+
+  #  cast      ritual           project     status   elapsed  steps  now
+  1  7c01ffab  triage           ludamus     waiting    1m03s      1  merge #74 now, or wait?
+  2  3f9a2b11  merge_ready      vekna       running    4m12s      3  land · coding  1m02s
+  3  dd44ee55  ping             deep        done          7s      1
+  4  91bb0c4d  fix_demo         vekna       aborted   10m09s      7  vekna cast --continue 91bb0c4d
+```
+
+`elapsed` is how long the cast has been going, `steps` how many it has
+finished, and `now` what it is doing this second — the running step, the medium
+inside it, and how long that step has been running. A step that has not moved
+in ten minutes is the thing this view exists to show. Casts waiting on an
+answer sort to the top, then the ones still running, then the ones that ended.
+
+The status word is `running`, `waiting`, `done`, `failed` or `aborted` —
+aborted being a cast whose socket closed without a goodbye, which is the one
+worth carrying on with, so its row prints the command that does it.
+
+A number drills into a cast, `b` comes back, `q` quits. Drilling in is where
+the rite tree, the live output and the error a failed cast ended on are. A cast
+blocked on a prompt is answered in the terminal that started it, not here.
 
 Casts are not started from here. `vekna cast` is how a cast begins, and it runs
 in the directory it was typed in, attached or not.
 
-## `vekna casts`
+## `vekna log`
 
 The casts the daemon has recorded, newest first — running, finished and gone.
 
 ```bash
-vekna casts
-vekna casts list
+vekna log
 ```
 
 A cast that ran with no daemon listening leaves no record: the journal is the
 daemon's, and there was none.
 
-### `vekna casts resume`
+### `vekna cast --continue`
 
 Runs a cast on from where it was interrupted, in the directory it ran in.
 
 ```bash
-vekna casts resume 6f1c2a9e
+vekna cast --continue 6f1c2a9e
 ```
 
 A fresh process, always. It re-runs the ritual's steps — cheap, and the same

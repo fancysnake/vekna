@@ -57,7 +57,7 @@ class Journal:
     # The write that would record the gap is the same kind of write that just
     # failed, so it can fail too — and a record that survives ungapped over a
     # log with a hole in it is worse than no record at all, because that is the
-    # one `vekna casts resume` accepts. The record goes instead: unlinking is
+    # one `vekna cast --continue` accepts. The record goes instead: unlinking is
     # the one thing a disk with no room left still does, and what a resume then
     # finds is nothing to resume from, said in a sentence.
     def _mark_gapped(self, cast_id: str) -> None:
@@ -89,7 +89,7 @@ class Journal:
         return self._newest_first()[:limit]
 
     # Nothing else ever removes a cast, so without this the runs root grows for
-    # as long as the machine lives and every `vekna casts` pays for all of it.
+    # as long as the machine lives and every `vekna log` pays for all of it.
     # A cast still running is left alone whatever its age, and so is a record
     # this cannot read: deleting what it could not read back is not its call.
     def prune(self, *, keep: int) -> None:
@@ -114,7 +114,7 @@ class Journal:
 
     # Written beside itself and moved into place, because a plain write
     # truncates first: a daemon killed between the two leaves half a record
-    # where `vekna casts` and `vekna casts resume` both look. `os.replace` is
+    # where `vekna log` and `vekna cast --continue` both look. `os.replace` is
     # atomic within a directory, so what is there is either the last record or
     # this one.
     def _write(self, record: RunRecord) -> None:
