@@ -47,11 +47,11 @@ def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | N
 
 
 def _make_ask(channel: Channel) -> AskFn:
-    # The agent asks; the human answers on whichever surface is attached.
+    # The agent asks; the human answers on whichever surface is attached. The
+    # agent's options are guesses at what the human will say, so they are always
+    # offered as suggestions rather than as the only answers allowed.
     async def ask(question: str, options: Sequence[str] | None) -> str:
-        if options:
-            return await channel.decide(prompt=question, options=options)
-        return await channel.decide(prompt=question, free=True)
+        return await channel.decide(prompt=question, options=options, free=True)
 
     return ask
 

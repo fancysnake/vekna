@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -37,6 +38,15 @@ _NOTIFY_TITLES: dict[NotifyEvent, str] = {
 # early or paint the rest of it into the terminal.
 def _one_line(text: str) -> str:
     return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
+
+
+# A terminal left in bracketed-paste mode wraps pasted input in `ESC[200~` and
+# `ESC[201~`, so a pasted `1` reads as neither a number nor an option and the
+# answer is thrown away. Nothing an answer means arrives as an escape sequence,
+# so they all go.
+_ESCAPES = re.compile(
+    r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]|[\x00-\x08\x0b-\x1f\x7f]"
+)
 
 
 def default_socket_path() -> str:
@@ -102,7 +112,8 @@ class StandaloneRenderer:
         self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
     async def _readline(self) -> str:
-        return (await asyncio.to_thread(self._inp.readline)).strip()
+        line = await asyncio.to_thread(self._inp.readline)
+        return _ESCAPES.sub("", line).strip()
 
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:
@@ -190,21 +201,29 @@ class StandaloneRenderer:
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
         self.notify("decide", prompt)
+        if options:
+            return await self._choose(prompt, options, free=free)
         if free:
             return await self._free_text(prompt)
-        if options is None:
-            return await self._confirm(prompt)
-        return await self._choose(prompt, options)
+        return await self._confirm(prompt)
 
-    async def _choose(self, prompt: str, options: Sequence[str]) -> str:
+    # Offered with `free`, the options are suggestions: a number or an exact
+    # option still answers itself, and anything else answers as typed.
+    async def _choose(
+        self, prompt: str, options: Sequence[str], *, free: bool = False
+    ) -> str:
         lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
+        if free:
+            lines.append("  or answer in your own words")
         self._say("\n".join(lines) + "\n")
         for _ in range(_MAX_PROMPT_ATTEMPTS):
             if (answer := await self._readline()) in options:
                 return answer
             if answer.isdigit() and 1 <= int(answer) <= len(options):
                 return options[int(answer) - 1]
-            self._say("invalid choice; try again\n")
+            if free and answer:
+                return answer
+            self._say(("say something" if free else "invalid choice") + "; try again\n")
         msg = "no valid choice provided"
         raise StandalonePromptError(msg)
 

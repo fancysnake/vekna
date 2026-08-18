@@ -76,7 +76,9 @@ outside the list is denied without stopping to ask you. Not
 mode cannot read the files you gave it `Read` for.
 
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
-tool; the cast blocks until you answer, exactly as `decide` does.
+tool; the cast blocks until you answer, exactly as `decide` does. Any options it
+offers are suggestions — pick one by number or by name, or answer in your own
+words, which is what the agent gets.
 
 ### Sessions
 

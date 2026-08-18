@@ -10,6 +10,18 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+### Fixed
+
+- **An agent's `ask_human` options no longer trap the answer.** The options an
+  agent offers are its guesses at what you will say, so they are now
+  suggestions: a number or an option still answers itself, and anything else
+  answers as typed. A ritual's own `decide(options=...)` stays closed — a step
+  branching on `Literal["fix", "stop"]` still gets one of those back.
+- **A pasted answer is read as typed.** A terminal left in bracketed-paste mode
+  wraps pasted input in escape sequences, so a pasted `1` was neither a number
+  nor an option and the prompt rejected it; escape sequences are now stripped
+  from an answer before it is read.
+
 ### Added
 
 - **A rite says what it is doing.** A tree of `↳ shell` lines named the medium

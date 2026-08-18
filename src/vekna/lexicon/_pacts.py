@@ -108,7 +108,8 @@ class Channel(Protocol):
 
 GateFn = Callable[[str], Awaitable[bool]]
 
-# The agent's own question, mid-rite: free text when no options are offered.
+# The agent's own question, mid-rite. Always free text; options, when the agent
+# offers any, are suggestions the human may answer past.
 AskFn = Callable[[str, Sequence[str] | None], Awaitable[str]]
 
 

@@ -209,6 +209,56 @@ class TestDecide:
             asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
 
 
+class TestDecideSuggested:
+    @staticmethod
+    def test_answers_past_the_options():
+        renderer, _ = _renderer("neither, do c\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "neither, do c"
+
+    @staticmethod
+    def test_a_number_still_picks_its_option():
+        renderer, _ = _renderer("2\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "b"
+
+    @staticmethod
+    def test_says_the_options_are_suggestions():
+        renderer, out = _renderer("2\n")
+
+        asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+
+        assert "or answer in your own words" in out.getvalue()
+
+    @staticmethod
+    def test_an_empty_answer_asks_again():
+        renderer, out = _renderer("\nc\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert (answer, "say something; try again" in out.getvalue()) == ("c", True)
+
+
+class TestPastedAnswer:
+    @staticmethod
+    def test_bracketed_paste_markers_do_not_reach_the_answer():
+        renderer, _ = _renderer("\x1b[200~1\x1b[201~\n")
+
+        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+
+        assert choice == "a"
+
+
 class TestDecideConfirm:
     @staticmethod
     def test_yes_answer():

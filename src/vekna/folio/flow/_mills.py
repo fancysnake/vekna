@@ -7,6 +7,8 @@ from vekna.lexicon import current_rite, medium
 # or raises, never a string of its own — so a ritual offering
 # `Literal["fix", "file", "ignore"]` gets that back rather than a bare `str` it
 # would have to re-validate. Offering a plain `list[str]` still answers `str`.
+# Adding `free` drops that guarantee on purpose: the options become suggestions
+# and the answer widens back to `str`.
 _OptionT = TypeVar("_OptionT", bound=str)
 
 
@@ -14,6 +16,10 @@ _OptionT = TypeVar("_OptionT", bound=str)
 async def decide(prompt: str) -> bool: ...
 @overload
 async def decide(prompt: str, *, options: Sequence[_OptionT]) -> _OptionT: ...
+@overload
+async def decide(
+    prompt: str, *, options: Sequence[str], free: Literal[True]
+) -> str: ...
 @overload
 async def decide(prompt: str, *, free: Literal[True]) -> str: ...
 
