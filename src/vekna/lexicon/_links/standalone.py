@@ -1,6 +1,5 @@
 import asyncio
 import os
-import re
 import socket
 import sys
 import tempfile
@@ -38,15 +37,6 @@ _NOTIFY_TITLES: dict[NotifyEvent, str] = {
 # early or paint the rest of it into the terminal.
 def _one_line(text: str) -> str:
     return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
-
-
-# A terminal left in bracketed-paste mode wraps pasted input in `ESC[200~` and
-# `ESC[201~`, so a pasted `1` reads as neither a number nor an option and the
-# answer is thrown away. Nothing an answer means arrives as an escape sequence,
-# so they all go.
-_ESCAPES = re.compile(
-    r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]|[\x00-\x08\x0b-\x1f\x7f]"
-)
 
 
 def default_socket_path() -> str:
@@ -112,8 +102,7 @@ class StandaloneRenderer:
         self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
     async def _readline(self) -> str:
-        line = await asyncio.to_thread(self._inp.readline)
-        return _ESCAPES.sub("", line).strip()
+        return (await asyncio.to_thread(self._inp.readline)).strip()
 
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:

@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 
 from pydantic import BaseModel
 
@@ -19,6 +20,8 @@ from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteStreamed, Ritual
 
 _FAILURE_EXIT = 3
+# `read` meeting EOF straight away.
+_EOF_EXIT = 1
 # Comfortably past the 1 MiB readline limit that used to crash the cast here.
 _LONG_LINE = 2_000_000
 # The ↳ that opens a rite and the ✓ that closes it, both quoting the command.
@@ -52,6 +55,11 @@ async def run_quiet_partial(_state: State) -> Transition:
 
 
 @step
+async def run_reads_stdin(_state: State) -> Transition:
+    return done(await shell('read -r line && echo "got $line"'))
+
+
+@step
 async def run_long_line(_state: State) -> Transition:
     return done(
         await shell(f"python3 -c \"print('x' * {_LONG_LINE}); print('after')\"")
@@ -77,6 +85,7 @@ quiet_partial = entry(name="quiet_partial", target=run_quiet_partial, payload=St
 long_line = entry(name="long_line", target=run_long_line, payload=State())
 partial_line = entry(name="partial_line", target=run_partial_line, payload=State())
 multibyte = entry(name="multibyte", target=run_multibyte, payload=State())
+reads_stdin = entry(name="reads_stdin", target=run_reads_stdin, payload=State())
 
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
@@ -192,6 +201,27 @@ class _RecordingFocus(ShellFocusProtocol):
         if on_line is not None:
             on_line("intercepted")
         return ShellReply(stdout="from the focus", stderr="", exit_code=0)
+
+
+class TestShellStdin:
+    # The bug this holds shut: a command inheriting the terminal reads the line
+    # the operator typed at a prompt beside it, and the answer disappears.
+    @staticmethod
+    def test_a_command_cannot_read_what_the_operator_typed():
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, b"1\n")
+        os.close(write_fd)
+        stdin_fd = os.dup(0)
+        try:
+            os.dup2(read_fd, 0)
+            result = _cast(reads_stdin)
+        finally:
+            os.dup2(stdin_fd, 0)
+            os.close(stdin_fd)
+        unread = os.read(read_fd, 2)
+        os.close(read_fd)
+
+        assert (result.exit_code, result.stdout, unread) == (_EOF_EXIT, "", b"1\n")
 
 
 class TestShellFocus:

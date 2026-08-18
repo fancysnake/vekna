@@ -249,16 +249,6 @@ class TestDecideSuggested:
         assert (answer, "say something; try again" in out.getvalue()) == ("c", True)
 
 
-class TestPastedAnswer:
-    @staticmethod
-    def test_bracketed_paste_markers_do_not_reach_the_answer():
-        renderer, _ = _renderer("\x1b[200~1\x1b[201~\n")
-
-        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
-
-        assert choice == "a"
-
-
 class TestDecideConfirm:
     @staticmethod
     def test_yes_answer():

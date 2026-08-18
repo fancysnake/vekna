@@ -60,6 +60,10 @@ async def _pump(
             on_line(pending)
 
 
+# Closed stdin, not the cast's: a command inheriting the terminal reads the line
+# the operator typed at a `decide` prompt running beside it, and the answer is
+# gone. One that wants input hangs on a terminal nobody is watching anyway, so
+# it gets EOF instead.
 async def run_bash(
     command: str,
     *,
@@ -70,6 +74,7 @@ async def run_bash(
         "bash",
         "-c",
         command,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,

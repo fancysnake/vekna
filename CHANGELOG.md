@@ -17,10 +17,11 @@ which links back to the version here that carried each shipped feature.
   suggestions: a number or an option still answers itself, and anything else
   answers as typed. A ritual's own `decide(options=...)` stays closed — a step
   branching on `Literal["fix", "stop"]` still gets one of those back.
-- **A pasted answer is read as typed.** A terminal left in bracketed-paste mode
-  wraps pasted input in escape sequences, so a pasted `1` was neither a number
-  nor an option and the prompt rejected it; escape sequences are now stripped
-  from an answer before it is read.
+- **A command can no longer eat the answer you typed.** `shell()` spawned bash
+  with the cast's own stdin, so a command running beside a question — a step
+  holding two mediums at once — read the line meant for the prompt, which then
+  rejected an answer nobody saw it take. Commands get `/dev/null` now; one that
+  wants input meets EOF rather than a terminal it was never watching.
 
 ### Added
 
