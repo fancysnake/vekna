@@ -237,6 +237,9 @@ class TestPeers:
     # daemon on the other end is a stub, because a real one never sends it.
     @staticmethod
     async def test_a_peer_ignores_its_own_handshake_coming_back(socket_path: Path):
+        # Closed when the peer hangs up: 3.12's `Server.wait_closed` comes back
+        # only once every connection the server handed out is closed, and a stub
+        # that leaves its own open never comes back from it at all.
         async def echoes(
             reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
@@ -245,6 +248,7 @@ class TestPeers:
                     writer.write(encode_frame(SurfaceHello()))
                     writer.write(encode_frame(_hello()))
                     await writer.drain()
+            writer.close()
 
         server = await asyncio.start_unix_server(echoes, path=str(socket_path))
         peer_keys = _Keys()
