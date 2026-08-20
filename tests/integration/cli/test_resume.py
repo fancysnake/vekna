@@ -242,6 +242,33 @@ class TestResumeCommand:
         assert result.exit_code == 1
         assert f"{project} is not there any more" in result.output
 
+    # Every surface cuts the id to eight characters, so eight is what an
+    # operator has to type back — and the aborted row prints that command.
+    @staticmethod
+    def test_it_takes_the_id_as_it_was_printed(
+        project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        cast_id = "0f3789e6e42b4bde999c4ad779493932"
+        _journalled(project, tmp_path / "runs", cast_id)
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", "0f3789e6"])
+
+        assert result.exit_code == 0
+        assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    @staticmethod
+    def test_it_refuses_a_prefix_that_names_more_than_one_cast(
+        project: Path, tmp_path: Path
+    ):
+        for cast_id in ("abc1", "abc2"):
+            _journalled(project, tmp_path / "runs", cast_id)
+
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", "abc"])
+
+        assert result.exit_code == 1
+        assert "'abc' names 2 casts" in result.output
+
     # The whole way round: a real process, in the recorded directory.
     @staticmethod
     def test_it_spawns_a_cast_in_the_directory_the_first_one_ran_in(

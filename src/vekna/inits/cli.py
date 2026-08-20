@@ -129,7 +129,17 @@ def _log() -> None:
 # The child is handed `_RESUME`, which is the runtime's own flag and skips this
 # layer: reaching `--continue` again is how it would spawn itself forever.
 def _continue(cast_id: str) -> int:
-    if (record := Journal(default_runs_root()).read(cast_id)) is None:
+    journal = Journal(default_runs_root())
+    # What `vekna log` and the aborted row print is the id cut short, so what
+    # comes back here is a prefix rather than the directory's own name.
+    found = journal.matching(cast_id)
+    if len(found) > 1:
+        ambiguous = f"{cast_id!r} names {len(found)} casts — `vekna log` has the ids"
+        raise click.ClickException(ambiguous)
+    # A prefix that named nothing is read as itself, misses again, and is said
+    # back in the sentence as the operator typed it.
+    named = found[0] if found else cast_id
+    if (record := journal.read(named)) is None:
         message = f"no cast {cast_id!r} in the journal — `vekna log` has the ids"
         raise click.ClickException(message)
     # The directory is the record's, not this shell's, and a project that has
@@ -140,7 +150,9 @@ def _continue(cast_id: str) -> int:
     if not Path(root).is_dir():
         message = f"{root} is not there any more — cast {cast_id!r} ran in it"
         raise click.ClickException(message)
-    return asyncio.run(_spawn_cast(cast_id, cwd=root))
+    # The child is handed the whole id: it reads the journal by directory name,
+    # and a prefix is this layer's convenience, not the runtime's.
+    return asyncio.run(_spawn_cast(record.hello.cast_id, cwd=root))
 
 
 _rituals.add_command(_rituals_list)

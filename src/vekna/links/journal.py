@@ -79,6 +79,18 @@ class Journal:
         except (OSError, ValidationError):
             return None
 
+    # Every surface prints a cast id cut to eight characters, so eight is what
+    # an operator has back to type. A prefix that names one cast is that cast;
+    # one that names several is not an id yet, and the caller says so.
+    def matching(self, prefix: str) -> list[str]:
+        if not prefix or not self._root.is_dir():
+            return []
+        return sorted(
+            found.name
+            for found in self._root.iterdir()
+            if found.is_dir() and found.name.startswith(prefix)
+        )
+
     def events(self, cast_id: str) -> Iterator[WireMessage]:
         return read_events(self._root, cast_id)
 
