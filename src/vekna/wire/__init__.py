@@ -1,6 +1,7 @@
 from ._links import (
     default_runs_root,
     default_socket_path,
+    default_state_root,
     events_log,
     read_events,
     read_frames,
@@ -54,6 +55,7 @@ __all__ = [
     "decode_frame",
     "default_runs_root",
     "default_socket_path",
+    "default_state_root",
     "encode_frame",
     "events_log",
     "read_events",

@@ -136,9 +136,9 @@ vekna
 vekna --debug
 ```
 
-`--debug` writes a line per event to `~/.config/vekna/debug.log` — the daemon is
-the one place every message passes, and the log says what it did with each one,
-including the ones it dropped.
+`--debug` writes a line per event to `~/.local/state/vekna/debug.log` — the
+daemon is the one place every message passes, and the log says what it did with
+each one, including the ones it dropped.
 
 One row per cast, and no output in any of them — the row is for deciding which
 cast to go and look at:

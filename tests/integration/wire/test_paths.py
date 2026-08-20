@@ -23,10 +23,22 @@ class TestRunsRoot:
         assert default_runs_root() == Path("/tmp/mine")
 
     @staticmethod
-    def test_otherwise_it_is_the_config_namespace(monkeypatch: pytest.MonkeyPatch):
+    def test_the_session_state_directory_is_used_when_there_is_one(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         monkeypatch.delenv("VEKNA_RUNS", raising=False)
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
 
-        assert default_runs_root().parts[-3:] == (".config", "vekna", "runs")
+        assert default_runs_root() == tmp_path / "vekna" / "runs"
+
+    # A journal is history, not configuration: XDG puts it under the state
+    # namespace, which is a different directory from `~/.config` on purpose.
+    @staticmethod
+    def test_otherwise_it_is_the_state_namespace(monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("VEKNA_RUNS", raising=False)
+        monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+
+        assert default_runs_root().parts[-4:] == (".local", "state", "vekna", "runs")
 
 
 class TestSocketPath:

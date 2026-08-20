@@ -37,8 +37,8 @@ which links back to the version here that carried each shipped feature.
   is answered. Answering from `vekna` itself is deferred — see
   [the feature doc](docs/reborn/06-vekna-daemon.md) for what it costs.
 - **A durable journal.** Every event the daemon sees is written under
-  `~/.config/vekna/runs/<cast_id>/` — `run.json` for what the cast was and how
-  it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them,
+  `~/.local/state/vekna/runs/<cast_id>/` — `run.json` for what the cast was
+  and how it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them,
   newest first, and needs no daemon running to do it. A cast that ran with
   nothing listening leaves no record: the journal is the daemon's. A write that
   fails fails closed: the run is marked as having a hole in it, and if the disk
@@ -55,7 +55,7 @@ which links back to the version here that carried each shipped feature.
 - **Options before the ritual name are vekna's, everything after is the
   ritual's.** Docker's rule, and what lets `vekna cast --continue <id>` and a
   ritual with a `--continue` of its own both exist without either guessing.
-- **`vekna --debug`.** A line per event to `~/.config/vekna/debug.log`: kind,
+- **`vekna --debug`.** A line per event to `~/.local/state/vekna/debug.log`: kind,
   cast, and what the daemon did with it, including the ones it dropped and why.
   The daemon is the one place every message passes, so it is the one place worth
   instrumenting — and it writes to a file rather than to the view it would

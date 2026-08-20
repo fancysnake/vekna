@@ -11,6 +11,7 @@ _RUN = "run.json"
 _RUNS_ENV = "VEKNA_RUNS"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
+_STATE_ENV = "XDG_STATE_HOME"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 
@@ -31,7 +32,18 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
 def default_runs_root() -> Path:
     if (named := os.environ.get(_RUNS_ENV)) is not None:
         return Path(named)
-    return Path.home() / ".config" / "vekna" / "runs"
+    return default_state_root() / "runs"
+
+
+# What the daemon writes down rather than what the user configured: a journal of
+# what ran and a debug log of what it did with each event. XDG calls that state
+# — history and what survives a restart — and puts it under `~/.local/state`,
+# which is a different directory from `~/.config` on purpose. Both of vekna's
+# are here, so moving the namespace moves them together.
+def default_state_root() -> Path:
+    if (named := os.environ.get(_STATE_ENV)) is not None:
+        return Path(named) / "vekna"
+    return Path.home() / ".local" / "state" / "vekna"
 
 
 # Inside a directory of this user's own, which is why this makes one. A socket

@@ -15,14 +15,21 @@ _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 # A cast with nothing said to it dials `$XDG_RUNTIME_DIR/vekna.sock` and writes
-# to `~/.config/vekna/runs`, which is the operator's own daemon and the
+# to `~/.local/state/vekna/runs`, which is the operator's own daemon and the
 # operator's own journal: a suite run beside a live `vekna` fills their
 # dashboard with test casts. Every test gets its own instead — one that is
-# *about* the default path unsets these itself.
+# *about* the default path unsets these itself. `XDG_STATE_HOME` is here too
+# because the debug log hangs off it and `VEKNA_RUNS` does not cover it.
 @pytest.fixture(autouse=True)
 def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("VEKNA_SOCKET", str(tmp_path / "vekna.sock"))
     monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    # The global config is `$XDG_CONFIG_HOME/vekna` and `~/.config/vekna` only
+    # when nothing exports one, and the tests that check it move `HOME`. Cleared
+    # so the suite reads the same on a machine that sets it as on one that does
+    # not — the test that is about the variable sets it itself.
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
 
 
 # A notification is an escape sequence written only to a tty, and neither

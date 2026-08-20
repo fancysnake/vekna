@@ -24,6 +24,7 @@ from vekna.wire import (
     SurfaceHello,
     default_runs_root,
     default_socket_path,
+    default_state_root,
     encode_frame,
     read_frames,
 )
@@ -47,7 +48,7 @@ _RECENT = 20
 # write: a cast is a directory of a few kilobytes, and this is about a machine
 # that has been running vekna for a year, not about the last hour.
 _KEPT = 200
-_DEBUG_LOG = Path.home() / ".config" / "vekna" / "debug.log"
+_DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
 _PEER = "attached to the vekna already running here"
 
@@ -238,12 +239,15 @@ def init_command() -> Group:
     @click.option(
         "--debug",
         is_flag=True,
-        help="Log every event the daemon processes to ~/.config/vekna/debug.log.",
+        help="Log every event the daemon processes to ~/.local/state/vekna/debug.log.",
     )
     def vekna(*, debug: bool = False) -> None:
         ctx = click.get_current_context()
         if ctx.invoked_subcommand is None:
-            raise SystemExit(asyncio.run(daemon(debug=_DEBUG_LOG if debug else None)))
+            # Resolved here rather than at import, so the environment a shell
+            # exports is the one that decides where the log goes.
+            where = default_state_root() / _DEBUG_LOG if debug else None
+            raise SystemExit(asyncio.run(daemon(debug=where)))
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)

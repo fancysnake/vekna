@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,7 @@ _USAGE = (
     "       vekna cast --continue <cast_id>\n"
 )
 _RESUME_FLAG = "--resume"
+_CONFIG_ENV = "XDG_CONFIG_HOME"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -115,9 +117,18 @@ def _no_rituals(near_miss: Path | None) -> str:
     return f"{_NO_RITUALS}\n({near_miss} is not one — every level needs an __init__.py)"
 
 
+# What the user configured, which is the one thing of vekna's that belongs in
+# the config namespace — the journal and the debug log are state and live under
+# `default_state_root()`.
+def _config_home() -> Path:
+    if (named := os.environ.get(_CONFIG_ENV)) is not None:
+        return Path(named)
+    return Path.home() / ".config"
+
+
 def _config_files(cwd: Path) -> list[Path]:
     found: list[Path] = []
-    global_config = Path.home() / ".config" / "vekna" / "config.toml"
+    global_config = _config_home() / "vekna" / "config.toml"
     if global_config.is_file():
         found.append(global_config)
     for directory in (cwd, *cwd.parents):

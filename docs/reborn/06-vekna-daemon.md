@@ -30,7 +30,7 @@ lands on top of this at [0.7.0](05-locks.md).
 - Cross-project visibility: every cast process probing the user's socket shows
   up, regardless of `cwd`.
 - **Durable journal** — every wire event persisted under
-  `~/.config/vekna/runs/<cast_id>/` (JSONL log + `run.json`). The daemon
+  `~/.local/state/vekna/runs/<cast_id>/` (JSONL log + `run.json`). The daemon
   already records every event for replay. A standalone cast writes none: the
   durable half is the daemon's, and a second writer would be a second format to
   keep right.

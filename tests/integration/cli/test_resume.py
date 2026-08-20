@@ -291,10 +291,11 @@ class TestWhereTheJournalLives:
         assert default_runs_root() == Path("/tmp/mine")
 
     @staticmethod
-    def test_otherwise_it_is_the_config_namespace(monkeypatch: pytest.MonkeyPatch):
+    def test_otherwise_it_is_the_state_namespace(monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("VEKNA_RUNS", raising=False)
+        monkeypatch.delenv("XDG_STATE_HOME", raising=False)
 
-        assert default_runs_root().parts[-3:] == (".config", "vekna", "runs")
+        assert default_runs_root().parts[-4:] == (".local", "state", "vekna", "runs")
 
     # A run directory with no event log is a cast the daemon heard say hello and
     # nothing else. There is nothing to replay, and that is not an error.
