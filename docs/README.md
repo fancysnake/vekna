@@ -48,7 +48,7 @@ status in its header and nowhere else.
 | [Locks API](reborn/05-locks.md) | `0.7.0` | planned |
 | [Ritual craft](reborn/13-ritual-craft.md) | `0.7.0` | planned |
 | [Ritual defaults](reborn/14-ritual-defaults.md) | `0.7.0` | planned |
-| [Lich](reborn/07-lich.md) | `0.8.0` | planned |
+| [Lich](reborn/07-lich.md) | `0.8.0` | in progress |
 | [1.0 hardening](reborn/08-hardening.md) | `1.0.0` | in progress |
 | [Steps as DTOs](reborn/11-steps-as-dto.md) | — | undecided |
 

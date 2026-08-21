@@ -1,6 +1,6 @@
 # Feature — Lich (a named station, remote-controlled)
 
-**Version:** `0.8.0` — **planned.**
+**Version:** `0.8.0` — **in progress.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, CLI surface —
 and [06-vekna-daemon.md](06-vekna-daemon.md), which this builds on.
@@ -62,7 +62,7 @@ Two of those fields are genuinely stored rather than derived:
 Keyed by **name, not by directory**: a project root can hold several liches, so
 the name is the only thing that identifies one. The process is not the lich;
 the row is. Kill the process and the lich is dormant, not gone. A cast
-interrupted by the death resumes through the daemon's `vekna casts resume`.
+interrupted by the death resumes through the daemon's `vekna cast --continue`.
 
 ### Name
 
@@ -245,18 +245,20 @@ routing in the middle, "the button did nothing" has three possible homes.
 - `lexicon/` — `status()` in `_mills/engine.py` and exported; `StatusSet` in
   `_pacts.py`; the standalone renderer prints it as a stream line, having no
   frame to pin it to; `trial.statuses` records it.
-- `pacts/lich/` — lich protocols and DTOs.
-- `mills/lich/` — session state, cast slot, command dispatch, name generator
-  (the word list is `specs/`).
-- `mills/` + `links/` (daemon) — the phylactery registry beside `runs/`: rows
-  written on rising and on each cast, read by the raising prompt, dropped by
-  `dismiss`.
-- `links/lich/spawn.py` — subprocess supervision of `vekna cast`.
+- `pacts/lich.py` — the phylactery row, the registry protocol the mills hold,
+  the station protocol a session view paints, and the lich's errors.
+- `mills/station.py` — session state, cast slot, command dispatch.
+- `mills/liches.py` — the daemon's half: the phylactery registry beside `runs/`
+  (rows written on rising and on each cast, read by the raising prompt, dropped
+  by `dismiss`), routing by name, and the name generator (the word list is
+  `specs/names.py`).
+- `links/registry.py` — the registry file.
+- `links/spawn.py` — subprocess supervision of `vekna cast`.
 - `links/discord/` — gateway client, channel lifecycle, pinned status, buttons.
   Optional extra; the only place importing the Discord client.
-- `mills/` (daemon) — lich registry, routing by name.
-- `gates/cli/click/` — `vekna lich`, `lich attach`, `lich dismiss`, `liches`.
-- `inits/` — wires the lich process and the optional gateway.
+- `gates/cli/lich.py` — the raising prompt and the session view.
+- `inits/cli.py` — `vekna lich`, `lich attach`, `lich dismiss`, `liches`; wires
+  the lich process and the optional gateway.
 
 ## Out of scope
 
