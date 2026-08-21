@@ -16,7 +16,7 @@ asking the operator questions — and then the step ends, and a boundary decides
 what happens next. A gate passed or it did not. A budget ran out. A human
 answered. Nothing is left to the agent's discretion at the seam.
 
-Everything below is the shipped surface, read off the source of vekna `0.5.0`.
+Everything below is the shipped surface, read off the source of vekna `0.6.0`.
 What is planned but not yet bound is quarantined at the bottom under **Not yet
 bound** — do not summon it.
 
@@ -384,7 +384,7 @@ reviewer under it could not even read `CLAUDE.md`.
 list is `Read` on any path the process can open; `permission_mode` inspects no
 arguments, and `cwd` is a working directory, not a jail. If an agent genuinely
 must not leave the repository, that is a sandbox or a `PreToolUse` validator —
-neither of which vekna ships at `0.5.0`. Say so in the prompt by all means, but
+neither of which vekna ships at `0.6.0`. Say so in the prompt by all means, but
 know that you asked rather than bound, and do not write a ritual whose safety
 rests on the asking.
 
@@ -436,6 +436,38 @@ lint, tests = linting.result(), suite.result()
 Each opens its own rite — a Task copies the contextvar the runtime hangs them
 from. One cast then tells you everything that is red, rather than the first
 thing that is red.
+
+---
+
+## Carried-on casts
+
+`vekna cast --continue <cast_id>` runs an interrupted cast on from where it
+stopped, and what replays is **only medium rites**. A step returns a
+`Transition` whose target is a function reference no journal can hold, so a
+carried-on cast **re-runs every step body from the top** while each `shell`,
+`coding` and `decide` inside them comes back off the record instead of
+happening twice. The human is not asked the same question again.
+
+The match is the rite's id and the medium's name, and rite ids are a counter —
+so replay holds only while the carried-on cast walks the path the recorded one
+walked. The first miss spends the whole ledger and everything after it runs
+live. A ritual that branches differently this time is not handed someone else's
+answers.
+
+What this asks of a ritual:
+
+- **Work that reaches outside goes through a medium.** A step that writes a
+  file with `pathlib`, or fetches with `httpx`, does it again on every carry-on
+  — the ledger has nothing to give back. `shell` it, and it replays.
+- **A step body must survive being re-run** with the medium results it already
+  got. Computing, routing and validating are safe; incrementing something that
+  is not in the payload is not.
+- **Keep the walk deterministic given the payload.** Branching on the clock or
+  on a random draw moves the rite ids, and replay stops at the first one that
+  moved.
+
+Nothing here is opt-in: a cast is journaled whenever a daemon is listening, and
+`vekna log` is where the id comes from.
 
 ---
 
@@ -635,6 +667,8 @@ this document, they are right and this document is stale — say so.
       `gate_tools`, not merely requested in the prompt — and no tool is on both
       an allowlist and `gate_tools`.
 - [ ] Untrusted text is fenced and named as data.
+- [ ] Work that reaches outside the process goes through a medium, so
+      `vekna cast --continue` replays it instead of doing it twice.
 - [ ] Every component interpolated into a `shell` command is `shlex.quote`d.
 - [ ] Spending an agent's time on a retry is a `decide`, not an assumption.
 - [ ] Prompts are module constants; steps read as decisions.
@@ -657,9 +691,7 @@ Planned, designed, **not on this branch**. Do not write against any of it.
 - **`@step(goes_to=[...])`** and declared edges. Rejected in favour of steps-as-DTOs
   (`docs/reborn/11-steps-as-dto.md`), which is itself unscheduled and would be a
   breaking change to `goto`/`Transition`.
-- **Locks.** `0.6.0`. Nothing lock-shaped is importable today.
-- **The daemon.** `0.7.0`. Casts run standalone: events to stdout, prompts on
-  stdin. The socket probe exists and its answer is deliberately discarded.
+- **Locks.** `0.7.0`. Nothing lock-shaped is importable today.
 - **Annotation-gated dispatch** — `goto(payload)` with no named target. Deferred
   and additive; name the target.
 - **Parallel steps.** Not happening, ever. Concurrency stays inside a step body

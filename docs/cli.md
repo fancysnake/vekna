@@ -178,8 +178,16 @@ The casts the daemon has recorded, newest first — running, finished and gone.
 vekna log
 ```
 
-A cast that ran with no daemon listening leaves no record: the journal is the
-daemon's, and there was none.
+```text
+91bb0c4d  ✗  fix_demo          2026-08-21 14:02  /home/you/vekna
+7c01ffab  ▶  triage            2026-08-21 13:58  /home/you/ludamus
+3f9a2b11  ✓  merge_ready       2026-08-21 13:40  /home/you/vekna  ↳ 91bb0c4d
+```
+
+The id is cut to eight characters, the timestamp is in your own zone, and a
+trailing `↳` names the cast this one was carried on from. A cast that ran with
+no daemon listening leaves no record: the journal is the daemon's, and there was
+none.
 
 ### `vekna cast --continue`
 
@@ -198,3 +206,9 @@ had already opened, so it remembers what it was told.
 Replay stops at the first rite that does not match what was recorded, and the
 cast runs live from there. A ritual that takes a different path this time is
 not made to pretend otherwise.
+
+The id may be the eight characters `vekna log` and the aborted row print — a
+prefix is resolved against the journal, and one naming two casts is refused
+rather than guessed. What comes back is a cast of its own, with an id of its
+own; `vekna log` and the drilled-in header both say which cast it carries on
+from.
