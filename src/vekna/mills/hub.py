@@ -95,7 +95,7 @@ class Hub(Casts):
 
     def _accept(self, message: CastMessage) -> None:
         self._journal(message)
-        self._fan_out(message)
+        self.fan_out(message, subject=message.cast_id)
         self._say(kind=message.kind, subject=message.cast_id, action="applied")
 
     # A disk that is full is the daemon's problem and not the cast's. The
@@ -113,13 +113,21 @@ class Hub(Casts):
     # The dead surface is dropped rather than tried again on the next event —
     # its socket is not coming back, and the detach it never got to send is
     # exactly what this stands in for.
-    def _fan_out(self, message: CastMessage) -> None:
+    # Public, and taking any wire message, because the hub is where the surfaces
+    # are: a lich's events go out to the same people, and `mills.liches` may not
+    # reach for this class. `inits` hands this over to it.
+    def fan_out(self, message: WireMessage, *, subject: str | None = None) -> None:
         for surface in list(self._surfaces):
             try:
                 surface.send(message)
             except OSError as error:
                 self.detach_surface(surface)
-                self._drop(message, reason=f"surface gone: {error}")
+                self._say(
+                    kind=message.kind,
+                    subject=subject,
+                    action="dropped",
+                    reason=f"surface gone: {error}",
+                )
 
     def _drop(self, message: CastMessage, *, reason: str) -> None:
         self._say(

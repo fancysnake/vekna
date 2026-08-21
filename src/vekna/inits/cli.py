@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import itertools
 import os
 import sys
 from collections.abc import Callable
@@ -17,23 +18,32 @@ from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.registry import LichRegistry
 from vekna.links.socket_server import alive, attach, serve
-from vekna.links.spawn import raise_detached
+from vekna.links.spawn import CastProcess, raise_detached, spawn_cast
 from vekna.links.terminal import Terminal
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.mills.liches import Liches, draw_name, sleeping_here
+from vekna.mills.station import Station
 from vekna.pacts.lich import LichLine, Phylactery
 from vekna.pacts.routing import Routed, Surface, Wiring
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    LICH_ENV,
+    CastHello,
+    CastKillRequested,
     CastMessage,
+    CastRefused,
+    CastRequested,
+    CastStatus,
     LichDismissRequested,
     LichFell,
     LichRose,
     LichStatus,
     LichUpdate,
+    SurfaceCommand,
     SurfaceHello,
     SurfaceReady,
+    WireMessage,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -70,6 +80,8 @@ _NEW_ONE = "n"
 # is on the same machine and answers in a turn of its loop; this is the ceiling
 # for a daemon wedged rather than a budget for a slow one.
 _ANSWER_SECONDS = 5.0
+_QUIT = frozenset({"q", "quit"})
+_LICH_KEYS = "cast <ritual>, prompt <text>, kill, or q"
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -222,20 +234,14 @@ async def _as_peer(*, path: Path, screen: Screen) -> int:
     return 0
 
 
-async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> int:
-    where: Screen = screen if screen is not None else Terminal()
-    path = default_socket_path()
-    if await alive(path):
-        return await _as_peer(path=path, screen=where)
-    journal = Journal(default_runs_root())
-    await asyncio.to_thread(journal.prune, keep=_KEPT)
-    routed = _sink(debug)
-    hub = Hub(on_routed=routed, on_journal=journal.record)
-    liches = Liches(registry=LichRegistry(default_state_root()), on_routed=routed)
-    dashboard = Dashboard(casts=hub, screen=where)
-
+# What the socket reaches, and the one place the daemon's three parts meet: the
+# hub knows what a cast is doing, the liches know whose cast it is, and the view
+# repaints when either changes. None of them may reach for another.
+def _wiring(*, hub: Hub, liches: Liches, dashboard: Dashboard) -> Wiring:
     def heard(message: CastMessage) -> None:
         hub.apply(message)
+        if isinstance(message, CastHello) and message.lich is not None:
+            liches.cast_started(lich=message.lich, cast_id=message.cast_id)
         dashboard.changed()
 
     # The cast replay first, then the liches, then the word that the picture is
@@ -258,17 +264,37 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
         liches.apply(message)
         dashboard.changed()
 
+    return Wiring(
+        on_message=heard,
+        on_attach=attached,
+        on_detach=hub.detach_surface,
+        on_rise=rose,
+        on_lich=lich_said,
+        on_fallen=liches.gone,
+        on_command=liches.command,
+    )
+
+
+async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> int:
+    where: Screen = screen if screen is not None else Terminal()
+    path = default_socket_path()
+    if await alive(path):
+        return await _as_peer(path=path, screen=where)
+    journal = Journal(default_runs_root())
+    await asyncio.to_thread(journal.prune, keep=_KEPT)
+    routed = _sink(debug)
+    hub = Hub(on_routed=routed, on_journal=journal.record)
+    liches = Liches(
+        registry=LichRegistry(default_state_root()),
+        on_routed=routed,
+        # The surfaces are the hub's, and a lich's events go out to the same
+        # people a cast's do. This is the only join between the two.
+        on_said=lambda message, name: hub.fan_out(message, subject=name),
+    )
+    dashboard = Dashboard(casts=hub, screen=where)
+
     server = await serve(
-        path=path,
-        wiring=Wiring(
-            on_message=heard,
-            on_attach=attached,
-            on_detach=hub.detach_surface,
-            on_rise=rose,
-            on_lich=lich_said,
-            on_fallen=liches.gone,
-            on_command=liches.command,
-        ),
+        path=path, wiring=_wiring(hub=hub, liches=liches, dashboard=dashboard)
     )
     if debug is not None:
         dashboard.say(f"logging every event to {debug}")
@@ -290,9 +316,9 @@ async def _live_liches(path: Path) -> dict[str, LichStatus | None]:
     async def read_until_ready() -> None:
         async for message in read_frames(reader):
             if isinstance(message, LichRose):
-                live.setdefault(message.name, None)
+                live.setdefault(message.lich, None)
             elif isinstance(message, LichStatus):
-                live[message.name] = message
+                live[message.lich] = message
             elif isinstance(message, SurfaceReady):
                 return
 
@@ -344,18 +370,77 @@ async def list_liches() -> int:
 # loses the process; raising it again revives it. A retry loop is the upgrade.
 async def serve_lich(*, name: str, root: str) -> int:
     reader, writer = await attach(default_socket_path())
-    writer.write(encode_frame(LichRose(name=name, root=root, pid=os.getpid())))
-    writer.write(encode_frame(LichStatus(name=name)))
+    standing = _Standing(station=Station(name=name, root=root), writer=writer)
+    writer.write(encode_frame(LichRose(lich=name, root=root, pid=os.getpid())))
+    standing.say()
     async for message in read_frames(reader):
-        if isinstance(message, LichDismissRequested) and message.name == name:
-            writer.write(encode_frame(LichFell(name=name, reason="dismissed")))
+        if not isinstance(message, SurfaceCommand) or message.lich != name:
+            continue
+        if isinstance(message, LichDismissRequested):
             break
+        await standing.told(message)
+    # Dismissed, or the daemon went: either way the cast this lich was holding
+    # has nobody left to report to or answer it, so it goes too.
+    await standing.stop()
+    writer.write(encode_frame(LichFell(lich=name, reason="dismissed")))
     with contextlib.suppress(OSError):
         await writer.drain()
     writer.close()
     with contextlib.suppress(OSError):
         await writer.wait_closed()
     return 0
+
+
+# The lich's own loop, in the one layer where a mill and a link may meet. The
+# station holds the rule — one cast, never two — and the process is what the
+# rule is about; supervising it is a task of its own, so control still works
+# while a cast runs and while that cast sits blocked on a decide.
+class _Standing:
+    def __init__(self, *, station: Station, writer: asyncio.StreamWriter) -> None:
+        self._station = station
+        self._writer = writer
+        self._cast: CastProcess | None = None
+        self._watching: asyncio.Task[None] | None = None
+
+    def say(self, message: LichStatus | CastRefused | None = None) -> None:
+        self._writer.write(
+            encode_frame(self._station.status() if message is None else message)
+        )
+
+    async def told(self, message: CastRequested | CastKillRequested) -> None:
+        if isinstance(message, CastKillRequested):
+            await self._kill()
+        elif (refused := self._station.refusal(message)) is not None:
+            self.say(refused)
+        else:
+            await self._begin(message)
+
+    async def stop(self) -> None:
+        await self._kill()
+
+    async def _begin(self, message: CastRequested) -> None:
+        self._cast = await spawn_cast(
+            argv=[sys.executable, "-m", _CLI_MODULE, "cast", *message.argv],
+            cwd=self._station.root,
+            env={**os.environ, LICH_ENV: self._station.name},
+        )
+        self.say(self._station.began(message))
+        self._watching = asyncio.create_task(self._until_it_ends(self._cast))
+
+    # The slot is given back when the process ends, whatever ended it: a ritual
+    # that finished, one that raised, and one that was killed all leave a lich
+    # that can cast again.
+    async def _until_it_ends(self, running: CastProcess) -> None:
+        await running.wait()
+        if self._cast is running:
+            self._cast = None
+            self.say(self._station.ended())
+
+    async def _kill(self) -> None:
+        if (running := self._cast) is not None:
+            await running.kill()
+        if (watching := self._watching) is not None:
+            await watching
 
 
 async def _spawn_lich(*, name: str, root: str) -> None:
@@ -437,6 +522,129 @@ async def _drawn_or_chosen(
     return await _chosen(sleeping, screen=screen) or draw_name(taken=taken)
 
 
+# A shell on a lich's session: it paints what the lich says about itself and
+# what the ritual says under it, and it takes the vocabulary — `cast`, `prompt`,
+# `kill`. Detaching leaves the lich standing, which is the whole point of it.
+# ponytail: no rite tree here yet. What a cast is doing is `vekna`'s view for
+# now; the two surfaces meet when the lich gets a frame of its own (Eye).
+async def attach_lich(*, named: str | None, screen: Screen | None = None) -> int:
+    path = default_socket_path()
+    if not await alive(path):
+        raise click.ClickException(_NO_DAEMON)
+    live = await _live_liches(path)
+    name = _one_of(live, named=named)
+    where: Screen = screen if screen is not None else Terminal()
+    reader, writer = await attach(path)
+    writer.write(encode_frame(SurfaceHello()))
+    session = _Session(lich=name, screen=where, writer=writer, said=live.get(name))
+    await session.run(reader)
+    writer.close()
+    with contextlib.suppress(OSError):
+        await writer.wait_closed()
+    return 0
+
+
+# One lich here, attach to it; several, say which; none, say so. The same shape
+# the raising prompt takes, and for the same reason.
+def _one_of(live: dict[str, LichStatus | None], *, named: str | None) -> str:
+    if named is not None:
+        if named not in live:
+            message = f"{named} is not standing — `vekna liches` has them"
+            raise click.ClickException(message)
+        return named
+    if not live:
+        message = "no lich is standing — `vekna lich` raises one"
+        raise click.ClickException(message)
+    if len(live) > 1:
+        standing = ", ".join(sorted(live))
+        message = f"several liches are standing — say which: {standing}"
+        raise click.ClickException(message)
+    return next(iter(live))
+
+
+# The session view and the keys, over one socket. Painting and typing are
+# separate tasks: what a lich is for is being told something while it is busy,
+# and a loop that read and painted in turn could not do that.
+class _Session:
+    def __init__(
+        self,
+        *,
+        lich: str,
+        screen: Screen,
+        writer: asyncio.StreamWriter,
+        said: LichStatus | None,
+    ) -> None:
+        self._lich = lich
+        self._screen = screen
+        self._writer = writer
+        self._said = said
+        self._ritual_line = ""
+        self._note = ""
+        self._casts: set[str] = set()
+
+    async def run(self, reader: asyncio.StreamReader) -> None:
+        self._paint()
+        listening = asyncio.create_task(self._listen(reader))
+        typing = asyncio.create_task(self._typing())
+        await asyncio.wait([listening, typing], return_when=asyncio.FIRST_COMPLETED)
+        for task in (listening, typing):
+            task.cancel()
+        await asyncio.gather(listening, typing, return_exceptions=True)
+
+    # What the daemon fans out, kept down to this lich's own: its status, the
+    # refusals it answers with, and the line the ritual it is running sets.
+    async def _listen(self, reader: asyncio.StreamReader) -> None:
+        async for message in read_frames(reader):
+            self._heard(message)
+            self._paint()
+
+    def _heard(self, message: WireMessage) -> None:
+        if isinstance(message, LichStatus) and message.lich == self._lich:
+            self._said = message
+            if message.cast_id is not None:
+                self._casts.add(message.cast_id)
+            if message.ritual is None:
+                self._ritual_line = ""
+        elif isinstance(message, CastRefused) and message.lich == self._lich:
+            self._note = lich_screen.refusal(message)
+        elif isinstance(message, CastHello) and message.lich == self._lich:
+            self._casts.add(message.cast_id)
+        elif isinstance(message, CastStatus) and message.cast_id in self._casts:
+            self._ritual_line = message.text
+
+    async def _typing(self) -> None:
+        # A `while` in disguise: this repository bans the statement.
+        for _ in itertools.count():
+            if (line := await self._screen.read_line()) is None:
+                return
+            if line.strip().lower() in _QUIT:
+                return
+            self._say(line.strip())
+            self._paint()
+
+    def _say(self, line: str) -> None:
+        verb, _, rest = line.partition(" ")
+        if verb == "kill":
+            self._writer.write(encode_frame(CastKillRequested(lich=self._lich)))
+        elif verb == "cast" and rest:
+            self._send_cast(rest.split())
+        elif verb == "prompt" and rest:
+            self._send_cast(["--prompt", rest])
+        elif line:
+            self._note = f"{line!r} is not a command — {_LICH_KEYS}"
+
+    def _send_cast(self, argv: list[str]) -> None:
+        self._note = ""
+        self._writer.write(encode_frame(CastRequested(lich=self._lich, argv=argv)))
+
+    def _paint(self) -> None:
+        self._screen.show(
+            lich_screen.session(
+                said=self._said, ritual_line=self._ritual_line, note=self._note
+            )
+        )
+
+
 # The row goes whether or not a process is holding it: a dormant lich is a row
 # and nothing else, so dropping it is the whole of dismissing one.
 async def dismiss_lich(name: str) -> int:
@@ -449,7 +657,7 @@ async def dismiss_lich(name: str) -> int:
         raise click.ClickException(message)
     _, writer = await attach(path)
     writer.write(encode_frame(SurfaceHello()))
-    writer.write(encode_frame(LichDismissRequested(name=name)))
+    writer.write(encode_frame(LichDismissRequested(lich=name)))
     # Closing after the drain does not discard what is buffered: the daemon
     # reads the frame and *then* the end of the connection, so there is no
     # acknowledgement to wait for and nothing to race.
@@ -506,8 +714,15 @@ def _lich_command() -> Group:
             raise SystemExit(asyncio.run(serve_lich(name=serving[0], root=serving[1])))
         raise SystemExit(asyncio.run(raise_lich(named=name, fresh=fresh)))
 
+    lich.add_command(_attach_command)
     lich.add_command(_dismiss_command)
     return lich
+
+
+@click.command("attach", help="Attach this shell to a lich's session.")
+@click.argument("name", required=False)
+def _attach_command(name: str | None = None) -> None:
+    raise SystemExit(asyncio.run(attach_lich(named=name)))
 
 
 @click.command("dismiss", help="End a lich for good and drop its row.")

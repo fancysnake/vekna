@@ -97,12 +97,13 @@ submodules cooperate.
   mills/
     hub.py       # the daemon's model: views per cast, fan-out, replay
     liches.py    # the daemon's liches: rows, live stations, routing by name
+    station.py   # one lich's own state: the cast slot, and one cast at a time
     debug.py     # one Routed, one line
   links/
     socket_server.py  # the Unix socket, and Serving, which closes it whole
     journal.py        # runs/<cast_id>/: run.json + events.jsonl
     registry.py       # liches.json beside runs/
-    spawn.py          # a process that outlives the shell that asked for it
+    spawn.py          # a detached lich, and the cast one runs: stdin, kill
     terminal.py       # the daemon's own screen and keys
     debug_log.py      # --debug's file
   gates/

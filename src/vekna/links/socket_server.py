@@ -7,7 +7,6 @@ from vekna.pacts.routing import SocketPathError, Surface, Wiring
 from vekna.wire import (
     CastGoodbye,
     CastMessage,
-    LichDismissRequested,
     LichFell,
     LichRose,
     LichUpdate,
@@ -180,7 +179,7 @@ async def _as_surface(
     try:
         with contextlib.suppress(ValueError, OSError):
             async for message in frames:
-                if isinstance(message, LichDismissRequested):
+                if isinstance(message, SurfaceCommand):
                     wiring.on_command(message)
     finally:
         wiring.on_detach(surface)
@@ -203,7 +202,7 @@ async def _as_lich(
     try:
         with contextlib.suppress(ValueError, OSError):
             async for message in frames:
-                if isinstance(message, LichUpdate) and message.name == rose.name:
+                if isinstance(message, LichUpdate) and message.lich == rose.lich:
                     fell = isinstance(message, LichFell)
                     wiring.on_lich(message)
     finally:
@@ -211,7 +210,7 @@ async def _as_lich(
         # closed under it has not, and the daemon would otherwise hold a station
         # every command vanishes into.
         if not fell:
-            wiring.on_fallen(rose.name)
+            wiring.on_fallen(rose.lich)
 
 
 # A cast that goes without a goodbye gets one anyway, or the daemon would hold

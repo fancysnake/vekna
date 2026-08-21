@@ -9,6 +9,10 @@ from ._pacts import RunRecord, WireMessage, decode_frame
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
 _RUNS_ENV = "VEKNA_RUNS"
+# How a cast learns which lich spawned it. An environment variable rather than a
+# flag, because everything after `vekna cast` belongs to the ritual — and this
+# is the one thing about a cast that neither the operator nor the ritual says.
+LICH_ENV = "VEKNA_LICH"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
@@ -71,6 +75,12 @@ def _owned(directory: Path) -> Path:
         )
         raise PermissionError(msg)
     return directory
+
+
+# The lich this cast is running under, or None for one run by hand. Empty is
+# None too: an exported-but-blank variable is a shell's way of saying nothing.
+def casting_lich() -> str | None:
+    return os.environ.get(LICH_ENV) or None
 
 
 def run_file(root: Path, cast_id: str) -> Path:

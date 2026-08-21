@@ -3,24 +3,41 @@ import contextlib
 import os
 import signal
 import sys
+import textwrap
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
 
 import click
 import pytest
 
-from vekna.inits.cli import daemon, dismiss_lich, list_liches, raise_lich
+from vekna.inits.cli import attach_lich, daemon, dismiss_lich, list_liches, raise_lich
 from vekna.links.registry import LichRegistry
+from vekna.links.socket_server import attach
 from vekna.links.spawn import raise_detached
 from vekna.pacts.lich import Phylactery
 from vekna.pacts.screen import Screen
+from vekna.wire import (
+    CastHello,
+    CastKillRequested,
+    CastRefused,
+    CastRequested,
+    LichStatus,
+    SurfaceHello,
+    WireMessage,
+    encode_frame,
+    read_frames,
+)
+
+_MessageT = TypeVar("_MessageT", bound=WireMessage)
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
 _CLI = "vekna.inits.cli"
 _TWO = 2
+_SLOW_PATIENCE = 3000
 
 
 # The daemon's own terminal, and — where a lich is being raised — the one the
@@ -321,3 +338,303 @@ async def _until_listed(capsys: pytest.CaptureFixture[str], text: str) -> None:
         await asyncio.sleep(_TICK)
     msg = f"the listing never said {text!r}"
     raise AssertionError(msg)
+
+
+_RITUALS = textwrap.dedent("""
+    import asyncio
+
+    from pydantic import BaseModel
+
+    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, status, step
+
+
+    class Tick(BaseModel):
+        left: int
+
+
+    class Countdown(BaseModel):
+        start: int
+
+
+    @step
+    async def tick(state: Tick) -> Transition:
+        status(f"{state.left} to go")
+        if not state.left:
+            return done(state)
+        return goto(tick, Tick(left=state.left - 1))
+
+
+    @ritual("countdown")
+    async def countdown(components: Countdown) -> Transition:
+        return goto(tick, Tick(left=components.start))
+
+
+    @step
+    async def linger(_: NoComponents) -> Transition:
+        await asyncio.sleep(30)
+        return done()
+
+
+    @ritual("slow")
+    async def slow(_: NoComponents) -> Transition:
+        return goto(linger, NoComponents())
+    """)
+
+
+# A surface on the daemon, which is what an attached shell and a Discord channel
+# both are: it hears everything and it may now speak.
+class _Watcher:
+    def __init__(self) -> None:
+        self.heard: list[WireMessage] = []
+        self._writer: asyncio.StreamWriter | None = None
+        self._reading: asyncio.Task[None] | None = None
+
+    async def attach_to(self, socket_path: Path) -> None:
+        reader, self._writer = await attach(socket_path)
+        self._writer.write(encode_frame(SurfaceHello()))
+        self._reading = asyncio.create_task(self._listen(reader))
+
+    def send(self, message: WireMessage) -> None:
+        assert self._writer is not None
+        self._writer.write(encode_frame(message))
+
+    def of_kind(self, kind: type[_MessageT]) -> list[_MessageT]:
+        return [message for message in self.heard if isinstance(message, kind)]
+
+    async def close(self) -> None:
+        if self._reading is not None:
+            self._reading.cancel()
+            await asyncio.gather(self._reading, return_exceptions=True)
+        if self._writer is not None:
+            self._writer.close()
+            with contextlib.suppress(OSError):
+                await self._writer.wait_closed()
+
+    async def _listen(self, reader: asyncio.StreamReader) -> None:
+        async for message in read_frames(reader):
+            self.heard.append(message)
+
+
+def _casting(watcher: _Watcher, name: str) -> LichStatus | None:
+    for message in reversed(watcher.of_kind(LichStatus)):
+        if message.lich == name:
+            return message
+    return None
+
+
+@contextlib.asynccontextmanager
+async def _watching(socket_path: Path) -> AsyncIterator[_Watcher]:
+    watcher = _Watcher()
+    await watcher.attach_to(socket_path)
+    try:
+        yield watcher
+    finally:
+        await watcher.close()
+
+
+@pytest.mark.asyncio
+class TestCasting:
+    @staticmethod
+    async def test_a_cast_ordered_from_a_surface_runs_and_is_the_lich_s(
+        socket_path: Path, state: Path, tmp_path: Path
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+
+        async with _daemon_at(socket_path), _watching(socket_path) as watcher:
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+
+            watcher.send(
+                CastRequested(lich="hollow-vesper", argv=["countdown", "--start", "1"])
+            )
+            await _slowly(lambda: bool(watcher.of_kind(CastHello)))
+
+            hello = watcher.of_kind(CastHello)[0]
+            assert hello.ritual == "countdown"
+            # The cast says whose it is, which is what makes a lich's history a
+            # query over the journal rather than a list somebody maintains.
+            assert hello.lich == "hollow-vesper"
+            await _slowly(lambda: _rows(state)[0].last_cast == hello.cast_id)
+
+    # One cast, never two — and the refusal names what is running rather than
+    # leaving the operator to go and look.
+    @staticmethod
+    async def test_a_second_cast_is_refused_and_kill_is_the_way_out(
+        socket_path: Path, state: Path, tmp_path: Path
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+
+        async with _daemon_at(socket_path), _watching(socket_path) as watcher:
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+            watcher.send(CastRequested(lich="hollow-vesper", argv=["slow"]))
+            await _slowly(lambda: _running(watcher) == "slow")
+
+            watcher.send(CastRequested(lich="hollow-vesper", argv=["countdown"]))
+            await _slowly(lambda: bool(watcher.of_kind(CastRefused)))
+
+            refused = watcher.of_kind(CastRefused)[0]
+            assert (refused.lich, refused.ritual) == ("hollow-vesper", "slow")
+            # And what it said to do about it works.
+            watcher.send(CastKillRequested(lich="hollow-vesper"))
+            await _slowly(lambda: _running(watcher) is None)
+
+
+def _running(watcher: _Watcher) -> str | None:
+    said = _casting(watcher, "hollow-vesper")
+    return None if said is None else said.ritual
+
+
+# A cast is a Python process that imports the lexicon, the folios and the user's
+# rituals before it says anything, so what a lich does is slower than what the
+# daemon does.
+async def _slowly(ready: Callable[[], bool]) -> None:
+    for _ in range(_SLOW_PATIENCE):
+        if ready():
+            return
+        await asyncio.sleep(_TICK)
+    msg = f"gave up after {_SLOW_PATIENCE * _TICK:.1f}s waiting for the cast"
+    raise AssertionError(msg)
+
+
+# A terminal nobody is sitting at until the test types. Reading blocks on the
+# queue, which is what a real one does between keystrokes.
+class _Typed(Screen):
+    def __init__(self) -> None:
+        self.frames: list[str] = []
+        self._keys: asyncio.Queue[str | None] = asyncio.Queue()
+
+    def show(self, screen: str) -> None:
+        self.frames.append(screen)
+
+    async def read_line(self) -> str | None:
+        return await self._keys.get()
+
+    def press(self, key: str) -> None:
+        self._keys.put_nowait(key)
+
+    def painted(self, text: str) -> bool:
+        return any(text in frame for frame in self.frames)
+
+
+@pytest.mark.asyncio
+class TestAttaching:
+    @staticmethod
+    async def test_a_shell_on_the_session_orders_a_cast_and_watches_it(
+        socket_path: Path, state: Path, tmp_path: Path
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+            keys = _Typed()
+            attached = asyncio.create_task(
+                attach_lich(named="hollow-vesper", screen=keys)
+            )
+            await _eventually(lambda: keys.painted("hollow-vesper · idle"))
+
+            keys.press("cast slow")
+            await _slowly(lambda: keys.painted("casting slow"))
+
+            # And the way out of a cast that will not end on its own.
+            keys.press("kill")
+            await _slowly(lambda: keys.frames[-1].startswith("hollow-vesper · idle"))
+            keys.press("q")
+            assert await attached == 0
+
+    # The ritual's own line, under the lich's: the lich can say what it is
+    # casting and no more, and which of eight PRs this is belongs to the author.
+    @staticmethod
+    async def test_the_ritual_s_own_line_shows_under_the_lich_s(
+        socket_path: Path, state: Path, tmp_path: Path
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+            keys = _Typed()
+            attached = asyncio.create_task(
+                attach_lich(named="hollow-vesper", screen=keys)
+            )
+            await _eventually(lambda: bool(keys.frames))
+
+            keys.press("cast countdown --start=2")
+            await _slowly(lambda: keys.painted("to go"))
+
+            keys.press("q")
+            assert await attached == 0
+
+    @staticmethod
+    async def test_a_second_cast_from_the_shell_is_refused_in_its_own_words(
+        socket_path: Path, state: Path, tmp_path: Path
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+            keys = _Typed()
+            attached = asyncio.create_task(
+                attach_lich(named="hollow-vesper", screen=keys)
+            )
+            await _eventually(lambda: bool(keys.frames))
+            keys.press("cast slow")
+            await _slowly(lambda: keys.painted("casting slow"))
+
+            keys.press("cast countdown")
+            await _slowly(lambda: keys.painted("`kill` is the way out"))
+
+            keys.press("kill")
+            keys.press("q")
+            assert await attached == 0
+
+    @staticmethod
+    async def test_a_line_that_is_not_a_command_says_what_is(
+        socket_path: Path, state: Path
+    ):
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+            keys = _Typed()
+            attached = asyncio.create_task(
+                attach_lich(named="hollow-vesper", screen=keys)
+            )
+            await _eventually(lambda: bool(keys.frames))
+
+            keys.press("dance")
+            await _eventually(lambda: keys.painted("is not a command"))
+
+            keys.press("q")
+            assert await attached == 0
+
+    @staticmethod
+    async def test_attaching_to_nothing_says_so(socket_path: Path):
+        async with _daemon_at(socket_path):
+            with pytest.raises(click.ClickException, match="no lich is standing"):
+                await attach_lich(named=None)
+
+    @staticmethod
+    async def test_attaching_to_a_name_nobody_holds_says_so(
+        socket_path: Path, state: Path
+    ):
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await _eventually(lambda: bool(_names(state)))
+
+            with pytest.raises(click.ClickException, match="is not standing"):
+                await attach_lich(named="ashen-quill")
+
+    # With no name and more than one standing, guessing is worse than asking.
+    @staticmethod
+    async def test_several_standing_and_no_name_says_which(
+        socket_path: Path, state: Path
+    ):
+        async with _daemon_at(socket_path):
+            await raise_lich(named="hollow-vesper", fresh=False)
+            await raise_lich(named="ashen-quill", fresh=False)
+            await _eventually(lambda: len(_names(state)) == _TWO)
+
+            with pytest.raises(click.ClickException, match="say which"):
+                await attach_lich(named=None)

@@ -251,6 +251,33 @@ refused rather than raised twice.
 `--name` from an unrelated directory raises that lich in **its own** root, which
 is what its row remembers it for.
 
+### `vekna lich attach`
+
+```bash
+vekna lich attach
+vekna lich attach hollow-vesper
+```
+
+A shell on the lich's session. With no name: one lich standing, attach to it;
+several, say which. The view is the lich's own line — idle, or casting this for
+that long — with the ritual's `status(...)` under it, and the vocabulary is the
+same wherever you are typing it:
+
+```text
+cast <ritual> [--flag=value ...]
+prompt <text>
+kill
+q
+```
+
+`cast` and `prompt` are refused while a cast runs, naming what is running and
+how long it has been going; `kill` is the way out, and it works while the cast
+is blocked on a decide. Detaching with `q` leaves the lich standing — that is
+the point of it.
+
+A second shell attaches to the same session, and a cast started from either is
+visible in both.
+
 ### `vekna lich dismiss`
 
 ```bash

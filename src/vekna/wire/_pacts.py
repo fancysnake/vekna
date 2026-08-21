@@ -163,7 +163,7 @@ class LockReleased(BaseModel):
 # is exactly as long as this message is worth anything.
 class LichRose(BaseModel):
     kind: Literal["lich_rose"] = "lich_rose"
-    name: str
+    lich: str
     root: str
     pid: int
 
@@ -174,7 +174,7 @@ class LichRose(BaseModel):
 # station commands are routed into the dark.
 class LichFell(BaseModel):
     kind: Literal["lich_fell"] = "lich_fell"
-    name: str
+    lich: str
     reason: Literal["dismissed", "disconnected"]
 
 
@@ -183,7 +183,7 @@ class LichFell(BaseModel):
 # under it.
 class LichStatus(BaseModel):
     kind: Literal["lich_status"] = "lich_status"
-    name: str
+    lich: str
     ritual: str | None = None
     cast_id: str | None = None
     since: datetime | None = None
@@ -194,7 +194,32 @@ class LichStatus(BaseModel):
 # lich dormant rather than gone, and this is the one command that means gone.
 class LichDismissRequested(BaseModel):
     kind: Literal["lich_dismiss_requested"] = "lich_dismiss_requested"
-    name: str
+    lich: str
+
+
+# Surface → daemon → lich: start this. `argv` is what `vekna cast` is handed,
+# because that is what the lich spawns — a ritual and its component flags, or
+# `--prompt` and a line of text. Shaping it into fields would be this protocol
+# learning the cast CLI's own grammar twice.
+class CastRequested(BaseModel):
+    kind: Literal["cast_requested"] = "cast_requested"
+    lich: str
+    argv: list[str]
+
+
+# Lich → daemon → surface: not while that one runs. The facts, not the
+# sentence — a surface says it in its own words, and a channel with buttons
+# will not say it the way a terminal does.
+class CastRefused(BaseModel):
+    kind: Literal["cast_refused"] = "cast_refused"
+    lich: str
+    ritual: str
+    since: datetime
+
+
+class CastKillRequested(BaseModel):
+    kind: Literal["cast_kill_requested"] = "cast_kill_requested"
+    lich: str
 
 
 # Everything a cast says about itself, and the one thing that does not. Split so
@@ -225,14 +250,15 @@ CastMessage = CastHello | CastUpdate
 
 # The same split one station over: a rising opens the connection, and everything
 # after it is about a lich the daemon already holds.
-LichUpdate = LichStatus | LichFell
+LichUpdate = LichStatus | LichFell | CastRefused
 
 LichMessage = LichRose | LichUpdate
 
 # What a surface is allowed to *say*, as opposed to be sent. Until 0.8.0 a
 # surface only listened; a lich takes orders, so this is the direction that
-# opens — as far as the lich needs and no further.
-SurfaceCommand = LichDismissRequested
+# opens — as far as the lich needs and no further. Every one of these names the
+# lich it is for, because the daemon routes them by name and by nothing else.
+SurfaceCommand = LichDismissRequested | CastRequested | CastKillRequested
 
 WireMessage = CastMessage | SurfaceHello | SurfaceReady | LichMessage | SurfaceCommand
 

@@ -2,11 +2,13 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from vekna.pacts.lich import LichLine
+from vekna.wire import CastRefused, LichStatus
 
 _NAME = 16
 _STATE = 18
 _NONE = "no liches — `vekna lich` raises one here\n"
 _NEW = "a new one"
+_SESSION_KEYS = " cast <ritual> [--flag=v] · prompt <text> · kill · q quit"
 _MINUTE = 60
 _HOUR = 3600
 _DAY = 86400
@@ -61,6 +63,54 @@ def listing(lines: Sequence[LichLine], *, now: datetime | None = None) -> str:
         f"{line.row.name:<{_NAME}}  {_state(line):<{_STATE}}"
         f"  {line.row.root}  {_last(line, at)}\n"
         for line in lines
+    )
+
+
+# The lich's session, on the surface that has a frame to hold it: the lich's own
+# line — idle, or casting this for that long — and under it the ritual's, which
+# is the only thing that knows which of eight PRs this is.
+def session(
+    *,
+    said: LichStatus | None,
+    ritual_line: str = "",
+    note: str = "",
+    now: datetime | None = None,
+) -> str:
+    at = _now(now)
+    lines = [_casting(said, at)]
+    if ritual_line:
+        lines.append(f"  {ritual_line}")
+    if note:
+        lines.append(note)
+    return "\n".join([*lines, _SESSION_KEYS, ""])
+
+
+def _casting(said: LichStatus | None, now: datetime) -> str:
+    if said is None:
+        return "…"
+    if said.ritual is None or said.since is None:
+        return f"{said.lich} · idle"
+    return f"{said.lich} · casting {said.ritual} for {_since(said.since, now)}"
+
+
+# How long it has been running, which is the thing an operator is deciding on:
+# four minutes is working, forty is stuck.
+def _since(when: datetime, now: datetime) -> str:
+    seconds = max(0, int((now - when).total_seconds()))
+    if seconds < _MINUTE:
+        return f"{seconds}s"
+    if seconds < _HOUR:
+        return f"{seconds // _MINUTE}m"
+    return f"{seconds // _HOUR}h{seconds % _HOUR // _MINUTE:02d}m"
+
+
+# Why a `cast` was not taken, in this surface's own words. The message carries
+# the facts; a channel with buttons will not word it the way a terminal does.
+def refusal(message: CastRefused, *, now: datetime | None = None) -> str:
+    running = _since(message.since, _now(now))
+    return (
+        f"{message.lich} is casting {message.ritual}, {running} in"
+        " — `kill` is the way out"
     )
 
 

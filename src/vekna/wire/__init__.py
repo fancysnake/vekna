@@ -1,4 +1,6 @@
 from ._links import (
+    LICH_ENV,
+    casting_lich,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -11,7 +13,10 @@ from ._links import (
 from ._pacts import (
     CastGoodbye,
     CastHello,
+    CastKillRequested,
     CastMessage,
+    CastRefused,
+    CastRequested,
     CastStatus,
     CastUpdate,
     DecideRequested,
@@ -42,9 +47,13 @@ from ._pacts import (
 )
 
 __all__ = [
+    "LICH_ENV",
     "CastGoodbye",
     "CastHello",
+    "CastKillRequested",
     "CastMessage",
+    "CastRefused",
+    "CastRequested",
     "CastStatus",
     "CastUpdate",
     "DecideRequested",
@@ -70,6 +79,7 @@ __all__ = [
     "SurfaceHello",
     "SurfaceReady",
     "WireMessage",
+    "casting_lich",
     "decode_frame",
     "default_runs_root",
     "default_socket_path",

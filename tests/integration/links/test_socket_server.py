@@ -54,7 +54,7 @@ def _said_goodbye(daemon: "_Daemon") -> bool:
 
 
 def _rose(name: str = "hollow-vesper") -> LichRose:
-    return LichRose(name=name, root="/proj", pid=4242)
+    return LichRose(lich=name, root="/proj", pid=4242)
 
 
 # Everything the lich half of the wiring was told, kept together — one
@@ -391,12 +391,12 @@ class TestLiches:
 
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_rose()))
-        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        writer.write(encode_frame(LichStatus(lich="hollow-vesper")))
         await writer.drain()
         await _eventually(lambda: bool(daemon.liches.said))
 
         assert daemon.liches.risen == [_rose()]
-        assert daemon.liches.said == [LichStatus(name="hollow-vesper")]
+        assert daemon.liches.said == [LichStatus(lich="hollow-vesper")]
         writer.close()
         await server.close()
 
@@ -423,7 +423,7 @@ class TestLiches:
         server = await daemon.start(socket_path)
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_rose()))
-        writer.write(encode_frame(LichFell(name="hollow-vesper", reason="dismissed")))
+        writer.write(encode_frame(LichFell(lich="hollow-vesper", reason="dismissed")))
         await writer.drain()
         await _eventually(lambda: bool(daemon.liches.said))
 
@@ -458,12 +458,12 @@ class TestLiches:
         server = await daemon.start(socket_path)
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_rose()))
-        writer.write(encode_frame(LichStatus(name="ashen-quill")))
-        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        writer.write(encode_frame(LichStatus(lich="ashen-quill")))
+        writer.write(encode_frame(LichStatus(lich="hollow-vesper")))
         await writer.drain()
         await _eventually(lambda: bool(daemon.liches.said))
 
-        assert daemon.liches.said == [LichStatus(name="hollow-vesper")]
+        assert daemon.liches.said == [LichStatus(lich="hollow-vesper")]
         writer.close()
         await server.close()
 
@@ -474,7 +474,7 @@ class TestLiches:
         server = await daemon.start(socket_path)
 
         _, writer = await attach(socket_path)
-        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        writer.write(encode_frame(LichStatus(lich="hollow-vesper")))
         await writer.drain()
         await _settle()
 
@@ -492,10 +492,10 @@ class TestLiches:
 
         _, writer = await attach(socket_path)
         writer.write(encode_frame(SurfaceHello()))
-        writer.write(encode_frame(LichDismissRequested(name="hollow-vesper")))
+        writer.write(encode_frame(LichDismissRequested(lich="hollow-vesper")))
         await writer.drain()
         await _eventually(lambda: bool(daemon.liches.commanded))
 
-        assert daemon.liches.commanded == [LichDismissRequested(name="hollow-vesper")]
+        assert daemon.liches.commanded == [LichDismissRequested(lich="hollow-vesper")]
         writer.close()
         await server.close()

@@ -36,7 +36,7 @@ class _Station:
 
 
 def _rose(name: str = "hollow-vesper", *, root: str = "/proj") -> LichRose:
-    return LichRose(name=name, root=root, pid=4242)
+    return LichRose(lich=name, root=root, pid=4242)
 
 
 def _row(name: str = "hollow-vesper", *, root: str = "/proj") -> Phylactery:
@@ -99,7 +99,7 @@ class TestFalling:
         liches = Liches(registry=registry)
         liches.rose(_rose(), _Station())
 
-        liches.apply(LichFell(name="hollow-vesper", reason="dismissed"))
+        liches.apply(LichFell(lich="hollow-vesper", reason="dismissed"))
 
         assert not liches.live
         # The row goes with the dismissal, not with the process: dropping it is
@@ -124,7 +124,7 @@ class TestFalling:
         seen: list[Routed] = []
         liches = Liches(registry=_Rows(), on_routed=seen.append)
 
-        liches.apply(LichStatus(name="nobody"))
+        liches.apply(LichStatus(lich="nobody"))
 
         assert seen[-1].action == "dropped"
         assert seen[-1].subject == "nobody"
@@ -136,7 +136,7 @@ class TestStatus:
         liches = Liches(registry=_Rows())
         liches.rose(_rose(), _Station())
 
-        liches.apply(LichStatus(name="hollow-vesper", ritual="fix_demo", since=_WHEN))
+        liches.apply(LichStatus(lich="hollow-vesper", ritual="fix_demo", since=_WHEN))
 
         said = liches.live["hollow-vesper"].said
         assert said is not None
@@ -151,9 +151,9 @@ class TestCommands:
         station = _Station()
         liches.rose(_rose(), station)
 
-        liches.command(LichDismissRequested(name="hollow-vesper"))
+        liches.command(LichDismissRequested(lich="hollow-vesper"))
 
-        assert station.sent == [LichDismissRequested(name="hollow-vesper")]
+        assert station.sent == [LichDismissRequested(lich="hollow-vesper")]
         assert not registry.saved
 
     # There is no process to tell, and dropping the row is the whole of what
@@ -164,7 +164,7 @@ class TestCommands:
         seen: list[Routed] = []
         liches = Liches(registry=registry, on_routed=seen.append)
 
-        liches.command(LichDismissRequested(name="hollow-vesper"))
+        liches.command(LichDismissRequested(lich="hollow-vesper"))
 
         assert not registry.saved
         assert seen[-1].action == "dropped"

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from vekna.wire import CastHello, WireMessage, default_socket_path
+from vekna.wire import CastHello, WireMessage, casting_lich, default_socket_path
 
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
@@ -410,6 +410,9 @@ def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
         started_at=datetime.now(tz=UTC),
         resumed_from=plan.resumed_from,
+        # Set by the lich that spawned this cast, and absent for one run by
+        # hand: it is what makes a lich's history a query over `runs/`.
+        lich=casting_lich(),
     )
 
 

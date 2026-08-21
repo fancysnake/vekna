@@ -12,6 +12,17 @@ which links back to the version here that carried each shipped feature.
 
 ### Added
 
+- **A lich casts.** `vekna lich attach` puts a shell on a lich's session and
+  the vocabulary is the same wherever it is typed: `cast <ritual> [--flag=v]`,
+  `prompt <text>`, `kill`. This is the first release where vekna **originates**
+  work — every surface before it watched. A lich runs one cast and never two: a
+  second is refused rather than queued, naming what is running and how long it
+  has been going, and `kill` is the way out — including while the cast sits
+  blocked on a decide. The cast it spawns is an ordinary cast that reports
+  itself to the daemon, carrying one new field: the lich that started it, which
+  is what makes a lich's history a query over `runs/` instead of a list
+  something maintains. The session shows the lich's own line and the ritual's
+  `status(...)` under it, and a second shell sees the same session.
 - **The lich stands up.** `vekna lich` raises a named station in a project
   directory and returns to the prompt — it outlives the shell, and the ssh
   session, that raised it. A lich is its **row**, not its process: name, root,
