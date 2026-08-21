@@ -17,6 +17,10 @@ which links back to the version here that carried each shipped feature.
   suggestions: a number or an option still answers itself, and anything else
   answers as typed. A ritual's own `decide(options=...)` stays closed — a step
   branching on `Literal["fix", "stop"]` still gets one of those back.
+- **A question meeting closed input says so.** A cast whose stdin had ended
+  answered a free-text question with an empty string and turned a suggested one
+  into an invalid choice, though nothing had been typed either way. Every prompt
+  now stops with `input ended before the question was answered`.
 - **A command can no longer eat the answer you typed.** `shell()` spawned bash
   with the cast's own stdin, so a command running beside a question — a step
   holding two mediums at once — read the line meant for the prompt, which then
