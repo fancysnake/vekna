@@ -238,15 +238,35 @@ class TestDecideSuggested:
 
         assert "or answer in your own words" in out.getvalue()
 
+    # A suggested prompt cannot be answered wrongly, so a bare return is not a
+    # retry — it is an empty answer, and the cast moves on with it.
     @staticmethod
-    def test_an_empty_answer_asks_again():
-        renderer, out = _renderer("\nc\n")
+    def test_an_empty_answer_stands():
+        renderer, _ = _renderer("\n")
 
         answer = asyncio.run(
             renderer.decide(prompt="pick", options=["a", "b"], free=True)
         )
 
-        assert (answer, "say something; try again" in out.getvalue()) == ("c", True)
+        assert not answer
+
+
+class TestPromptEndOfInput:
+    # Closed input is the channel going away, not a wrong answer: every prompt
+    # says so the same way rather than one claiming an invalid choice.
+    @staticmethod
+    def test_a_suggested_prompt_says_the_input_ended():
+        renderer, _ = _renderer("")
+
+        with pytest.raises(StandalonePromptError, match="input ended"):
+            asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+
+    @staticmethod
+    def test_a_free_text_prompt_says_the_input_ended():
+        renderer, _ = _renderer("")
+
+        with pytest.raises(StandalonePromptError, match="input ended"):
+            asyncio.run(renderer.decide(prompt="name?", free=True))
 
 
 class TestDecideConfirm:

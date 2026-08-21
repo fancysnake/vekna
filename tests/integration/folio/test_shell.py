@@ -1,6 +1,8 @@
 import asyncio
 import io
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from pydantic import BaseModel
 
@@ -203,23 +205,35 @@ class _RecordingFocus(ShellFocusProtocol):
         return ShellReply(stdout="from the focus", stderr="", exit_code=0)
 
 
+# Swapping fd 0 for real is the only honest way to prove a command cannot reach
+# it — mocking `create_subprocess_exec` would assert the implementation back at
+# itself. It is process-global state, so every fd is restored and closed even
+# when the cast raises, which is exactly what a regression here does.
+@contextmanager
+def _typed_at_stdin(text: bytes) -> Iterator[int]:
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, text)
+        os.close(write_fd)
+        stdin_fd = os.dup(0)
+        try:
+            os.dup2(read_fd, 0)
+            yield read_fd
+        finally:
+            os.dup2(stdin_fd, 0)
+            os.close(stdin_fd)
+    finally:
+        os.close(read_fd)
+
+
 class TestShellStdin:
     # The bug this holds shut: a command inheriting the terminal reads the line
     # the operator typed at a prompt beside it, and the answer disappears.
     @staticmethod
     def test_a_command_cannot_read_what_the_operator_typed():
-        read_fd, write_fd = os.pipe()
-        os.write(write_fd, b"1\n")
-        os.close(write_fd)
-        stdin_fd = os.dup(0)
-        try:
-            os.dup2(read_fd, 0)
+        with _typed_at_stdin(b"1\n") as read_fd:
             result = _cast(reads_stdin)
-        finally:
-            os.dup2(stdin_fd, 0)
-            os.close(stdin_fd)
-        unread = os.read(read_fd, 2)
-        os.close(read_fd)
+            unread = os.read(read_fd, 2)
 
         assert (result.exit_code, result.stdout, unread) == (_EOF_EXIT, "", b"1\n")
 

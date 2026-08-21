@@ -150,6 +150,9 @@ class DecideDouble(Channel):
     # The real channel returns a member of what it offered or raises. A test
     # scripting "repair" for a step offering ["fix", "stop"] is testing a ritual
     # that does not exist, so it is refused here rather than three steps later.
+    # Under `free` the options are suggestions — an agent's `ask_human` always
+    # arrives that way — and answering past them is the point, so nothing to
+    # check.
     @staticmethod
     def _offered(*, answer: str, options: Sequence[str] | None, free: bool) -> str:
         if free:
