@@ -2314,7 +2314,7 @@ description = "C parser in Python"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
-markers = "platform_python_implementation != \"PyPy\" and implementation_name != \"PyPy\""
+markers = "implementation_name != \"PyPy\" and platform_python_implementation != \"PyPy\""
 files = [
     {file = "pycparser-3.0-py3-none-any.whl", hash = "sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992"},
     {file = "pycparser-3.0.tar.gz", hash = "sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29"},
@@ -3241,14 +3241,14 @@ syntax = ["tree-sitter (>=0.25.0) ; python_version >= \"3.10\"", "tree-sitter-ba
 
 [[package]]
 name = "tingle"
-version = "0.5.0"
+version = "0.7.0"
 description = "Constant refactoring monitoring tool"
 optional = false
 python-versions = "<4.0,>=3.11"
 groups = ["dev"]
 files = [
-    {file = "tingle-0.5.0-py3-none-any.whl", hash = "sha256:4d1bbc2bc9fd759dbd5c7809cbed663ab2a1ffc7441fdce4517f99538b7f4496"},
-    {file = "tingle-0.5.0.tar.gz", hash = "sha256:b027f2513f0ee4f54385172290919baea7ecd76a07bc0ffc401cc67ab3d5b74d"},
+    {file = "tingle-0.7.0-py3-none-any.whl", hash = "sha256:c29e3ceb6e993ad42443d32f0061ab99a51c824a6d7a52cca3517953b98359a2"},
+    {file = "tingle-0.7.0.tar.gz", hash = "sha256:355d6c46e7b76ad0d8b9ffe196585521749adc366dbd252d9cbb4f0dd93a9ee8"},
 ]
 
 [package.dependencies]
@@ -3528,4 +3528,4 @@ trial = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4"
-content-hash = "b844f8d488e7bfb98edc36b3551739cca4a87232f336c518cf398594e89ea44b"
+content-hash = "afa5fafa0975fee1788d07eb4cf36bf571c1efaf9e9045345b39ef9ea80cc6a4"
