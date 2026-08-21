@@ -22,8 +22,8 @@ from ._mills.graph import step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
     FocusMissingError,
+    GrimoireEvent,
     NoComponents,
-    RiteEvent,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -483,7 +483,7 @@ async def _run(plan: _Plan) -> int:
         rite_id=lambda: current_rite().parent_id,
     )
 
-    def emit(event: RiteEvent) -> None:
+    def emit(event: GrimoireEvent) -> None:
         renderer.render(event)
         link.send(to_wire(event, cast_id=cast_id))
 

@@ -6,10 +6,17 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from vekna.lexicon._pacts import Channel, RiteBegan, RiteEvent, RiteStreamed
+from vekna.lexicon._pacts import (
+    Channel,
+    GrimoireEvent,
+    RiteBegan,
+    RiteStreamed,
+    StatusSet,
+)
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastStatus,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -24,7 +31,9 @@ from vekna.wire import (
 _REATTACH_SECONDS = 2.0
 
 
-def to_wire(event: RiteEvent, *, cast_id: str) -> WireMessage:
+def to_wire(event: GrimoireEvent, *, cast_id: str) -> WireMessage:
+    if isinstance(event, StatusSet):
+        return CastStatus(cast_id=cast_id, text=event.text, at=event.at)
     if isinstance(event, RiteBegan):
         return RiteStarted(
             cast_id=cast_id,

@@ -8,7 +8,7 @@ import pytest
 
 from vekna.gates.cli.screen import listing, paint
 from vekna.pacts.casts import CastView, RiteStatus, RiteView
-from vekna.wire import CastHello, DecideRequested, RiteStarted, RunRecord
+from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _WIDE_TERMINAL = 120
@@ -86,6 +86,10 @@ def _step(
 
 def _medium(view: CastView, name: str, *, ago: int) -> None:
     _add(view, name, ago=ago, category="medium")
+
+
+def _status(text: str) -> CastStatus:
+    return CastStatus(cast_id="c1abcdef99", text=text, at=_WHEN)
 
 
 # The listed casts, without the header, the blank lines and the key hints: a
@@ -254,6 +258,44 @@ class TestTheList:
     def test_nothing_running_says_where_casts_come_from():
         assert "vekna cast <ritual>" in paint(casts=[], focus=None)
 
+    # The rite tree says `gates · shell`, which is true of every branch this
+    # ritual ever runs on. Which branch is the author's to say.
+    @staticmethod
+    def test_the_ritual_line_beats_the_rites_in_the_free_column():
+        view = _running("merge_ready", ago=240)
+        _step(view, "gates", ago=30)
+        _medium(view, "shell", ago=10)
+        view.said = _status("PR #412 · lint + tests")
+
+        row = _row(paint(casts=[view], focus=None, now=_WHEN), "merge_ready")
+
+        assert "PR #412 · lint + tests" in row
+        assert "gates · shell" not in row
+
+    @staticmethod
+    def test_a_cleared_line_gives_the_column_back_to_the_rites():
+        view = _running("merge_ready", ago=240)
+        _step(view, "gates", ago=30)
+        view.said = _status("")
+
+        row = _row(paint(casts=[view], focus=None, now=_WHEN), "merge_ready")
+
+        assert "gates" in row
+
+    # A prompt is what the operator has to act on; the ritual's line is not.
+    @staticmethod
+    def test_a_waiting_cast_still_shows_its_question():
+        view = _running("merge_ready", ago=240)
+        _step(view, "gates", ago=30)
+        view.said = _status("PR #412 · lint + tests")
+        view.waiting["q1"] = DecideRequested(
+            cast_id="merge_ready", request_id="q1", prompt="merge it?"
+        )
+
+        row = _row(paint(casts=[view], focus=None, now=_WHEN), "merge_ready")
+
+        assert "merge it?" in row
+
 
 class TestDrilledIn:
     # `parent_id` is whatever a peer wrote on the wire and nothing checks it for
@@ -278,3 +320,23 @@ class TestDrilledIn:
         painted = paint(casts=[CastView(hello=carried)], focus="c2beef0011")
 
         assert "↳ c1abcdef" in painted
+
+    # Pinned under the header, which is the frame this surface has.
+    @staticmethod
+    def test_the_ritual_line_sits_under_the_header():
+        view = CastView(hello=_hello())
+        view.said = _status("PR #412 · rebase")
+
+        painted = paint(casts=[view], focus="c1abcdef99").splitlines()
+
+        assert "vekna — fix_demo" in painted[0]
+        assert painted[2] == " · PR #412 · rebase"
+
+    @staticmethod
+    def test_a_cleared_line_leaves_nothing_pinned():
+        view = CastView(hello=_hello())
+        view.said = _status("")
+
+        painted = paint(casts=[view], focus="c1abcdef99").splitlines()
+
+        assert not [line for line in painted if line.startswith(" · ")]

@@ -75,6 +75,19 @@ class RiteFinished(BaseModel):
     finished_at: datetime
 
 
+# --- what the ritual says it is doing ---
+
+
+# The author's own line, set with `status()`. Cast-level and so no `rite_id`;
+# empty text is how a ritual clears it. A surface with a frame pins the latest
+# one; a surface that is a stream prints it as it arrives.
+class CastStatus(BaseModel):
+    kind: Literal["cast_status"] = "cast_status"
+    cast_id: str
+    text: str
+    at: datetime
+
+
 # --- prompts ---
 
 
@@ -146,6 +159,7 @@ CastUpdate = (
     | RiteStarted
     | RiteDelta
     | RiteFinished
+    | CastStatus
     | DecideRequested
     | DecideResolved
     | LockAcquireRequested
@@ -165,7 +179,7 @@ WireMessage = CastMessage | SurfaceHello
 # own types because it is shared exactly the way a message is: the daemon writes
 # it, and a resumed cast process — which may not import the daemon's layers —
 # reads it back to learn what it is carrying on.
-CastStatus = Literal["running", "ok", "error", "disconnected"]
+RunStatus = Literal["running", "ok", "error", "disconnected"]
 
 
 # `gapped` is what a resume has to know that the event log cannot say for
@@ -175,7 +189,7 @@ CastStatus = Literal["running", "ok", "error", "disconnected"]
 # the shell command, the agent call — so the answer is to refuse instead.
 class RunRecord(BaseModel):
     hello: CastHello
-    status: CastStatus = "running"
+    status: RunStatus = "running"
     detail: str | None = None
     gapped: bool = False
 

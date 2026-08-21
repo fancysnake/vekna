@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted
+from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted, RunStatus
 
 RiteStatus = Literal["running", "ok", "error"]
 
@@ -34,10 +34,15 @@ class RiteView:
 @dataclass
 class CastView:
     hello: CastHello
-    status: CastStatus = "running"
+    status: RunStatus = "running"
     detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, DecideRequested] = field(default_factory=dict)
+    # The ritual's own line, held as the message that set it — a surface is
+    # replayed this again, and the daemon keeps no second copy of the text.
+    # `None` until a ritual says something; a ritual that clears its line leaves
+    # a message here whose text is empty, and that is what a surface shows.
+    said: CastStatus | None = None
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator

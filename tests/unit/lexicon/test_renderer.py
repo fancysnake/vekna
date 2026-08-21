@@ -7,7 +7,9 @@ import pytest
 from tests.conftest import Tty
 from vekna.lexicon import StandalonePromptError
 from vekna.lexicon._links.standalone import StandaloneRenderer
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, StatusSet
+
+_WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _renderer(
@@ -74,6 +76,23 @@ class TestRender:
         renderer.render(ended)
 
         assert out.getvalue() == "✗ r9\n"
+
+    @staticmethod
+    def test_says_the_ritual_line_where_it_was_set():
+        renderer, out = _renderer("")
+
+        renderer.render(_began("r1", name="gates"))
+        renderer.render(StatusSet(text="main · lint + tests", at=_WHEN))
+
+        assert out.getvalue() == "▶ gates\n· main · lint + tests\n"
+
+    @staticmethod
+    def test_a_cleared_line_says_nothing_to_a_stream():
+        renderer, out = _renderer("")
+
+        renderer.render(StatusSet(text="", at=_WHEN))
+
+        assert not out.getvalue()
 
 
 def _began(

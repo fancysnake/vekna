@@ -2,10 +2,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, StatusSet
 from vekna.trial import TrialScriptError
 from vekna.trial._mills import Recorder, Script
 from vekna.trial._pacts import Answer
+
+_WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _script(*answers: Answer[str]) -> Script[str]:
@@ -122,6 +124,16 @@ class TestRecorder:
         recorder.record(RiteStreamed(rite_id="r2", delta="fixed"))
 
         assert recorder.deltas == ["E501", "fixed"]
+
+    @staticmethod
+    def test_statuses_are_kept_in_order_including_the_cleared_one():
+        recorder = Recorder()
+
+        recorder.record(StatusSet(text="main · lint", at=_WHEN))
+        recorder.record(RiteStreamed(rite_id="r1", delta="E501"))
+        recorder.record(StatusSet(text="", at=_WHEN))
+
+        assert recorder.statuses == ["main · lint", ""]
 
     @staticmethod
     def test_every_event_is_kept_whole():

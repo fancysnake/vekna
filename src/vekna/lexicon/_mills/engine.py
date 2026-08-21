@@ -13,14 +13,15 @@ from vekna.lexicon._pacts import (
     CodingFocusProtocol,
     Done,
     FocusMissingError,
+    GrimoireEvent,
     RiteBegan,
     RiteEnded,
-    RiteEvent,
     RiteStreamed,
     Ritual,
     RitualDefinitionError,
     RitualError,
     ShellFocusProtocol,
+    StatusSet,
     Step,
     StepBudgetExceededError,
     StringOutput,
@@ -40,15 +41,15 @@ class Grimoire:
         *,
         cast_id: str,
         clock: Callable[[], datetime] = _now,
-        on_event: Callable[[RiteEvent], None] | None = None,
+        on_event: Callable[[GrimoireEvent], None] | None = None,
     ) -> None:
         self.cast_id = cast_id
         self._clock = clock
         self._on_event = on_event
-        self._events: list[RiteEvent] = []
+        self._events: list[GrimoireEvent] = []
         self._counter = 0
 
-    def _append(self, event: RiteEvent) -> None:
+    def _append(self, event: GrimoireEvent) -> None:
         self._events.append(event)
         if self._on_event is not None:
             self._on_event(event)
@@ -78,21 +79,29 @@ class Grimoire:
     def rite_delta(self, rite_id: str, delta: str) -> None:
         self._append(RiteStreamed(rite_id=rite_id, delta=delta))
 
+    def status_set(self, text: str) -> None:
+        self._append(StatusSet(text=text, at=self._clock()))
+
+    # `outcome`, not `status`: `status()` is the ritual author's call two
+    # screens down, and a parameter of that name here shadows it.
     def rite_finished(
         self,
         rite_id: str,
         *,
-        status: Literal["ok", "error"] = "ok",
+        outcome: Literal["ok", "error"] = "ok",
         result: JsonValue | None = None,
     ) -> None:
         self._append(
             RiteEnded(
-                rite_id=rite_id, status=status, result=result, finished_at=self._clock()
+                rite_id=rite_id,
+                status=outcome,
+                result=result,
+                finished_at=self._clock(),
             )
         )
 
     @property
-    def events(self) -> list[RiteEvent]:
+    def events(self) -> list[GrimoireEvent]:
         return list(self._events)
 
 
@@ -327,9 +336,11 @@ _current_rite: ContextVar[RiteContext | None] = ContextVar(
 )
 
 
-def current_rite() -> RiteContext:
+# `call` is what the sentence blames. A ritual author who calls `status()` at
+# import time is told about `status()`, not about mediums they did not write.
+def current_rite(*, call: str = "mediums") -> RiteContext:
     if (rite := _current_rite.get()) is None:
-        msg = "mediums can only be called inside a running cast"
+        msg = f"{call} can only be called inside a running cast"
         raise RitualError(msg)
     return rite
 
@@ -347,6 +358,14 @@ def _current_rite_id(rite: RiteContext) -> str:
 def emit_delta(text: str) -> None:
     rite = current_rite()
     rite.grimoire.rite_delta(_current_rite_id(rite), text)
+
+
+# What a surface with a frame pins: the ritual's own words about what this cast
+# is doing. Free text rather than fields — a dict of branch/command/attempt buys
+# nothing an f-string does not, and costs every surface a layout decision. No
+# rite is needed, so a ritual body may set one before the first step.
+def status(text: str = "") -> None:
+    current_rite(call="status()").grimoire.status_set(text)
 
 
 # The one place a rite is opened and closed. A rite whose body raises is
@@ -384,7 +403,7 @@ async def _rite(
     finally:
         _current_rite.reset(token)
         parent.grimoire.rite_finished(
-            rite_id, status="ok" if finished else "error", result=outcome.result
+            rite_id, outcome="ok" if finished else "error", result=outcome.result
         )
 
 

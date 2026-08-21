@@ -66,6 +66,9 @@ than no test at all.
 `trial.decide.prompts`. There is no `assert_called_with` here — the recording
 is the assertion surface.
 
+`trial.statuses` is the same for what the ritual said it was doing: every
+`status(...)` in the order it was set, a cleared one included as `""`.
+
 ## What the doubles do not replace
 
 The doubles stand at the folio's *outer* edge, where a medium reaches the

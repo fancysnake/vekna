@@ -1,7 +1,7 @@
 from fnmatch import fnmatchcase
 from typing import Generic, TypeVar
 
-from vekna.lexicon._pacts import RiteBegan, RiteEvent, RiteStreamed
+from vekna.lexicon._pacts import GrimoireEvent, RiteBegan, RiteStreamed, StatusSet
 
 from ._pacts import Answer, TrialScriptError
 
@@ -52,9 +52,9 @@ class Script(Generic[_AnswerT]):
 # with category "step", and there is no second place for that to be wrong.
 class Recorder:
     def __init__(self) -> None:
-        self.events: list[RiteEvent] = []
+        self.events: list[GrimoireEvent] = []
 
-    def record(self, event: RiteEvent) -> None:
+    def record(self, event: GrimoireEvent) -> None:
         self.events.append(event)
 
     @property
@@ -68,3 +68,9 @@ class Recorder:
     @property
     def deltas(self) -> list[str]:
         return [event.delta for event in self.events if isinstance(event, RiteStreamed)]
+
+    # In the order they were set, cleared ones included — a ritual that clears
+    # its line did something, and a test asserting it did says so as "".
+    @property
+    def statuses(self) -> list[str]:
+        return [event.text for event in self.events if isinstance(event, StatusSet)]

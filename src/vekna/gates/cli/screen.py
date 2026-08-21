@@ -129,11 +129,19 @@ def _now(view: CastView, now: datetime) -> str:
         return f"vekna cast --continue {view.hello.cast_id[:_ID]}"
     if (step := _innermost(view, "step")) is None:
         return ""
-    medium = _innermost(view, "medium")
-    doing = (
-        f"{step.started.name} · {medium.started.name}" if medium else step.started.name
-    )
-    return f"{doing}  {_clock((now - step.started.started_at).total_seconds())}"
+    since = _clock((now - step.started.started_at).total_seconds())
+    return f"{_doing(view, step)}  {since}"
+
+
+# The ritual's own line where it set one, the rites' names otherwise. Author
+# over derived, and not a merge of the two: a ritual that says "PR #412 · rebase"
+# knows which of eight it is on, and no reading of the rite tree does.
+def _doing(view: CastView, step: RiteView) -> str:
+    if (said := view.said) is not None and said.text:
+        return said.text
+    if (medium := _innermost(view, "medium")) is not None:
+        return f"{step.started.name} · {medium.started.name}"
+    return step.started.name
 
 
 def _line(index: int, view: CastView, now: datetime) -> str:
@@ -209,6 +217,15 @@ def _carried(hello: CastHello) -> str:
     return f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
 
 
+# Under the header, which is the frame this surface has. The lich's own line
+# goes above it once there is one to say (docs/reborn/07-lich.md); a cleared
+# status leaves nothing, because "" is not a sentence.
+def _said_lines(view: CastView) -> list[str]:
+    if (said := view.said) is None or not said.text:
+        return []
+    return ["", f" · {_fit(said.text, _NOW).rstrip()}"]
+
+
 def _waiting_lines(view: CastView) -> list[str]:
     if not view.waiting:
         return []
@@ -238,6 +255,7 @@ def _drilled(view: CastView, now: datetime) -> list[str]:
     )
     return [
         header,
+        *_said_lines(view),
         "",
         *_rite_lines(view),
         *_waiting_lines(view),

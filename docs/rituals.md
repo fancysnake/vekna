@@ -88,6 +88,29 @@ Steps themselves stay sequential. The boundary between two steps is the thing
 that makes a ritual reproducible, and running two of them at once would give
 that up.
 
+## Saying what the cast is working on
+
+`status(text)` sets one free-text line about what this cast is doing. Surfaces
+show it beside the cast: "casting `merge_ready` for 4 minutes" is all vekna can
+say on its own, and which of eight PRs it is on is the ritual's to say.
+
+```python
+from vekna.lexicon import status
+
+@step
+async def gates(payload: MergeReady) -> Transition:
+    status(f"{payload.branch} · lint + tests")
+    ...
+```
+
+Latest wins, `status()` with no argument clears it, and it hangs off the cast
+rather than off a rite — so a ritual body can set one before the first step, and
+a line outlives the step that set it. It is free text on purpose: a surface that
+needs to truncate one line truncates it, and no layout decision travels with it.
+
+Nothing derives a status. "Current branch" is one guess of many — a ritual may
+work in a worktree, a temp clone, a PR number, no repository at all.
+
 ## Where rituals come from
 
 A `rituals.py` — or a `rituals/` package — in the current directory or any

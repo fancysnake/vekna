@@ -16,6 +16,7 @@ from ._mills.engine import (
     offer_prompt,
     record_result,
     replayed,
+    status,
 )
 from ._pacts import (
     AskFn,
@@ -94,5 +95,6 @@ __all__ = [
     "replayed",
     "ritual",
     "sha256_of",
+    "status",
     "step",
 ]

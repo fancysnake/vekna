@@ -14,7 +14,7 @@ from vekna.lexicon._mills.engine import (
     cast_context,
     run_cast,
 )
-from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
+from vekna.lexicon._pacts import GrimoireEvent, Ritual, Step, Transition
 
 from ._links import (
     CodingDouble,
@@ -98,7 +98,11 @@ class Trial:
         return self._recorder.deltas
 
     @property
-    def events(self) -> list[RiteEvent]:
+    def statuses(self) -> list[str]:
+        return self._recorder.statuses
+
+    @property
+    def events(self) -> list[GrimoireEvent]:
         return list(self._recorder.events)
 
     def _grimoire(self) -> Grimoire:

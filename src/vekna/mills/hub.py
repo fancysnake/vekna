@@ -7,6 +7,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastStatus,
     CastUpdate,
     DecideRequested,
     DecideResolved,
@@ -21,6 +22,15 @@ from vekna.wire import (
     RiteStarted,
     WireMessage,
 )
+
+# The two halves of what a cast can say, split so neither branch grows past what
+# one screen and pylint's complexity budget hold. The tuple is what the isinstance
+# narrowing needs; the alias is what the handler declares. What is *not* one of
+# these four falls to `_inside`, so a kind added to the protocol and to no
+# handler meets one `assert_never` rather than passing two unreachable ones.
+_Inside = RiteStarted | RiteDelta | RiteFinished | DecideRequested | DecideResolved
+_About = GrimoireBegin | GrimoireEnd | CastStatus | CastGoodbye
+_ABOUT = (GrimoireBegin, GrimoireEnd, CastStatus, CastGoodbye)
 
 _LOCKS_LATER = "locks arrive at 0.7.0"
 _NO_CAST = "no such cast"
@@ -136,6 +146,8 @@ class Hub(Casts):
             yield view.hello
             yield GrimoireBegin(cast_id=view.hello.cast_id)
             yield from _replay_rites(view)
+            if view.said is not None:
+                yield view.said
             yield from view.waiting.values()
             yield GrimoireEnd(cast_id=view.hello.cast_id)
             yield from _replay_goodbye(view)
@@ -147,36 +159,56 @@ class Hub(Casts):
 def _update(view: CastView, message: CastUpdate) -> str | None:
     # Answered here rather than by a catch-all under the match: the reason is
     # true of these four and of nothing else, and what is left over is what the
-    # match then has to cover for `assert_never` to hold.
+    # matches then have to cover for `assert_never` to hold.
     if isinstance(
         message, (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
     ):
         return _LOCKS_LATER
-    refused: str | None = None
+    if isinstance(message, _ABOUT):
+        _about(view, message)
+        return None
+    return _inside(view, message)
+
+
+# What happens *inside* a cast: its rites and the prompts they open. Every one
+# of these names something that has to exist already, which is why refusing is
+# something only this half can do.
+def _inside(view: CastView, message: _Inside) -> str | None:
     match message:
-        case GrimoireBegin():
-            # The replay rule: what is cached for this cast is what the cast is
-            # about to say again, so it goes before the replay rebuilds it.
-            view.rites.clear()
-            view.waiting.clear()
-        case GrimoireEnd():
-            pass
         case RiteStarted():
             view.rites[message.rite_id] = RiteView(started=message)
         case RiteDelta() | RiteFinished():
-            refused = _update_rite(view, message)
+            return _update_rite(view, message)
         case DecideRequested():
             view.waiting[message.request_id] = message
         case DecideResolved():
-            refused = _answer(view, message)
-        case CastGoodbye():
-            view.status = message.status
-            view.detail = message.detail
-            # A cast that is gone is not still asking.
-            view.waiting.clear()
+            return _answer(view, message)
         case _:
             assert_never(message)
-    return refused
+    return None
+
+
+# What the cast says *about itself*: the brackets round a replay, the line it
+# says it is working on, and how it ended. Nothing here can be refused — there
+# is no earlier message any of them has to match up with, and a `GrimoireEnd`
+# has nothing to do, which is why this is a chain and not a match: the fourth
+# branch would be a `pass` and a fifth an `assert_never` nothing can reach.
+def _about(view: CastView, message: _About) -> None:
+    if isinstance(message, GrimoireBegin):
+        # The replay rule: what is cached for this cast is what the cast is
+        # about to say again, so it goes before the replay rebuilds it.
+        view.rites.clear()
+        view.waiting.clear()
+        view.said = None
+    elif isinstance(message, CastStatus):
+        # Latest wins, and a cleared one is kept rather than dropped: a surface
+        # replayed after a clear has to be told the line is gone.
+        view.said = message
+    elif isinstance(message, CastGoodbye):
+        view.status = message.status
+        view.detail = message.detail
+        # A cast that is gone is not still asking.
+        view.waiting.clear()
 
 
 def _answer(view: CastView, message: DecideResolved) -> str | None:

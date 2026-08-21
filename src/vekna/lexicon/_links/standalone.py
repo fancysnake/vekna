@@ -6,11 +6,12 @@ from dataclasses import dataclass, field
 from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
+    GrimoireEvent,
     RiteBegan,
     RiteEnded,
-    RiteEvent,
     RiteStreamed,
     StandalonePromptError,
+    StatusSet,
 )
 
 _PROBE_TIMEOUT_SECONDS = 0.5
@@ -169,13 +170,23 @@ class StandaloneRenderer:
         rite.buffer.clear()
         self._say(line + "\n")
 
-    # RiteEvent is closed, so the three branches are exhaustive — there is no
+    # A status has no frame to be pinned to here — this sink is written to
+    # forwards and never repainted — so it is said once, where it was set. A
+    # cleared status says nothing: there is no line to take back out of a
+    # stream, and "" is not a sentence.
+    def _status(self, event: StatusSet) -> None:
+        if event.text:
+            self._say(f"· {event.text}\n")
+
+    # GrimoireEvent is closed, so the four branches are exhaustive — there is no
     # unknown-event fallback to write.
-    def render(self, event: RiteEvent) -> None:
+    def render(self, event: GrimoireEvent) -> None:
         if isinstance(event, RiteBegan):
             self._began(event)
         elif isinstance(event, RiteStreamed):
             self._streamed(event)
+        elif isinstance(event, StatusSet):
+            self._status(event)
         else:
             self._ended(event)
 

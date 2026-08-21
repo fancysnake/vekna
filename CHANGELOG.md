@@ -10,6 +10,21 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+### Added
+
+- **A ritual can say what it is working on.** `status(text)` from
+  `vekna.lexicon` sets one free-text line on the cast — the branch, which of
+  eight PRs, which attempt — and every surface shows it beside that cast. Latest
+  wins, `status()` clears it, and it hangs off the cast rather than a rite, so a
+  ritual body can set one before its first step. The daemon's listing shows it
+  in place of the rite names it would otherwise derive, and drilling in pins it
+  under the header; a cast running standalone prints it as another line, having
+  no frame to pin it to. `trial.statuses` records every one, cleared included.
+  Nothing derives a status: "current branch" is one guess of many, and a ritual
+  may work in a worktree, a temp clone, or no repository at all. The first
+  half of [the lich](docs/reborn/07-lich.md), which is the release that grows a
+  frame worth pinning a line to.
+
 ## [0.6.0] - 2026-08-21
 
 ### Added

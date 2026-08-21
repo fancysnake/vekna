@@ -16,9 +16,11 @@ from vekna.lexicon import (
     Transition,
     current_rite,
     done,
+    emit_delta,
     goto,
     medium,
     ritual,
+    status,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -26,11 +28,12 @@ from vekna.lexicon._mills.engine import (
     FocusSlot,
     Grimoire,
     SessionBook,
+    cast_context,
     offer_prompt,
     prompt_runner,
     run_cast,
 )
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, StatusSet
 
 
 def _fixed_clock() -> datetime:
@@ -494,3 +497,38 @@ class TestGrimoire:
         finished = grimoire.events[-1]
         assert isinstance(finished, RiteEnded)
         assert finished.result == {"cost": 1}
+
+
+class TestStatus:
+    @staticmethod
+    def test_what_the_ritual_says_lands_in_the_grimoire_in_order():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        with cast_context(grimoire=grimoire, channel=_channel()):
+            status("main · lint")
+            status("main · tests")
+            status()
+
+        assert [
+            event.text for event in grimoire.events if isinstance(event, StatusSet)
+        ] == ["main · lint", "main · tests", ""]
+
+    @staticmethod
+    def test_a_status_hangs_off_the_cast_and_not_off_a_rite():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        # No rite is open: a ritual body may say what the cast is doing before
+        # its first step, and `emit_delta` in the same place cannot.
+        with cast_context(grimoire=grimoire, channel=_channel()):
+            status("PR #412")
+            with pytest.raises(RitualError, match="deltas belong to"):
+                emit_delta("nowhere to put this")
+
+        said = grimoire.events[0]
+        assert isinstance(said, StatusSet)
+        assert (said.text, said.at) == ("PR #412", _fixed_clock())
+
+    @staticmethod
+    def test_outside_a_cast_it_says_which_call_was_made():
+        with pytest.raises(RitualError, match=r"status\(\) can only be called"):
+            status("nobody is casting")

@@ -61,6 +61,22 @@ _SPINNER = textwrap.dedent("""
         return goto(spin, Spin())
     """)
 
+_NARRATOR = textwrap.dedent("""
+    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, status, step
+
+
+    @step
+    async def work(_: NoComponents) -> Transition:
+        status("PR #412 · lint")
+        status("PR #412 · tests")
+        return done()
+
+
+    @ritual("narrator")
+    async def narrator(_: NoComponents) -> Transition:
+        return goto(work, NoComponents())
+    """)
+
 _POLL_SECONDS = 0.01
 _PATIENCE = 500
 
@@ -183,6 +199,30 @@ class TestAttachedCast:
 
         daemon.wait_for(lambda: bool(daemon.hub.casts))
         assert daemon.only_cast().hello.resumed_from == "first"
+
+    # The ritual is the only thing that knows which of eight PRs this is, so
+    # what it says has to travel the same wire the rites do.
+    @staticmethod
+    def test_what_the_ritual_says_it_is_doing_reaches_the_daemon(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        daemon: _DaemonThread,
+    ):
+        (tmp_path / "rituals.py").write_text(_NARRATOR)
+        monkeypatch.chdir(tmp_path)
+
+        assert main(["narrator"]) == 0
+
+        daemon.wait_for(lambda: bool(daemon.hub.casts))
+        daemon.wait_for(lambda: daemon.only_cast().said is not None)
+        said = daemon.only_cast().said
+        assert said is not None
+        assert said.text == "PR #412 · tests"
+        # And the cast's own stream said both, in the order they were set.
+        printed = capsys.readouterr().out
+        assert "· PR #412 · lint\n" in printed
+        assert "· PR #412 · tests\n" in printed
 
     @staticmethod
     def test_the_cast_still_prints_its_own_tree(

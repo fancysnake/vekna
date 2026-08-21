@@ -17,6 +17,7 @@ from vekna.lexicon import (
     done,
     goto,
     ritual,
+    status,
     step,
 )
 from vekna.trial import Trial, TrialError, TrialScriptError
@@ -69,6 +70,15 @@ async def repair(failure: Failure) -> Transition:
 @step
 async def one_gate(_state: Attempt) -> Transition:
     return done(await shell("mise run test:py"))
+
+
+@step
+async def narrated(state: Attempt) -> Transition:
+    status(f"PR #412 · {state.budget} left")
+    await shell("mise run test:py")
+    status("PR #412 · merging")
+    status()
+    return done()
 
 
 @step
@@ -203,6 +213,18 @@ class TestWalk:
     ) -> None:
         with pytest.raises(StepBoundaryError, match=r"expected .*Attempt"):
             trial.walk(gates, Failure(budget=1, said="nope"))
+
+
+class TestStatus:
+    # What the author says the cast is doing, in the order they said it —
+    # cleared included, because clearing is something a ritual did.
+    @staticmethod
+    def test_every_line_the_ritual_said_is_recorded_in_order(trial: Trial) -> None:
+        trial.shell.replies(when="*", exit_code=0)
+
+        trial.walk(narrated, Attempt(budget=2))
+
+        assert trial.statuses == ["PR #412 · 2 left", "PR #412 · merging", ""]
 
 
 class TestScriptedOutput:

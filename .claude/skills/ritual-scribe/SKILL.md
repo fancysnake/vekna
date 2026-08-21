@@ -308,6 +308,21 @@ attempts, then `StandalonePromptError`. Keep the prompt to one line — the
 operator reads it and nothing else. A prompt with one possible answer should not
 be asked at all.
 
+### `status` — say what this cast is working on
+
+```python
+from vekna.lexicon import status
+
+status(f"{payload.branch} · lint + tests")   # one free-text line, latest wins
+status()                                      # clears it
+```
+
+Not a medium and not a rite: a level on the cast that surfaces show beside it.
+Vekna can say "casting `merge_ready` for 4 minutes" and no more — which branch,
+which of eight PRs, which attempt is yours to say. Set it at the top of a step
+that will run for a while; it costs nothing and it is what a surface shows when
+someone looks up from their phone. `trial.statuses` records every one.
+
 ---
 
 ## Configuring the agent
@@ -517,7 +532,8 @@ def test_merge_ready_repairs_once_then_goes_green(trial: Trial) -> None:
 | `trial.coding` | `replies(text_or_model, when=…, uses=[…], asks=[…])` | the prompt | `.prompts`, `.calls`, `.gated`, `.answered` |
 | `trial.decide` | `answers(answer=…, when=…)` | the prompt | `.prompts`, `.asked` |
 
-Plus `trial.steps`, `trial.deltas`, `trial.events`, `trial.result`.
+Plus `trial.steps`, `trial.deltas`, `trial.statuses`, `trial.events`,
+`trial.result`.
 
 **`when=` is a glob, and matched answers beat the queue.** Answers with no
 `when=` fall back to arrival order for whatever no pattern claims — and two

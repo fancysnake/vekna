@@ -11,6 +11,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastStatus,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -69,6 +70,10 @@ def _started(rite_id: str = "r1", *, cast_id: str = "c1") -> RiteStarted:
         category="step",
         started_at=_WHEN,
     )
+
+
+def _said(text: str) -> CastStatus:
+    return CastStatus(cast_id="c1", text=text, at=_WHEN)
 
 
 def _asked(request_id: str = "q1") -> DecideRequested:
@@ -150,6 +155,43 @@ class TestPrompts:
         assert hub.casts["c1"].waiting == {}
 
 
+class TestStatus:
+    @staticmethod
+    def test_the_latest_line_is_what_the_view_holds():
+        hub = Hub()
+        hub.apply(_hello())
+
+        hub.apply(_said("main · lint"))
+        hub.apply(_said("main · tests"))
+
+        said = hub.casts["c1"].said
+        assert said is not None
+        assert said.text == "main · tests"
+
+    @staticmethod
+    def test_a_cleared_line_is_kept_as_an_empty_one():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_said("main · lint"))
+
+        hub.apply(_said(""))
+
+        said = hub.casts["c1"].said
+        assert said is not None
+        assert not said.text
+
+    @staticmethod
+    def test_a_late_surface_is_told_what_the_ritual_is_working_on():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_said("main · tests"))
+        surface = _Surface()
+
+        hub.attach_surface(surface)
+
+        assert _said("main · tests") in surface.sent
+
+
 class TestReplayRule:
     @staticmethod
     def test_grimoire_begin_wipes_what_the_replay_is_about_to_rebuild():
@@ -157,11 +199,13 @@ class TestReplayRule:
         hub.apply(_hello())
         hub.apply(_started())
         hub.apply(_asked())
+        hub.apply(_said("main · lint"))
 
         hub.apply(GrimoireBegin(cast_id="c1"))
 
         assert hub.casts["c1"].rites == {}
         assert hub.casts["c1"].waiting == {}
+        assert hub.casts["c1"].said is None
 
 
 class TestDrops:

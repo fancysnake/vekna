@@ -88,6 +88,23 @@ class RiteEnded:
 RiteEvent = RiteBegan | RiteStreamed | RiteEnded
 
 
+# The ritual's own line about what this cast is doing — a branch, which of eight
+# PRs, which attempt. Cast-level, so no `rite_id`: it is a level the author sets
+# and the latest wins, where a delta is a line in a stream. It outlives the rite
+# that set it, which is the whole reason a surface can pin one.
+@dataclass(frozen=True, kw_only=True)
+class StatusSet:
+    text: str
+    at: datetime
+
+
+# What the grimoire emits: the rites, and the one thing a cast says about
+# itself. `RiteEvent` stays the closed three-way union it was, because the
+# renderer and the trial match it exhaustively and a rite is what they are
+# matching on.
+GrimoireEvent = RiteEvent | StatusSet
+
+
 # What loading a ritual source yields. The loader reaches the filesystem, so it
 # lives in `_links`, which may not import the compendium in `_mills` — it hands
 # back what it found and `_inits` registers it.

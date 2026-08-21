@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, to_wire
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, StatusSet
 from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
 from vekna.wire import CastHello, WireMessage
@@ -370,3 +370,12 @@ class TestProjection:
         assert message.kind == "rite_finished"
         assert message.status == "error"
         assert message.result == {"x": 1}
+
+    @staticmethod
+    def test_a_status_becomes_a_cast_status_with_no_rite_on_it():
+        message = to_wire(StatusSet(text="main · tests", at=_WHEN), cast_id=_CAST)
+
+        assert message.kind == "cast_status"
+        assert message.cast_id == _CAST
+        assert message.text == "main · tests"
+        assert message.at == _WHEN
