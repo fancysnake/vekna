@@ -33,6 +33,10 @@ for these and every other feature is in the [roadmap](../README.md#roadmap).
   Mediums, so a dev server's lifetime lives in a folio rather than a ritual
   body. Reborn's `0.4.0` until it became clear that owning a process is 02 and
   03 wearing a different hat.
+- [07-discord.md](07-discord.md) — a channel per lich: commands as messages, a
+  decide as buttons, an allowlist. Reborn's `0.7.0` until the lich shipped
+  without it — the engine was the hard half, and a channel is a platform
+  integration on top of an engine that is already right.
 
 ## Filed here, not fenced here
 

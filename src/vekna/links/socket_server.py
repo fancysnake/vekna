@@ -166,7 +166,7 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is fanned out to, and — since 0.8.0 — heard from: a lich takes
+# A surface is fanned out to, and — since 0.7.0 — heard from: a lich takes
 # orders, and the surface a person is typing at is where they come from. What is
 # not a command is read to notice the disconnect and nothing else; answering a
 # cast's prompt from `vekna` itself is still

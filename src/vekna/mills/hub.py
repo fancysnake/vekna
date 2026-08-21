@@ -32,7 +32,7 @@ _Inside = RiteStarted | RiteDelta | RiteFinished | DecideRequested | DecideResol
 _About = GrimoireBegin | GrimoireEnd | CastStatus | CastGoodbye
 _ABOUT = (GrimoireBegin, GrimoireEnd, CastStatus, CastGoodbye)
 
-_LOCKS_LATER = "locks arrive at 0.7.0"
+_LOCKS_LATER = "locks arrive at 0.8.0"
 _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"

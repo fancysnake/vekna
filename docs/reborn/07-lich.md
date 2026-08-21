@@ -1,6 +1,6 @@
-# Feature — Lich (a named station, remote-controlled)
+# Feature — Lich (a named station, commanded from anywhere)
 
-**Version:** `0.8.0` — **in progress.**
+**Version:** `0.7.0` — **in progress.**
 
 See [00-common.md](00-common.md) — process model, wire protocol, CLI surface —
 and [06-vekna-daemon.md](06-vekna-daemon.md), which this builds on.
@@ -9,12 +9,16 @@ and [06-vekna-daemon.md](06-vekna-daemon.md), which this builds on.
 
 The daemon watches; a lich works. `vekna lich` in a project directory raises a
 long-lived, named station that runs one cast at a time in that directory and
-takes orders from anywhere you can reach it: the terminal that raised it,
-another shell, or a Discord channel of its own. Start one before leaving the
-house, then from a phone watch what it is doing, kill it, cast something else.
+takes orders from any shell that can reach the daemon — the terminal that
+raised it, or one attached later. Start one before leaving the desk, come back
+to another window, and carry on where it is rather than where you are.
 
-This is the first release where vekna **originates** work remotely. Every
-surface up to here observes casts and answers decides; none can start one.
+This is the first release where vekna **originates** work. Every surface up to
+here observes casts and answers decides; none can start one.
+
+Reaching it from a phone is [Discord](../hand/07-discord.md), which the lich is
+built to take and which lands with Hand: the channel is a surface, and every
+surface here speaks the same vocabulary over the same wire.
 
 ## What a lich is
 
@@ -41,7 +45,7 @@ radius is unchanged.
 One row in the daemon's registry, kept beside `runs/`:
 
 ```text
-name (key) · root · created · last cast (cast_id) · discord channel id
+name (key) · root · created · last cast (cast_id)
 ```
 
 That is the whole of it, and it is deliberately that small. Session log and cast
@@ -50,14 +54,11 @@ over `runs/` filtered by lich, which costs one field on the cast record and no
 bookkeeping at all. A pid would restate what the lich's open socket says, only
 staler.
 
-Two of those fields are genuinely stored rather than derived:
-
-- **Root.** A dormant lich has no connection for the daemon to learn it from,
-  and raising one means spawning casts in its directory — which `--name` from
-  another path, or a revive from Discord where there is no cwd at all, has no
-  other way to know.
-- **Channel id**, so a revived lich returns to its channel instead of standing
-  a second one beside it.
+One of those fields is genuinely stored rather than derived: **root**. A dormant
+lich has no connection for the daemon to learn it from, and raising one means
+spawning casts in its directory — which `--name` from another path has no other
+way to know. (A row gains a channel id when there are channels to remember:
+[`../hand/07-discord.md`](../hand/07-discord.md).)
 
 Keyed by **name, not by directory**: a project root can hold several liches, so
 the name is the only thing that identifies one. The process is not the lich;
@@ -68,8 +69,9 @@ interrupted by the death resumes through the daemon's `vekna cast --continue`.
 
 Generated on first rising from a themed word list, checked for collision
 against every phylactery — live or dormant, since the name is the key — then
-sticky. `--name` overrides. The name is the address: it titles the Discord
-channel, keys the daemon's routing, and is what `vekna lich attach` takes.
+sticky. `--name` overrides. The name is the address: it keys the daemon's
+routing, is what `vekna lich attach` takes, and titles the channel a lich gets
+when there are channels.
 
 ### Raising
 
@@ -97,7 +99,7 @@ always raises a fresh one. So scripts and `mise` tasks never sit on a question.
 rooted here — one, attach to it; several, ask; none, say so.
 
 Rows accumulate. `vekna lich dismiss <name>` is the deliberate way out: it ends
-the lich, archives its channel, and drops the row. Whether rows should also age
+the lich and drops the row. Whether rows should also age
 out on their own is **open** — a lich raised once, which cast nothing and has
 not been touched in a month, is noise in every prompt it appears in, but a
 reaper needs a rule and the rule needs a number that only use will supply.
@@ -117,16 +119,17 @@ Commands split accordingly:
 | **Origination** | idle only | `cast <ritual> [--flag=v]`, `prompt <text>` |
 
 Control must work while a cast runs *and* while that cast sits blocked on a
-decide. Otherwise the one command worth having from a phone is the one you
-cannot issue. So the lich supervises its subprocess and serves its surfaces as
-separate tasks, with the cast slot as shared state — never a lock the command
+decide. Otherwise the one command worth having from another window is the one
+you cannot issue. So the lich supervises its subprocess and serves its surfaces
+as separate tasks, with the cast slot as shared state — never a lock the command
 loop waits on.
 
 This is the **lich's** rule, not the directory's. Several liches can stand in
 one project root and cast at the same time; the slot buys serial work per
 station, and keeping two stations out of each other's files is what the
-daemon's lock coordination (0.7.0) is for. `lock("project:edit")` is the tool,
-and this is the release that makes it load-bearing rather than theoretical.
+daemon's lock coordination ([05-locks.md](05-locks.md), `0.8.0`) is for.
+`lock("project:edit")` is the tool, and the release after this one is what makes
+it load-bearing rather than theoretical.
 
 ### The status line
 
@@ -171,47 +174,12 @@ surface. A lich that dies with its ssh session is useless for the case it
 exists for. `vekna lich attach <name>` from any other shell; detaching leaves
 it running; `vekna lich dismiss <name>` ends it for good.
 
-## Discord
-
-One bot, many liches, a channel each. `#lich-<name>` created on rising, archived
-on death.
-
-Not a bot per lich — no platform lets you create bots programmatically.
-Channel-per-lich is the shape that costs one API call, and it carries the
-addressing for free: a message's channel says which lich it means, so no
-command ever needs a `--lich` flag.
-
-- Commands are plain messages in the lich's channel.
-- **One pinned status message, edited in place**, carrying the ritual, its
-  runtime, and the ritual's own status line under it. Rite deltas do not
-  stream — Discord's rate limits and your notification tray both lose. `log`
-  returns a tail on demand.
-- A decide arrives as a message with buttons and blocks until pressed. No
-  auto-approval, no timeout default: a decide is a choice the ritual author
-  declared, and guessing it is worse than waiting.
-- Authorisation is an allowlist of Discord user IDs. Anyone else is ignored
-  silently.
-
-**The daemon still binds nothing but its Unix socket.** The bot dials out over
-Discord's gateway — no inbound port, no TLS, no token endpoint, no auth code of
-vekna's own. "Network-exposed daemon" stays on 00-common's not-planned list.
-
-⚠️ Reaching a lich's channel means running agents in that directory on that
-machine. Keep the guild private and the allowlist short.
+### Config
 
 ```toml
 [lich]
 detach = true
-
-[lich.discord]
-guild    = "…"
-category = "liches"      # channels are created here
-allow    = ["…", "…"]    # discord user ids
-# token from VEKNA_DISCORD_TOKEN
 ```
-
-The Discord client is an optional extra (`vekna[discord]`). Without it a lich
-runs terminal-only and says so once, at startup.
 
 ## Wire
 
@@ -253,12 +221,11 @@ routing in the middle, "the button did nothing" has three possible homes.
   by `dismiss`), routing by name, and the name generator (the word list is
   `specs/names.py`).
 - `links/registry.py` — the registry file.
-- `links/spawn.py` — subprocess supervision of `vekna cast`.
-- `links/discord/` — gateway client, channel lifecycle, pinned status, buttons.
-  Optional extra; the only place importing the Discord client.
-- `gates/cli/lich.py` — the raising prompt and the session view.
-- `inits/cli.py` — `vekna lich`, `lich attach`, `lich dismiss`, `liches`; wires
-  the lich process and the optional gateway.
+- `links/spawn.py` — the detached lich, and subprocess supervision of the
+  `vekna cast` it runs.
+- `gates/cli/lich.py` — the raising prompt, the listing, and the session view.
+- `inits/cli.py` — `vekna lich`, `lich attach`, `lich dismiss`, `liches`, and
+  the lich process itself.
 
 ## Out of scope
 
@@ -267,7 +234,10 @@ different event nobody has asked for. Markup, colour or a second line in it; a
 surface that wants to truncate one line truncates it. A history of statuses —
 the journal holds every `CastStatus` in order and nothing needs to show them.
 Two casts in one lich. One lich over several project roots (the reverse — many
-liches in one root — is supported). A web surface for the lich
+liches in one root — is supported). **Discord**, and reaching a lich from a
+phone at all — a lich takes orders from any surface on the daemon's socket, and
+a channel is one more of those, built on this rather than with it
+([`../hand/07-discord.md`](../hand/07-discord.md)). A web surface for the lich
 ([`../eye/`](../eye/README.md)). Anything visual — the daemon's CLI view is the
 local surface at this release.
 
@@ -282,20 +252,19 @@ local surface at this release.
   there it offers that name or a new one; with two it lists both and what each
   last did; a lich rooted in a *different* directory is not offered at all;
   `--name` and `--new` answer without asking. Reviving one brings back its
-  history, its channel, and its interrupted cast.
+  history and its interrupted cast.
 - `vekna lich --name <n>` from an unrelated path raises that lich in its own
   root, not in the cwd. `dismiss` drops the row, and the next `vekna lich`
   there stops offering it.
-- Two liches in one project root cast concurrently; the second blocks on
-  `lock("project:edit")` while the first holds it, and the daemon shows why.
-- From Discord, `cast fix_demo --bound=3` starts it and the pinned status
-  updates; a second `cast` is refused, naming the running ritual and its
-  runtime; `kill` stops it — including while it is blocked on a decide.
-- A ritual calling `status(...)` twice leaves the second text on the pinned
-  message and on `status`; `status()` clears it; `status()` outside a cast
-  raises, naming the call. `trial.statuses` holds both texts in order.
-- A decide reaches the channel as buttons; pressing one unblocks the cast, and
-  the answer shows on the terminal surface too.
-- A message from a user not on the allowlist changes nothing and gets no reply.
-- Without the `discord` extra the lich runs terminal-only and says so once.
+- From an attached shell, `cast fix_demo --bound=3` starts it and the session
+  says what is running; a second `cast` is refused, naming the running ritual
+  and its runtime; `kill` stops it — including while it is blocked on a decide.
+- A ritual calling `status(...)` twice leaves the second text on the session and
+  on `vekna`'s own view; `status()` clears it; `status()` outside a cast raises,
+  naming the call. `trial.statuses` holds both texts in order.
 - `mise run fullcheck` passes.
+
+Two liches in one project root casting concurrently — the second blocking on
+`lock("project:edit")` while the first holds it — is the acceptance that waits
+on [05-locks.md](05-locks.md) at `0.8.0`, which is what makes the lock
+load-bearing.

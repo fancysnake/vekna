@@ -37,9 +37,7 @@ which links back to the version here that carried each shipped feature.
   the same socket, a surface may now speak as well as listen, and a lich that
   vanishes is said to have fallen the way a cast that vanishes says goodbye.
   It loads no ritual code, so a broken `rituals.py` still kills only the cast
-  process that read it. Casting from one is the next release
-  ([07-lich.md](docs/reborn/07-lich.md)).
-
+  process that read it ([07-lich.md](docs/reborn/07-lich.md)).
 - **A ritual can say what it is working on.** `status(text)` from
   `vekna.lexicon` sets one free-text line on the cast — the branch, which of
   eight PRs, which attempt — and every surface shows it beside that cast. Latest
@@ -52,6 +50,23 @@ which links back to the version here that carried each shipped feature.
   may work in a worktree, a temp clone, or no repository at all. The first
   half of [the lich](docs/reborn/07-lich.md), which is the release that grows a
   frame worth pinning a line to.
+
+### Changed
+
+- **The lich takes `0.7.0` and locks move to `0.8.0`** — the same swap the
+  daemon and locks made a release ago, for the same reason: the lich is what got
+  built. Ritual craft, ritual defaults and pushover were filed beside locks and
+  go with them. What this costs the lich is one acceptance row — two stations in
+  one project root, the second blocking on `lock("project:edit")` — which lands
+  with the lock that makes it mean something.
+- **Discord moved to Hand (`3.0.0`).** What the lich needed from it was the
+  shape — a station taking orders from a surface it does not own — and that
+  shipped: the daemon routes by lich name, a surface may speak as well as
+  listen, and the vocabulary is the same wherever it is typed. A channel is a
+  platform integration on an engine that is already right, which is a different
+  kind of work ([`docs/hand/07-discord.md`](docs/hand/07-discord.md) has what it
+  still needs). Until then, a phone is reached by
+  [pushover](docs/reborn/15-pushover.md).
 
 ## [0.6.0] - 2026-08-21
 

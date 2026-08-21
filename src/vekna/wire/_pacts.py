@@ -254,7 +254,7 @@ LichUpdate = LichStatus | LichFell | CastRefused
 
 LichMessage = LichRose | LichUpdate
 
-# What a surface is allowed to *say*, as opposed to be sent. Until 0.8.0 a
+# What a surface is allowed to *say*, as opposed to be sent. Until 0.7.0 a
 # surface only listened; a lich takes orders, so this is the direction that
 # opens — as far as the lich needs and no further. Every one of these names the
 # lich it is for, because the daemon routes them by name and by nothing else.

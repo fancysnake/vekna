@@ -381,8 +381,8 @@ _RITUALS = textwrap.dedent("""
     """)
 
 
-# A surface on the daemon, which is what an attached shell and a Discord channel
-# both are: it hears everything and it may now speak.
+# A surface on the daemon, which is what an attached shell is — and what a
+# channel would be: it hears everything, and it may now speak.
 class _Watcher:
     def __init__(self) -> None:
         self.heard: list[WireMessage] = []

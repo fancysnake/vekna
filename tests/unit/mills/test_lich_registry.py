@@ -55,11 +55,11 @@ class TestRising:
         assert registry.saved["hollow-vesper"].root == "/proj"
 
     # The row is the lich: raised again it is the same one, so the day it was
-    # first raised and the channel it speaks in survive the process that died.
+    # first raised and what it last cast survive the process that died.
     @staticmethod
     def test_rising_again_keeps_the_row_it_had():
         row = _row()
-        row.channel = "9911"
+        row.last_cast = "c1abcdef"
         registry = _Rows(row)
         liches = Liches(registry=registry)
 
@@ -67,7 +67,7 @@ class TestRising:
 
         kept = registry.saved["hollow-vesper"]
         assert kept.created == _WHEN
-        assert kept.channel == "9911"
+        assert kept.last_cast == "c1abcdef"
 
     @staticmethod
     def test_a_lich_moved_to_another_root_says_where_it_stands_now():

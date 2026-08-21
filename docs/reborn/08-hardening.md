@@ -19,8 +19,9 @@ enough that a second person can use it.
 
 ## What ships
 
-- **Published to PyPI.** `pip install vekna` gets a working tool; `vekna[discord]`
-  gets the lich's channel. Release is a `mise` task, not a remembered sequence:
+- **Published to PyPI.** `pip install vekna` gets a working tool, and
+  `vekna[trial]` the ritual author's test seam. Release is a `mise` task, not a
+  remembered sequence:
   build, check the wheel imports clean in a bare venv, tag, publish, verify the
   install from the index. Publishing is the first thing that makes the version
   numbers this roadmap has been spending mean anything to anyone else. The tag
@@ -87,5 +88,6 @@ this release. See above for the two things to do instead.
 - `pip install vekna` in a clean venv on a machine that has never built it, and
   the first ritual runs.
 - A stranger follows the README, writes a three-step ritual, and runs it
-  end-to-end from a terminal — then raises a lich and casts it from Discord.
+  end-to-end from a terminal — then raises a lich and casts it from a second
+  shell.
 - `mise run fullcheck` passes on `main`.

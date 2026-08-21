@@ -50,5 +50,5 @@ class Wiring:
     on_rise: Callable[[LichRose, Surface], str | None]
     on_lich: Callable[[LichUpdate], None]
     on_fallen: Callable[[str], None]
-    # A surface with something to say, which until 0.8.0 no surface had.
+    # A surface with something to say, which until 0.7.0 no surface had.
     on_command: Callable[[SurfaceCommand], None]

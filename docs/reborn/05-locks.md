@@ -1,6 +1,6 @@
 # Feature — Locks, coordinated
 
-**Version:** `0.7.0` — **planned.**
+**Version:** `0.8.0` — **planned.**
 
 See [00-common.md](00-common.md) — wire lock messages, replay rebuilds lock
 state, standalone modes.
@@ -14,9 +14,15 @@ them mean something. Locks land *after* the daemon
 first line: there is no permissive stage to ship and then flip out of, and no
 release where `lock()` succeeds while promising nothing.
 
+They now land after the **lich** ([07-lich.md](07-lich.md)) too, which is what
+makes them load-bearing rather than theoretical: two stations standing in one
+project root is exactly the case a lock has to answer, and until this ships that
+is the one acceptance row the lich has to leave open.
+
 (This doc once described the opposite order — the API shipping first and honest
 about having no coordinator, the daemon adding one after. The daemon came first
-instead, because locks were not what was needed next.)
+instead, because locks were not what was needed next; then the lich did, for the
+same reason.)
 
 ## What ships
 

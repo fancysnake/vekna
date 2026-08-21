@@ -1,6 +1,6 @@
 # Feature — pushover: the notification that leaves the desk
 
-**Version:** `0.7.0` — **planned**, beside [13-ritual-craft.md](13-ritual-craft.md)
+**Version:** `0.8.0` — **planned**, beside [13-ritual-craft.md](13-ritual-craft.md)
 and [14-ritual-defaults.md](14-ritual-defaults.md), which are the same size.
 
 See [00-common.md](00-common.md) — discovery and configuration, standalone.
@@ -16,10 +16,11 @@ at 02:00 waits until someone comes back to the desk to find out it was waiting.
 [Pushover](https://pushover.net/) is the smallest thing that closes that gap: an
 account, an application token, one HTTPS POST, a phone that buzzes. No daemon
 involvement, no wire message, no new dependency — `urllib.request` posts a form.
-Discord ([07-lich.md](07-lich.md), `0.8.0`) covers the same ground properly, for
-a lich, with a channel per station and commands coming back the other way. This
-does not compete with it: it is three lines of config for the operator who has
-the phone already, and it works from a plain `vekna cast` with no lich standing.
+Discord ([`../hand/07-discord.md`](../hand/07-discord.md), `3.0.0`) covers the
+same ground properly, for a lich, with a channel per station and commands coming
+back the other way. This does not compete with it — and now precedes it by two
+major versions: it is three lines of config for the operator who has the phone
+already, and it works from a plain `vekna cast` with no lich standing.
 
 ## Goal
 

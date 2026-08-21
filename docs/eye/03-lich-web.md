@@ -8,8 +8,9 @@ A lich is a route on the daemon's web view, not a server of its own.
 ## Goal
 
 A page per lich, shaped for a phone: what it is, what it is doing, what it did,
-and a box to tell it what to do next. The same session Discord shows, rendered
-instead of narrated.
+and a box to tell it what to do next. The same session an attached shell shows —
+and a channel would ([`../hand/07-discord.md`](../hand/07-discord.md)) —
+rendered instead of narrated.
 
 ## What ships
 
@@ -22,11 +23,11 @@ instead of narrated.
 
 ## The open question is auth
 
-Discord authenticates for free — the platform knows who sent the message and
-vekna checks an allowlist. A web page does not, and this is the whole reason
-this feature is parked rather than scheduled: it buys a nicer view of a
-capability that already arrived over Discord, at the cost of the one security
-story vekna has so far avoided owning.
+A chat platform authenticates for free — it knows who sent the message and vekna
+checks an allowlist. A web page does not, and this is the whole reason this
+feature is parked rather than scheduled: it buys a nicer view of a capability
+that arrives over a socket and a channel already, at the cost of the one
+security story vekna has so far avoided owning.
 
 Two ways, to be decided when it is picked up:
 

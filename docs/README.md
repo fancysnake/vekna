@@ -45,10 +45,11 @@ status in its header and nowhere else.
 | [Trial: testing rituals](reborn/12-trial.md) | `0.4.0` | [shipped](../CHANGELOG.md#040---2026-08-08) |
 | [The site](reborn/09-site.md) | `0.5.0` | in progress |
 | [Vekna daemon](reborn/06-vekna-daemon.md) | `0.6.0` | [shipped](../CHANGELOG.md#060---2026-08-21) |
-| [Locks API](reborn/05-locks.md) | `0.7.0` | planned |
-| [Ritual craft](reborn/13-ritual-craft.md) | `0.7.0` | planned |
-| [Ritual defaults](reborn/14-ritual-defaults.md) | `0.7.0` | planned |
-| [Lich](reborn/07-lich.md) | `0.8.0` | in progress |
+| [Lich](reborn/07-lich.md) | `0.7.0` | in progress |
+| [Locks API](reborn/05-locks.md) | `0.8.0` | planned |
+| [Ritual craft](reborn/13-ritual-craft.md) | `0.8.0` | planned |
+| [Ritual defaults](reborn/14-ritual-defaults.md) | `0.8.0` | planned |
+| [Pushover](reborn/15-pushover.md) | `0.8.0` | planned |
 | [1.0 hardening](reborn/08-hardening.md) | `1.0.0` | in progress |
 | [Steps as DTOs](reborn/11-steps-as-dto.md) | — | undecided |
 
@@ -76,6 +77,7 @@ Parked until Reborn ships. Unscheduled within `3.x`.
 | [Skills](hand/04-skills.md) | planned |
 | [Replay](hand/05-replay.md) | planned |
 | [`folio/process`](hand/06-process.md) | planned |
+| [Discord: a lich's channel](hand/07-discord.md) | planned |
 
 ## Contents
 

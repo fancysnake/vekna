@@ -129,8 +129,9 @@ class Liches:
             )
 
     # A rising is not always a new lich: one raised again keeps the row it had,
-    # so its channel and the day it was first raised survive the process that
-    # died. What it does learn is where it stands now.
+    # so the day it was first raised — and whatever a later release hangs off
+    # the row — survives the process that died. What it learns is where it
+    # stands now.
     def _remember(self, message: LichRose) -> None:
         found = {row.name: row for row in self._registry.rows()}
         if (row := found.get(message.lich)) is None:

@@ -15,7 +15,7 @@ in the same account attaches as a peer surface and sees the same view.
 It observes. A cast answers its prompts on the stdin of the terminal that
 started it, attached or not; what the wire carries is that the cast is
 *waiting*, so the operator can be told from anywhere. Coordination — locks —
-lands on top of this at [0.7.0](05-locks.md).
+lands on top of this at [0.8.0](05-locks.md).
 
 ## What ships
 
@@ -84,14 +84,14 @@ lands on top of this at [0.7.0](05-locks.md).
 ## Out of scope
 
 **Locks** — the whole lock manager, `vekna locks`, `vekna unlock`, and lock
-state rebuilt from replay ([05-locks.md](05-locks.md), 0.7.0). **Takeover** —
+state rebuilt from replay ([05-locks.md](05-locks.md), 0.8.0). **Takeover** —
 answering a blocked cast from `vekna`. It is one message and the hub already
 holds the state it would answer into; what it costs is on the cast side, where
 the local read is a thread that cannot be cancelled, so the loser would stay
 blocked and eat the next line typed into that terminal. Racing the two wants
 stdin read through `loop.add_reader`. Deferred rather than dropped — and at
-0.8.0 the question changes shape anyway, a lich holding the stdin of the casts
-it spawns. Originating casts — the daemon observes; the lich casts (0.8.0).
+0.7.0 the question changes shape anyway, a lich holding the stdin of the casts
+it spawns. Originating casts — the daemon observes; the lich casts (0.7.0).
 Visual surfaces ([`../eye/`](../eye/README.md)). Cross-machine peers.
 Network-exposed daemon (TCP/auth/TLS). Pooled cast processes.
 

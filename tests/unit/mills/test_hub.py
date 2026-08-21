@@ -271,7 +271,7 @@ class TestDrops:
         )
 
         assert seen[-1].action == "dropped"
-        assert seen[-1].reason == "locks arrive at 0.7.0"
+        assert seen[-1].reason == "locks arrive at 0.8.0"
 
 
 class TestFanOut:

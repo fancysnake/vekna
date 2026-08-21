@@ -10,12 +10,13 @@ One binary, `vekna`, three roles with separate lifetimes:
   folios, and the user's `rituals.py`. Runs one cast to completion, streams
   events to the daemon when attached, exits. Always fresh; never pooled. A
   crash kills one cast.
-- **lich** (0.8.0) — long-running, named, bound to one project directory (a
+- **lich** (0.7.0) — long-running, named, bound to one project directory (a
   directory may hold several). Started by `vekna lich`. Runs one cast at a time
-  in its directory and takes orders from
-  any surface — its terminal, another shell, its own Discord channel. Spawns
-  cast processes; never loads them, so it sits inside the same import rule as
-  the daemon.
+  in its directory and takes orders from any surface on the daemon's socket —
+  its terminal, a shell attached later, and a channel of its own once there are
+  channels ([`../hand/07-discord.md`](../hand/07-discord.md)). Spawns cast
+  processes; never loads them, so it sits inside the same import rule as the
+  daemon.
 - **vekna daemon** — long-running, one per machine/user. Started by bare
   `vekna`. Coordinates locks, owns the durable journal, surfaces attention
   across casts, routes commands to liches. Never imports user code, lexicon, or
@@ -28,13 +29,14 @@ one cast process, not the daemon or sibling casts. Blast radius = one cast. The
 original soul (cross-attention surfacing) is the daemon's job, across casts.
 
 **Staging.** 0.x builds features up. The daemon (`vekna` dashboard, journal,
-resume) arrives at **0.6.0**; before that, casts run standalone. Locks follow at
-**0.7.0**, coordinated by the daemon that is already there — so they ship with
-`deny` as the standalone default rather than a permissive one waiting to be
-flipped. The lich lands at **0.8.0** and is the
-first release that can start work remotely. **1.0 ships when all features are
-ready** (hardening), not when the daemon lands. The visual surfaces are parked
-past 1.0 in [`../eye/`](../eye/README.md).
+resume) arrives at **0.6.0**; before that, casts run standalone. The lich lands
+at **0.7.0** and is the first release that can *start* work rather than watch
+it. Locks follow at **0.8.0**, coordinated by the daemon that is already there —
+so they ship with `deny` as the standalone default rather than a permissive one
+waiting to be flipped — and they are what lets two liches share a project root
+without standing on each other. **1.0 ships when all features are ready**
+(hardening), not when the daemon lands. The visual surfaces are parked past 1.0
+in [`../eye/`](../eye/README.md).
 
 **Config namespace** is `~/.config/vekna/`, `.vekna.toml`. Package on disk is
 named `vekna`.
@@ -57,8 +59,8 @@ named `vekna`.
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
-| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. (0.8.0.) |
-| **Phylactery** | A lich's row in the daemon's registry, beside `runs/`: name, root, created, last cast, Discord channel id. Outlives the process — a lich whose process died is dormant, not gone. Anything larger (session log, cast history) is the journal's already. |
+| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. (0.7.0.) |
+| **Phylactery** | A lich's row in the daemon's registry, beside `runs/`: name, root, created, last cast. Outlives the process — a lich whose process died is dormant, not gone. Anything larger (session log, cast history) is the journal's already. |
 
 `cast` is the verb: `vekna cast write-tests`.
 
@@ -142,18 +144,18 @@ rituals.py            ◄────── imports                          ┌
                               standalone fallback              │
                               cast event log                   ├──── runs/ on disk
                               acquires/releases locks          │
-                              renders prompts on stdin         ├──── lich routing (0.8.0)
+                              renders prompts on stdin         ├──── lich routing (0.7.0)
                               when no daemon                   │
                                                                └──── eye surfaces (post-1.0)
 ```
 
-A lich (0.8.0) hangs off the same daemon, bound to one project directory —
+A lich (0.7.0) hangs off the same daemon, bound to one project directory —
 though a directory may hold several:
 
 ```text
 lich "hollow-vesper"                       ┌── the terminal that raised it
 one directory            ◄── commands ─────┼── shells that attached later
-one cast at a time                         └── #lich-hollow-vesper on discord
+one cast at a time                         └── a channel of its own (3.0.0)
 phylactery: one registry row
       │                    (the daemon routes them, keyed by lich name)
       └── spawns ──► cast process ──► reports itself to the daemon, as always
@@ -267,8 +269,10 @@ only place the two vocabularies meet.
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. Both flow cast → daemon at 0.6.0: the cast keeps its own stdin and the daemon is told it is waiting, not asked to answer. The daemon → cast direction is what a takeover would use |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
-| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | 0.8.0: name, project root, pid, idle-or-casting |
-| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | 0.8.0: the daemon routes by lich name |
+| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | 0.7.0: name, project root, pid, idle-or-casting |
+| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | 0.7.0: the daemon routes by lich name |
+| `CastStatus` | cast → daemon → surface | 0.7.0: the ritual's own line about what it is doing; empty clears it |
+| `SurfaceReady` | daemon → surface | 0.7.0: the replay is complete, for a surface that asks one question and leaves |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on
@@ -338,7 +342,7 @@ modules = ["myproj.rituals", "myproj.dev_rituals"]
 files   = ["scripts/rituals.py", "ops/rituals.py"]
 
 [locks]
-standalone = "deny"   # 0.7.0 default; allow/warn are for a cast with no daemon
+standalone = "deny"   # 0.8.0 default; allow/warn are for a cast with no daemon
 ```
 
 A config that does not validate stops the command with the path and the
@@ -371,20 +375,21 @@ vekna                                         # dashboard: observe running casts
 vekna log                                     # list active + recent casts — 0.6.0
 vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal — 0.6.0
 vekna --debug                                 # daemon: log every event it processes — 0.6.0
-vekna rituals check                           # unreachable steps, hidden transitions, name collisions — 0.7.0
-vekna cast <ritual> --unattended              # a decide fails at the boundary instead of waiting on nobody — 0.7.0
-vekna locks                                   # current locks + holders — 0.7.0
-vekna unlock <key>                            # admin override (confirmation) — 0.7.0
-vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.8.0
-vekna lich attach [<name>]                    # attach a shell to a lich's session — 0.8.0
-vekna lich dismiss <name>                     # end it; archive the channel, drop the row — 0.8.0
-vekna liches                                  # liches live and dormant, their roots and state — 0.8.0
+vekna lich [--name=… | --new]                 # raise a lich here; detaches; asks if one sleeps — 0.7.0
+vekna lich attach [<name>]                    # attach a shell to a lich's session — 0.7.0
+vekna lich dismiss <name>                     # end it for good and drop its row — 0.7.0
+vekna liches                                  # liches live and dormant, their roots and state — 0.7.0
+vekna rituals check                           # unreachable steps, hidden transitions, name collisions — 0.8.0
+vekna cast <ritual> --unattended              # a decide fails at the boundary instead of waiting on nobody — 0.8.0
+vekna locks                                   # current locks + holders — 0.8.0
+vekna unlock <key>                            # admin override (confirmation) — 0.8.0
 vekna --help
 ```
 
-Inside a lich's session — terminal, attached shell, or Discord channel — the
-vocabulary is the same: `cast`, `prompt`, `status`, `log`, `rituals`, `kill`.
-Only `cast` and `prompt` are refused while a cast is running.
+Inside a lich's session — the terminal that raised it, a shell attached later,
+or a channel once there are channels — the vocabulary is the same: `cast`,
+`prompt`, `status`, `log`, `rituals`, `kill`. Only `cast` and `prompt` are
+refused while a cast is running.
 
 ### Hand and Eye (easter egg)
 
@@ -433,7 +438,7 @@ run …` commands.
    as its only parameter. Output declared per call site (`output=`); an
    output-side Component is deferred. Telemetry in grimoire, not return value.
 6. Locks hierarchical colon-keyed. Cast holds, release token authorises.
-   Standalone modes allow/warn/deny, defaulting to `deny` — they land at 0.7.0,
+   Standalone modes allow/warn/deny, defaulting to `deny` — they land at 0.8.0,
    after the daemon that coordinates them, so there is no permissive stage to
    flip out of.
 7. Lock state replays from grimoire events — no separate "current state" message.
@@ -451,17 +456,20 @@ run …` commands.
     the cast it supervises.
 14. A lich's identity lives in its phylactery — a row in the daemon's registry,
     not a store of its own — keyed by **name**, since a project root may hold
-    several liches. It carries only what nothing else has: root (a dormant lich
-    has no connection to learn it from, and raising one means spawning casts
-    there) and Discord channel id. History stays a query over the journal,
-    which costs one field on the cast record. Because a directory does not
-    identify a lich, `vekna lich` where one sleeps **asks** which to raise,
-    listing only the rows rooted there; `--name` and `--new` answer up front,
-    so nothing scripted waits on the question.
-15. Remote control arrives over **Discord**, one bot with a channel per lich —
-    outbound only. Bots cannot be created programmatically; channels can. The
-    platform authenticates and vekna checks an allowlist, so the daemon still
-    binds nothing but its Unix socket.
+    several liches. It carries only what nothing else has: root, because a
+    dormant lich has no connection to learn it from and raising one means
+    spawning casts there. History stays a query over the journal, which costs
+    one field on the cast record. Because a directory does not identify a lich,
+    `vekna lich` where one sleeps **asks** which to raise, listing only the rows
+    rooted there; `--name` and `--new` answer up front, so nothing scripted
+    waits on the question.
+15. Reaching a lich from a phone arrives over **Discord**, one bot with a
+    channel per lich — outbound only, and filed with Hand
+    ([`../hand/07-discord.md`](../hand/07-discord.md)) rather than with the lich
+    itself: the engine half is a surface on the daemon's socket, which shipped,
+    and the platform half is an integration on top of it. Bots cannot be created
+    programmatically; channels can. The platform authenticates and vekna checks
+    an allowlist, so the daemon still binds nothing but its Unix socket.
 16. Visual surfaces (TUI, web) are parked past 1.0 in [`../eye/`](../eye/README.md).
     They consume the same events and change no engine, so they block nothing.
     WhatsApp was dropped: it cannot give a lich a channel of its own.

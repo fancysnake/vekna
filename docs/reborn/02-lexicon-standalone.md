@@ -57,7 +57,7 @@ work.
 
 ## Out of scope
 
-The daemon. Coding medium. Claude. TUI. Persistence. Locks (0.7.0).
+The daemon. Coding medium. Claude. TUI. Persistence. Locks (0.8.0).
 `vekna cast "<prompt>"` sugar (0.3.0). Annotation-gated step dispatch
 (`goto(payload)` without a named target) — explicit `goto(step, payload)` only
 for now.

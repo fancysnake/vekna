@@ -19,10 +19,10 @@ class Phylactery(BaseModel):
     name: str
     root: str
     created: datetime
-    # The last cast this lich started, and the channel it speaks in. Both None
-    # until there is one — a lich that has cast nothing is still a lich.
+    # The last cast this lich started, None until there is one — a lich that has
+    # cast nothing is still a lich. A channel id joins it when there are
+    # channels to remember (`docs/hand/07-discord.md`).
     last_cast: str | None = None
-    channel: str | None = None
 
 
 # What the mills hold instead of a file. `links` and `mills` are peers here, so
@@ -68,8 +68,8 @@ class LichLine:
 
 # The registry is every lich at once, so a file that will not parse is not one
 # row lost the way a torn `run.json` is — it is all of them. Read as empty it
-# would hand out a name somebody already holds and raise a second lich onto a
-# live one's channel, so it is said instead, naming the file.
+# would hand out a name somebody already holds and raise a second lich beside a
+# live one, so it is said instead, naming the file.
 class RegistryUnreadableError(Exception):
     def __init__(self, path: Path, detail: str) -> None:
         super().__init__(f"{path} will not parse — {detail}")

@@ -4,7 +4,7 @@ The roadmap for vekna's pivot to overseeing many concurrent rituals. Common
 knowledge lives once; each feature doc assumes it. One `vekna` binary, three
 roles: the `vekna cast` process runs one ritual; the `vekna` daemon observes
 casts, coordinates locks, owns the journal; a **lich** stands in one directory
-and casts on command, from a terminal or from Discord.
+and casts on command, from the terminal that raised it or any shell after it.
 
 - [00-common.md](00-common.md) — premise, vocabulary, process model, package
   layout, layering, wire protocol, Components, config, standalone, CLI (incl.
@@ -51,6 +51,16 @@ ships when every Reborn feature is ready — not when the daemon lands.
   outside tome that turned up the six workarounds wants one component answered
   per repository rather than per run. Filed separately because it is a config
   surface rather than a ritual-authoring one, at `0.7.0` beside it.
+- **The lich and locks swapped in turn, and Discord left the release
+  entirely.** The lich is what got built, so it takes `0.7.0`; locks — and `13`,
+  `14` and `15`, which were filed beside them — slide to `0.8.0`. That costs the
+  lich one acceptance row, the two stations blocking on `lock("project:edit")`,
+  which now lands with the lock that makes it mean something. Discord went to
+  Hand ([`../hand/07-discord.md`](../hand/07-discord.md)): what the lich needed
+  from it was the shape — a station taking orders from a surface it does not own
+  — and the shape shipped without the platform. A channel is an integration on
+  an engine that is already right, which is a different kind of work and a
+  different release.
 - **Nothing below `0.5.0` has started, but some of it is in the tree.** The wire
   already carries the lock messages, and a cast already probes for a daemon it
   cannot yet find. Groundwork laid early by the feature that needed the seam,
@@ -72,7 +82,9 @@ ships when every Reborn feature is ready — not when the daemon lands.
 Textual TUI, web view, the lich's web page, the workflow graph drawn, and the
 lich's channels reshaped into adapters. Same wire, same events, another
 consumer, so they park without blocking anything here. WhatsApp notifications
-were dropped outright: Discord ships at 0.8.0 and does that job better.
+were dropped outright: a channel per lich does that job properly, and it is
+Hand's ([`../hand/07-discord.md`](../hand/07-discord.md)) — until it lands,
+[15-pushover.md](15-pushover.md) is what reaches a phone.
 
 [`../hand/`](../hand/README.md) — **Hand** (`3.0.0`), the acting half: failure
 as a transition, `timeout`/`race`, cast budgets, loadable skills, and replaying

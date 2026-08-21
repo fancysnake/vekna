@@ -23,7 +23,6 @@ class TestRows:
         registry = LichRegistry(tmp_path)
         saved = _row()
         saved.last_cast = "c1abcdef"
-        saved.channel = "9911"
 
         registry.save(saved)
 

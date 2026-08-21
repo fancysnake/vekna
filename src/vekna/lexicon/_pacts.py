@@ -304,7 +304,7 @@ def done(result: BaseModel | None = None) -> Done:
 
 # Unknown keys are an error: a misspelt `module = [...]` would otherwise load
 # nothing and leave the next cast to fail with "no ritual named ...". The
-# top-level table stays open — `[locks]` lands at 0.7.0.
+# top-level table stays open — `[locks]` lands at 0.8.0.
 class RitualsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

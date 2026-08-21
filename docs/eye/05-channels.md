@@ -1,16 +1,19 @@
 # Feature — Surfaces as adapters
 
-**Version:** Eye (`2.x`), unscheduled within it.
+**Version:** Eye (`2.x`), unscheduled within it — and **after**
+[`../hand/07-discord.md`](../hand/07-discord.md), which is the implementation
+this generalises. Discord left Reborn when the lich shipped without it, so this
+waits on Hand rather than on the release that raised the station.
 
-See [`../reborn/07-lich.md`](../reborn/07-lich.md) — the lich, its command
-vocabulary, and the Discord channel it ships with.
+See [`../reborn/07-lich.md`](../reborn/07-lich.md) — the lich and its command
+vocabulary, which every surface here speaks.
 
 ## Goal
 
-The lich speaks Discord. That is one platform, and the code behind it — gateway
+A lich speaks Discord. That is one platform, and the code behind it — gateway
 client, channel lifecycle, a pinned status message edited in place, decides as
-buttons, an allowlist — is nine parts shape to one part platform. Right now the
-shape is spelled out once, inside the only implementation of it.
+buttons, an allowlist — is nine parts shape to one part platform. Written once,
+the shape is spelled out inside the only implementation of it.
 
 Pull the shape out so that a second channel is a file rather than a refactor.
 Not so that vekna ships ten channels: so that the one somebody actually needs
@@ -78,7 +81,7 @@ not this doc's to revisit.
 
 ## Acceptance
 
-- Discord behaves exactly as it did at `0.8.0` — same pinned status, same
+- Discord behaves exactly as it did when it landed — same pinned status, same
   buttons, same refusals, same silent ignore for a sender off the allowlist.
 - A second channel is implemented in its own `links/` module with no change to
   `mills/lich/`, and carries the full vocabulary.
