@@ -1,6 +1,6 @@
 # Feature — ritual defaults: a component answered once per repo
 
-**Version:** `0.6.0` — **planned**, beside [13-ritual-craft.md](13-ritual-craft.md),
+**Version:** `0.7.0` — **planned**, beside [13-ritual-craft.md](13-ritual-craft.md),
 whose provenance it shares.
 
 See [00-common.md](00-common.md) — discovery and configuration, Components,

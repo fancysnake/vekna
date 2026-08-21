@@ -1,11 +1,56 @@
+import asyncio
+import contextlib
 import importlib
+import sys
+from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol, cast
 
 import click
 from click import Group
 
-_CAST_CONTEXT: dict[str, bool] = {"ignore_unknown_options": True}
+from vekna.gates.cli.dashboard import Dashboard
+from vekna.gates.cli.screen import listing
+from vekna.links.debug_log import DebugLog
+from vekna.links.journal import Journal
+from vekna.links.socket_server import alive, attach, serve
+from vekna.links.terminal import Terminal
+from vekna.mills.debug import debug_line
+from vekna.mills.hub import Hub
+from vekna.pacts.routing import Routed
+from vekna.pacts.screen import Screen
+from vekna.wire import (
+    CastMessage,
+    SurfaceHello,
+    default_runs_root,
+    default_socket_path,
+    default_state_root,
+    encode_frame,
+    read_frames,
+)
+
+# Docker's rule: what comes before the positional belongs to the outer command,
+# what comes after belongs to what it runs. `allow_interspersed_args` off is
+# what draws that line — without it a ritual's own `--continue` would be eaten
+# here, and vekna's would be honoured wherever it happened to appear.
+_CAST_CONTEXT: dict[str, bool] = {
+    "ignore_unknown_options": True,
+    "allow_interspersed_args": False,
+}
 _RUNTIME = "vekna.lexicon._inits"
+# Spawned through the interpreter running this one rather than through whatever
+# `vekna` is on PATH, which in a venv, a `pipx` install or a test is not always
+# the same binary.
+_CLI_MODULE = "vekna.inits.cli"
+_RESUME = "--resume"
+_RECENT = 20
+# What the daemon keeps on disk, trimmed once at startup rather than on every
+# write: a cast is a directory of a few kilobytes, and this is about a machine
+# that has been running vekna for a year, not about the last hour.
+_KEPT = 200
+_DEBUG_LOG = "debug.log"
+_DAEMON_ENDED = "the daemon ended"
+_PEER = "attached to the vekna already running here"
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -32,8 +77,16 @@ def _runtime() -> _Runtime:
     add_help_option=False,
     help="Run a ritual from rituals.py (try `vekna cast --help`).",
 )
+@click.option(
+    "--continue",
+    "continued",
+    metavar="CAST_ID",
+    help="Carry an interrupted cast on from where it stopped.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
-def _cast(ritual_args: tuple[str, ...]) -> None:
+def _cast(ritual_args: tuple[str, ...], continued: str | None = None) -> None:
+    if continued is not None:
+        raise SystemExit(_continue(continued))
     raise SystemExit(_runtime().main(list(ritual_args)))
 
 
@@ -53,19 +106,152 @@ def _rituals() -> None:
     pass
 
 
+async def _spawn_cast(cast_id: str, *, cwd: str) -> int:
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", _CLI_MODULE, "cast", _RESUME, cast_id, cwd=cwd
+    )
+    return await process.wait()
+
+
+# `log` rather than `casts`, which sat one letter from `cast` and did something
+# else entirely: the verb an operator types all day is the one that must not
+# have a near-homograph waiting for a slip of the finger.
+@click.command("log", help="List the casts the daemon has seen, newest first.")
+def _log() -> None:
+    records = Journal(default_runs_root()).recent(limit=_RECENT)
+    click.echo(listing(records), nl=False)
+
+
+# Always a fresh process, in the directory the interrupted cast ran in: the
+# ritual source is found by walking up from there, and a resume that ran here
+# would cast a different project's ritual of the same name. The journal is
+# handed over by name — the cast process reads it itself, being the only one
+# that needs what is in it.
+# The child is handed `_RESUME`, which is the runtime's own flag and skips this
+# layer: reaching `--continue` again is how it would spawn itself forever.
+def _continue(cast_id: str) -> int:
+    journal = Journal(default_runs_root())
+    # What `vekna log` and the aborted row print is the id cut short, so what
+    # comes back here is a prefix rather than the directory's own name.
+    found = journal.matching(cast_id)
+    if len(found) > 1:
+        ambiguous = f"{cast_id!r} names {len(found)} casts — `vekna log` has the ids"
+        raise click.ClickException(ambiguous)
+    # A prefix that named nothing is read as itself, misses again, and is said
+    # back in the sentence as the operator typed it.
+    named = found[0] if found else cast_id
+    if (record := journal.read(named)) is None:
+        message = f"no cast {cast_id!r} in the journal — `vekna log` has the ids"
+        raise click.ClickException(message)
+    # The directory is the record's, not this shell's, and a project that has
+    # been moved or deleted since is the likeliest thing to have gone wrong
+    # between the two casts. Said as a sentence naming it, rather than as the
+    # `NotADirectoryError` the spawn would otherwise raise from inside asyncio.
+    root = record.hello.project_root
+    if not Path(root).is_dir():
+        message = f"{root} is not there any more — cast {cast_id!r} ran in it"
+        raise click.ClickException(message)
+    # The child is handed the whole id: it reads the journal by directory name,
+    # and a prefix is this layer's convenience, not the runtime's.
+    return asyncio.run(_spawn_cast(record.hello.cast_id, cwd=root))
+
+
 _rituals.add_command(_rituals_list)
 _rituals.add_command(_rituals_show)
 
 
+def _nothing(_: Routed) -> None:
+    pass
+
+
+def _sink(debug: Path | None) -> Callable[[Routed], None]:
+    if debug is None:
+        return _nothing
+    log = DebugLog(debug)
+
+    def record(routed: Routed) -> None:
+        log.write(debug_line(routed))
+
+    return record
+
+
+# A second `vekna` in the same account is a surface on the first: it says so, is
+# replayed every live cast, and paints the same view. It journals nothing — the
+# daemon that owns the socket owns the record.
+async def _as_peer(*, path: Path, screen: Screen) -> int:
+    reader, writer = await attach(path)
+    writer.write(encode_frame(SurfaceHello()))
+    hub = Hub()
+    dashboard = Dashboard(casts=hub, screen=screen)
+    dashboard.say(_PEER)
+
+    # What a daemon sends a surface is what it heard from its casts, so the
+    # handshake this end wrote is the only frame kind that cannot come back.
+    async def listen() -> None:
+        async for message in read_frames(reader):
+            if isinstance(message, SurfaceHello):
+                continue
+            hub.apply(message)
+            dashboard.changed()
+        dashboard.stop(note=_DAEMON_ENDED)
+
+    await dashboard.run(alongside=[asyncio.create_task(listen())])
+    writer.close()
+    with contextlib.suppress(OSError):
+        await writer.wait_closed()
+    return 0
+
+
+async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> int:
+    where: Screen = screen if screen is not None else Terminal()
+    path = default_socket_path()
+    if await alive(path):
+        return await _as_peer(path=path, screen=where)
+    journal = Journal(default_runs_root())
+    await asyncio.to_thread(journal.prune, keep=_KEPT)
+    hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
+    dashboard = Dashboard(casts=hub, screen=where)
+
+    def heard(message: CastMessage) -> None:
+        hub.apply(message)
+        dashboard.changed()
+
+    server = await serve(
+        path=path,
+        on_message=heard,
+        on_attach=hub.attach_surface,
+        on_detach=hub.detach_surface,
+    )
+    if debug is not None:
+        dashboard.say(f"logging every event to {debug}")
+    try:
+        await dashboard.run()
+    finally:
+        await server.close()
+    return 0
+
+
 def init_command() -> Group:
+    # Bare `vekna` is the daemon, which is why the group runs a body of its own
+    # rather than printing help: the first one binds the socket and renders,
+    # every one after attaches to it as another surface.
     @click.group(invoke_without_command=True)
-    def vekna() -> None:
+    @click.option(
+        "--debug",
+        is_flag=True,
+        help="Log every event the daemon processes to ~/.local/state/vekna/debug.log.",
+    )
+    def vekna(*, debug: bool = False) -> None:
         ctx = click.get_current_context()
         if ctx.invoked_subcommand is None:
-            click.echo(ctx.get_help())
+            # Resolved here rather than at import, so the environment a shell
+            # exports is the one that decides where the log goes.
+            where = default_state_root() / _DEBUG_LOG if debug else None
+            raise SystemExit(asyncio.run(daemon(debug=where)))
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)
+    vekna.add_command(_log)
     return vekna
 
 

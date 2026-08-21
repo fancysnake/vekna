@@ -1,6 +1,6 @@
 # Feature — ritual craft: what an outside ritual needed
 
-**Version:** `0.6.0` — **planned**, beside [05-locks.md](05-locks.md). Two
+**Version:** `0.7.0` — **planned**, beside [05-locks.md](05-locks.md). Two
 features may share a version; `10` and `12` both took `0.4.0`.
 
 See [00-common.md](00-common.md).

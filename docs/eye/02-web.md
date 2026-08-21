@@ -37,7 +37,7 @@ cut) fielding decides.
 
 ## Out of scope
 
-Multi-user. Remote access. History-browsing UI (data is on disk from 0.7.0;
+Multi-user. Remote access. History-browsing UI (data is on disk from 0.6.0;
 add a history page later if asked).
 
 ## Acceptance

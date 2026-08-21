@@ -8,6 +8,8 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, JsonValue
 
+from vekna.wire import RunRecord, WireMessage
+
 
 # Component types — the typed values on a ritual's external interface. They are
 # boundary contracts, so they live here; that their validators touch the
@@ -51,7 +53,7 @@ GitRef = Annotated[str, AfterValidator(_nonempty_git_ref)]
 
 # The grimoire's own vocabulary, not the daemon's. These carry no `cast_id`:
 # correlating events to a cast is a transport concern, and in one process there
-# is one cast. `vekna.wire` projects these onto the socket at 0.7.0; keeping the
+# is one cast. `_links/daemon.py` projects these onto `vekna.wire`; keeping the
 # two apart is what lets either change without the other.
 @dataclass(frozen=True, kw_only=True)
 class RiteBegan:
@@ -73,7 +75,7 @@ class RiteStreamed:
     delta: str
 
 
-# `result` is JSON-shaped because 0.7.0 persists the grimoire to a durable
+# `result` is JSON-shaped because the daemon persists the grimoire to a durable
 # journal — a real requirement, not the transport leaking back in.
 @dataclass(frozen=True, kw_only=True)
 class RiteEnded:
@@ -98,6 +100,15 @@ class RitualSource:
     origin: str
     rituals: list["Ritual"]
     steps: list["Step"]
+
+
+# What a resumed cast is handed: the record of what the interrupted cast was,
+# and every event the daemon saw it emit. The link reads them; deciding what is
+# replayable out of them is the ledger's job in `_mills`.
+@dataclass(frozen=True, kw_only=True)
+class Resumption:
+    record: RunRecord
+    events: list[WireMessage]
 
 
 class Channel(Protocol):
@@ -277,7 +288,7 @@ def done(result: BaseModel | None = None) -> Done:
 
 # Unknown keys are an error: a misspelt `module = [...]` would otherwise load
 # nothing and leave the next cast to fail with "no ritual named ...". The
-# top-level table stays open — `[locks]` lands at 0.6.0.
+# top-level table stays open — `[locks]` lands at 0.7.0.
 class RitualsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -1,4 +1,4 @@
 from ._links import shell
-from ._pacts import ShellResult
+from ._pacts import ShellOutputError, ShellResult
 
-__all__ = ["ShellResult", "shell"]
+__all__ = ["ShellOutputError", "ShellResult", "shell"]
