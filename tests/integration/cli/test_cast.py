@@ -290,6 +290,21 @@ class TestCastConfig:
 
         assert main(["ping"]) == 0
 
+    # The config namespace is the one thing of vekna's that is configuration,
+    # and XDG lets a shell say where it is.
+    @staticmethod
+    def test_the_environment_names_the_config_namespace(tmp_path, monkeypatch):
+        config = tmp_path / "elsewhere" / "vekna"
+        config.mkdir(parents=True)
+        (config / "config.toml").write_text('[rituals]\nfiles = ["extra.py"]\n')
+        (config / "extra.py").write_text(_EXTRA)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "elsewhere"))
+        project = tmp_path / "project"
+        project.mkdir()
+        monkeypatch.chdir(project)
+
+        assert main(["ping"]) == 0
+
     @staticmethod
     def test_config_files_resolve_against_the_config_not_the_cwd(tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path / "home"))

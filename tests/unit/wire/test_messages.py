@@ -6,6 +6,7 @@ from vekna.wire import (
     DecideResolved,
     LockGranted,
     RiteStarted,
+    SurfaceHello,
     decode_frame,
     encode_frame,
 )
@@ -63,6 +64,12 @@ class TestDiscriminator:
         assert requested.free is False
         assert isinstance(decided, DecideResolved)
         assert decided.answer == "yes"
+
+    @staticmethod
+    def test_surface_hello_needs_no_fields():
+        restored = decode_frame(encode_frame(SurfaceHello()))
+
+        assert isinstance(restored, SurfaceHello)
 
     @staticmethod
     def test_lock_granted_carries_token():

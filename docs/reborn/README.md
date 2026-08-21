@@ -37,14 +37,20 @@ ships when every Reborn feature is ready — not when the daemon lands.
   it, so PyPI and the site come forward. `0.5.0` rather than a patch number
   because this is the first version anyone outside this repository installs by
   name, and that is worth a minor. The rest of `08` stays where it is.
+- **The daemon and locks swapped, and locks got simpler for it.** Locks were
+  next and are not what is needed next, so `0.6.0` is the daemon and `0.7.0` is
+  locks; nothing below moves, and the lich keeps `0.8.0`. Landing after the
+  coordinator rather than before it deletes a whole stage from
+  [05-locks.md](05-locks.md) — there is no permissive default to ship and then
+  flip, and no release where `lock()` succeeds while promising nothing.
 - **`13` is numbered last because it was found last.** Casting a real ritual
   from outside this repository turned up six places the shipped surface has to
   be worked around; they are small, independent of everything else on the line,
-  and filed at `0.6.0` beside locks rather than given a slot of their own.
+  and filed at `0.7.0` beside locks rather than given a slot of their own.
 - **`14` shares `13`'s number-neighbourhood and its provenance.** The same
   outside tome that turned up the six workarounds wants one component answered
   per repository rather than per run. Filed separately because it is a config
-  surface rather than a ritual-authoring one, at `0.6.0` beside it.
+  surface rather than a ritual-authoring one, at `0.7.0` beside it.
 - **Nothing below `0.5.0` has started, but some of it is in the tree.** The wire
   already carries the lock messages, and a cast already probes for a daemon it
   cannot yet find. Groundwork laid early by the feature that needed the seam,

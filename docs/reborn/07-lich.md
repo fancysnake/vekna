@@ -160,7 +160,7 @@ async def gates(payload: MergeReady) -> Transition:
 
 It ships here because here is the first surface with a **frame** to pin a line
 to — `vekna cast` is an append-only stream, where a status is just another
-line. The 0.7.0 dashboard gains a column for it retroactively, from the same
+line. The dashboard gains a column for it retroactively, from the same
 event, and Eye's TUI and the lich's web page get it for free
 ([`../eye/`](../eye/README.md)).
 

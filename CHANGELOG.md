@@ -10,26 +10,85 @@ which links back to the version here that carried each shipped feature.
 
 ## [Unreleased] - ???
 
+## [0.6.0] - 2026-08-21
+
 ### Added
 
-- **A rite says what it is doing.** A tree of `↳ shell` lines named the medium
-  and nothing about the call; a `RiteBegan` now carries a `summary` — the
+- **The daemon.** Bare `vekna` binds `$XDG_RUNTIME_DIR/vekna.sock` — or
+  `/tmp/vekna-<uid>/vekna.sock`, in a directory of the user's own — and renders
+  every cast running on this account, whatever directory each was started in.
+  One row per cast and no output in any of them: status, elapsed, steps
+  finished, and what it is doing this second — the running step, the medium
+  inside it, and how long that step has been running. Casts waiting on an answer
+  sort to the top; an aborted cast, one whose socket closed without a goodbye,
+  prints the command that carries it on. A number drills into a cast for its
+  rite tree, live output and the error it ended on; `b` back, `q` quit. A second
+  `vekna` attaches to the first as another surface and paints the same view. It
+  observes and records; it starts nothing.
+- **A cast tells it what it is doing.** `vekna cast` projects its grimoire onto
+  `vekna.wire` and sends it — the protocol designed at `0.2.0` finally has both
+  ends. The cast's end is send-only and reads the socket for one thing, the EOF
+  that says the daemon has gone. A cast that starts with no daemon keeps
+  probing, and one raised halfway through is caught up on the whole cast rather
+  than joining midway.
+- **The prompt stays where the cast is.** A `decide`, coding's tool gate and the
+  agent's own question are all answered on the stdin of the terminal that ran
+  the cast, attached or not. The wire carries only that the cast is *waiting*:
+  the daemon raises it with the prompt and stops when it is answered. Answering
+  from `vekna` itself is deferred — see
+  [the feature doc](docs/reborn/06-vekna-daemon.md) for what it costs.
+- **A durable journal.** Every event the daemon sees is written under
+  `~/.local/state/vekna/runs/<cast_id>/`: `run.json` for what the cast was and
+  how it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them
+  newest first and needs no daemon to do it. A cast that ran with nothing
+  listening leaves no record — the journal is the daemon's. A write that fails
+  fails closed: the run is marked as having a hole in it, and if the disk cannot
+  take that mark either the record goes, so a carry-on says there is nothing to
+  carry on from rather than replaying a log that is missing a rite. The root is
+  trimmed to the newest 200 casts at startup, sparing whatever is still running.
+- **`vekna cast --continue <cast_id>`.** A fresh process in the directory the
+  interrupted cast ran in, handed the journal. Its steps re-run — cheap, and the
+  same walk they took before — while every agent call, shell command and prompt
+  that had already finished comes back off the record instead of happening
+  twice. A coding rite interrupted mid-flight runs again on the session the cast
+  had already opened, so the agent remembers what it was told. Replay stops at
+  the first rite that does not match what was recorded, and the cast runs live
+  from there. The id may be the eight characters `vekna log` prints; a prefix
+  naming two casts is refused rather than guessed. What comes back is a cast of
+  its own, and both `vekna log` and the drilled-in header say which cast it
+  carries on from.
+- **Options before the ritual name are vekna's, everything after is the
+  ritual's.** Docker's rule, and what lets `vekna cast --continue <id>` and a
+  ritual with a `--continue` of its own both exist without either guessing.
+- **`vekna --debug`.** A line per event to `~/.local/state/vekna/debug.log`:
+  kind, cast, and what the daemon did with it, including the ones it dropped and
+  why. The daemon is the one place every message passes, and it writes to a file
+  rather than to the view it would otherwise paint over.
+- **A rite says what it is doing.** `RiteBegan` carries a `summary` — the
   medium's first argument when it is a string, whitespace collapsed and cut to
-  60 characters — and the standalone surface prints it after the name on the lines
-  that open and close the rite, where two gates running at once are told apart
-  by their commands rather than by guesswork. One line per rite, as before.
+  60 characters — printed after the medium's name on the lines that open and
+  close the rite, so two gates running at once are told apart by their commands.
+  One line per rite, as before.
 - **A cast says it to the desktop when it stops for you or ends.** OSC 777,
   which Ghostty, kitty, wezterm and foot turn into an OSD; a terminal that does
   not know the sequence drops it. Three kinds, and no configuration to pick
   between them: `decide` when a question is waiting — the `decide` medium's own,
   coding's tool gate, the agent asking mid-rite — `done`, and `failed` with the
   error in the body. Only to a tty, so `vekna cast > log` collects no escape
-  codes, and the body is stripped of anything unprintable, because a prompt or
-  an error is arbitrary text and the sequence ends at the first BEL. Every way a
-  cast can end goes through one notify, including the `AttributeError` a
-  rituals.py under development raises — an `except` per error type would leave
-  whatever it does not name silent, which is the walked-away-from-the-terminal
-  case the notification exists for.
+  codes, and the body is stripped of anything unprintable, because the sequence
+  ends at the first BEL. Every way a cast can end goes through one notify,
+  including the `AttributeError` a rituals.py under development raises.
+
+### Changed
+
+- **Bare `vekna` no longer prints its help.** It is the daemon; `vekna --help`
+  is the help.
+- **Locks moved to `0.7.0`,** and got simpler for landing after the daemon that
+  coordinates them: no permissive default to ship and then flip, and no release
+  where `lock()` succeeds while promising nothing.
+- `CastGoodbye` gained a `disconnected` status, `CastHello` a `resumed_from`,
+  and the wire a `SurfaceHello` — a connection says which of the two things it
+  is, and nothing has to guess.
 
 ## [0.5.0] - 2026-08-08
 
@@ -399,8 +458,6 @@ which links back to the version here that carried each shipped feature.
   loading). `wire/_pacts` likewise sheds framing to `wire/_mills` and
   `wire/_links`.
 
-### Deprecated
-
 ### Removed
 
 - **The tmux subsystem.** `vekna tmux`, `vekna tmux notify`, `daemon` and
@@ -467,8 +524,6 @@ which links back to the version here that carried each shipped feature.
   shared the wire's correlation key for deltas, decisions and locks.
 - A `@medium`-decorated function reported `__name__ == "wrapped"`.
 
-### Security
-
 ## [0.2.0] - 2026-06-28
 
 ### Added
@@ -507,171 +562,29 @@ which links back to the version here that carried each shipped feature.
 - Top-level CLI now exposes the `cast` command alongside the existing `tmux`
   group.
 
-## [0.1.0] - 2026-06-01
+## The tmux era — [0.1.0], [0.0.4], [0.0.3], [0.0.2], [0.0.1]
 
-### Changed
+`0.0.1` (2026-04-07) through `0.1.0` (2026-06-01) were a tmux focus-switcher:
+`vekna` started or attached to a per-project tmux session, and a `vekna notify`
+hook from Claude Code switched the terminal's focus to whichever pane was
+asking for the human. It grew a single global daemon on a unix socket, a
+session registry, a `status-bar` segment, a bundled `tmux.conf`, and typing-aware
+focus that marked a window rather than stealing the cursor mid-keystroke.
+`0.1.0` moved the whole thing under `vekna tmux` to free the top-level command
+for rituals.
 
-- **CLI re-rooted under `vekna tmux`.** Existing behaviour moved one level
-  deeper to free the top-level `vekna` command for the upcoming rituals
-  overseer. Bare `vekna` now prints help listing available command groups.
-  - `vekna` (attach) → `vekna tmux`
-  - `vekna daemon` → `vekna tmux daemon`
-  - `vekna notify …` → `vekna tmux notify …`
-  - `vekna status-bar` → `vekna tmux status-bar`
-- Bundled `tmux.conf` updated to call `vekna tmux status-bar` in its
-  `status-right` line.
-- Claude Code notification hook is now
-  `vekna tmux notify --app claude --hook Notification`.
-
-## [0.0.4] - 2026-04-21
-
-### Added
-
-- **Single global daemon** — one `vekna` process now handles all sessions. The
-  Unix socket lives at `/tmp/vekna-<uid>.sock` (one per OS user) instead of
-  one socket per project directory.
-- **`vekna daemon`** command starts the server in the foreground; useful for
-  debugging or running it under a process supervisor.
-- **`vekna status-bar`** command prints the pending-notification text for a
-  session, intended to be called from the tmux `status-right` line so the
-  count is always visible without switching panes.
-- **Bundled `tmux.conf`** shipped with the package; sourced automatically when
-  `vekna` creates a new session. Provides Alt-key window bindings and wires up
-  the `vekna status-bar` status-right segment.
-- **Session registry** in the server tracks active sessions and their pending
-  notification counts.
-- **`EnsureSession` hook** — the server creates a named tmux session on demand
-  (with the correct `start_directory`) when `vekna` is invoked in a project.
-- **`StatusBar` hook** — the server returns formatted status-bar text per
-  session, including a deterministic emoji + colour badge derived from the
-  session name (SHA-256 hash mod palette) so multiple sessions are visually
-  distinct at a glance.
-- **`on_session_visited` callback** in `SelectPaneHandler` — called when the
-  user lands on a session, either by direct pane-switch or by clearing a marked
-  window; triggers `ServerMill.clear_pending` to reset the notification count.
-- **`session_name_for_pane()`** on `TmuxLink` — looks up which tmux session a
-  given pane belongs to.
-- **`App` and `Hook` str-enums** in `pacts/bus` replace raw strings throughout,
-  so typos are caught at type-check time.
-- **`drain()`** on `EventBus` and `EventBusProtocol` — waits for in-flight
-  handlers to finish before the socket server stops.
-- **`DisplayErrorHandler`** handles `Error` events by calling
-  `display_message` on the tmux link, surfacing invalid-payload errors to the
-  user directly in the terminal.
-- **`mise run coverage`** command added for line-coverage reporting.
-- `vekna notify` now accepts `--app` and `--hook` flags and reads the
-  hook payload from stdin, making it suitable as a drop-in Claude Code
-  hook: `echo "$CLAUDE_HOOK_DATA" | vekna notify --app claude --hook Notification`.
-- Notifications carry the full hook payload to the server, so future
-  handlers can act on message content.
-
-### Changed
-
-- `vekna` (no arguments) now ensures the daemon is running (spawning it if
-  needed, waiting up to 3 s for the socket to appear), sends an `EnsureSession`
-  request, then attaches to the created tmux session.
-- The server runs in **daemon mode**: `run()` loops indefinitely via an
-  `asyncio.Event` instead of blocking on `tmux attach`, so a single process
-  can serve many concurrent sessions.
-- `TmuxLink.ensure_session` now accepts `start_directory` and sources the
-  bundled `tmux.conf` on creation.
-- Session-aware handlers: `SelectPaneHandler` and `DisplayErrorHandler` derive
-  the session name from `session_name_for_pane` instead of assuming a single
-  session; `_marked_windows` is now a `dict[window_id → session_name]`.
-- `MarkWindowHandler` merged into `SelectPaneHandler` — pane-switching (idle)
-  and window-marking (active) are handled by the same class.
-- `ClaudeNotificationHandler` publishes an `Error` event on invalid payloads
-  instead of raising, and forwards `event.meta` so `DisplayErrorHandler` can
-  locate the correct session.
-- Activity tracking switched from `session_activity` to `client_activity`,
-  which tracks keyboard input rather than pane writes.
-- Status bar always shows a `vekna 💀` prefix even when no sessions are
-  pending, so the segment remains visible.
-- Session names in the status bar and notification counts now display the
-  folder name only (e.g. `myproject`), stripping the `vekna-` prefix and hash
-  suffix added internally.
-- `NotifyClientMill.request()` added for synchronous request/response over the
-  Unix socket; `Response` model added to `pacts/socket` as the canonical
-  envelope.
-- Focus switching now triggers only when the session has been idle for
-  at least 3 seconds (down from 5); the threshold is tunable via
-  `IDLE_THRESHOLD_SECONDS`.
-- When the user is active, the originating window turns red immediately
-  rather than waiting for the next poll cycle.
-
-### Removed
-
-- `stem_from_tmux_env()` and `paths_for()` removed from `specs/constants` —
-  the single daemon socket path makes per-project path derivation unnecessary.
-- `seconds_since_last_keystroke` removed from `TmuxLink` (unused after the
-  `client_activity` switch).
-
-### Fixed
-
-- Background task cancellation on Python 3.13+ no longer raises
-  `CancelledError` during shutdown.
-
-## [0.0.3] - 2026-04-13
-
-### Added
-
-- `vekna notify` command that signals the server to switch to the calling pane
-- Asyncio unix socket server runs alongside the tmux session
-- Socket client sends pane ID over `/tmp/vekna.sock`
-- Window and pane switching on notification (`select-window` + `select-pane`)
-- Multi-instance support: each working directory gets its own vekna
-  server, tmux session, and Unix socket, keyed on a stem derived from
-  the directory name plus a short hash of the absolute path. Run
-  `vekna` from any project directory and it will not collide with
-  other running instances.
-- Typing-aware focus: if a keystroke landed in another pane within the
-  last three seconds, `vekna notify` skips `select-pane` and sets the
-  tmux window attention flag instead. A periodic poll clears the flag
-  once the user reaches the pane on their own.
-  
-### Changed
-
-- CLI entry point renamed from `antistes` to `vekna`
-- CLI restructured as a click group to support subcommands
-- Tmux management rewritten with libtmux (replaces raw subprocess calls)
-- `ServerMill.run()` is now async; tmux attach runs in a thread executor
-- `vekna notify` now reads `$TMUX` as well as `$TMUX_PANE` and routes
-  automatically to the server that owns the calling pane — the global
-  Claude Code hook stays literally `vekna notify` with no arguments.
-- The Unix socket path is no longer the hardcoded `/tmp/vekna.sock`;
-  it is now `/tmp/vekna-<basename>-<hash>.sock`, one per project.
-- Package renamed from `antistes` to `vekna` across the source tree,
-  imports, entry point, and linter configs. Install and import as
-  `vekna`; the old name is gone.
-- Socket messages use pydantic models, giving client and server a typed
-  contract in place of ad-hoc dicts.
-
-### Removed
-
-- `links/subprocess.py` — replaced by `links/tmux.py` using libtmux
-
-## [0.0.2] - 2026-04-07
-
-### Added
-
-- CLI entry point (`vekna`) that starts or attaches to a named tmux session
-- Layered architecture: gates (Click CLI), mills (server logic), links (tmux
-  subprocess calls), pacts (protocols)
-- Pre-commit hooks: ruff, mypy, bandit, pylint, pytest
-- CI workflow with GitHub Actions
-- Dependabot configuration for pip and GitHub Actions
-- Integration and unit test scaffolding with pytest
-
-## [0.0.1] - 2026-04-07
-
-- initial release
+`0.3.0` removed all of it — Claude Code ships its own notifications now. The
+full entries are in the git history of this file; nothing below `0.2.0`
+describes code that still exists.
 
 <!-- Links -->
 [keep a changelog]: https://keepachangelog.com/en/1.0.0/
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.4.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/fancysnake/vekna/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/fancysnake/vekna/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fancysnake/vekna/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/fancysnake/vekna/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fancysnake/vekna/compare/v0.1.0...v0.2.0

@@ -15,6 +15,7 @@ from ._mills.engine import (
     emit_delta,
     offer_prompt,
     record_result,
+    replayed,
 )
 from ._pacts import (
     AskFn,
@@ -90,6 +91,7 @@ __all__ = [
     "medium",
     "offer_prompt",
     "record_result",
+    "replayed",
     "ritual",
     "sha256_of",
     "step",

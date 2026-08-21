@@ -1,11 +1,8 @@
 import asyncio
-import os
 import socket
 import sys
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
@@ -37,10 +34,6 @@ _NOTIFY_TITLES: dict[NotifyEvent, str] = {
 # early or paint the rest of it into the terminal.
 def _one_line(text: str) -> str:
     return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
-
-
-def default_socket_path() -> str:
-    return str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
 
 
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:

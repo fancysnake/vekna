@@ -1,21 +1,29 @@
 import asyncio
 import contextlib
 import importlib
+import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from vekna.wire import CastHello, WireMessage, default_socket_path
+
+from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
-from ._links.standalone import StandaloneRenderer, default_socket_path, probe_daemon
+from ._links.resume import read_run
+from ._links.standalone import StandaloneRenderer
 from ._mills.dispatch import component_flags
-from ._mills.engine import Compendium, Grimoire, prompt_runner, run_cast
+from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import step_graph
+from ._mills.ledger import Ledger
 from ._pacts import (
     FocusMissingError,
     NoComponents,
+    RiteEvent,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -27,7 +35,10 @@ from ._pacts import (
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
+    "       vekna cast --continue <cast_id>\n"
 )
+_RESUME_FLAG = "--resume"
+_CONFIG_ENV = "XDG_CONFIG_HOME"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -38,6 +49,9 @@ _PROMPT_FLAGS = frozenset({"-p", "--prompt"})
 _PROMPT_NAME = "prompt"
 _PROMPT_MEDIUM = "coding"
 _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
+# Validated rather than dumped: `model_dump()` hands back `dict[str, Any]`, and
+# what the wire carries is JSON.
+_COMPONENTS: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 # The lexicon may not import a folio, so each one is loaded by name and asked
 # to register what it offers.
 _FOLIOS = ("vekna.folio.coding", "vekna.folio.coding_claude")
@@ -103,9 +117,18 @@ def _no_rituals(near_miss: Path | None) -> str:
     return f"{_NO_RITUALS}\n({near_miss} is not one — every level needs an __init__.py)"
 
 
+# What the user configured, which is the one thing of vekna's that belongs in
+# the config namespace — the journal and the debug log are state and live under
+# `default_state_root()`.
+def _config_home() -> Path:
+    if (named := os.environ.get(_CONFIG_ENV)) is not None:
+        return Path(named)
+    return Path.home() / ".config"
+
+
 def _config_files(cwd: Path) -> list[Path]:
     found: list[Path] = []
-    global_config = Path.home() / ".config" / "vekna" / "config.toml"
+    global_config = _config_home() / "vekna" / "config.toml"
     if global_config.is_file():
         found.append(global_config)
     for directory in (cwd, *cwd.parents):
@@ -332,18 +355,156 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
     return parsed
 
 
-def _resolve_cast(argv: list[str]) -> tuple[Ritual, BaseModel]:
+class _Plan(NamedTuple):
+    ritual: Ritual
+    components: BaseModel
+    # What the interrupted cast already did, and which cast that was. Both None
+    # for a cast that is starting rather than carrying one on.
+    ledger: Ledger | None = None
+    resumed_from: str | None = None
+
+
+# The record holds the components as the CLI already validated them once, so
+# they are validated again against the same model rather than re-derived into
+# flags and parsed back out.
+def _resume(cast_id: str) -> _Plan:
+    resumption = read_run(cast_id)
+    hello = resumption.record.hello
+    the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
+    return _Plan(
+        ritual=the_ritual,
+        components=the_ritual.components.model_validate(hello.components),
+        ledger=Ledger.from_resumption(resumption),
+        resumed_from=cast_id,
+    )
+
+
+def _resolve_cast(argv: list[str]) -> _Plan:
     if (prompt := _prompt_text(argv)) is not None:
-        return _prompt_ritual(prompt), NoComponents()
+        return _Plan(_prompt_ritual(prompt), NoComponents())
     name, *flags = argv
+    # Both spellings, because `--prompt` takes both: `--resume=c1` otherwise
+    # reached the compendium and came back as "no ritual named '--resume=c1'",
+    # which names everything except what was actually wrong.
+    flag, separator, inline = name.partition("=")
+    if flag == _RESUME_FLAG:
+        wanted = [inline] if separator else flags
+        if not wanted or not wanted[0]:
+            raise ValueError(_USAGE.rstrip())
+        return _resume(wanted[0])
     the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
-    return the_ritual, the_ritual.components.model_validate(_parse_flags(flags))
+    return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
 
 
 # A cast returns a model or nothing, so its result renders as JSON rather than
 # as whatever repr the model happens to carry.
 def _rendered(result: BaseModel | None) -> str:
     return "null" if result is None else result.model_dump_json()
+
+
+def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
+    return CastHello(
+        cast_id=cast_id,
+        project_root=str(Path.cwd()),
+        ritual=plan.ritual.name,
+        components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
+        started_at=datetime.now(tz=UTC),
+        resumed_from=plan.resumed_from,
+    )
+
+
+# What a daemon arriving mid-cast has to be told: everything the grimoire has
+# recorded, and any prompt already on screen, which is not in it.
+def _backlog(
+    *, cast_id: str, grimoire: Grimoire, channel: TeeChannel
+) -> list[WireMessage]:
+    replayed: list[WireMessage] = [
+        to_wire(event, cast_id=cast_id) for event in grimoire.events
+    ]
+    return replayed + channel.open_prompts()
+
+
+# Every way a cast can end goes through one notify: an `except` per error type
+# would leave whatever it does not name — the AttributeError a step raises —
+# silent, which is the walked-away-from-the-terminal case the notification
+# exists for. `detail` outlives its block; `error` does not.
+async def _cast(
+    *,
+    plan: _Plan,
+    grimoire: Grimoire,
+    channel: TeeChannel,
+    link: DaemonLink,
+    renderer: StandaloneRenderer,
+) -> int:
+    try:
+        result = await run_cast(
+            ritual=plan.ritual,
+            components=plan.components,
+            grimoire=grimoire,
+            channel=channel,
+            ledger=plan.ledger,
+        )
+    except FocusMissingError as error:
+        sys.stderr.write(f"{error}\n")
+        code, detail = 2, str(error)
+    except RitualError as error:
+        sys.stderr.write(f"cast failed: {error}\n")
+        code, detail = 1, str(error)
+    except Exception as error:
+        # A rituals.py under development dies here, and its traceback is the
+        # whole diagnosis — say it to the desktop, then let it out unchanged.
+        renderer.notify("failed", f"{plan.ritual.name}: {error}")
+        raise
+    else:
+        await link.close(status="ok")
+        renderer.notify("done", plan.ritual.name)
+        sys.stdout.write(f"result: {_rendered(result)}\n")
+        return 0
+    await link.close(status="error", detail=detail)
+    renderer.notify("failed", f"{plan.ritual.name}: {detail}")
+    return code
+
+
+# The renderer and the wire both, in that order: what the operator sees does not
+# wait on a socket, and a cast with no daemon behaves exactly as it did.
+async def _run(plan: _Plan) -> int:
+    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
+    # is the wire's correlation key, and which cast this one carries on from is
+    # a field of its own on the hello.
+    cast_id = uuid4().hex
+    renderer = StandaloneRenderer()
+    link = DaemonLink(
+        socket_path=default_socket_path(), hello=_hello(cast_id=cast_id, plan=plan)
+    )
+    channel = TeeChannel(
+        inner=renderer,
+        link=link,
+        cast_id=cast_id,
+        rite_id=lambda: current_rite().parent_id,
+    )
+
+    def emit(event: RiteEvent) -> None:
+        renderer.render(event)
+        link.send(to_wire(event, cast_id=cast_id))
+
+    grimoire = Grimoire(cast_id=cast_id, on_event=emit)
+
+    # The same backlog either way: at the start it is empty, and a daemon that
+    # turns up later gets whatever has happened by then. One path, so the
+    # mid-cast attach is not a road only a rare timing takes.
+    def backlog() -> list[WireMessage]:
+        return _backlog(cast_id=cast_id, grimoire=grimoire, channel=channel)
+
+    await link.attach(backlog=backlog())
+    watcher = asyncio.create_task(link.keep_attached(backlog))
+    try:
+        return await _cast(
+            plan=plan, grimoire=grimoire, channel=channel, link=link, renderer=renderer
+        )
+    finally:
+        watcher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher
 
 
 async def _drive(argv: list[str]) -> int:
@@ -355,47 +516,11 @@ async def _drive(argv: list[str]) -> int:
         return 2
     _load_folios()
     try:
-        the_ritual, components = _resolve_cast(argv)
+        plan = _resolve_cast(argv)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
-    # The answer is deliberately discarded until 0.7.0: the probe exists so the
-    # attach path is already on the hot path, but nothing consumes a reachable
-    # daemon yet. See docs/reborn/06-vekna-daemon.md.
-    await probe_daemon(socket_path=default_socket_path())
-    renderer = StandaloneRenderer()
-    # Unique per cast, not per ritual: cast_id is the wire's correlation key
-    # for deltas, decisions and locks, and CastHello carries the ritual name
-    # in its own field.
-    grimoire = Grimoire(cast_id=uuid4().hex, on_event=renderer.render)
-    # Every way a cast can end goes through one notify: an `except` per error
-    # type would leave whatever it does not name — the AttributeError a step
-    # raises — silent, which is the walked-away-from-the-terminal case the
-    # notification exists for. `detail` outlives its block; `error` does not.
-    try:
-        result = await run_cast(
-            ritual=the_ritual,
-            components=components,
-            grimoire=grimoire,
-            channel=renderer,
-        )
-    except FocusMissingError as error:
-        sys.stderr.write(f"{error}\n")
-        code, detail = 2, str(error)
-    except RitualError as error:
-        sys.stderr.write(f"cast failed: {error}\n")
-        code, detail = 1, str(error)
-    except Exception as error:
-        # A rituals.py under development dies here, and its traceback is the
-        # whole diagnosis — say it to the desktop, then let it out unchanged.
-        renderer.notify("failed", f"{the_ritual.name}: {error}")
-        raise
-    else:
-        renderer.notify("done", the_ritual.name)
-        sys.stdout.write(f"result: {_rendered(result)}\n")
-        return 0
-    renderer.notify("failed", f"{the_ritual.name}: {detail}")
-    return code
+    return await _run(plan)
 
 
 def main(argv: list[str]) -> int:

@@ -69,6 +69,19 @@ class Session(StrEnum):
     CONTINUE = "continue"
 
 
+# What a coding rite leaves in the grimoire, and therefore what a resumed cast
+# reads back: the reply itself beside the declaration that produced it. Extra
+# fields are ignored rather than forbidden — a journal written by an older vekna
+# is still a journal, and the alternative is a resume that refuses to start.
+class CodingRecord(BaseModel):
+    session: str
+    key: str | None = None
+    session_id: str | None = None
+    num_turns: int | None = None
+    cost_usd: float | None = None
+    text: str = ""
+
+
 # What bundles here is *configuration*: reusing one `CodingOpts` across calls is
 # harmless, which is the point of bundling it. Per-call identity is not — the
 # thread a call joins stays a parameter of `coding` itself, and `forbid` is what

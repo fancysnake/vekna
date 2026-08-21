@@ -10,7 +10,7 @@ thing the user writes and keeps — and they are the least verified thing in the
 system: edit a step, and the only way to find out what you broke is to spend an
 agent run finding out.
 
-From `0.7.0` the daemon's journal holds every event of every cast it ran. A
+From `0.6.0` the daemon's journal holds every event of every cast it ran. A
 recording is a fixture, and this turns the one into the other — so what is
 replayable is what the daemon saw. A standalone cast keeps its journal in
 memory and takes it to the grave

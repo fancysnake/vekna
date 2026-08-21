@@ -6,6 +6,9 @@ from pydantic import BaseModel, Discriminator, JsonValue, TypeAdapter
 # --- cast lifecycle ---
 
 
+# A resumed cast is a new cast — new id, new journal — that says which one it is
+# carrying on from. Recording it on the hello rather than beside it means the
+# daemon, the journal and a surface all learn it from the same message.
 class CastHello(BaseModel):
     kind: Literal["cast_hello"] = "cast_hello"
     cast_id: str
@@ -13,13 +16,24 @@ class CastHello(BaseModel):
     ritual: str
     components: dict[str, JsonValue]
     started_at: datetime
+    resumed_from: str | None = None
 
 
+# `disconnected` is the daemon's own word for a cast whose socket closed without
+# one of these: it is a final status like the other two, and spelling it here is
+# what lets a peer surface learn it the same way it learns everything else.
 class CastGoodbye(BaseModel):
     kind: Literal["cast_goodbye"] = "cast_goodbye"
     cast_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error", "disconnected"]
     detail: str | None = None
+
+
+# What a connection opens with is what it is. A cast says `CastHello`; anything
+# watching says this, and is sent the live casts and everything they do next. No
+# fields: a surface is not addressed, only fanned out to.
+class SurfaceHello(BaseModel):
+    kind: Literal["surface_hello"] = "surface_hello"
 
 
 class GrimoireBegin(BaseModel):
@@ -64,10 +78,13 @@ class RiteFinished(BaseModel):
 # --- prompts ---
 
 
+# `rite_id` says which rite is asking, when one is — a surface groups the prompt
+# under it. Optional because the answer never depends on it: the cast that asked
+# is what a prompt has to be routed by, and that is `cast_id`.
 class DecideRequested(BaseModel):
     kind: Literal["decide_requested"] = "decide_requested"
     cast_id: str
-    rite_id: str
+    rite_id: str | None = None
     request_id: str
     prompt: str
     options: list[str] | None = None
@@ -114,9 +131,16 @@ class LockReleased(BaseModel):
     token: str
 
 
-WireMessage = (
-    CastHello
-    | CastGoodbye
+# Everything a cast says about itself, and the one thing that does not. Split so
+# that `cast_id` is a field of the type rather than something each consumer
+# re-establishes: the daemon's hub, the journal and the debug log all take
+# `CastMessage`, and the only place a `SurfaceHello` can arrive is the handshake
+# that reads the first frame off a connection.
+# A hello opens a cast and an update changes one already open, which is the
+# split the daemon acts on: it looks the cast up for an update and has nothing
+# to look up for a hello.
+CastUpdate = (
+    CastGoodbye
     | GrimoireBegin
     | GrimoireEnd
     | RiteStarted
@@ -129,6 +153,31 @@ WireMessage = (
     | LockDenied
     | LockReleased
 )
+
+CastMessage = CastHello | CastUpdate
+
+WireMessage = CastMessage | SurfaceHello
+
+
+# --- the record on disk ---
+
+# `run.json`, beside the event log. It lives here rather than with the daemon's
+# own types because it is shared exactly the way a message is: the daemon writes
+# it, and a resumed cast process — which may not import the daemon's layers —
+# reads it back to learn what it is carrying on.
+CastStatus = Literal["running", "ok", "error", "disconnected"]
+
+
+# `gapped` is what a resume has to know that the event log cannot say for
+# itself: an append the daemon could not make leaves a hole a reader cannot see,
+# because a log missing a rite reads exactly like a log that never had one. A
+# cast resumed across that hole re-runs the medium whose result fell in it —
+# the shell command, the agent call — so the answer is to refuse instead.
+class RunRecord(BaseModel):
+    hello: CastHello
+    status: CastStatus = "running"
+    detail: str | None = None
+    gapped: bool = False
 
 
 # --- framing ---

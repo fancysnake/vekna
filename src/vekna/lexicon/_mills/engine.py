@@ -7,6 +7,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
+from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
     Channel,
     CodingFocusProtocol,
@@ -26,6 +27,7 @@ from vekna.lexicon._pacts import (
 )
 
 _FocusT = TypeVar("_FocusT")
+_REPLAYED = "(from the journal — this rite already ran)"
 
 
 def _now() -> datetime:
@@ -301,10 +303,23 @@ class RiteContext:
     parent_id: str | None = None
     outcome: RiteOutcome = field(default_factory=RiteOutcome)
     sessions: SessionBook = field(default_factory=SessionBook)
+    # The interrupted cast's record, when this one is carrying it on, and what
+    # this rite in particular already produced. Both None in a fresh cast, which
+    # is every cast that was not resumed.
+    ledger: Ledger | None = None
+    replay: JsonValue | None = None
 
 
 def record_result(value: JsonValue) -> None:
     current_rite().outcome.result = value
+
+
+# What this rite produced the last time round, or None to do the work. Read by
+# the medium rather than applied to it: only the medium knows how to turn its
+# own recorded value back into what it returns, and `output=` makes coding's
+# depend on the call site.
+def replayed() -> JsonValue | None:
+    return current_rite().replay
 
 
 _current_rite: ContextVar[RiteContext | None] = ContextVar(
@@ -346,7 +361,22 @@ async def _rite(
         name=name, parent_id=parent.parent_id, category=category, summary=summary
     )
     outcome = RiteOutcome()
-    token = _current_rite.set(replace(parent, parent_id=rite_id, outcome=outcome))
+    # Looked up once, here, and only for mediums: a step's rite id is in the
+    # same counter, and asking the ledger about one would spend it on a rite it
+    # was never going to hold.
+    replay = (
+        parent.ledger.take(rite_id=rite_id, name=name)
+        if parent.ledger is not None and category == "medium"
+        else None
+    )
+    token = _current_rite.set(
+        replace(parent, parent_id=rite_id, outcome=outcome, replay=replay)
+    )
+    # Said out loud, because a rite that replayed and a rite that ran and
+    # printed nothing look identical otherwise — and "did it really skip the
+    # work?" is the question a resumed cast is watched for.
+    if replay is not None:
+        parent.grimoire.rite_delta(rite_id, _REPLAYED)
     finished = False
     try:
         yield
@@ -370,8 +400,12 @@ def medium_rite(
 # symptom would be a ritual test that passes while the real cast behaves
 # differently.
 @contextlib.contextmanager
-def cast_context(*, grimoire: Grimoire, channel: Channel) -> Iterator[None]:
-    token = _current_rite.set(RiteContext(grimoire=grimoire, channel=channel))
+def cast_context(
+    *, grimoire: Grimoire, channel: Channel, ledger: Ledger | None = None
+) -> Iterator[None]:
+    token = _current_rite.set(
+        RiteContext(grimoire=grimoire, channel=channel, ledger=ledger)
+    )
     try:
         yield
     finally:
@@ -379,9 +413,14 @@ def cast_context(*, grimoire: Grimoire, channel: Channel) -> Iterator[None]:
 
 
 async def run_cast(
-    *, ritual: Ritual, components: BaseModel, grimoire: Grimoire, channel: Channel
+    *,
+    ritual: Ritual,
+    components: BaseModel,
+    grimoire: Grimoire,
+    channel: Channel,
+    ledger: Ledger | None = None,
 ) -> BaseModel | None:
-    with cast_context(grimoire=grimoire, channel=channel):
+    with cast_context(grimoire=grimoire, channel=channel, ledger=ledger):
         transition = await ritual.run(components)
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
