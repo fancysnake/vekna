@@ -219,7 +219,7 @@ class TestDrops:
         assert seen == [
             Routed(
                 kind="rite_started",
-                cast_id="gone",
+                subject="gone",
                 action="dropped",
                 reason="no such cast",
             )

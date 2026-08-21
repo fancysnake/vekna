@@ -5,7 +5,7 @@ from vekna.pacts.routing import Routed
 class TestDebugLine:
     @staticmethod
     def test_it_leads_with_the_cast():
-        line = debug_line(Routed(kind="rite_started", cast_id="c1", action="applied"))
+        line = debug_line(Routed(kind="rite_started", subject="c1", action="applied"))
 
         assert line == "c1 rite_started applied"
 
@@ -13,7 +13,7 @@ class TestDebugLine:
     def test_a_drop_says_why():
         line = debug_line(
             Routed(
-                kind="rite_delta", cast_id="c1", action="dropped", reason="no such rite"
+                kind="rite_delta", subject="c1", action="dropped", reason="no such rite"
             )
         )
 
@@ -21,6 +21,6 @@ class TestDebugLine:
 
     @staticmethod
     def test_what_belongs_to_no_cast_still_lines_up():
-        line = debug_line(Routed(kind="surface_hello", cast_id=None, action="attached"))
+        line = debug_line(Routed(kind="surface_hello", subject=None, action="attached"))
 
         assert line == "- surface_hello attached"

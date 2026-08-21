@@ -1,6 +1,7 @@
 import asyncio
 import socket
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -8,11 +9,18 @@ from typing import TYPE_CHECKING
 import pytest
 
 from vekna.links.socket_server import Serving, alive, attach, serve
-from vekna.pacts.routing import SocketPathError
+from vekna.pacts.routing import SocketPathError, Wiring
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
+    LichDismissRequested,
+    LichFell,
+    LichRose,
+    LichStatus,
+    LichUpdate,
     RiteDelta,
+    SurfaceCommand,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -45,19 +53,50 @@ def _said_goodbye(daemon: "_Daemon") -> bool:
     return bool(daemon.messages) and isinstance(daemon.messages[-1], CastGoodbye)
 
 
+def _rose(name: str = "hollow-vesper") -> LichRose:
+    return LichRose(name=name, root="/proj", pid=4242)
+
+
+# Everything the lich half of the wiring was told, kept together — one
+# attribute on the daemon below rather than four.
+@dataclass
+class _Liches:
+    risen: list[LichRose] = field(default_factory=list)
+    said: list[LichUpdate] = field(default_factory=list)
+    fallen: list[str] = field(default_factory=list)
+    commanded: list[SurfaceCommand] = field(default_factory=list)
+    # What `on_rise` answers, so a test can be about a name already taken.
+    refuse: str | None = None
+
+
 class _Daemon:
     def __init__(self) -> None:
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
+        self.liches = _Liches()
 
     async def start(self, path: Path) -> Serving:
-        return await serve(
-            path=path,
-            on_message=self.messages.append,
+        return await serve(path=path, wiring=self.wiring())
+
+    # `on_message` is a parameter because one test needs a handler that raises;
+    # everything else about the wiring is the same either way.
+    def wiring(self, on_message: Callable[[CastMessage], None] | None = None) -> Wiring:
+        return Wiring(
+            on_message=self.messages.append if on_message is None else on_message,
             on_attach=self.attached.append,
             on_detach=self.detached.append,
+            on_rise=self._risen,
+            on_lich=self.liches.said.append,
+            on_fallen=self.liches.fallen.append,
+            on_command=self.liches.commanded.append,
         )
+
+    def _risen(self, message: LichRose, station: "Surface") -> str | None:
+        del station
+        if self.liches.refuse is None:
+            self.liches.risen.append(message)
+        return self.liches.refuse
 
 
 # The daemon reacts on its own turn of the event loop, so a client that has
@@ -245,12 +284,7 @@ class TestUncleanExits:
             if isinstance(message, RiteDelta):
                 raise OSError(28, "No space left on device")
 
-        server = await serve(
-            path=socket_path,
-            on_message=unwritable,
-            on_attach=daemon.attached.append,
-            on_detach=daemon.detached.append,
-        )
+        server = await serve(path=socket_path, wiring=daemon.wiring(unwritable))
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))
@@ -344,3 +378,124 @@ class TestBinding:
     @staticmethod
     async def test_nothing_listening_is_not_alive(socket_path: Path):
         assert not await alive(socket_path)
+
+
+# The third kind of connection: addressed by name, sent to as well as heard
+# from, and refused where one of that name already stands.
+@pytest.mark.asyncio
+class TestLiches:
+    @staticmethod
+    async def test_a_lich_rises_and_is_heard_from(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_rose()))
+        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.liches.said))
+
+        assert daemon.liches.risen == [_rose()]
+        assert daemon.liches.said == [LichStatus(name="hollow-vesper")]
+        writer.close()
+        await server.close()
+
+    # A lich whose socket closed without a word: the daemon holds a station
+    # every command would otherwise vanish into.
+    @staticmethod
+    async def test_a_lich_that_vanishes_is_said_to_have_fallen(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_rose()))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.liches.risen))
+
+        writer.close()
+        await _eventually(lambda: bool(daemon.liches.fallen))
+
+        assert daemon.liches.fallen == ["hollow-vesper"]
+        await server.close()
+
+    @staticmethod
+    async def test_a_lich_that_said_it_fell_is_not_said_for(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_rose()))
+        writer.write(encode_frame(LichFell(name="hollow-vesper", reason="dismissed")))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.liches.said))
+
+        writer.close()
+        await _settle()
+
+        assert not daemon.liches.fallen
+        await server.close()
+
+    # A refused rising is told by the socket closing under it — which is what
+    # the lich process reads as "not the lich of that name".
+    @staticmethod
+    async def test_a_refused_rising_is_closed_on(socket_path: Path):
+        daemon = _Daemon()
+        daemon.liches.refuse = "a lich of that name is already standing"
+        server = await daemon.start(socket_path)
+
+        reader, writer = await attach(socket_path)
+        writer.write(encode_frame(_rose()))
+        await writer.drain()
+
+        assert not await reader.read()
+        assert not daemon.liches.fallen
+        writer.close()
+        await server.close()
+
+    # A frame naming another lich is not routed, for the reason a cast's is
+    # not: any process on this account could otherwise speak for a station.
+    @staticmethod
+    async def test_a_lich_speaking_for_another_is_not_routed(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(_rose()))
+        writer.write(encode_frame(LichStatus(name="ashen-quill")))
+        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.liches.said))
+
+        assert daemon.liches.said == [LichStatus(name="hollow-vesper")]
+        writer.close()
+        await server.close()
+
+    # Nobody opens a connection with a frame only a standing lich sends.
+    @staticmethod
+    async def test_opening_with_a_lich_update_is_nobody(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(LichStatus(name="hollow-vesper")))
+        await writer.drain()
+        await _settle()
+
+        assert not daemon.liches.risen
+        assert not daemon.liches.said
+        assert not daemon.messages
+        writer.close()
+        await server.close()
+
+    # A surface takes orders now: what a lich needs and no more.
+    @staticmethod
+    async def test_a_command_from_a_surface_is_routed(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(SurfaceHello()))
+        writer.write(encode_frame(LichDismissRequested(name="hollow-vesper")))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.liches.commanded))
+
+        assert daemon.liches.commanded == [LichDismissRequested(name="hollow-vesper")]
+        writer.close()
+        await server.close()

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import cast_wiring
 from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, to_wire
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, StatusSet
 from vekna.links.socket_server import Serving, serve
@@ -79,9 +80,11 @@ class _Daemon:
     async def start(self, path: Path) -> None:
         self.server = await serve(
             path=path,
-            on_message=self.hub.apply,
-            on_attach=self.hub.attach_surface,
-            on_detach=self.hub.detach_surface,
+            wiring=cast_wiring(
+                on_message=self.hub.apply,
+                on_attach=self.hub.attach_surface,
+                on_detach=self.hub.detach_surface,
+            ),
         )
 
     async def stop(self) -> None:

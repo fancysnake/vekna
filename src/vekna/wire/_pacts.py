@@ -17,6 +17,10 @@ class CastHello(BaseModel):
     components: dict[str, JsonValue]
     started_at: datetime
     resumed_from: str | None = None
+    # The lich that spawned this cast, absent for one run by hand. One field, and
+    # what it buys is that a lich's history is a query over `runs/` rather than a
+    # list something has to maintain.
+    lich: str | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -34,6 +38,13 @@ class CastGoodbye(BaseModel):
 # fields: a surface is not addressed, only fanned out to.
 class SurfaceHello(BaseModel):
     kind: Literal["surface_hello"] = "surface_hello"
+
+
+# The end of a replay, said to the surface that just attached. A surface that
+# paints forever does not need it; one that asks a question and exits — `vekna
+# liches` — does, and the alternative is a timeout pretending to be an answer.
+class SurfaceReady(BaseModel):
+    kind: Literal["surface_ready"] = "surface_ready"
 
 
 class GrimoireBegin(BaseModel):
@@ -144,6 +155,48 @@ class LockReleased(BaseModel):
     token: str
 
 
+# --- liches ---
+
+
+# The third kind of connection, and what one opens with. `pid` is here and not
+# in the phylactery on purpose: it is true only while this socket is open, which
+# is exactly as long as this message is worth anything.
+class LichRose(BaseModel):
+    kind: Literal["lich_rose"] = "lich_rose"
+    name: str
+    root: str
+    pid: int
+
+
+# Sent by a lich that is dismissed, and synthesised by the daemon for one whose
+# socket closed without saying anything — the same rule a cast's goodbye
+# follows, and for the same reason: a station the daemon still believes in is a
+# station commands are routed into the dark.
+class LichFell(BaseModel):
+    kind: Literal["lich_fell"] = "lich_fell"
+    name: str
+    reason: Literal["dismissed", "disconnected"]
+
+
+# Idle, or casting — the lich's own sentence about itself, which is not the
+# ritual's (`CastStatus`). A surface shows both: this one, then the ritual's
+# under it.
+class LichStatus(BaseModel):
+    kind: Literal["lich_status"] = "lich_status"
+    name: str
+    ritual: str | None = None
+    cast_id: str | None = None
+    since: datetime | None = None
+
+
+# Surface → daemon → lich. The daemon drops the row and the lich ends itself:
+# both halves are needed, because the row outliving the process is what makes a
+# lich dormant rather than gone, and this is the one command that means gone.
+class LichDismissRequested(BaseModel):
+    kind: Literal["lich_dismiss_requested"] = "lich_dismiss_requested"
+    name: str
+
+
 # Everything a cast says about itself, and the one thing that does not. Split so
 # that `cast_id` is a field of the type rather than something each consumer
 # re-establishes: the daemon's hub, the journal and the debug log all take
@@ -170,7 +223,18 @@ CastUpdate = (
 
 CastMessage = CastHello | CastUpdate
 
-WireMessage = CastMessage | SurfaceHello
+# The same split one station over: a rising opens the connection, and everything
+# after it is about a lich the daemon already holds.
+LichUpdate = LichStatus | LichFell
+
+LichMessage = LichRose | LichUpdate
+
+# What a surface is allowed to *say*, as opposed to be sent. Until 0.8.0 a
+# surface only listened; a lich takes orders, so this is the direction that
+# opens — as far as the lich needs and no further.
+SurfaceCommand = LichDismissRequested
+
+WireMessage = CastMessage | SurfaceHello | SurfaceReady | LichMessage | SurfaceCommand
 
 
 # --- the record on disk ---

@@ -3,11 +3,17 @@ import contextlib
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
-from vekna.pacts.routing import SocketPathError, Surface
+from vekna.pacts.routing import SocketPathError, Surface, Wiring
 from vekna.wire import (
     CastGoodbye,
     CastMessage,
+    LichDismissRequested,
+    LichFell,
+    LichRose,
+    LichUpdate,
+    SurfaceCommand,
     SurfaceHello,
+    SurfaceReady,
     WireMessage,
     encode_frame,
     read_frames,
@@ -25,6 +31,10 @@ _CONNECT_SECONDS = 2.0
 _FRAME_LIMIT = 32 * 1024 * 1024
 _GONE = "socket closed without a goodbye"
 _NOT_ITS_OWN = "sent a frame for cast"
+# What nobody opens a connection with: a frame only the daemon sends, or only a
+# lich that already stands. The unions are what `isinstance` is given — they
+# work as one since 3.10, so there is no tuple here to keep in step with them.
+_NOT_AN_OPENING = (LichUpdate, SurfaceCommand, SurfaceReady)
 
 
 # Writes are buffered, never awaited: a surface that has stopped reading must
@@ -96,13 +106,7 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
 # ponytail: a live check then a bind, so two daemons starting in the same
 # millisecond can still race. A lock file opened O_EXCL is the upgrade, and it
 # costs a stale-lock story that this does not.
-async def serve(
-    *,
-    path: Path,
-    on_message: Callable[[CastMessage], None],
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
-) -> Serving:
+async def serve(*, path: Path, wiring: Wiring) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
 
     async def handle(
@@ -110,13 +114,7 @@ async def serve(
     ) -> None:
         writers.add(writer)
         try:
-            await _handle(
-                reader,
-                writer,
-                on_message=on_message,
-                on_attach=on_attach,
-                on_detach=on_detach,
-            )
+            await _handle(reader, writer, wiring=wiring)
         finally:
             writers.discard(writer)
 
@@ -135,24 +133,26 @@ def _occupied(path: Path) -> bool:
 
 
 # What a connection opens with is what it is, and that is settled once: a
-# surface is fanned out to, anything else is a cast and is routed. The first
-# frame is the only place the two can be told apart, so it is the only place
-# that asks.
+# surface is fanned out to, a lich is addressed by name, anything else is a cast
+# and is routed. The first frame is the only place the three can be told apart,
+# so it is the only place that asks.
 async def _handle(
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-    *,
-    on_message: Callable[[CastMessage], None],
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, *, wiring: Wiring
 ) -> None:
     frames = aiter(read_frames(reader))
     try:
         opened = await _opening(frames)
         if isinstance(opened, SurfaceHello):
-            await _as_surface(frames, writer, on_attach=on_attach, on_detach=on_detach)
+            await _as_surface(frames, writer, wiring=wiring)
+        elif isinstance(opened, LichRose):
+            await _as_lich(opened, frames, writer, wiring=wiring)
+        elif isinstance(opened, _NOT_AN_OPENING):
+            # A frame only the daemon sends, or only a lich that already stands.
+            # Opening with one names no cast and no station, so there is nobody
+            # here to be.
+            pass
         elif opened is not None:
-            await _as_cast(opened, frames, on_message=on_message)
+            await _as_cast(opened, frames, on_message=wiring.on_message)
     finally:
         writer.close()
         with contextlib.suppress(OSError):
@@ -167,24 +167,51 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is sent to and not heard from: answering a prompt from `vekna`
-# itself is `docs/reborn/06-vekna-daemon.md`'s deferred half, so what arrives
-# after the handshake is read to notice the disconnect and nothing else.
+# A surface is fanned out to, and — since 0.8.0 — heard from: a lich takes
+# orders, and the surface a person is typing at is where they come from. What is
+# not a command is read to notice the disconnect and nothing else; answering a
+# cast's prompt from `vekna` itself is still
+# `docs/reborn/06-vekna-daemon.md`'s deferred half.
 async def _as_surface(
+    frames: AsyncIterator[WireMessage], writer: asyncio.StreamWriter, *, wiring: Wiring
+) -> None:
+    surface = SocketSurface(writer)
+    wiring.on_attach(surface)
+    try:
+        with contextlib.suppress(ValueError, OSError):
+            async for message in frames:
+                if isinstance(message, LichDismissRequested):
+                    wiring.on_command(message)
+    finally:
+        wiring.on_detach(surface)
+
+
+# A lich is addressed, so it is the one connection the daemon both sends to and
+# hears from. A frame naming another lich is not routed, for the reason a cast's
+# is not: any process on this account could otherwise speak for a station it is
+# not.
+async def _as_lich(
+    rose: LichRose,
     frames: AsyncIterator[WireMessage],
     writer: asyncio.StreamWriter,
     *,
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
+    wiring: Wiring,
 ) -> None:
-    surface = SocketSurface(writer)
-    on_attach(surface)
+    if wiring.on_rise(rose, SocketSurface(writer)) is not None:
+        return
+    fell = False
     try:
         with contextlib.suppress(ValueError, OSError):
-            async for _ in frames:
-                pass
+            async for message in frames:
+                if isinstance(message, LichUpdate) and message.name == rose.name:
+                    fell = isinstance(message, LichFell)
+                    wiring.on_lich(message)
     finally:
-        on_detach(surface)
+        # A lich that said it fell has already been taken down; one whose socket
+        # closed under it has not, and the daemon would otherwise hold a station
+        # every command vanishes into.
+        if not fell:
+            wiring.on_fallen(rose.name)
 
 
 # A cast that goes without a goodbye gets one anyway, or the daemon would hold
@@ -237,7 +264,7 @@ async def _reading(
     on_message: Callable[[CastMessage], None],
 ) -> str:
     async for message in frames:
-        if isinstance(message, SurfaceHello):
+        if not isinstance(message, CastMessage):
             continue
         if message.cast_id != opened.cast_id:
             return f"{_NOT_ITS_OWN} {message.cast_id!r}"

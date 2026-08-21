@@ -1,8 +1,11 @@
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel
+
+from vekna.wire import LichRose, LichStatus, RunRecord, WireMessage
 
 
 # A lich's whole durable self. Anything larger — a session log, the casts it has
@@ -33,6 +36,34 @@ class Registry(Protocol):
     def save(self, row: Phylactery) -> None: ...
 
     def drop(self, name: str) -> None: ...
+
+
+# A lich's open connection, which is the only place a command for it can go.
+# Spelled here rather than reusing the surface's `Surface`: `pacts` modules are
+# independent of each other, and one sentence of duplication is what that costs.
+class Station(Protocol):
+    def send(self, message: WireMessage) -> None: ...
+
+
+# A lich the daemon can currently reach: how it rose, what it last said about
+# itself, and the connection to say things back down. Liveness is this object
+# existing — nothing stores it, because the socket already knows.
+@dataclass
+class LichView:
+    rose: LichRose
+    station: Station
+    said: LichStatus | None = None
+
+
+# One lich as a surface shows it: the row it is, whether the daemon can reach it
+# this second, what it said it was doing, and the cast it last started — read
+# out of the journal, which is where a lich's history already lives.
+@dataclass(frozen=True, kw_only=True)
+class LichLine:
+    row: Phylactery
+    live: bool
+    said: LichStatus | None = None
+    last: RunRecord | None = None
 
 
 # The registry is every lich at once, so a file that will not parse is not one

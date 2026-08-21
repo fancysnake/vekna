@@ -59,7 +59,7 @@ class TestEntry:
             for line in result.output.splitlines()
             if line.startswith("  ") and line.strip()
         }
-        assert {"cast", "log", "rituals"} <= listed
+        assert {"cast", "lich", "liches", "log", "rituals"} <= listed
 
     @staticmethod
     def test_casting_a_ritual_reaches_the_runtime():
@@ -88,3 +88,28 @@ class TestEntry:
 
         assert not result.exit_code
         assert "countdown" in result.output
+
+    # No daemon in this test, so nothing is live and nothing has been raised —
+    # what is checked is that the command is wired to something that answers.
+    @staticmethod
+    def test_listing_liches_reaches_the_registry():
+        result = CliRunner().invoke(init_command(), ["liches"])
+
+        assert not result.exit_code
+        assert "no liches" in result.output
+
+    @staticmethod
+    def test_raising_a_lich_with_no_daemon_says_so():
+        result = CliRunner().invoke(init_command(), ["lich"])
+
+        assert result.exit_code == 1
+        assert "no vekna is running" in result.output
+
+    @staticmethod
+    def test_dismissing_a_lich_with_no_daemon_says_so():
+        result = CliRunner().invoke(
+            init_command(), ["lich", "dismiss", "hollow-vesper"]
+        )
+
+        assert result.exit_code == 1
+        assert "no vekna is running" in result.output

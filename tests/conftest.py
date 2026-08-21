@@ -1,4 +1,5 @@
 import io
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -9,7 +10,15 @@ from pydantic import BaseModel, JsonValue
 from vekna.lexicon import NoComponents, Transition, goto, ritual
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import Resumption, Ritual, Step
-from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
+from vekna.pacts.routing import Surface, Wiring
+from vekna.wire import (
+    CastHello,
+    CastMessage,
+    LichRose,
+    RiteFinished,
+    RiteStarted,
+    RunRecord,
+)
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -30,6 +39,34 @@ def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # so the suite reads the same on a machine that sets it as on one that does
     # not — the test that is about the variable sets it itself.
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+
+def _nothing(_: object) -> None:
+    pass
+
+
+def _never_refused(_: LichRose, __: Surface) -> None:
+    return None
+
+
+# Most tests reach the socket for the cast half of it and have no lich in sight.
+# Rather than spell out four callbacks that do nothing, they say what they are
+# about and take these for the rest.
+def cast_wiring(
+    *,
+    on_message: Callable[[CastMessage], None],
+    on_attach: Callable[[Surface], None] = _nothing,
+    on_detach: Callable[[Surface], None] = _nothing,
+) -> Wiring:
+    return Wiring(
+        on_message=on_message,
+        on_attach=on_attach,
+        on_detach=on_detach,
+        on_rise=_never_refused,
+        on_lich=_nothing,
+        on_fallen=_nothing,
+        on_command=_nothing,
+    )
 
 
 # A notification is an escape sequence written only to a tty, and neither

@@ -12,6 +12,23 @@ which links back to the version here that carried each shipped feature.
 
 ### Added
 
+- **The lich stands up.** `vekna lich` raises a named station in a project
+  directory and returns to the prompt — it outlives the shell, and the ssh
+  session, that raised it. A lich is its **row**, not its process: name, root,
+  when it was raised, the cast it last started. Kill the process and it is
+  dormant, not gone; `vekna lich` offers it again, and `vekna lich dismiss`
+  is the deliberate way out. Where something already sleeps in this directory
+  vekna asks rather than guessing, listing what each last cast; `--name` and
+  `--new` answer without asking, and `--name` from an unrelated path raises
+  that lich in *its own* root. `vekna liches` lists them all, live or dormant —
+  live being a socket the daemon holds and never a line on disk. The daemon
+  becomes a router keyed by lich name: a lich is a third kind of connection on
+  the same socket, a surface may now speak as well as listen, and a lich that
+  vanishes is said to have fallen the way a cast that vanishes says goodbye.
+  It loads no ritual code, so a broken `rituals.py` still kills only the cast
+  process that read it. Casting from one is the next release
+  ([07-lich.md](docs/reborn/07-lich.md)).
+
 - **A ritual can say what it is working on.** `status(text)` from
   `vekna.lexicon` sets one free-text line on the cast — the branch, which of
   eight PRs, which attempt — and every surface shows it beside that cast. Latest

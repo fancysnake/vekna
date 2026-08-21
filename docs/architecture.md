@@ -89,26 +89,32 @@ submodules cooperate.
 (root)
   pacts/
     casts.py     # CastView, RiteView, the Casts protocol a surface reads
-    routing.py   # the Surface protocol, Routed, SocketPathError
+    lich.py      # Phylactery, the Registry and Station protocols, LichView
+    routing.py   # the Surface protocol, Wiring, Routed, SocketPathError
     screen.py    # the Screen protocol a surface paints on
-  specs/         # empty
+  specs/
+    names.py     # the words a lich's name is drawn from
   mills/
     hub.py       # the daemon's model: views per cast, fan-out, replay
+    liches.py    # the daemon's liches: rows, live stations, routing by name
     debug.py     # one Routed, one line
   links/
     socket_server.py  # the Unix socket, and Serving, which closes it whole
     journal.py        # runs/<cast_id>/: run.json + events.jsonl
+    registry.py       # liches.json beside runs/
+    spawn.py          # a process that outlives the shell that asked for it
     terminal.py       # the daemon's own screen and keys
     debug_log.py      # --debug's file
   gates/
     cli/
       screen.py   # painting: the cast list, one cast drilled into, `casts`
+      lich.py     # painting: the liches, and the prompt that raises one
       dashboard.py # what the keys do — over the two protocols, nothing else
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/
-    cli.py       # click root: the daemon, cast, rituals, casts — and the
-                 # lexicon reached dynamically
+    cli.py       # click root: the daemon, cast, rituals, log, lich, liches —
+                 # and the lexicon reached dynamically
 rituals.py       # the rituals this project casts on itself, named by
                  # .vekna.toml so `src` is the one measured directory
 lexicon/

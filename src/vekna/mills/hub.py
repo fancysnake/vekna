@@ -74,12 +74,12 @@ class Hub(Casts):
         self._surfaces.append(surface)
         for message in self._replay():
             surface.send(message)
-        self._say(kind="surface_hello", cast_id=None, action="attached")
+        self._say(kind="surface_hello", subject=None, action="attached")
 
     def detach_surface(self, surface: Surface) -> None:
         if surface in self._surfaces:
             self._surfaces.remove(surface)
-        self._say(kind="surface_hello", cast_id=None, action="detached")
+        self._say(kind="surface_hello", subject=None, action="detached")
 
     def apply(self, message: CastMessage) -> None:
         if isinstance(message, CastHello):
@@ -96,7 +96,7 @@ class Hub(Casts):
     def _accept(self, message: CastMessage) -> None:
         self._journal(message)
         self._fan_out(message)
-        self._say(kind=message.kind, cast_id=message.cast_id, action="applied")
+        self._say(kind=message.kind, subject=message.cast_id, action="applied")
 
     # A disk that is full is the daemon's problem and not the cast's. The
     # journal is called from inside a socket read loop, so an OSError let out of
@@ -123,19 +123,19 @@ class Hub(Casts):
 
     def _drop(self, message: CastMessage, *, reason: str) -> None:
         self._say(
-            kind=message.kind, cast_id=message.cast_id, action="dropped", reason=reason
+            kind=message.kind, subject=message.cast_id, action="dropped", reason=reason
         )
 
     def _say(
         self,
         *,
         kind: str,
-        cast_id: str | None,
+        subject: str | None,
         action: Action,
         reason: str | None = None,
     ) -> None:
         self._on_routed(
-            Routed(kind=kind, cast_id=cast_id, action=action, reason=reason)
+            Routed(kind=kind, subject=subject, action=action, reason=reason)
         )
 
     # Derived, not recorded: each cast's own `CastHello` opens it, the rites

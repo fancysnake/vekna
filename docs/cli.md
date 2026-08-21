@@ -212,3 +212,68 @@ prefix is resolved against the journal, and one naming two casts is refused
 rather than guessed. What comes back is a cast of its own, with an id of its
 own; `vekna log` and the drilled-in header both say which cast it carries on
 from.
+
+## `vekna lich`
+
+Raises a **lich**: a named, long-lived station bound to one project directory,
+which takes orders from anywhere you can reach it. It returns to the prompt —
+the lich outlives the shell that raised it, and the ssh session it was raised
+over.
+
+```bash
+vekna lich
+vekna lich --new
+vekna lich --name ashen-quill
+```
+
+Bare, it asks where something already sleeps here; `--new` always raises a fresh
+one; `--name` raises the one you say, dormant or new.
+
+A lich needs a daemon: it registers with the `vekna` already running on this
+account, and is refused with a sentence when there is none.
+
+Where nothing sleeps in this directory, a name is drawn and the lich stands.
+Where something does, vekna asks rather than guessing — reviving one you had
+finished with is no better than abandoning one you meant to carry on:
+
+```text
+2 liches sleep here.
+  [1] hollow-vesper   last cast fix_demo, 3d ago
+  [2] ashen-quill     last cast pr_triage, yesterday
+  [n] a new one
+```
+
+The list is the rows rooted **here**, dormant ones only — a lich the daemon can
+already reach is not something to raise again. `--name` and `--new` skip the
+question, so a script never sits on one, and a name that is already standing is
+refused rather than raised twice.
+
+`--name` from an unrelated directory raises that lich in **its own** root, which
+is what its row remembers it for.
+
+### `vekna lich dismiss`
+
+```bash
+vekna lich dismiss hollow-vesper
+```
+
+Ends the lich and drops its row. This is the difference between dormant and
+gone: killing the process leaves the row, and the lich can be raised again with
+everything it had; dismissing it does not.
+
+## `vekna liches`
+
+Every lich this account has, live or dormant, and what each last cast.
+
+```bash
+vekna liches
+```
+
+```text
+hollow-vesper     idle                /home/you/vekna     last cast fix_demo, 3d ago
+ashen-quill       dormant             /home/you/ludamus   cast nothing yet
+```
+
+Live is a socket the daemon is holding, never a line on disk: a lich whose
+process died reads as dormant the moment it goes, and nothing has to be cleaned
+up for that to be true.

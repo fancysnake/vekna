@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import cast_wiring
 from vekna.lexicon._inits import main
 from vekna.links.journal import Journal
 from vekna.links.socket_server import serve
@@ -123,9 +124,11 @@ class _DaemonThread:
         self._stop = asyncio.Event()
         server = await serve(
             path=self._path,
-            on_message=self.hub.apply,
-            on_attach=self.hub.attach_surface,
-            on_detach=self.hub.detach_surface,
+            wiring=cast_wiring(
+                on_message=self.hub.apply,
+                on_attach=self.hub.attach_surface,
+                on_detach=self.hub.detach_surface,
+            ),
         )
         assert server is not None
         self._ready.set()
