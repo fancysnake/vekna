@@ -125,6 +125,22 @@ class TestListing:
     def test_nothing_recorded_says_so():
         assert listing([]) == "no casts recorded\n"
 
+    # Two rows of the same ritual in the same project, minutes apart, are one
+    # piece of work carried on — and nothing said so before.
+    @staticmethod
+    def test_a_resumed_cast_names_the_one_it_carries_on_from():
+        carried = _hello()
+        carried.cast_id = "c2beef0011"
+        carried.resumed_from = "c1abcdef99"
+
+        line = listing([RunRecord(hello=carried)])
+
+        assert "↳ c1abcdef" in line
+
+    @staticmethod
+    def test_a_first_cast_carries_on_from_nothing():
+        assert "↳" not in listing([RunRecord(hello=_hello())])
+
 
 class TestTheList:
     # The reason to look at the view at all: which of the six casts running
@@ -252,3 +268,13 @@ class TestDrilledIn:
 
         assert "rite-r1" in painted
         assert "rite-r2" in painted
+
+    @staticmethod
+    def test_a_resumed_cast_names_the_one_it_carries_on_from():
+        carried = _hello()
+        carried.cast_id = "c2beef0011"
+        carried.resumed_from = "c1abcdef99"
+
+        painted = paint(casts=[CastView(hello=carried)], focus="c2beef0011")
+
+        assert "↳ c1abcdef" in painted

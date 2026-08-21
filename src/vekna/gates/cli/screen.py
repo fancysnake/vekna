@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from vekna.pacts.casts import CastView, RiteView
-from vekna.wire import RunRecord
+from vekna.wire import CastHello, RunRecord
 
 _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
 _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
@@ -200,6 +200,15 @@ def _rite_lines(view: CastView) -> list[str]:
     return lines
 
 
+# A resumed cast is a cast of its own with an id of its own, so what would
+# otherwise read as the same ritual run twice says which cast it carries on
+# from — cut to eight, the form `vekna cast --continue` takes.
+def _carried(hello: CastHello) -> str:
+    if hello.resumed_from is None:
+        return ""
+    return f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
+
+
 def _waiting_lines(view: CastView) -> list[str]:
     if not view.waiting:
         return []
@@ -225,6 +234,7 @@ def _drilled(view: CastView, now: datetime) -> list[str]:
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
         f"  {_word(view)}  {_elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
+        f"{_carried(view.hello)}"
     )
     return [
         header,
@@ -248,7 +258,7 @@ def listing(records: Sequence[RunRecord]) -> str:
         f"{record.hello.cast_id[:_ID]}  {_CAST_GLYPH[record.status]}"
         f"  {record.hello.ritual:<16}"
         f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
-        f"  {record.hello.project_root}\n"
+        f"  {record.hello.project_root}{_carried(record.hello)}\n"
         for record in records
     )
 
