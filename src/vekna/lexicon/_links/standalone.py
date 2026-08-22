@@ -1,11 +1,8 @@
 import asyncio
-import os
 import socket
 import sys
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
@@ -50,10 +47,6 @@ def _picked(answer: str, options: Sequence[str]) -> str | None:
     if answer.isdigit() and 1 <= int(answer) <= len(options):
         return options[int(answer) - 1]
     return None
-
-
-def default_socket_path() -> str:
-    return str(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}.sock")
 
 
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:
