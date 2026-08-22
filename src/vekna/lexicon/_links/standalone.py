@@ -41,12 +41,17 @@ def _menu(prompt: str, options: Sequence[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# `isdigit` is wider than `int` accepts — "²" is a digit and `int` raises on it,
+# as it does on a digit string past CPython's conversion limit. Neither is a menu
+# number, and raising here would crash a prompt that has an answer for anything
+# else typed at it.
 def _picked(answer: str, options: Sequence[str]) -> str | None:
     if answer in options:
         return answer
-    if answer.isdigit() and 1 <= int(answer) <= len(options):
-        return options[int(answer) - 1]
-    return None
+    if not answer.isdecimal() or len(answer) > len(str(len(options))):
+        return None
+    index = int(answer)
+    return options[index - 1] if 1 <= index <= len(options) else None
 
 
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:

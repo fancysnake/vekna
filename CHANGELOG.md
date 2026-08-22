@@ -22,6 +22,13 @@ when.
   answered a free-text question with an empty string and turned a suggested one
   into an invalid choice, though nothing had been typed either way. Every prompt
   now stops with `input ended before the question was answered`.
+- **A question with no answers in it stops the step.** `decide(options=[])` —
+  a list that computed to nothing — fell through to a yes/no prompt live and was
+  then refused off the journal on resume; it now raises `MediumBoundaryError` at
+  the medium, before either. An answer that is a digit without being a number —
+  `²`, or one longer than Python will convert — no longer crashes a prompt
+  either: it is an invalid choice, or, at a question offering suggestions, the
+  answer as typed.
 - **A command can no longer eat the answer you typed.** `shell()` spawned bash
   with the cast's own stdin, so a command running beside a question — a step
   holding two mediums at once — read the line meant for the prompt, which then

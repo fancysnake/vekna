@@ -208,6 +208,16 @@ class TestDecide:
         with pytest.raises(StandalonePromptError):
             asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
 
+    # "²" is a digit to `str.isdigit` and not a number to `int`, which used to
+    # raise where this prompt has an answer for anything else typed at it.
+    @staticmethod
+    def test_a_digit_that_is_not_a_number_is_an_invalid_choice():
+        renderer, out = _renderer("²\na\n")
+
+        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+
+        assert (choice, "invalid choice" in out.getvalue()) == ("a", True)
+
 
 class TestDecideSuggested:
     @staticmethod
@@ -237,6 +247,16 @@ class TestDecideSuggested:
         asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
 
         assert "or answer in your own words" in out.getvalue()
+
+    @staticmethod
+    def test_a_digit_that_is_not_a_number_stands_as_the_answer():
+        renderer, _ = _renderer("²\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "²"
 
     # A suggested prompt cannot be answered wrongly, so a bare return is not a
     # retry — it is an empty answer, and the cast moves on with it.

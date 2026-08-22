@@ -117,6 +117,22 @@ class Channel(Protocol):
     ) -> str: ...
 
 
+_BOOLEAN = ("yes", "no")
+
+
+# The one reading of a `(options, free)` pair, because three sides need it and
+# had drifted into three answers: the channel asking, the trial double checking
+# a script, the ledger checking a journal. `None` is "anything goes" — under
+# `free` the options are guesses at the answer and answering past them is the
+# point. A bare `decide` offers yes and no.
+def allowed_answers(
+    *, options: Sequence[str] | None, free: bool
+) -> tuple[str, ...] | None:
+    if free:
+        return None
+    return _BOOLEAN if options is None else tuple(options)
+
+
 GateFn = Callable[[str], Awaitable[bool]]
 
 # The agent's own question, mid-rite. Always free text; options, when the agent

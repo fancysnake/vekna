@@ -7,7 +7,7 @@ from pydantic import BaseModel, JsonValue
 
 from tests.conftest import entry, journalled
 from vekna.folio.flow import decide
-from vekna.lexicon import RitualError, Transition, done, step
+from vekna.lexicon import MediumBoundaryError, RitualError, Transition, done, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import Ritual
@@ -82,6 +82,15 @@ async def confirm(_state: State) -> Transition:
 confirmer = entry(name="confirmer", target=confirm, payload=State())
 
 
+@step
+async def choose_nothing(_state: State) -> Transition:
+    nothing: list[str] = []
+    return done(Choice(picked=await decide("pick", options=nothing)))
+
+
+emptier = entry(name="emptier", target=choose_nothing, payload=State())
+
+
 class Note(BaseModel):
     text: str
 
@@ -144,3 +153,22 @@ class TestResumedDecisions:
     def test_an_answer_that_is_not_text_is_refused():
         with pytest.raises(RitualError, match="answer 3 is not text"):
             _resumed(3, jotter)
+
+
+class TestEmptyOptions:
+    # A question with nothing to pick from is a bug in the step. Left alone it
+    # would fall through to yes/no live and then be refused off the journal on
+    # resume, so it stops at the medium instead.
+    @staticmethod
+    def test_offering_no_options_is_refused():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        with pytest.raises(MediumBoundaryError, match="at least one option"):
+            asyncio.run(
+                run_cast(
+                    ritual=emptier,
+                    components=emptier.components(),
+                    grimoire=grimoire,
+                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                )
+            )
