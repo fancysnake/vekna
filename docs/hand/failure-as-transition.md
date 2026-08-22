@@ -1,8 +1,6 @@
-# Feature — Failure as a transition
+# Failure as a transition
 
-**Version:** Hand (`3.x`), unscheduled within it.
-
-See [`../reborn/00-common.md`](../reborn/00-common.md) — ritual model,
+See [`../reborn/common.md`](../reborn/common.md) — ritual model,
 transitions, the bounded trampoline.
 
 ## Goal
@@ -52,7 +50,8 @@ payload and an edge in the graph.
   ```
 
 - **`on_error` edges are real edges.** They appear in `rituals show` and in the
-  graph the Eye renders ([`../eye/04-graph.md`](../eye/04-graph.md)), because a
+  graph the Eye renders — see
+  [`../eye/workflow-graph-drawn.md`](../eye/workflow-graph-drawn.md) — because a
   recovery path that is invisible in the graph is a recovery path nobody
   reviews.
 - **The budget guard still counts.** Recovery re-entering a step counts against
@@ -63,8 +62,9 @@ payload and an edge in the graph.
 - **Three outcomes, deliberately distinct.** Escalate (no `on_error`: the cast
   dies, and that is correct for a corrupt repo), recover (route to the recovery
   step), and convert — a timeout arrives *as* a `Failure`
-  ([02-timeout-race.md](02-timeout-race.md)), a budget overrun likewise
-  ([03-budgets.md](03-budgets.md)), so one mechanism handles all three.
+  ([bounding-a-rite.md](bounding-a-rite.md)), a budget overrun likewise
+  ([budgets-and-processes.md](budgets-and-processes.md)), so one mechanism
+  handles all three.
 - **Locks release.** A step failing inside `async with lock(...)` releases on
   the way out, as the context manager already guarantees; the release event is
   in the grimoire before the failure transition is.
@@ -73,13 +73,54 @@ payload and an edge in the graph.
   running-with-a-failure, not as failed, and `vekna casts` distinguishes the
   two.
 
+## A cast that fails still owes its report
+
+A ritual that reached four items before the agent died loses the whole night's
+work product: `RitualError` leaves the step, the CLI prints `cast failed: …`,
+and the accumulated result is gone. So rituals route **every** ending —
+including the fatal ones — through a single terminal `report` step that emits
+the summary and only then raises.
+
+Two answers, and the cheap one first.
+
+- **Document the pattern.** One terminal step, every ending routes to it,
+  `emit_delta` the human summary, `done` or raise last. It costs nothing and it
+  is what real rituals already do. `emit_delta` is exported from the lexicon and
+  appears on no page under `docs/` — that alone is worth fixing.
+- **Let `RitualError` carry a payload**, rendered by the CLI the way `done`'s
+  result is. Small, additive, and it removes the reason the terminal step has to
+  exist. It is filed here because `on_error` subsumes the second half: once
+  failure is a route, the terminal step is reachable by an edge and the payload
+  rides an ordinary transition.
+
+## An unattended cast says so
+
+A ritual meant for cron declares in its first paragraph that it asks nothing,
+because at 3am a prompt is a hang. That is a deliberate break with the rule that
+spending an agent's time is a `decide`, and the break is correct. What is
+missing is any way for the ritual to declare it.
+
+Today a `decide` reached from cron gets three empty `readline()`s and dies with
+`StandalonePromptError` mid-cast. Not a hang, which is the good half; but it
+dies where it stood, and everything the run had accumulated dies with it.
+
+- **`vekna cast --unattended`** makes every `decide` fail at the boundary rather
+  than at the third empty line, and makes the property visible in the invocation
+  instead of in a paragraph.
+- **The ritual-side half** — a step asking whether it may prompt — is why this
+  is filed here rather than beside the CLI: a `decide` that cannot be answered
+  becomes a `Failure` with an `on_error` route, and a ritual that would rather
+  degrade than die says so with an edge.
+
 ## Scope
 
-- `lexicon/_pacts.py` — `Failure`, `ErrorInfo`, `RiteRef`.
+- `lexicon/_pacts.py` — `Failure`, `ErrorInfo`, `RiteRef`; a payload on
+  `RitualError`.
 - `lexicon/_mills/` — the trampoline catches at the step boundary, builds the
   `Failure`, validates it against the recovery step's input annotation like any
   other payload, and dispatches.
-- `lexicon/_gates.py` — `rituals show` draws `on_error` edges.
+- `lexicon/_gates.py` — `rituals show` draws `on_error` edges; the CLI renders a
+  failure payload the way it renders a result; `cast --unattended`.
 - `wire/_pacts.py` — `RiteFailed`.
 - Daemon `mills/` — cast state gains "recovering".
 
@@ -109,4 +150,9 @@ failure is not another's, and the daemon already surfaces both.
   declares one, and otherwise aborts the cast — never an implicit self-catch.
 - `rituals show` prints the `on_error` edge; a recovery step reachable only that
   way is not reported as unreachable.
+- A cast that ends in failure still puts its report in front of the human, and
+  the terminal-report pattern is written down on a page a ritual author reads.
+- `vekna cast --unattended` on a ritual that reaches a `decide` fails at that
+  boundary, naming the prompt it refused to ask; without the flag nothing
+  changes.
 - `mise run fullcheck` passes.

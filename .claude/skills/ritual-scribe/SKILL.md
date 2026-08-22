@@ -384,7 +384,7 @@ reviewer under it could not even read `CLAUDE.md`.
 list is `Read` on any path the process can open; `permission_mode` inspects no
 arguments, and `cwd` is a working directory, not a jail. If an agent genuinely
 must not leave the repository, that is a sandbox or a `PreToolUse` validator —
-neither of which vekna ships at `0.6.0`. Say so in the prompt by all means, but
+neither of which vekna ships. Say so in the prompt by all means, but
 know that you asked rather than bound, and do not write a ritual whose safety
 rests on the asking.
 
@@ -689,9 +689,9 @@ Planned, designed, **not on this branch**. Do not write against any of it.
 - **`@step(max_visits=N)`.** Does not exist. `@step` is a bare decorator; the
   only engine bound is `max_steps` on the ritual.
 - **`@step(goes_to=[...])`** and declared edges. Rejected in favour of steps-as-DTOs
-  (`docs/reborn/11-steps-as-dto.md`), which is itself unscheduled and would be a
+  (`docs/reborn/steps-as-dtos.md`), which is unbuilt and would be a
   breaking change to `goto`/`Transition`.
-- **Locks.** `0.7.0`. Nothing lock-shaped is importable today.
+- **Locks.** Unbuilt. Nothing lock-shaped is importable today.
 - **Annotation-gated dispatch** — `goto(payload)` with no named target. Deferred
   and additive; name the target.
 - **Parallel steps.** Not happening, ever. Concurrency stays inside a step body

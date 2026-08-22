@@ -90,7 +90,7 @@ result: {"outcome":"green"}
 [GLIMPSE](https://glimpse.fancysnake.dev/) layering, enforced by
 [`import-linter`](https://import-linter.readthedocs.io/). See
 [`docs/architecture.md`](docs/architecture.md) and
-[`docs/reborn/`](docs/reborn/) for the release-by-release plan.
+[`docs/README.md`](docs/README.md) for where the ideas live.
 
 ## Development
 

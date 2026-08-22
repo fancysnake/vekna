@@ -2,16 +2,18 @@
 
 **Version:** `0.4.0` — **shipped.**
 
-> Filed a slot lower and built before [05-locks.md](05-locks.md), so it took the
-> number `folio/process` left free on its way to Hand rather than sharing one
-> with a feature that is not written. Two things the spec did not say, settled
+> Filed a slot lower and built before [locks](../../reborn/locks.md), so it
+> took the number `folio/process` left free on its way to Hand rather than
+> sharing one with a feature that is not written. Two things the spec did not
+> say, settled
 > while building: a directory counts as a source only with an `__init__.py`, at
 > **every** level — `pkgutil` yields a directory without one as nothing at all,
 > so a namespace-package level would go unswept in the same silence this feature
 > exists to remove — and the cwd is what goes on `sys.path` for
 > `[rituals] modules`, which is literally what `PYTHONPATH=.` said.
 
-See [00-common.md](00-common.md) — Components, config, package layout.
+See [`../../reborn/common.md`](../../reborn/common.md) — Components, config,
+package layout.
 
 ## Goal
 
@@ -136,7 +138,8 @@ And what those declarations are:
 | helpers | 8% | 13% |
 
 Two things follow, and both are guidance for the example library
-([08-hardening.md](08-hardening.md)) rather than anything the engine enforces:
+([`../../reborn/casting-someone-elses-ritual.md`](../../reborn/casting-someone-elses-ritual.md))
+rather than anything the engine enforces:
 
 - **Split by ritual before splitting by kind.** Across the four rituals in
   `rituals.py` exactly one symbol is shared (`Bound`, by `CoverDiff` and
@@ -183,9 +186,10 @@ rituals/
   into `Triaged.took: Literal[...]`). A ritual *package* — the subject of this
   document — still has to be named in `SRC_PATHS` to get the same treatment.
 - **Steps as DTOs**, with step values appearing only in return statements —
-  [11-steps-as-dto.md](11-steps-as-dto.md). Undecided, and competing with
-  [`../eye/04-graph.md`](../eye/04-graph.md): it is a change to the ritual model
-  rather than to how one is loaded.
+  [`../../reborn/steps-as-dtos.md`](../../reborn/steps-as-dtos.md). Undecided,
+  and competing with
+  [`../../eye/workflow-graph-drawn.md`](../../eye/workflow-graph-drawn.md): it
+  is a change to the ritual model rather than to how one is loaded.
 - **Parallel across steps.** Not happening. Steps never run concurrently;
   concurrency stays inside a step body as plain `asyncio`, as
   `merge_ready.gates` already does.

@@ -1,9 +1,8 @@
-# Feature — Surfaces as adapters
+# Surfaces as adapters
 
-**Version:** Eye (`2.x`), unscheduled within it.
-
-See [`../reborn/07-lich.md`](../reborn/07-lich.md) — the lich, its command
-vocabulary, and the Discord channel it ships with.
+See [`../reborn/lich.md`](../reborn/lich.md) — the lich and its command
+vocabulary — and [discord-channel.md](discord-channel.md),
+the first channel.
 
 ## Goal
 
@@ -25,7 +24,7 @@ happens to talk back.
 - **`SurfaceProtocol`** in `pacts/`, stating what any remote surface owes the
   lich: deliver a command from the vocabulary in, render status out, present a
   `decide` and return an answer, and authorise a sender. That list is short
-  because `07-lich.md` already settled the semantics — control commands always,
+  because the lich already settled the semantics — control commands always,
   origination only when idle, a refusal that names what is running. A surface
   implements delivery; it does not get to reinterpret the rules.
 - **`links/discord/` becomes the first implementation** rather than the only
@@ -39,7 +38,7 @@ happens to talk back.
   pinned. Degrading deliberately, not discovering at runtime that a call failed.
 - **One extra per channel** (`vekna[discord]`, `vekna[telegram]`, …), and a lich
   says once at startup which surfaces it actually has — extending the notice
-  `07-lich.md` already specifies for a missing Discord extra.
+  the lich already gives for a missing Discord extra.
 - **At least one second channel**, to prove the protocol. Which one is not the
   interesting part and is deliberately not decided here; the acceptance is that
   the second costs a file and no changes to `mills/lich/`.
@@ -50,11 +49,12 @@ happens to talk back.
 that stays true here — a candidate channel that needs an inbound port, a
 webhook endpoint, or TLS termination of vekna's own is not a candidate. It is
 the reason Discord was chosen in the first place, and it is the line that keeps
-"network-exposed daemon" on `00-common.md`'s not-planned list.
+"network-exposed daemon" on [`../reborn/common.md`](../reborn/common.md)'s
+not-planned list.
 
-The lich's web page ([03-lich-web.md](03-lich-web.md)) is the one surface that
-cannot satisfy this, which is why its auth question is parked in its own doc and
-not answered here.
+The lich's web page ([web-view.md](web-view.md)) is the one surface that
+cannot satisfy this, which is why its auth question is settled there and not
+here.
 
 ## Scope
 
@@ -73,12 +73,12 @@ not answered here.
 Which channels vekna chases. It does not; it makes room. Multi-user — the
 allowlist per lich stays the model, and a surface that cannot identify its
 sender cannot be one. Surfaces for the daemon itself: the daemon observes and
-coordinates, the lich is what takes orders, and that split is `07-lich.md`'s,
+coordinates, the lich is what takes orders, and that split is the lich's,
 not this doc's to revisit.
 
 ## Acceptance
 
-- Discord behaves exactly as it did at `0.8.0` — same pinned status, same
+- Discord behaves exactly as it did before the reshape — same pinned status, same
   buttons, same refusals, same silent ignore for a sender off the allowlist.
 - A second channel is implemented in its own `links/` module with no change to
   `mills/lich/`, and carries the full vocabulary.

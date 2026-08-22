@@ -1,12 +1,8 @@
-# Feature — Textual TUI
+# Textual TUI
 
-**Version:** Eye (`2.x`), unscheduled within it. (Held a reborn slot until the
-lich took its number.)
-
-See [`../reborn/00-common.md`](../reborn/00-common.md) and
-[`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md). Same wire
-protocol, richer surface. Liches render here too — a station in the sidebar
-with the cast it is running underneath it.
+See [`../reborn/common.md`](../reborn/common.md). Same wire protocol, richer
+surface. Liches render here too — a station in the sidebar with the cast it is
+running underneath it.
 
 ## Goal
 
@@ -23,7 +19,7 @@ multi-grimoire UI.
 
 - Textual dashboard subscribing to the daemon's bus. Default surface for
   `vekna`.
-- `--no-tui` keeps the terminal-streaming behaviour from 0.6.0.
+- `--no-tui` keeps the terminal-streaming CLI view.
 - Layout: left = cast tree (pending / running / done) across projects; right =
   active rite's live output; bottom = status bar.
 - `decide` modals. Per-rite, with a queue when several arrive at
@@ -45,7 +41,7 @@ multi-grimoire UI.
 
 ## Out of scope
 
-Persistence (shipped 0.6.0). Web ([02-web.md](02-web.md)). Cross-machine peers.
+Web ([web-view.md](web-view.md)). Cross-machine peers.
 
 ## Acceptance
 

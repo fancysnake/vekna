@@ -6,7 +6,7 @@ author controls and whose agent calls happen inside those steps. `vekna cast
 permissively within a step; determinism lives at the step boundaries.
 
 (The tmux focus-switcher vekna started as was removed in 0.3.0 — Claude Code
-ships its own notifications now. `docs/reborn/` is the plan from here.)
+ships its own notifications now.)
 
 ## Commands
 
@@ -23,9 +23,9 @@ by the global permission rules and will not run.
   steps, a prompt with one possible answer — cut it.
 - Don't ignore lint rules globally.
 - No single-line files.
-- Every major release carries a name before it carries a number — Reborn
-  (`1.0.0`), Eye (`2.0.0`). Name a track when work on it starts; attach the
-  number at the tag. [`docs/README.md`](docs/README.md).
+- Every major release carries a name before it carries a number — Reborn, Eye,
+  Hand. Name a track when work on it starts; attach the number at the tag.
+  [`docs/README.md`](docs/README.md).
 - Hit friction (retried command, flaky tool, stale cache, bad error, gotcha)?
   Log it now, one or two sentences: what you did → what got in the way.
 
@@ -89,11 +89,16 @@ map, layout, patterns, and drift flags:
 
 - [`tests/CLAUDE.md`](tests/CLAUDE.md) — testing conventions, loaded when you
   work under `tests/`
-- [`docs/README.md`](docs/README.md) — docs index, release names
+- [`docs/README.md`](docs/README.md) — docs index, how the idea files work,
+  release names
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
-- [`docs/reborn/`](docs/reborn/README.md) — Reborn (`1.0.0`), the plan from
-  0.3.0 onward
-- [`docs/eye/`](docs/eye/README.md) — Eye (`2.0.0`), parked until Reborn ships
-- [`docs/hand/`](docs/hand/README.md) — Hand (`3.0.0`), the acting half: failure
-  paths, bounds, budgets, skills, replay
+- [`docs/reborn/common.md`](docs/reborn/common.md) — shared context every idea
+  file assumes: premise, vocabulary, process model, wire, CLI surface
+- [`docs/reborn/`](docs/reborn/README.md) — Reborn, the pivot to rituals and
+  casts
+- [`docs/eye/`](docs/eye/README.md) — Eye, the surfaces that watch
+- [`docs/hand/`](docs/hand/README.md) — Hand, the acting half: failure paths,
+  bounds, budgets, skills, replay
+- [`docs/done/`](docs/done/) — shipped ideas, filed under their track. A file
+  moves here instead of gaining a status line
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight

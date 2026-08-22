@@ -2,8 +2,8 @@
 
 **Version:** `0.3.0` — **shipped.**
 
-See [00-common.md](00-common.md) for Medium/Focus/Component and Component
-output direction.
+See [`../../reborn/common.md`](../../reborn/common.md) for Medium/Focus/Component
+and Component output direction.
 
 ## Goal
 
@@ -171,7 +171,7 @@ Five things the implementation settled that the sketch above left open:
 ## Out of scope
 
 TUI. Multi-Focus-per-Medium. Persistence. Locks. (`folio/process` is Hand's —
-[`../hand/06-process.md`](../hand/06-process.md).)
+[`../../hand/budgets-and-processes.md`](../../hand/budgets-and-processes.md).)
 
 ## Acceptance
 

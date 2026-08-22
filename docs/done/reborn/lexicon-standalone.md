@@ -2,8 +2,8 @@
 
 **Version:** `0.2.0` — **shipped.**
 
-See [00-common.md](00-common.md) for vocabulary, package layout, wire schema,
-standalone mode.
+See [`../../reborn/common.md`](../../reborn/common.md) for vocabulary, package
+layout, wire schema, standalone mode.
 
 ## Goal
 
@@ -37,7 +37,7 @@ work.
   step body, and `parallel` into plain `asyncio` — not separate mediums.
   Concurrency lives inside a step and stays the language's; **steps themselves
   never run concurrently**, which is what keeps a cast to one cursor and so
-  keeps resume ([06-vekna-daemon.md](06-vekna-daemon.md)) a single-cursor
+  keeps resume ([vekna-daemon.md](vekna-daemon.md)) a single-cursor
   problem.
 - `vekna.folio.shell` — `shell` Medium + bash Focus.
 - Worked example: a `@ritual` with at least two `@step`s wired by

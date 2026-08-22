@@ -21,7 +21,7 @@ from vekna.wire import (
 
 # Everything the daemon saw, on disk, keyed by cast. `run.json` is the index —
 # what the cast was and how it ended — and `events.jsonl` is the wire verbatim,
-# which is what makes resume possible and what `hand/05-replay.md` will read.
+# which is what makes resume possible and what `docs/hand/replay.md` will read.
 # Where those two live, and how they are read back, is `vekna.wire`'s: a resumed
 # cast reads the same files from a process that shares nothing else with this.
 # ponytail: one open per event. A handle per live cast is the upgrade if a

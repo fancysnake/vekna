@@ -109,5 +109,5 @@ repository setting still has to be told once.
       converts the pending publisher; until then the name is claimed by nobody.
 - [ ] The PyPI page renders the README, and the sidebar links resolve
 - [ ] `pip install vekna` in a fresh venv on a machine that has never built it,
-      and the first ritual runs — [08-hardening](reborn/08-hardening.md)'s
-      acceptance, and the only one a workflow cannot check for you
+      and the first ritual runs — the one acceptance a workflow cannot check
+      for you

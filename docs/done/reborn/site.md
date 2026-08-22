@@ -4,7 +4,7 @@
 
 > Filed at `1.0.0` and pulled forward: vekna is in use outside this repository
 > before the daemon or the lich exist, and a checkout is no way to install it.
-> What moved with it is [08-hardening.md](08-hardening.md)'s publishing bullet —
+> What moved with it is the 1.0-hardening publishing bullet —
 > a package on PyPI with no page to send anyone to is half a release. Three
 > decisions changed on the way, and each is a simplification: mkdocs-material
 > rather than Astro and Starlight, GitHub Pages rather than Cloudflare,
@@ -12,9 +12,9 @@
 > landing page is dropped — this is a documentation site, and a home page is
 > worth writing when there is an audience to write it for.
 
-See [00-common.md](00-common.md). A sibling to
-[08-hardening.md](08-hardening.md)'s publishing half, not a step after it: a
-package nobody can read about is half of being installable.
+See [`../../reborn/common.md`](../../reborn/common.md). A sibling to the
+publishing half, not a step after it: a package nobody can read about is half of
+being installable.
 
 ## Goal
 
@@ -50,7 +50,7 @@ place to look rather than two conventions for where a `.md` goes.
   is worth building when there is an audience to build it for.
 - **The blast-radius statement as a page of its own.** What vekna does not
   sandbox, and the two things to do instead, are written out in
-  [08-hardening.md](08-hardening.md) for the author. On the site they are one
+  the 1.0-hardening notes for the author. On the site they are one
   click from the front page, because a second user should meet them before
   their first cast rather than after.
 - **Written fresh.** The site is not generated from `docs/reborn/` and does not
@@ -77,10 +77,9 @@ place to look rather than two conventions for where a `.md` goes.
 ## Out of scope
 
 - **The runtime surfaces.** Watching casts in a browser is Eye
-  ([`../eye/02-web.md`](../eye/02-web.md)), and the lich's page is
-  [`../eye/03-lich-web.md`](../eye/03-lich-web.md). Those are a program with a
-  wire behind it; this is a static site. Sharing a domain later is fine;
-  sharing a codebase now is not.
+  ([`../../eye/web-view.md`](../../eye/web-view.md)), which carries the lich's
+  page too. Those are a program with a wire behind it; this is a static site.
+  Sharing a domain later is fine; sharing a codebase now is not.
 - Versioned documentation for more than the released version. One version, the
   one on PyPI, until there is a second one anybody is still running.
 - A blog, a changelog page beyond linking `CHANGELOG.md`, i18n, and any design
@@ -89,7 +88,7 @@ place to look rather than two conventions for where a `.md` goes.
 ## Acceptance
 
 The stranger who follows the README from a checkout is
-[08-hardening.md](08-hardening.md)'s test. This one never touches the repo.
+the 1.0-hardening test. This one never touches the repo.
 
 - A stranger arrives at `vekna.fancysnake.dev` knowing nothing, and reaches a
   running cast without cloning anything — the install line came off the first
