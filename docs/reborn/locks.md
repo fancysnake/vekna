@@ -1,22 +1,15 @@
-# Feature — Locks, coordinated
+# Locks, coordinated
 
-**Version:** `0.7.0` — **planned.**
-
-See [00-common.md](00-common.md) — wire lock messages, replay rebuilds lock
-state, standalone modes.
+See [common.md](common.md) — wire lock messages, replay rebuilds lock state,
+standalone modes.
 
 ## Goal
 
-Real concurrency primitive, not a coding-mode footnote. Ship the lock API with
+A real concurrency primitive, not a coding-mode footnote. The lock API with
 hierarchical keys and the `Scope` helper, and the daemon-side manager that makes
-them mean something. Locks land *after* the daemon
-([06-vekna-daemon.md](06-vekna-daemon.md)), so they are coordinated from the
-first line: there is no permissive stage to ship and then flip out of, and no
-release where `lock()` succeeds while promising nothing.
-
-(This doc once described the opposite order — the API shipping first and honest
-about having no coordinator, the daemon adding one after. The daemon came first
-instead, because locks were not what was needed next.)
+them mean something. Coordinated from the first line: no permissive stage to
+ship and then flip out of, and no state where `lock()` succeeds while promising
+nothing.
 
 ## What ships
 
@@ -70,6 +63,11 @@ it:
 | `warn`  | Locks succeed with red banner + log line | Interactive |
 | `deny`  | Locks block with retry/quit prompt       | Default     |
 
+```toml
+[locks]
+standalone = "deny"
+```
+
 Banner appears once per cast on first acquisition (not per lock):
 
 ```text
@@ -93,7 +91,7 @@ acquires and the cast continues.
 
 - Lexicon: `lock`, `Scope` public surface; lock ops emit grimoire events
   (`LockAcquireRequested`/`LockGranted`/`LockDenied`/`LockReleased`).
-- `vekna.wire` lock message kinds (defined at 0.2.0, exercised here).
+- `vekna.wire` lock message kinds.
 - `mills/` — the lock tree, and rebuilding it from a replayed cast.
 - `gates/cli/click/` — `locks`, `unlock`.
 - Standalone-mode resolution from config + `VEKNA_STANDALONE_LOCKS` env.

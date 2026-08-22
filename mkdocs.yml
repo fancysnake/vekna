@@ -16,6 +16,7 @@ exclude_docs: |
   reborn/
   eye/
   hand/
+  done/
 
 theme:
   name: material

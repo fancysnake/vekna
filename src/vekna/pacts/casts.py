@@ -30,7 +30,7 @@ class RiteView:
 # draws is built from each rite's `parent_id` at paint time, so nothing here has
 # to hold a second copy of the shape. `waiting` is the open prompts: the daemon
 # holds them to say a cast is waiting and to say what for, while answering stays
-# the cast's own terminal's job (docs/reborn/06-vekna-daemon.md).
+# the cast's own terminal's job (docs/done/reborn/vekna-daemon.md).
 @dataclass
 class CastView:
     hello: CastHello

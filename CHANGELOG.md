@@ -5,8 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
-What is planned rather than released is in the [roadmap](docs/README.md#roadmap),
-which links back to the version here that carried each shipped feature.
+This file is the record of what shipped. What is only an idea is in
+[`docs/`](docs/README.md), under the track it belongs to, and says nothing about
+when.
 
 ## [Unreleased] - ???
 
@@ -36,7 +37,7 @@ which links back to the version here that carried each shipped feature.
   the cast, attached or not. The wire carries only that the cast is *waiting*:
   the daemon raises it with the prompt and stops when it is answered. Answering
   from `vekna` itself is deferred — see
-  [the feature doc](docs/reborn/06-vekna-daemon.md) for what it costs.
+  [the feature doc](docs/done/reborn/vekna-daemon.md) for what it costs.
 - **A durable journal.** Every event the daemon sees is written under
   `~/.local/state/vekna/runs/<cast_id>/`: `run.json` for what the cast was and
   how it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them

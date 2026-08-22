@@ -1,8 +1,6 @@
-# Feature — Skills: procedures a rite loads on demand
+# Skills: procedures a rite loads on demand
 
-**Version:** Hand (`3.x`), unscheduled within it.
-
-See [`../reborn/03-coding-folios.md`](../reborn/03-coding-folios.md) — the
+See [`../reborn/common.md`](../reborn/common.md) — the
 `coding` Medium and its call shape.
 
 ## Goal
@@ -42,7 +40,7 @@ Advertise the procedures; load the one that gets picked.
   daemon, the Eye, and the journal all show which procedure the agent reached
   for and when. That is vekna's addition rather than the convention's: the
   choice becomes observable, reviewable after the fact, and — because it is in
-  the journal — replayable ([05-replay.md](05-replay.md)).
+  the journal — replayable ([replay.md](replay.md)).
 - **Portable at the Medium.** A Focus that cannot do progressive disclosure
   inlines every advertised skill into the system prompt and says so once, at the
   first call. Degrading is fine; pretending is not.
@@ -53,7 +51,7 @@ Advertise the procedures; load the one that gets picked.
 
 Because the ritual is the part that must stay deterministic. A procedure is
 prose the agent reads inside a step, which is exactly the region where the
-bargain in `03-coding-folios.md` already says the agent runs permissively. A
+bargain vekna already makes says the agent runs permissively. A
 skill changes what the agent knows; it does not change where the step boundary
 is or what crosses it. Nothing in the engine moves for this feature.
 

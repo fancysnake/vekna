@@ -168,7 +168,7 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
 
 
 # A surface is sent to and not heard from: answering a prompt from `vekna`
-# itself is `docs/reborn/06-vekna-daemon.md`'s deferred half, so what arrives
+# itself is `docs/done/reborn/vekna-daemon.md`'s deferred half, so what arrives
 # after the handshake is read to notice the disconnect and nothing else.
 async def _as_surface(
     frames: AsyncIterator[WireMessage],

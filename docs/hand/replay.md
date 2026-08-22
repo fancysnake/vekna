@@ -1,7 +1,7 @@
-# Feature — Replay: checking a ritual still walks its path
+# Replay: checking a ritual still walks its path
 
-**Version:** Hand (`3.x`), unscheduled within it. Requires the journal from
-[`../reborn/06-vekna-daemon.md`](../reborn/06-vekna-daemon.md).
+See [`../reborn/common.md`](../reborn/common.md) — the durable journal a
+recording comes from.
 
 ## Goal
 
@@ -10,12 +10,11 @@ thing the user writes and keeps — and they are the least verified thing in the
 system: edit a step, and the only way to find out what you broke is to spend an
 agent run finding out.
 
-From `0.6.0` the daemon's journal holds every event of every cast it ran. A
-recording is a fixture, and this turns the one into the other — so what is
-replayable is what the daemon saw. A standalone cast keeps its journal in
-memory and takes it to the grave
-([`../reborn/00-common.md`](../reborn/00-common.md)); giving those a recording
-worth replaying is a separate piece of work, not something this feature
+The daemon's journal holds every event of every cast it ran. A recording is a
+fixture, and this turns the one into the other — so what is replayable is what
+the daemon saw. A standalone cast keeps its journal in memory and takes it to
+the grave ([`../reborn/common.md`](../reborn/common.md)); giving those a
+recording worth replaying is a separate piece of work, not something this
 assumes.
 
 ## What ships

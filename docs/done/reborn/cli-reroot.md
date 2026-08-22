@@ -7,7 +7,7 @@
 > everything under it no longer exist. Kept as the record of how the top-level
 > `vekna` command was freed.
 
-See [00-common.md](00-common.md) for vocabulary and architecture.
+See [`../../reborn/common.md`](../../reborn/common.md) for vocabulary and architecture.
 
 ## Goal
 

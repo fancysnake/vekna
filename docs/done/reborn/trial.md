@@ -2,7 +2,8 @@
 
 **Version:** `0.4.0` — **shipped.**
 
-See [00-common.md](00-common.md) — package layout, layering, Components.
+See [`../../reborn/common.md`](../../reborn/common.md) — package layout,
+layering, Components.
 
 A complementary release rather than a roadmap slot. Nothing a `0.3.0` ritual
 does changes: the surface is additive, and the one existing behaviour it
@@ -231,13 +232,13 @@ What it costs:
   but `rituals` is a name an author is very likely to own. Checking the built
   wheel is an acceptance item rather than an assumption.
 - **Rituals-as-modules inherits a slightly different move.**
-  [10-ritual-modules.md](10-ritual-modules.md) turns this file into a `rituals/`
+  [ritual-modules.md](ritual-modules.md) turns this file into a `rituals/`
   package; from `src/` that package is reached by the `modules` route rather
   than the walk-up — precisely the route that doc puts the ritual root's parent
   on `sys.path` for. Nothing there is invalidated; one sentence in it is.
 - **The stray `rituals/` at the repo root goes.** Untracked, holding nothing but
   a `__pycache__` from an earlier split experiment, and under
-  `10-ritual-modules.md` a directory holding both `rituals.py` and `rituals/`
+  `ritual-modules.md` a directory holding both `rituals.py` and `rituals/`
   becomes an error naming both.
 
 Keep the move a pure rename in its own commit — git's rename detection is what
@@ -281,7 +282,8 @@ loads an entry-point plugin before pytest-cov starts measuring, so a top-level
 
 **`vekna.trial` imports the lexicon's internals**, `Grimoire` and `run_cast`
 among them, and gets a contract that says so — the reasoning is in
-[`../architecture.md`](../architecture.md). If a third consumer appears, that is
+[`../../architecture.md`](../../architecture.md). If a third consumer appears,
+that is
 when the second public door reopens.
 
 **Both new sources are measured**: `src/vekna/trial/` and `src/rituals.py`
@@ -294,7 +296,7 @@ threshold that quietly excludes the file the release is about.
 ## Out of scope
 
 - **Replay.** Driving a ritual from a recorded journal is
-  [`../hand/05-replay.md`](../hand/05-replay.md) and needs the daemon's journal
+  [`../../hand/replay.md`](../../hand/replay.md) and needs the daemon's journal
   first. A trial scripts answers; a replay reads them back. Different feature,
   same shaped assertion at the end.
 - **Generic interception by medium name.** An author's own medium gets its own
