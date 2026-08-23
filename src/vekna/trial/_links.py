@@ -1,9 +1,7 @@
-import contextlib
-from collections.abc import Callable, Iterator, Sequence
-from contextvars import ContextVar
-from typing import TypeVar
+from collections.abc import Callable, Sequence
 
 from pydantic import BaseModel
+from typing_extensions import override
 
 from vekna.lexicon._pacts import (
     AskFn,
@@ -23,10 +21,8 @@ from ._pacts import Answer, Asked, CodingAnswer, ScriptProtocol, TrialScriptErro
 _YES = "yes"
 _NO = "no"
 
-_DoubleT = TypeVar("_DoubleT")
 
-
-class CodingDouble:
+class CodingDouble(CodingFocusProtocol):
     def __init__(self, script: ScriptProtocol[CodingAnswer]) -> None:
         self._script = script
         self.calls: list[CodingCall] = []
@@ -62,10 +58,11 @@ class CodingDouble:
     # What a real focus does with a thread: a call that resumes stays on its
     # session, and one that does not is handed a new id. `s1`, `s2` by arrival —
     # which is what makes `calls[1].resume == "s1"` an assertion worth writing.
-    async def answer(
+    @override
+    async def run(
         self,
-        *,
         call: CodingCall,
+        *,
         on_delta: Callable[[str], None],
         gate: GateFn | None,
         ask: AskFn,
@@ -84,7 +81,7 @@ class CodingDouble:
         return FocusReply(text=scripted.text, session_id=session_id)
 
 
-class ShellDouble:
+class ShellDouble(ShellFocusProtocol):
     def __init__(self, script: ScriptProtocol[ShellReply]) -> None:
         self._script = script
         self.calls: list[ShellCall] = []
@@ -107,7 +104,8 @@ class ShellDouble:
 
     # The lines go out the way bash's do, so a ritual that streams and a
     # renderer that reads deltas both behave as they will in a real cast.
-    def answer(
+    @override
+    async def run(
         self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
         self.calls.append(call)
@@ -161,50 +159,3 @@ class DecideDouble(Channel):
             return answer
         msg = f"{answer!r} is not one of the offered answers: {list(allowed)}"
         raise TrialScriptError(msg)
-
-
-# A Focus is static — the protocol says so, and a real one carries no per-call
-# state — so the doubles it delegates to are reached the way the engine reaches
-# the running rite.
-_coding: ContextVar[CodingDouble | None] = ContextVar(
-    "vekna_trial_coding", default=None
-)
-_shell: ContextVar[ShellDouble | None] = ContextVar("vekna_trial_shell", default=None)
-
-
-def _reached(name: str, double: _DoubleT | None) -> _DoubleT:
-    if double is None:
-        msg = f"the {name} double is only reachable inside a Trial"
-        raise TrialScriptError(msg)
-    return double
-
-
-class TrialCodingFocus(CodingFocusProtocol):
-    @staticmethod
-    async def run(
-        call: CodingCall,
-        *,
-        on_delta: Callable[[str], None],
-        gate: GateFn | None,
-        ask: AskFn,
-    ) -> FocusReply:
-        double = _reached("coding", _coding.get())
-        return await double.answer(call=call, on_delta=on_delta, gate=gate, ask=ask)
-
-
-class TrialShellFocus(ShellFocusProtocol):
-    @staticmethod
-    async def run(
-        call: ShellCall, *, on_line: Callable[[str], None] | None
-    ) -> ShellReply:
-        return _reached("shell", _shell.get()).answer(call, on_line=on_line)
-
-
-@contextlib.contextmanager
-def doubles_bound(*, coding: CodingDouble, shell: ShellDouble) -> Iterator[None]:
-    tokens = (_coding.set(coding), _shell.set(shell))
-    try:
-        yield
-    finally:
-        _coding.reset(tokens[0])
-        _shell.reset(tokens[1])

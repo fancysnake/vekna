@@ -7,4 +7,4 @@ from ._links import ClaudeCodingFocus
 # imports another folio, and the lexicon is where the two agree on both the
 # medium's name and the protocol a Focus for it must satisfy.
 def register() -> None:
-    CODING_FOCUS.register(ClaudeCodingFocus)
+    CODING_FOCUS.register(ClaudeCodingFocus())

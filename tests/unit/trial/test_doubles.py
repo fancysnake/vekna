@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from vekna.lexicon._pacts import AskFn, CodingCall, FocusReply, GateFn, ShellCall
 from vekna.trial import CodingDouble, DecideDouble, ShellDouble, TrialScriptError
-from vekna.trial._links import TrialShellFocus
 from vekna.trial._mills import Script
 
 
@@ -55,7 +54,7 @@ def _answered(
         raise AssertionError(question, options)
 
     return asyncio.run(
-        double.answer(call=call, on_delta=on_delta, gate=gate, ask=ask or refuse)
+        double.run(call, on_delta=on_delta, gate=gate, ask=ask or refuse)
     )
 
 
@@ -172,7 +171,9 @@ class TestShellDouble:
         double = _shell()
         double.replies(when="mise run lint:py", exit_code=1, stdout="E501")
 
-        reply = double.answer(ShellCall(command="mise run lint:py"), on_line=None)
+        reply = asyncio.run(
+            double.run(ShellCall(command="mise run lint:py"), on_line=None)
+        )
 
         assert (reply.exit_code, reply.stdout) == (1, "E501")
         assert double.commands == ["mise run lint:py"]
@@ -183,7 +184,7 @@ class TestShellDouble:
         double.replies(stdout="first\nsecond\n", stderr="oops\n")
         lines: list[str] = []
 
-        double.answer(ShellCall(command="anything"), on_line=lines.append)
+        asyncio.run(double.run(ShellCall(command="anything"), on_line=lines.append))
 
         assert lines == ["first", "second", "oops"]
 
@@ -192,16 +193,9 @@ class TestShellDouble:
         double = _shell()
         double.replies(stdout="quiet\n")
 
-        reply = double.answer(ShellCall(command="anything"), on_line=None)
+        reply = asyncio.run(double.run(ShellCall(command="anything"), on_line=None))
 
         assert reply.stdout == "quiet\n"
-
-
-class TestOutsideATrial:
-    @staticmethod
-    def test_a_focus_reached_with_no_trial_bound_says_so():
-        with pytest.raises(TrialScriptError, match="only reachable inside a Trial"):
-            asyncio.run(TrialShellFocus.run(ShellCall(command="ls"), on_line=None))
 
 
 class TestDecideDouble:

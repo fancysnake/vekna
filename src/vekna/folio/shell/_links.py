@@ -3,6 +3,7 @@ import codecs
 from collections.abc import Callable
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
+from typing_extensions import override
 
 from vekna.lexicon import (
     SHELL_FOCUS,
@@ -103,9 +104,9 @@ async def run_bash(
 # monkeypatching `run_bash` was the only way in before — and it costs the folio
 # one indirection.
 class BashFocus(ShellFocusProtocol):
-    @staticmethod
+    @override
     async def run(
-        call: ShellCall, *, on_line: Callable[[str], None] | None
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
         stdout, stderr, exit_code = await run_bash(
             call.command, cwd=call.cwd, on_line=on_line
@@ -117,7 +118,7 @@ class BashFocus(ShellFocusProtocol):
 # nothing here is business logic — it is the I/O call plus the shape it returns.
 # A mills/inits pair injecting a run_bash that will never have a second
 # implementation would be ceremony around a wrapper.
-# `default=BashFocus`, so a cast that loaded no folios still runs bash: the
+# `default=BashFocus()`, so a cast that loaded no folios still runs bash: the
 # medium is importable on its own and answers on its own.
 @medium
 async def shell(
@@ -129,7 +130,7 @@ async def shell(
     if (prior := replayed()) is not None:
         result = _recorded(prior)
     else:
-        focus = SHELL_FOCUS.resolve(default=BashFocus)
+        focus = SHELL_FOCUS.resolve(default=BashFocus())
         reply = await focus.run(
             ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
         )

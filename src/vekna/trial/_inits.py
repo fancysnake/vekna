@@ -16,14 +16,7 @@ from vekna.lexicon._mills.engine import (
 )
 from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
 
-from ._links import (
-    CodingDouble,
-    DecideDouble,
-    ShellDouble,
-    TrialCodingFocus,
-    TrialShellFocus,
-    doubles_bound,
-)
+from ._links import CodingDouble, DecideDouble, ShellDouble
 from ._mills import Recorder, Script
 from ._pacts import TrialError
 
@@ -61,11 +54,8 @@ class Trial:
         self._active = False
 
     def __enter__(self) -> Self:
-        self._installed.enter_context(CODING_FOCUS.scope(TrialCodingFocus))
-        self._installed.enter_context(SHELL_FOCUS.scope(TrialShellFocus))
-        self._installed.enter_context(
-            doubles_bound(coding=self.coding, shell=self.shell)
-        )
+        self._installed.enter_context(CODING_FOCUS.scope(self.coding))
+        self._installed.enter_context(SHELL_FOCUS.scope(self.shell))
         self._active = True
         return self
 

@@ -11,6 +11,17 @@ when.
 
 ## [Unreleased] - ???
 
+### Changed
+
+- **A Focus is an instance, and may carry state.** `CodingFocusProtocol.run` and
+  `ShellFocusProtocol.run` were `@staticmethod`, which made a stateful Focus
+  inexpressible — a class implementing the protocol must declare it as a base,
+  and a static base rejects an instance-method override. Both take `self` now:
+  install `BashFocus()` rather than `BashFocus`, and a Focus of your own is
+  registered as an instance. `Trial`'s doubles are the foci themselves, so
+  `CodingDouble.answer` and `ShellDouble.answer` are `run`, and the shell one is
+  a coroutine like the protocol says.
+
 ## [0.6.1] - 2026-08-23
 
 ### Fixed
