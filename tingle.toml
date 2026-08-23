@@ -18,34 +18,19 @@ policy = "sum"
 # Formatting
 
 [[metrics]]
-name = "fmt-comment"
-type = "regex_count"
-group = "formatting"
-pattern = '#\s*fmt'
-description = "`# fmt` comments that switch off the formatter."
+base = "tingle.builtins.black.fmt_comment"
 
 [[metrics]]
-name = "taplo-comment"
-type = "regex_count"
-group = "formatting"
-pattern = '#\s*taplo:'
-description = "`# taplo:` comments that switch off TOML formatting."
+base = "tingle.builtins.taplo.ignore_comment"
 
 # Linting
 
 [[metrics]]
-name = "codespell-comment"
-type = "regex_count"
+base = "tingle.builtins.codespell.ignore_comment"
 group = "linting"
-pattern = '#\s*codespell:ignore'
-description = "`# codespell:ignore` comments that skip the spellchecker."
 
 [[metrics]]
-name = "noqa-comment"
-type = "regex_count"
-group = "linting"
-pattern = '#\s*noqa:'
-description = "`# noqa:` comments that silence a ruff rule on one line."
+base = "tingle.builtins.ruff.noqa_comment"
 
 [[metrics]]
 name = "ruff-comment"
@@ -54,34 +39,17 @@ group = "linting"
 pattern = '#\s*ruff:'
 
 [[metrics]]
-name = "ruff-ignores"
-type = "toml_list_length"
-group = "linting"
-key = "tool.ruff.lint.ignore"
-description = "Ruff lint rules disabled project-wide."
+base = "tingle.builtins.ruff.lint_ignores"
 
 [[metrics]]
-name = "ruff-per-file-ignores"
-type = "toml_list_length"
-group = "linting"
-key = "tool.ruff.lint.per-file-ignores"
-description = "Ruff lint rules disabled for specific files."
+base = "tingle.builtins.ruff.per_file_ignores"
 
 [[metrics]]
-name = "pylint-comment"
-type = "regex_count"
-group = "linting"
-pattern = '#\s*pylint:'
-description = "`# pylint:` comments that silence a check inline."
+base = "tingle.builtins.pylint.disable_comment"
 
 [[metrics]]
+base = "tingle.builtins.pylint.rcfile_disables"
 name = "pylint-disables"
-type = "ini_list_length"
-group = "linting"
-file = ".pylintrc"
-section = "MESSAGES CONTROL"
-option = "disable"
-description = "Pylint checks disabled project-wide."
 
 # testing
 
@@ -120,26 +88,15 @@ ranges = ["python-tests"]
 # typing
 
 [[metrics]]
-name = "type-ignores"
-type = "regex_count"
-group = "typing"
-pattern = '#\s*type:\s*ignore'
+base = "tingle.builtins.mypy.type_ignore_comment"
 ranges = ["python-src"]
-description = "`# type: ignore` comments that silence the type checker."
 
 [[metrics]]
-name = "mypy-overrides"
-type = "toml_table_array"
-group = "typing"
-key = "tool.mypy.overrides"
-label = "module"
-description = "Modules given relaxed mypy strictness."
+base = "tingle.builtins.mypy.overrides"
 
 [[metrics]]
+base = "tingle.builtins.python.any_used"
 name = "type-any"
-type = "symbol_uses"
-group = "typing"
-symbol = 'Any'
 ranges = ["python-src"]
 
 [[metrics]]
@@ -166,8 +123,7 @@ ranges = ["config"]
 # Refactoring
 
 [[metrics]]
-name = "todo-comments"
-type = "regex_count"
+base = "tingle.builtins.python.todo_comments"
 group = "refactoring"
 pattern = '#\s*(TODO|FIXME|XXX|HACK)'
 ranges = ["python-src"]
