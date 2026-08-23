@@ -380,7 +380,7 @@ ritual:
 
 ## Testing a ritual
 
-`pip install vekna[trial]` and a `trial` fixture arrives — no conftest, no
+`pip install 'vekna[trial]'` and a `trial` fixture arrives — no conftest, no
 plugin line. It doubles each medium where it reaches the outside and answers
 from a script. **The medium's own body still runs**: session threading, `resume`
 resolution, output-schema validation and exit-code handling are exercised, so a
@@ -497,13 +497,13 @@ all.
 | `RitualDefinitionError` | `@ritual`/`@step` signature wrong: not exactly one parameter, or the annotation is not a pydantic model (or a union of them). Also a bad `.vekna.toml`, or two sources claiming one ritual name. |
 | `StepBoundaryError` | a step received a payload of the wrong type — the `goto` and the target's annotation disagree |
 | `RitualBoundaryError` | `goto`/`done` handed a non-model, or components that are not the declared model |
-| `MediumBoundaryError` | a medium called with an argument it does not take |
+| `MediumBoundaryError` | a medium called with an argument it does not take — including `decide(options=[])`, an empty option list |
 | `StepBudgetExceededError` | `max_steps` exhausted — the ritual is not settling |
 | `FocusMissingError` | no backend registered (`pip install claude-agent-sdk` for `coding`) |
 | `CodingOptsError` | `CodingOpts` given an unknown field — did you mean `session`/`key` on `coding()`? |
 | `CodingSessionError` | `session` is not `Session.NEW`/`Session.CONTINUE`, or `key` is empty |
 | `CodingOutputError` | the agent's reply did not validate against `output=` |
-| `StandalonePromptError` | three invalid answers to a `decide` prompt |
+| `StandalonePromptError` | three invalid answers to a `decide` prompt, or stdin closed before one was given |
 
 All descend from `RitualError`.
 
@@ -511,9 +511,9 @@ All descend from `RitualError`.
 
 ## Rituals, whole
 
-Do not work from a snippet — **read `rituals.py` at the repository root.** It is
-vekna's own, inside mypy's scope, and `mise run fullcheck` keeps it correct.
-Four rituals, four lessons:
+Do not work from a snippet — **read the rituals in `src/rituals/`** (the source
+`.vekna.toml` configures). They are vekna's own, inside mypy's scope, and `mise
+run fullcheck` keeps them correct. Four rituals, four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
   a business budget counted down until it routes to `done`.

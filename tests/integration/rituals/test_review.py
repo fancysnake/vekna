@@ -31,7 +31,7 @@ class TestCollect:
     def test_the_diff_is_read_against_the_base_and_pinned_by_content(
         trial: Trial,
     ) -> None:
-        trial.shell.replies(when="git diff main...HEAD", stdout=_DIFF)
+        trial.shell.replies(when="git diff --end-of-options main...HEAD", stdout=_DIFF)
 
         transition = trial.walk(collect, ReviewRequest(base="main"))
 
@@ -41,12 +41,26 @@ class TestCollect:
 
     @staticmethod
     def test_only_narrows_the_diff_to_one_file(trial: Trial) -> None:
-        trial.shell.replies(when="git diff main...HEAD -- *", stdout=_DIFF)
+        trial.shell.replies(
+            when="git diff --end-of-options main...HEAD -- *", stdout=_DIFF
+        )
         here = Path(__file__)
 
         trial.walk(collect, ReviewRequest(base="main", only=here))
 
-        assert trial.shell.commands == [f"git diff main...HEAD -- {here}"]
+        assert trial.shell.commands == [
+            f"git diff --end-of-options main...HEAD -- {here}"
+        ]
+
+    @staticmethod
+    def test_a_base_with_shell_metacharacters_is_quoted_not_run(trial: Trial) -> None:
+        trial.shell.replies(when="git diff*", stdout=_DIFF)
+
+        trial.walk(collect, ReviewRequest(base="main; touch pwned"))
+
+        assert trial.shell.commands == [
+            "git diff --end-of-options 'main; touch pwned'...HEAD"
+        ]
 
     # Nothing changed is an answer, and not one worth paying an agent for.
     @staticmethod
@@ -63,7 +77,9 @@ class TestCollect:
         trial: Trial,
     ) -> None:
         trial.shell.replies(
-            when="git diff nope...HEAD", exit_code=128, stderr="bad revision 'nope'\n"
+            when="git diff --end-of-options nope...HEAD",
+            exit_code=128,
+            stderr="bad revision 'nope'\n",
         )
 
         with pytest.raises(RitualError, match="git diff against 'nope' failed"):
@@ -108,7 +124,7 @@ class TestJudge:
 class TestReviewWhole:
     @staticmethod
     def test_a_diff_with_findings_comes_back_as_a_review(trial: Trial) -> None:
-        trial.shell.replies(when="git diff main...HEAD", stdout=_DIFF)
+        trial.shell.replies(when="git diff --end-of-options main...HEAD", stdout=_DIFF)
         trial.coding.replies(Judgement(verdict="fix", findings=[_FINDING]))
 
         result = trial.cast(review, ReviewRequest(base="main"))
