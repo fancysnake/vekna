@@ -154,8 +154,10 @@ from vekna.folio.shell import ShellResult, shell
 
 result = await shell("mise run lint:py")
 
-span = shlex.quote(f"{base}...HEAD")
-result = await shell(f"git diff {span}", stream=False, cwd="./svc")
+ref = shlex.quote(base)
+result = await shell(
+    f"git diff --end-of-options {ref}...HEAD", stream=False, cwd="./svc"
+)
 ```
 
 `ShellResult` is `stdout: str`, `stderr: str`, `exit_code: int`. Runs under
@@ -165,10 +167,13 @@ result = await shell(f"git diff {span}", stream=False, cwd="./svc")
 
 **`bash -c` means every interpolated component is shell syntax until you quote
 it.** `shlex.quote` anything that came from a flag. `GitRef` refuses an empty
-ref and nothing more; `Url` can still hold a semicolon.
+ref and nothing more; `Url` can still hold a semicolon. Quoting shuts the
+shell's door, not the command's own: a ref reading `--output=/tmp/x` is still
+an option to `git`, so pass `--end-of-options` where the tool offers it.
 
 **Reach for `shell` before an agent whenever no judgement is needed.** `gh issue
-view` returns JSON, reads private repos, and costs nothing.
+view "$issue" --json title,body,state,author,url` reads private repos, returns
+something you can parse, and costs nothing.
 
 ### `coding` — an agent
 
