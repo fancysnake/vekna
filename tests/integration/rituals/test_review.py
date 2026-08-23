@@ -1,4 +1,5 @@
 import hashlib
+import shlex
 from pathlib import Path
 
 import pytest
@@ -40,16 +41,20 @@ class TestCollect:
         )
 
     @staticmethod
-    def test_only_narrows_the_diff_to_one_file(trial: Trial) -> None:
+    def test_only_narrows_the_diff_to_one_file_and_quotes_its_path(
+        trial: Trial, tmp_path: Path
+    ) -> None:
         trial.shell.replies(
             when="git diff --end-of-options main...HEAD -- *", stdout=_DIFF
         )
-        here = Path(__file__)
+        # A path is as much shell syntax as a ref is.
+        one = tmp_path / "a b; touch pwned.py"
+        one.touch()
 
-        trial.walk(collect, ReviewRequest(base="main", only=here))
+        trial.walk(collect, ReviewRequest(base="main", only=one))
 
         assert trial.shell.commands == [
-            f"git diff --end-of-options main...HEAD -- {here}"
+            f"git diff --end-of-options main...HEAD -- {shlex.quote(str(one))}"
         ]
 
     @staticmethod
