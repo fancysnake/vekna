@@ -1,6 +1,7 @@
 # review — read the diff this branch adds, and say what is wrong with it.
 
 import hashlib
+import shlex
 from typing import Literal
 
 from pydantic import BaseModel
@@ -81,10 +82,17 @@ def review(components: ReviewRequest) -> Transition:
 
 @step
 async def collect(request: ReviewRequest) -> Transition:
-    scope = f" -- {request.only}" if request.only is not None else ""
+    scope = f" -- {shlex.quote(str(request.only))}" if request.only is not None else ""
+    # bash -c makes every component shell syntax and git reads a leading dash as
+    # an option, so `base` could inject a command or slip a `--output=` past the
+    # range. shlex.quote shuts the first door; --end-of-options the second, by
+    # forcing what follows to be read as a revision.
     # stream=False: a diff is bulk, not progress. It reaches the agent in the
     # next step either way.
-    result = await shell(f"git diff {request.base}...HEAD{scope}", stream=False)
+    result = await shell(
+        f"git diff --end-of-options {shlex.quote(request.base)}...HEAD{scope}",
+        stream=False,
+    )
     if result.exit_code:
         msg = f"git diff against {request.base!r} failed: {result.stderr.strip()}"
         raise RitualError(msg)

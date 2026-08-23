@@ -1,5 +1,8 @@
 import asyncio
 import io
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -20,6 +23,8 @@ from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteStreamed, Ritual
 
 _FAILURE_EXIT = 3
+# `read` meeting EOF straight away.
+_EOF_EXIT = 1
 # Comfortably past the 1 MiB readline limit that used to crash the cast here.
 _LONG_LINE = 2_000_000
 # The ↳ that opens a rite and the ✓ that closes it, both quoting the command.
@@ -53,6 +58,11 @@ async def run_quiet_partial(_state: State) -> Transition:
 
 
 @step
+async def run_reads_stdin(_state: State) -> Transition:
+    return done(await shell('read -r line && echo "got $line"'))
+
+
+@step
 async def run_long_line(_state: State) -> Transition:
     return done(
         await shell(f"python3 -c \"print('x' * {_LONG_LINE}); print('after')\"")
@@ -78,6 +88,7 @@ quiet_partial = entry(name="quiet_partial", target=run_quiet_partial, payload=St
 long_line = entry(name="long_line", target=run_long_line, payload=State())
 partial_line = entry(name="partial_line", target=run_partial_line, payload=State())
 multibyte = entry(name="multibyte", target=run_multibyte, payload=State())
+reads_stdin = entry(name="reads_stdin", target=run_reads_stdin, payload=State())
 
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
@@ -223,6 +234,39 @@ class _RecordingFocus(ShellFocusProtocol):
         if on_line is not None:
             on_line("intercepted")
         return ShellReply(stdout="from the focus", stderr="", exit_code=0)
+
+
+# Swapping fd 0 for real is the only honest way to prove a command cannot reach
+# it — mocking `create_subprocess_exec` would assert the implementation back at
+# itself. It is process-global state, so every fd is restored and closed even
+# when the cast raises, which is exactly what a regression here does.
+@contextmanager
+def _typed_at_stdin(text: bytes) -> Iterator[int]:
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, text)
+        os.close(write_fd)
+        stdin_fd = os.dup(0)
+        try:
+            os.dup2(read_fd, 0)
+            yield read_fd
+        finally:
+            os.dup2(stdin_fd, 0)
+            os.close(stdin_fd)
+    finally:
+        os.close(read_fd)
+
+
+class TestShellStdin:
+    # The bug this holds shut: a command inheriting the terminal reads the line
+    # the operator typed at a prompt beside it, and the answer disappears.
+    @staticmethod
+    def test_a_command_cannot_read_what_the_operator_typed():
+        with _typed_at_stdin(b"1\n") as read_fd:
+            result = _cast(reads_stdin)
+            unread = os.read(read_fd, 2)
+
+        assert (result.exit_code, result.stdout, unread) == (_EOF_EXIT, "", b"1\n")
 
 
 class TestShellFocus:

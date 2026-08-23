@@ -251,6 +251,17 @@ class TestDecideDouble:
         assert answer == "the port is 9000"
 
     @staticmethod
+    def test_suggested_options_do_not_refuse_an_answer_past_them():
+        double = _decide()
+        double.answers(answer="rewrite the parser")
+
+        answer = asyncio.run(
+            double.decide(prompt="what now?", options=["fix", "stop"], free=True)
+        )
+
+        assert answer == "rewrite the parser"
+
+    @staticmethod
     def test_what_was_offered_is_recorded_as_it_was_offered():
         double = _decide()
         double.answers(answer="fix")

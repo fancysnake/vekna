@@ -245,6 +245,24 @@ class TestCodingMedium:
         assert focus.answers == ["integration"]
 
     @staticmethod
+    def test_agent_options_are_only_suggestions():
+        focus = FakeFocus(
+            questions=(("unit or integration?", ("unit", "integration")),)
+        )
+        CODING_FOCUS.register(focus)
+
+        @step
+        async def work(_: Answer) -> Transition:
+            await coding("write the test")
+            return done(None)
+
+        r = entry(target=work, payload=Answer(port=1))
+
+        _cast(r, stdin="both, in that order\n")
+
+        assert focus.answers == ["both, in that order"]
+
+    @staticmethod
     def test_agent_question_without_options_asks_for_free_text():
         focus = FakeFocus(questions=(("which fixture?", None),))
         CODING_FOCUS.register(focus)

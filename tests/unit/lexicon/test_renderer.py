@@ -208,6 +208,86 @@ class TestDecide:
         with pytest.raises(StandalonePromptError):
             asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
 
+    # "²" is a digit to `str.isdigit` and not a number to `int`, which used to
+    # raise where this prompt has an answer for anything else typed at it.
+    @staticmethod
+    def test_a_digit_that_is_not_a_number_is_an_invalid_choice():
+        renderer, out = _renderer("²\na\n")
+
+        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+
+        assert (choice, "invalid choice" in out.getvalue()) == ("a", True)
+
+
+class TestDecideSuggested:
+    @staticmethod
+    def test_answers_past_the_options():
+        renderer, _ = _renderer("neither, do c\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "neither, do c"
+
+    @staticmethod
+    def test_a_number_still_picks_its_option():
+        renderer, _ = _renderer("2\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "b"
+
+    @staticmethod
+    def test_says_the_options_are_suggestions():
+        renderer, out = _renderer("2\n")
+
+        asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+
+        assert "or answer in your own words" in out.getvalue()
+
+    @staticmethod
+    def test_a_digit_that_is_not_a_number_stands_as_the_answer():
+        renderer, _ = _renderer("²\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert answer == "²"
+
+    # A suggested prompt cannot be answered wrongly, so a bare return is not a
+    # retry — it is an empty answer, and the cast moves on with it.
+    @staticmethod
+    def test_an_empty_answer_stands():
+        renderer, _ = _renderer("\n")
+
+        answer = asyncio.run(
+            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+        )
+
+        assert not answer
+
+
+class TestPromptEndOfInput:
+    # Closed input is the channel going away, not a wrong answer: every prompt
+    # says so the same way rather than one claiming an invalid choice.
+    @staticmethod
+    def test_a_suggested_prompt_says_the_input_ended():
+        renderer, _ = _renderer("")
+
+        with pytest.raises(StandalonePromptError, match="input ended"):
+            asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+
+    @staticmethod
+    def test_a_free_text_prompt_says_the_input_ended():
+        renderer, _ = _renderer("")
+
+        with pytest.raises(StandalonePromptError, match="input ended"):
+            asyncio.run(renderer.decide(prompt="name?", free=True))
+
 
 class TestDecideConfirm:
     @staticmethod

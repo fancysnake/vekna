@@ -15,6 +15,7 @@ from vekna.lexicon._pacts import (
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
+    allowed_answers,
 )
 
 from ._pacts import Answer, Asked, CodingAnswer, ScriptProtocol, TrialScriptError
@@ -150,12 +151,13 @@ class DecideDouble(Channel):
     # The real channel returns a member of what it offered or raises. A test
     # scripting "repair" for a step offering ["fix", "stop"] is testing a ritual
     # that does not exist, so it is refused here rather than three steps later.
+    # `allowed_answers` is that rule, read from the same place the medium and
+    # the journal read it — under `free` it allows anything, since the options
+    # are suggestions an agent's `ask_human` expects to be answered past.
     @staticmethod
     def _offered(*, answer: str, options: Sequence[str] | None, free: bool) -> str:
-        if free:
-            return answer
-        allowed = (_YES, _NO) if options is None else tuple(options)
-        if answer in allowed:
+        allowed = allowed_answers(options=options, free=free)
+        if allowed is None or answer in allowed:
             return answer
         msg = f"{answer!r} is not one of the offered answers: {list(allowed)}"
         raise TrialScriptError(msg)

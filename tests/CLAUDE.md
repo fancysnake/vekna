@@ -49,7 +49,9 @@ unit: the mediums are `links`.
   `trial.coding.prompts`, `trial.coding.gated`, `trial.decide.prompts`. That is
   the "check all mock calls" rule; there is no `assert_called_with` here.
 - An unscripted call raises `TrialScriptError` and stops the cast — there is no
-  default answer. A `decide` answer outside the offered options raises too.
+  default answer. A `decide` answer outside the offered options raises too —
+  unless the options came with `free`, as an agent's `ask_human` always does,
+  where they are suggestions and any answer stands.
   Inside an `asyncio.TaskGroup` — `merge_ready.gates` runs its two gates in one
   — it arrives wrapped, so a cast that reaches a grouped step needs
   `pytest.raises(BaseExceptionGroup)` and an assertion on `.exceptions[0]`.

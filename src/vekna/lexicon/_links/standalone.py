@@ -36,6 +36,24 @@ def _one_line(text: str) -> str:
     return "".join(c for c in text if c.isprintable())[:_NOTIFY_BODY_MAX]
 
 
+def _menu(prompt: str, options: Sequence[str]) -> str:
+    lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
+    return "\n".join(lines) + "\n"
+
+
+# `isdigit` is wider than `int` accepts — "²" is a digit and `int` raises on it,
+# as it does on a digit string past CPython's conversion limit. Neither is a menu
+# number, and raising here would crash a prompt that has an answer for anything
+# else typed at it.
+def _picked(answer: str, options: Sequence[str]) -> str | None:
+    if answer in options:
+        return answer
+    if not answer.isdecimal() or len(answer) > len(str(len(options))):
+        return None
+    index = int(answer)
+    return options[index - 1] if 1 <= index <= len(options) else None
+
+
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
@@ -94,8 +112,15 @@ class StandaloneRenderer:
             return
         self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
+    # EOF is the channel closing, not a bad answer: `readline` returns "" only
+    # there, an empty line being "\n". Raising here rather than in each prompt
+    # keeps confirm, choose and free text from each inventing their own reading
+    # of exhausted input.
     async def _readline(self) -> str:
-        return (await asyncio.to_thread(self._inp.readline)).strip()
+        if not (line := await asyncio.to_thread(self._inp.readline)):
+            msg = "input ended before the question was answered"
+            raise StandalonePromptError(msg)
+        return line.strip()
 
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:
@@ -183,23 +208,32 @@ class StandaloneRenderer:
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
         self.notify("decide", prompt)
+        if options:
+            if free:
+                return await self._suggest(prompt, options)
+            return await self._choose(prompt, options)
         if free:
             return await self._free_text(prompt)
-        if options is None:
-            return await self._confirm(prompt)
-        return await self._choose(prompt, options)
+        return await self._confirm(prompt)
 
     async def _choose(self, prompt: str, options: Sequence[str]) -> str:
-        lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
-        self._say("\n".join(lines) + "\n")
+        self._say(_menu(prompt, options))
         for _ in range(_MAX_PROMPT_ATTEMPTS):
-            if (answer := await self._readline()) in options:
-                return answer
-            if answer.isdigit() and 1 <= int(answer) <= len(options):
-                return options[int(answer) - 1]
+            if (picked := _picked(await self._readline(), options)) is not None:
+                return picked
             self._say("invalid choice; try again\n")
         msg = "no valid choice provided"
         raise StandalonePromptError(msg)
+
+    # The options are the agent's guesses at the answer, so a number or an exact
+    # option still answers itself and anything else answers as typed. Nothing
+    # here can be answered wrongly, so there is no retry, no attempt cap and no
+    # error — a bare return answers with nothing, which is itself an answer.
+    async def _suggest(self, prompt: str, options: Sequence[str]) -> str:
+        self._say(_menu(prompt, options) + "  or answer in your own words\n")
+        answer = await self._readline()
+        picked = _picked(answer, options)
+        return answer if picked is None else picked
 
     async def _confirm(self, prompt: str) -> str:
         self._say(f"{prompt} [y/n] ")
