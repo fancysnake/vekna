@@ -24,19 +24,34 @@ Returns the exit code, stdout and stderr. Nothing is raised on a non-zero exit
 — a failing command is usually the thing the ritual is about, and an exception
 would make the ordinary case the exceptional one.
 
+A command runs on closed stdin. One that reads gets EOF rather than the line you
+were typing at a prompt beside it.
+
 ## `decide`
 
 Hands a choice back to you mid-cast. The cast blocks until you answer.
 
 ```python
-from vekna.lexicon import offer_prompt
+from vekna.folio.flow import decide
 
-if not await offer_prompt("Push to main?"):
+if not await decide("Push to main?"):               # -> bool
     return done(Verdict(outcome="stopped"))
+
+took = await decide("what now?", options=_TOOK)     # -> the option offered
+note = await decide("why?", free=True)              # -> str
 ```
 
+Three shapes, three return types. A bare prompt is yes or no. `options` answers
+with one of them, and options typed as a `tuple[Literal[...], ...]` come back as
+that literal, so a step can branch on the answer without re-validating a `str`.
+`free=True` takes whatever you type. Empty `options` raises
+`MediumBoundaryError`: a list that computed to nothing is a bug in the step, not
+a question.
+
 There is no default and no timeout: a `decide` is a choice the ritual author
-declared was yours, and guessing it is worse than waiting.
+declared was yours, and guessing it is worse than waiting. A cast whose stdin
+has ended stops with `input ended before the question was answered` rather than
+answering for you.
 
 ## `coding`
 

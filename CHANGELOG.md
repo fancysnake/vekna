@@ -11,29 +11,36 @@ when.
 
 ## [Unreleased] - ???
 
+## [0.6.1] - 2026-08-23
+
 ### Fixed
 
-- **An agent's `ask_human` options no longer trap the answer.** The options an
-  agent offers are its guesses at what you will say, so they are now
-  suggestions: a number or an option still answers itself, and anything else
-  answers as typed. A ritual's own `decide(options=...)` stays closed — a step
-  branching on `Literal["fix", "stop"]` still gets one of those back.
+- **An agent's `ask_human` options no longer trap the answer.** They are the
+  agent's guesses at what you will say, so they are suggestions now: a number or
+  an option answers itself, anything else answers as typed. A ritual's own
+  `decide(options=...)` stays closed — a step branching on `Literal["fix",
+  "stop"]` still gets one of those back.
 - **A question meeting closed input says so.** A cast whose stdin had ended
   answered a free-text question with an empty string and turned a suggested one
-  into an invalid choice, though nothing had been typed either way. Every prompt
-  now stops with `input ended before the question was answered`.
-- **A question with no answers in it stops the step.** `decide(options=[])` —
-  a list that computed to nothing — fell through to a yes/no prompt live and was
-  then refused off the journal on resume; it now raises `MediumBoundaryError` at
-  the medium, before either. An answer that is a digit without being a number —
-  `²`, or one longer than Python will convert — no longer crashes a prompt
-  either: it is an invalid choice, or, at a question offering suggestions, the
-  answer as typed.
+  into an invalid choice, with nothing typed either way. Every prompt now stops
+  with `input ended before the question was answered`.
+- **A question with no answer in it stops the step.** `decide(options=[])` — a
+  list that computed to nothing — fell through to a yes/no prompt live and was
+  then refused off the journal on resume. It raises `MediumBoundaryError` at the
+  medium now, before either.
+- **A digit that is not a number no longer crashes a prompt.** `²`, or a digit
+  string longer than Python will convert, is an invalid choice — or, at a
+  question offering suggestions, the answer as typed.
 - **A command can no longer eat the answer you typed.** `shell()` spawned bash
-  with the cast's own stdin, so a command running beside a question — a step
+  on the cast's own stdin, so a command running beside a question — a step
   holding two mediums at once — read the line meant for the prompt, which then
   rejected an answer nobody saw it take. Commands get `/dev/null` now; one that
   wants input meets EOF rather than a terminal it was never watching.
+
+### Changed
+
+- `trial`'s decide double takes any answer to a question offering suggestions,
+  the same rule the medium and the journal read.
 
 ## [0.6.0] - 2026-08-21
 
@@ -607,7 +614,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/fancysnake/vekna/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fancysnake/vekna/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fancysnake/vekna/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fancysnake/vekna/compare/v0.3.0...v0.4.0
