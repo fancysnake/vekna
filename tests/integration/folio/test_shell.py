@@ -1,7 +1,7 @@
 import asyncio
 import io
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import pytest
@@ -224,11 +224,13 @@ class TestShellStreaming:
 
 
 class _RecordingFocus(ShellFocusProtocol):
-    def __init__(self):
+    def __init__(self) -> None:
         self.intercepted: list[ShellCall] = []
 
     @override
-    async def run(self, call, *, on_line):
+    async def run(
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
+    ) -> ShellReply:
         self.intercepted.append(call)
         if on_line is not None:
             on_line("intercepted")

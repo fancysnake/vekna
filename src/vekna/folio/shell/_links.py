@@ -114,11 +114,18 @@ class BashFocus(ShellFocusProtocol):
         return ShellReply(stdout=stdout, stderr=stderr, exit_code=exit_code)
 
 
+# One instance, the way a registered Focus is one: it lives as long as its
+# install, so a Focus that grew state would keep it. `resolve`'s `default=` is
+# eager besides — building one per call pays for it even when a focus is
+# installed and the default is thrown away.
+_BASH = BashFocus()
+
+
 # Lives beside run_bash rather than in a _mills of its own: no branches, and
 # nothing here is business logic — it is the I/O call plus the shape it returns.
 # A mills/inits pair injecting a run_bash that will never have a second
 # implementation would be ceremony around a wrapper.
-# `default=BashFocus()`, so a cast that loaded no folios still runs bash: the
+# `default=_BASH`, so a cast that loaded no folios still runs bash: the
 # medium is importable on its own and answers on its own.
 @medium
 async def shell(
@@ -130,7 +137,7 @@ async def shell(
     if (prior := replayed()) is not None:
         result = _recorded(prior)
     else:
-        focus = SHELL_FOCUS.resolve(default=BashFocus())
+        focus = SHELL_FOCUS.resolve(default=_BASH)
         reply = await focus.run(
             ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
         )
