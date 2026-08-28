@@ -593,8 +593,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = [
-    "ANN", # flake8-annotations
+    "ANN",                    # flake8-annotations
     "S",
+    "pytest-fixture-autouse",
 ]
 "src/vekna/lexicon/_mills/_annotations.py" = ["any-type"]
 # The import is inside the fixture deliberately: pytest loads an entry-point
@@ -610,6 +611,7 @@ allow-star-arg-any = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
+
 
 # VULTURE
 
