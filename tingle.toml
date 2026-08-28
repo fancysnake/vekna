@@ -33,10 +33,13 @@ group = "linting"
 base = "tingle.builtins.ruff.noqa_comment"
 
 [[metrics]]
-name = "ruff-comment"
-type = "regex_count"
-group = "linting"
-pattern = '#\s*ruff:'
+base = "tingle.builtins.ruff.ignore_comment"
+
+[[metrics]]
+base = "tingle.builtins.ruff.suppressed_ranges"
+
+[[metrics]]
+base = "tingle.builtins.ruff.file_exemptions"
 
 [[metrics]]
 base = "tingle.builtins.ruff.lint_ignores"
@@ -54,35 +57,21 @@ name = "pylint-disables"
 # testing
 
 [[metrics]]
-name = "pragma-comment"
-type = "regex_count"
-group = "testing"
-pattern = '#\s*pragma'
+base = "tingle.builtins.coverage.pragma_comment"
 ranges = ["python-tests"]
 
-
 [[metrics]]
+base = "tingle.builtins.unittest_mock.any_used"
 name = "mock-ANY"
-type = "regex_count"
-group = "testing"
-pattern = '^(?!.*(?:\b|_)(view|form|import)\b).*\bANY\b'
-flags = ["MULTILINE"]
 ranges = ["python-tests"]
-
+ignore_lines = ['(?:\b|_)(view|form|import)\b']
 
 [[metrics]]
-name = "pytest-skip"
-type = "regex_count"
-group = "testing"
-pattern = 'mark\.skip'
+base = "tingle.builtins.pytest.skip_marks"
 ranges = ["python-tests"]
 
-
 [[metrics]]
-name = "pytest-xfail"
-type = "regex_count"
-group = "testing"
-pattern = 'mark\.xfail'
+base = "tingle.builtins.pytest.xfail_marks"
 ranges = ["python-tests"]
 
 # typing
@@ -107,17 +96,12 @@ symbol = "object"
 ranges = ["python-src"]
 
 [[metrics]]
+base = "tingle.builtins.python.cast_used"
 name = "type-cast"
-type = "symbol_uses"
-group = "typing"
-symbol = 'cast'
 ranges = ["python-src"]
 
 [[metrics]]
-name = "mypy-strictness-holes"
-type = "regex_count"
-group = "typing"
-pattern = 'disallow_\w+ = false'
+base = "tingle.builtins.mypy.strictness_holes"
 ranges = ["config"]
 
 # Refactoring
@@ -125,5 +109,4 @@ ranges = ["config"]
 [[metrics]]
 base = "tingle.builtins.python.todo_comments"
 group = "refactoring"
-pattern = '#\s*(TODO|FIXME|XXX|HACK)'
 ranges = ["python-src"]

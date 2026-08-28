@@ -31,7 +31,7 @@ includes = [
 
 [tasks.update]
 run = [
-    "mise upgrade --bump --exclude python",
+    "mise upgrade --bump --exclude python --minimum-release-age=7d",
     "mise install",
     { task = "dep:upgrade:py" },
     "pre-commit autoupdate",
