@@ -96,9 +96,28 @@ class TestRecording:
         assert record.gapped
 
     # The disk that lost the event is the disk the gap marker is written to, so
-    # both go at once. What is left must not read back as a run to resume.
+    # both can fail at once. The log must not grow over a record that has not
+    # admitted the gap: a short log is a cast to pick up, a holed one is not.
     @staticmethod
-    def test_a_gap_that_cannot_be_written_takes_the_record_with_it(tmp_path: Path):
+    def test_an_unwritable_gap_refuses_the_next_append(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        (tmp_path / "c1" / "run.part").mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        _appends_again(events)
+
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
+
+        assert not list(journal.events("c1"))
+
+    # The record is what says the run lost something, so it is the one thing
+    # that must survive the disk that lost it.
+    @staticmethod
+    def test_a_gap_that_cannot_be_written_keeps_the_record(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello())
         _no_appends(tmp_path / "c1" / "events.jsonl")
@@ -107,7 +126,54 @@ class TestRecording:
         with pytest.raises(IsADirectoryError):
             journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
 
-        assert journal.read("c1") is None
+        record = journal.read("c1")
+        assert record is not None
+        assert record.hello == _hello()
+
+    # Nothing was owed while the record could not be written, so what the disk
+    # coming back buys is the mark first and the log growing again after it.
+    @staticmethod
+    def test_a_recovered_disk_marks_the_gap_and_appends_again(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        (tmp_path / "c1" / "run.part").mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        _appends_again(events)
+        (tmp_path / "c1" / "run.part").rmdir()
+
+        journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.gapped
+        assert list(journal.events("c1")) == [
+            RiteDelta(cast_id="c1", rite_id="r2", delta="after")
+        ]
+
+    # A record nothing can read back is one no resume accepts either, so there
+    # is no gap left to mark and no reason to stop journalling the rest.
+    @staticmethod
+    def test_a_torn_record_does_not_hold_up_the_log(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        (tmp_path / "c1" / "run.part").mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        _appends_again(events)
+        (tmp_path / "c1" / "run.part").rmdir()
+        # Cut mid-character, the way a daemon killed inside a write leaves it.
+        (tmp_path / "c1" / "run.json").write_bytes(b'{"hello": {"cast_i\xff')
+
+        journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
+
+        assert list(journal.events("c1")) == [
+            RiteDelta(cast_id="c1", rite_id="r2", delta="after")
+        ]
 
     # The first event is the one with no record behind it yet, so there is
     # nothing to mark and nothing to take away.

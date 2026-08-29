@@ -9,6 +9,7 @@ _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "�
 _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
 _WAITING = "⏸"
 _MEDIUM = "↳"
+_GAP = "◌"
 _HOME = "\x1b[H\x1b[2J"
 _LIST_KEYS = "number to drill in · q to quit"
 _CAST_KEYS = "b back · q quit"
@@ -258,9 +259,16 @@ def listing(records: Sequence[RunRecord]) -> str:
         f"{record.hello.cast_id[:_ID]}  {_CAST_GLYPH[record.status]}"
         f"  {record.hello.ritual:<16}"
         f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
-        f"  {record.hello.project_root}{_carried(record.hello)}\n"
+        f"  {record.hello.project_root}{_carried(record.hello)}{_lost(record)}\n"
         for record in records
     )
+
+
+# A run the daemon could not write part of is still a run, and still resumable
+# — it picks up at the last rite that landed. What it is not is complete, and
+# the log is the only place an operator finds that out.
+def _lost(record: RunRecord) -> str:
+    return f"  {_GAP} gap" if record.gapped else ""
 
 
 # One string, painted over the top of the last one. A terminal that can only be

@@ -11,6 +11,28 @@ when.
 
 ## [Unreleased] - ???
 
+### Fixed
+
+- **A journal that cannot record a gap no longer destroys the run.** An append
+  the daemon could not make left the record unlinked when the gap mark could not
+  be written either — the cast dropped out of `vekna log` and a resume was told
+  it had never had a journal. Worse, the mark was skipped in silence whenever
+  the record could not be *read*, and the log then grew past the failure into a
+  hole no reader can see. The journal refuses to append for a cast whose record
+  has not admitted the gap, and retries the mark on every following event, so
+  `events.jsonl` is always a prefix of what the daemon saw and nothing is
+  deleted to say so.
+
+### Changed
+
+- **A run marked `gapped` is resumable again.** A gap costs the tail of the log,
+  which is what every interrupted cast loses: the resume replays the rites that
+  landed and runs live from there. Refusing it spent the healthy prefix too, to
+  avoid work the ledger re-runs anyway.
+- **`vekna log` says which runs lost part of their log**, with `◌ gap` at the end
+  of the row. It said nothing, which was the other half of a damaged run being
+  told less than the truth.
+
 ## [0.7.0] - 2026-08-29
 
 ### Changed

@@ -29,16 +29,28 @@ from vekna.wire import (
 class Journal:
     def __init__(self, root: Path) -> None:
         self._root = root
+        # The casts whose log is ahead of what their record admits. In memory
+        # because it only has to outlive the failure: a daemon that dies here
+        # leaves a log that is short, which is what a killed cast leaves too.
+        self._behind: set[str] = set()
 
     def record(self, message: CastMessage) -> None:
+        # An append that failed leaves the log short, and a short log is what
+        # every interrupted cast leaves — a resume replays what landed and runs
+        # live from there. Appending past it is the one damage that reads as
+        # nothing: a hole in the middle, over a record that says all is well.
+        # So the record admits the gap before the log grows again, and if it
+        # cannot, this raises and the daemon drops the event instead.
+        self._settle(message.cast_id)
         try:
             self._append(message)
         except OSError:
-            # Marked before the caller hears about it, because what is on disk
-            # is now a log with a hole in it and nothing in the log says so.
-            # The raise still goes on, so the daemon reports the failure rather
-            # than swallowing it here.
-            self._mark_gapped(message.cast_id)
+            self._behind.add(message.cast_id)
+            # Tried here as well as before the next event, because there may be
+            # no next event: a cast that ends on this failure still has a
+            # record, and `vekna log` still gets to be right about it.
+            with contextlib.suppress(OSError):
+                self._settle(message.cast_id)
             raise
         if isinstance(message, CastHello):
             self._write(RunRecord(hello=message))
@@ -51,23 +63,28 @@ class Journal:
         with log.open("ab") as events:
             events.write(encode_frame(message))
 
-    # Read back and written on rather than rebuilt field by field: what `read`
+    # Read back and written on rather than rebuilt field by field: what this
     # hands over is parsed fresh off the disk each time, so it is nobody else's
     # to hold, and a field added to `RunRecord` needs nothing said here.
-    # The write that would record the gap is the same kind of write that just
-    # failed, so it can fail too — and a record that survives ungapped over a
-    # log with a hole in it is worse than no record at all, because that is the
-    # one `vekna cast --continue` accepts. The record goes instead: unlinking is
-    # the one thing a disk with no room left still does, and what a resume then
-    # finds is nothing to resume from, said in a sentence.
-    def _mark_gapped(self, cast_id: str) -> None:
+    # `read_record` rather than `read`, which answers a disk that will not talk
+    # with `None`: that would read here as "nothing to mark" and let the next
+    # append through. The `OSError` let out instead is what refuses it.
+    # A record that is torn, or that was never written, is one no resume
+    # accepts either — there is nothing to mark and nothing left to protect,
+    # so the log may go on growing. `ValueError` rather than `ValidationError`
+    # because a write cut mid-character is a `UnicodeDecodeError`, and this
+    # wants the whole set `read_run` already refuses.
+    def _settle(self, cast_id: str) -> None:
+        if cast_id not in self._behind:
+            return
         try:
-            if (record := self.read(cast_id)) is not None:
-                record.gapped = True
-                self._write(record)
-        except OSError:
-            with contextlib.suppress(OSError):
-                run_file(self._root, cast_id).unlink(missing_ok=True)
+            record = read_record(self._root, cast_id)
+        except ValueError:
+            record = None
+        if record is not None:
+            record.gapped = True
+            self._write(record)
+        self._behind.discard(cast_id)
 
     # A record that will not parse is one the daemon was killed halfway through
     # writing. Skipped rather than raised, because the command that reads these
