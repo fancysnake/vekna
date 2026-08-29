@@ -141,6 +141,16 @@ class TestListing:
     def test_a_first_cast_carries_on_from_nothing():
         assert "↳" not in listing([RunRecord(hello=_hello())])
 
+    # A run the daemon could not write part of is still resumable and still
+    # listed, and this is the only place an operator learns it lost something.
+    @staticmethod
+    def test_a_run_that_lost_part_of_its_log_says_so():
+        assert "◌ gap" in listing([RunRecord(hello=_hello(), gapped=True)])
+
+    @staticmethod
+    def test_an_intact_run_says_nothing_about_gaps():
+        assert "◌" not in listing([RunRecord(hello=_hello())])
+
 
 class TestTheList:
     # The reason to look at the view at all: which of the six casts running

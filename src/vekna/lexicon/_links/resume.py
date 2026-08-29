@@ -24,16 +24,11 @@ def read_run(cast_id: str, *, root: Path | None = None) -> Resumption:
             " — only a cast the daemon saw can be resumed"
         )
         raise RitualDefinitionError(msg)
-    # A hole in the log is the one damage a reader cannot see: the first rite
-    # whose result fell in it misses, and a miss spends the whole ledger, so
-    # everything from there on runs again — the shell command, the agent call.
-    # Refusing beats doing that work twice without saying so.
-    if record.gapped:
-        msg = (
-            f"the daemon could not write part of cast {cast_id!r}'s journal"
-            " — it cannot be resumed, and casting it again is the way on"
-        )
-        raise RitualDefinitionError(msg)
+    # A `gapped` record is not refused: the journal never appends past a failed
+    # write, so what a gap costs is the tail, and a log that lost its tail is
+    # what every killed cast leaves. The ledger spends itself at the first rite
+    # it cannot find and the resume runs live from there — picking up at the
+    # last step that landed, which is the whole of what resume is.
     return Resumption(record=record, events=_events(where, cast_id))
 
 

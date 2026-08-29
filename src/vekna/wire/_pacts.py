@@ -168,11 +168,12 @@ WireMessage = CastMessage | SurfaceHello
 CastStatus = Literal["running", "ok", "error", "disconnected"]
 
 
-# `gapped` is what a resume has to know that the event log cannot say for
-# itself: an append the daemon could not make leaves a hole a reader cannot see,
-# because a log missing a rite reads exactly like a log that never had one. A
-# cast resumed across that hole re-runs the medium whose result fell in it —
-# the shell command, the agent call — so the answer is to refuse instead.
+# `gapped` is what the event log cannot say for itself: an append the daemon
+# could not make leaves the log short, and a log that lost its tail reads
+# exactly like the log of a cast that was killed. The resume is the same either
+# way — replay what landed, run live from there — so this is not a gate but the
+# operator's answer to whether a run lost anything, and what a kept recording
+# (`docs/hand/replay.md`) refuses to be made from.
 class RunRecord(BaseModel):
     hello: CastHello
     status: CastStatus = "running"

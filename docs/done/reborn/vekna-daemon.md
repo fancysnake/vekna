@@ -46,9 +46,9 @@ lands on top of this at [locks](../../reborn/locks.md).
   hands it the journal; it replays completed rite state, re-enters the current
   rite. Always-fresh process (no pooling). Medium rites come back from the
   journal, so no agent is called twice; step rites re-run, a `Transition` being
-  a function reference no journal can hold. A run marked `gapped` is refused
-  rather than resumed: the rite whose result fell in the hole would run a second
-  time, and so would everything after it.
+  a function reference no journal can hold. A run marked `gapped` resumes like
+  any other: the journal never appends past a write it could not make, so what a
+  gap costs is the tail, and the tail is what an interrupted cast loses anyway.
 - **Attention surfacing** across casts — a cast blocked on a `decide` is
   raised to the operator wherever they are looking. The idea vekna started
   with, expressed in casts and rites rather than tmux panes.

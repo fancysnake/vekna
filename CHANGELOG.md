@@ -11,6 +11,41 @@ when.
 
 ## [Unreleased] - ???
 
+### Fixed
+
+- **A journal that cannot record a gap no longer destroys the run.** An append
+  the daemon could not make left the record unlinked when the gap mark could not
+  be written either — the cast dropped out of `vekna log` and a resume was told
+  it had never had a journal. Worse, the mark was skipped in silence whenever
+  the record could not be *read*, and the log then grew past the failure into a
+  hole no reader can see. A log that lost an event now ends there and the mark
+  is retried on every following event, so `events.jsonl` is always a prefix of
+  what the daemon saw and nothing is deleted to say so.
+- **A run that ends on a failed write is closed rather than left `running`.**
+  The goodbye's status is record-only information, and it was written inside the
+  append that failed — so such a cast kept a `running` row that `vekna log`
+  showed forever and `prune`, which collects nothing still running, never came
+  back for.
+- **A hello whose record cannot be written no longer leaves an orphan log.** The
+  record was written after the frame it describes, so a disk that took the frame
+  and refused the record left events on disk that `vekna log` does not list,
+  `prune` does not collect, and a resume is told were never recorded. The record
+  goes down first, and a log that has no record never starts.
+- **One torn record no longer hides every healthy cast behind a traceback.** A
+  write cut mid-character comes back out of `read_text` as a
+  `UnicodeDecodeError`, which the reader did not catch, so `vekna log` and
+  `prune` ended in the parser rather than in a listing.
+
+### Changed
+
+- **A run marked `gapped` is resumable again.** A gap costs the tail of the log,
+  which is what every interrupted cast loses: the resume replays the rites that
+  landed and runs live from there. Refusing it spent the healthy prefix too, to
+  avoid work the ledger re-runs anyway.
+- **`vekna log` says which runs lost part of their log**, with `◌ gap` at the end
+  of the row. It said nothing, which was the other half of a damaged run being
+  told less than the truth.
+
 ## [0.7.0] - 2026-08-29
 
 ### Changed
