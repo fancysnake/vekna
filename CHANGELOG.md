@@ -18,10 +18,23 @@ when.
   be written either — the cast dropped out of `vekna log` and a resume was told
   it had never had a journal. Worse, the mark was skipped in silence whenever
   the record could not be *read*, and the log then grew past the failure into a
-  hole no reader can see. The journal refuses to append for a cast whose record
-  has not admitted the gap, and retries the mark on every following event, so
-  `events.jsonl` is always a prefix of what the daemon saw and nothing is
-  deleted to say so.
+  hole no reader can see. A log that lost an event now ends there and the mark
+  is retried on every following event, so `events.jsonl` is always a prefix of
+  what the daemon saw and nothing is deleted to say so.
+- **A run that ends on a failed write is closed rather than left `running`.**
+  The goodbye's status is record-only information, and it was written inside the
+  append that failed — so such a cast kept a `running` row that `vekna log`
+  showed forever and `prune`, which collects nothing still running, never came
+  back for.
+- **A hello whose record cannot be written no longer leaves an orphan log.** The
+  record was written after the frame it describes, so a disk that took the frame
+  and refused the record left events on disk that `vekna log` does not list,
+  `prune` does not collect, and a resume is told were never recorded. The record
+  goes down first, and a log that has no record never starts.
+- **One torn record no longer hides every healthy cast behind a traceback.** A
+  write cut mid-character comes back out of `read_text` as a
+  `UnicodeDecodeError`, which the reader did not catch, so `vekna log` and
+  `prune` ended in the parser rather than in a listing.
 
 ### Changed
 

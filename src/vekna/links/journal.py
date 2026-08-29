@@ -3,8 +3,6 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from pydantic import ValidationError
-
 from vekna.wire import (
     CastGoodbye,
     CastHello,
@@ -29,33 +27,54 @@ from vekna.wire import (
 class Journal:
     def __init__(self, root: Path) -> None:
         self._root = root
-        # The casts whose log is ahead of what their record admits. In memory
-        # because it only has to outlive the failure: a daemon that dies here
-        # leaves a log that is short, which is what a killed cast leaves too.
-        self._behind: set[str] = set()
+        # The casts whose log lost an event, and of those, the ones whose record
+        # has not admitted it yet. In memory because they only have to outlive
+        # the failure: a daemon that dies here leaves a log that is short, which
+        # is what a killed cast leaves too.
+        self._gapped: set[str] = set()
+        self._unmarked: set[str] = set()
 
     def record(self, message: CastMessage) -> None:
-        # An append that failed leaves the log short, and a short log is what
-        # every interrupted cast leaves — a resume replays what landed and runs
-        # live from there. Appending past it is the one damage that reads as
-        # nothing: a hole in the middle, over a record that says all is well.
-        # So the record admits the gap before the log grows again, and if it
-        # cannot, this raises and the daemon drops the event instead.
-        self._settle(message.cast_id)
+        # The record is written before the log grows, because a record that
+        # never landed is a log nothing can find: `vekna log` does not list it,
+        # `prune` never collects it, and a resume is told the daemon never saw
+        # the cast. The other order — record on disk, log short — is what every
+        # interrupted cast leaves, and a resume knows what to do with it.
+        if isinstance(message, CastHello):
+            self._write(RunRecord(hello=message))
+        try:
+            self._append_unless_gapped(message)
+        finally:
+            # A goodbye's status is record-only information, like the gap mark,
+            # so it lands whether or not the log took the frame. Inside the
+            # append, a cast that ended on a failed write stayed `running`
+            # forever, and `prune` collects nothing that is still running.
+            if isinstance(message, CastGoodbye):
+                self._close(message)
+
+    # Once a log is behind it stays behind. An append that failed leaves the log
+    # short, and a short log is what every interrupted cast leaves — a resume
+    # replays what landed and runs live from there. A hole in the middle is the
+    # one damage that reads as nothing, and the frames past it are unreachable
+    # anyway: the ledger spends itself at the first rite it cannot find. So the
+    # tail is forfeit from the failure on, `events.jsonl` stays a prefix of what
+    # the daemon saw, and every frame dropped after it is still raised about,
+    # because every one of them really is dropped.
+    def _append_unless_gapped(self, message: CastMessage) -> None:
+        if (cast_id := message.cast_id) in self._gapped:
+            self._mark(cast_id)
+            msg = f"cast {cast_id} lost an event and its log ends there"
+            raise OSError(msg)
         try:
             self._append(message)
         except OSError:
-            self._behind.add(message.cast_id)
+            self._gapped.add(cast_id)
+            self._unmarked.add(cast_id)
             # Tried here as well as before the next event, because there may be
             # no next event: a cast that ends on this failure still has a
             # record, and `vekna log` still gets to be right about it.
-            with contextlib.suppress(OSError):
-                self._settle(message.cast_id)
+            self._mark(cast_id)
             raise
-        if isinstance(message, CastHello):
-            self._write(RunRecord(hello=message))
-        elif isinstance(message, CastGoodbye):
-            self._close(message)
 
     def _append(self, message: CastMessage) -> None:
         log = events_log(self._root, message.cast_id)
@@ -66,34 +85,37 @@ class Journal:
     # Read back and written on rather than rebuilt field by field: what this
     # hands over is parsed fresh off the disk each time, so it is nobody else's
     # to hold, and a field added to `RunRecord` needs nothing said here.
-    # `read_record` rather than `read`, which answers a disk that will not talk
-    # with `None`: that would read here as "nothing to mark" and let the next
-    # append through. The `OSError` let out instead is what refuses it.
-    # A record that is torn, or that was never written, is one no resume
-    # accepts either — there is nothing to mark and nothing left to protect,
-    # so the log may go on growing. `ValueError` rather than `ValidationError`
-    # because a write cut mid-character is a `UnicodeDecodeError`, and this
-    # wants the whole set `read_run` already refuses.
-    def _settle(self, cast_id: str) -> None:
-        if cast_id not in self._behind:
+    # The disk that lost the event is the disk this is written to, so it can
+    # refuse too — and then the cast stays owed and the next event tries again.
+    def _mark(self, cast_id: str) -> None:
+        if cast_id not in self._unmarked:
             return
+        with contextlib.suppress(OSError):
+            if (record := self._parsed(cast_id)) is not None:
+                record.gapped = True
+                self._write(record)
+            self._unmarked.discard(cast_id)
+
+    # `read` answers a disk that will not talk with `None`, which would read
+    # here as "nothing to mark" and settle a debt the disk never let this pay.
+    # A record that is torn, or that was never written, is one no resume accepts
+    # either: nothing left to mark, and the retry stops.
+    def _parsed(self, cast_id: str) -> RunRecord | None:
         try:
-            record = read_record(self._root, cast_id)
+            return read_record(self._root, cast_id)
         except ValueError:
-            record = None
-        if record is not None:
-            record.gapped = True
-            self._write(record)
-        self._behind.discard(cast_id)
+            return None
 
     # A record that will not parse is one the daemon was killed halfway through
     # writing. Skipped rather than raised, because the command that reads these
     # is what an operator runs after a daemon died: one torn file must not be
-    # able to hide every healthy cast behind a traceback.
+    # able to hide every healthy cast behind a traceback. `ValueError` rather
+    # than `ValidationError`, because a write cut mid-character comes back out
+    # of `read_text` as a `UnicodeDecodeError`, before the parser sees it.
     def read(self, cast_id: str) -> RunRecord | None:
         try:
             return read_record(self._root, cast_id)
-        except (OSError, ValidationError):
+        except (OSError, ValueError):
             return None
 
     # Every surface prints a cast id cut to eight characters, so eight is what
@@ -148,6 +170,7 @@ class Journal:
     # this one.
     def _write(self, record: RunRecord) -> None:
         path = run_file(self._root, record.hello.cast_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
         half = path.with_suffix(".part")
         half.write_text(record.model_dump_json(indent=2))
         half.replace(path)
