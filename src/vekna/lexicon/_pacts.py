@@ -166,10 +166,8 @@ class FocusReply(BaseModel):
 
 
 class CodingFocusProtocol(Protocol):
-    # Static on both sides: a focus carries no per-call state, and an instance
-    # method would leave `self` unused in every implementation.
-    @staticmethod
     async def run(
+        self,
         call: CodingCall,
         *,
         on_delta: Callable[[str], None],
@@ -198,9 +196,8 @@ class ShellReply(BaseModel):
 
 
 class ShellFocusProtocol(Protocol):
-    @staticmethod
     async def run(
-        call: ShellCall, *, on_line: Callable[[str], None] | None
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply: ...
 
 

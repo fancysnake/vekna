@@ -11,6 +11,19 @@ when.
 
 ## [Unreleased] - ???
 
+## [0.7.0] - 2026-08-29
+
+### Changed
+
+- **A Focus is an instance, and may carry state.** `CodingFocusProtocol.run` and
+  `ShellFocusProtocol.run` were `@staticmethod`, which left a stateful Focus
+  inexpressible: an implementation must declare the protocol as a base, and a
+  static base rejects an instance-method override. Both take `self` now, so
+  register `BashFocus()` rather than `BashFocus`. `Trial`'s doubles are the foci
+  themselves — `CodingDouble.answer` and `ShellDouble.answer` are `run`, and the
+  shell one is a coroutine, as the protocol says.
+- `typing-extensions` is a runtime dependency, for `@override` on 3.11.
+
 ## [0.6.1] - 2026-08-23
 
 ### Fixed
@@ -614,7 +627,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.6.1...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/fancysnake/vekna/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/fancysnake/vekna/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fancysnake/vekna/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fancysnake/vekna/compare/v0.4.0...v0.5.0

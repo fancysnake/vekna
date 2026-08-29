@@ -180,8 +180,8 @@ PromptRunner = Callable[[str], Awaitable[StringOutput]]
 # cast checks nothing, so a Focus whose `run` had the wrong shape reached the
 # call site intact. Here the type travels with the name: `register` refuses what
 # the medium could not call, and `resolve` hands back the protocol itself.
-# A Focus holds no state and its `run` is static, so the class and an instance
-# of it both satisfy the protocol; a folio may register either.
+# What stands here is an instance, so a Focus may carry state — which is what a
+# test double is.
 class FocusSlot(Generic[_FocusT]):
     def __init__(self, medium_name: str) -> None:
         self.medium_name = medium_name

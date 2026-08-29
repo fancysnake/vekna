@@ -23,6 +23,7 @@ from claude_agent_sdk.types import (
     ToolPermissionContext,
 )
 from pydantic import BaseModel, JsonValue
+from typing_extensions import override
 
 from vekna.lexicon import (
     AskFn,
@@ -224,8 +225,9 @@ async def _streamed(
 
 
 class ClaudeCodingFocus(CodingFocusProtocol):
-    @staticmethod
+    @override
     async def run(
+        self,
         call: CodingCall,
         *,
         on_delta: Callable[[str], None],

@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 import pytest
 from pydantic import BaseModel
+from typing_extensions import override
 
 from vekna.folio.coding import CodingOpts, CodingOutputError, Session, coding
 from vekna.folio.flow import decide
@@ -336,9 +337,9 @@ class TestOnlyInsideTheBlock:
 
 
 class _AuthorsOwnFocus(ShellFocusProtocol):
-    @staticmethod
+    @override
     async def run(
-        call: ShellCall, *, on_line: Callable[[str], None] | None
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
         if on_line is not None:
             on_line(call.command)
@@ -351,17 +352,21 @@ class TestRegistryIsLeftAsFound:
         # The outer scope is the test's own tidying, not part of what is
         # asserted: the slot is global, and a focus left behind here would
         # answer for whatever ran next.
-        with SHELL_FOCUS.scope(_AuthorsOwnFocus):
+        author = _AuthorsOwnFocus()
+
+        with SHELL_FOCUS.scope(author):
             with Trial():
                 pass
 
-            assert SHELL_FOCUS.resolve() is _AuthorsOwnFocus
+            assert SHELL_FOCUS.resolve() is author
 
     # What `shell()` resolves to once the double is gone is bash, which
     # tests/integration/folio/test_shell.py is where it is proven.
     @staticmethod
     def test_a_medium_nothing_installed_is_uninstalled_again() -> None:
+        author = _AuthorsOwnFocus()
+
         with Trial():
             pass
 
-        assert SHELL_FOCUS.resolve(default=_AuthorsOwnFocus) is _AuthorsOwnFocus
+        assert SHELL_FOCUS.resolve(default=author) is author

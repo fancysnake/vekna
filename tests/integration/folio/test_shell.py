@@ -1,11 +1,12 @@
 import asyncio
 import io
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import pytest
 from pydantic import BaseModel, JsonValue
+from typing_extensions import override
 
 from tests.conftest import entry, journalled
 from vekna.folio.shell import ShellOutputError, ShellResult, shell
@@ -222,15 +223,15 @@ class TestShellStreaming:
         assert result.stdout == "hushed"
 
 
-# A Focus is static — it carries no per-call state — so what it records lives
-# beside it rather than on it.
-_intercepted: list[ShellCall] = []
-
-
 class _RecordingFocus(ShellFocusProtocol):
-    @staticmethod
-    async def run(call, *, on_line):
-        _intercepted.append(call)
+    def __init__(self) -> None:
+        self.intercepted: list[ShellCall] = []
+
+    @override
+    async def run(
+        self, call: ShellCall, *, on_line: Callable[[str], None] | None
+    ) -> ShellReply:
+        self.intercepted.append(call)
         if on_line is not None:
             on_line("intercepted")
         return ShellReply(stdout="from the focus", stderr="", exit_code=0)
@@ -272,18 +273,18 @@ class TestShellStdin:
 class TestShellFocus:
     @staticmethod
     def test_a_registered_focus_answers_instead_of_bash():
-        _intercepted.clear()
+        focus = _RecordingFocus()
 
-        with SHELL_FOCUS.scope(_RecordingFocus):
+        with SHELL_FOCUS.scope(focus):
             result, grimoire, _ = _run(echoer)
 
         assert result == ShellResult(stdout="from the focus", stderr="", exit_code=0)
-        assert [call.command for call in _intercepted] == ["echo hello && exit 0"]
+        assert [call.command for call in focus.intercepted] == ["echo hello && exit 0"]
         assert _deltas(grimoire) == ["intercepted"]
 
     @staticmethod
     def test_bash_answers_again_once_the_scope_closes():
-        with SHELL_FOCUS.scope(_RecordingFocus):
+        with SHELL_FOCUS.scope(_RecordingFocus()):
             pass
 
         assert _cast(echoer).stdout.strip() == "hello"
