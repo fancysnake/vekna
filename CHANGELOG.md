@@ -11,6 +11,11 @@ when.
 
 ## [Unreleased] - ???
 
+### Added
+
+- `vekna cats` meows. One transposition from `cast`, and it eats whatever the
+  cast was going to get, so the slip costs a laugh rather than a usage error.
+
 ## [0.7.0] - 2026-08-29
 
 ### Changed

@@ -101,6 +101,26 @@ def _rituals_show(name: str) -> None:
     raise SystemExit(_runtime().rituals_show(name))
 
 
+# `cats` is one transposition away from `cast`, and the fingers that type the
+# verb all day will find it. Hidden: a reward for the slip, not a command.
+_CATS = r"""
+ /\_/\    /\_/\    /\_/\
+( o.o )  ( -.- )  ( o.o )   MEOW :D
+ > ^ <    > ^ <    > ^ <
+"""
+
+
+# The slip carries whatever `cast` was going to get — a ritual name, its
+# options — so the same context as `cast` and everything after is eaten.
+@click.command(
+    "cats", context_settings=_CAST_CONTEXT, add_help_option=False, hidden=True
+)
+@click.argument("ignored", nargs=-1, type=click.UNPROCESSED)
+def _cats(ignored: tuple[str, ...]) -> None:
+    del ignored
+    click.echo(_CATS)
+
+
 @click.group("rituals", help="Inspect the ritual library.")
 def _rituals() -> None:
     pass
@@ -252,6 +272,7 @@ def init_command() -> Group:
     vekna.add_command(_cast)
     vekna.add_command(_rituals)
     vekna.add_command(_log)
+    vekna.add_command(_cats)
     return vekna
 
 
