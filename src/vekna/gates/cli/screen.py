@@ -273,7 +273,7 @@ def _lost(record: RunRecord) -> str:
 
 # One string, painted over the top of the last one. A terminal that can only be
 # written to forwards is what the CLI surface has; the Textual dashboard in
-# `docs/eye/tui.md` is where partial redraws belong.
+# issue #107 is where partial redraws belong.
 def paint(
     *,
     casts: Sequence[CastView],

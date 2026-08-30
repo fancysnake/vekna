@@ -11,7 +11,7 @@ from vekna.pacts.screen import Screen
 # ponytail: a blocking read on a worker thread. It cannot be cancelled, so the
 # daemon stops when the reader says stop rather than the other way round; a
 # `loop.add_reader` on the tty is the upgrade, and it is what a takeover would
-# need anyway (docs/done/reborn/vekna-daemon.md).
+# need anyway. Takeover — answering a prompt from `vekna` itself — is deferred.
 class Terminal(Screen):
     def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout

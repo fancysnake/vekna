@@ -113,7 +113,9 @@ modules = ["mycompany.rites"]
 
 These are additive: naming the file that would have been found anyway is how
 you are explicit about it, and loading it twice is not an error. Two
-*different* sources claiming one ritual name still is.
+*different* sources claiming one ritual name still is, and so are two of them
+declaring a step of the same name — both errors name the pair rather than
+letting whichever loaded first win.
 
 ## Tomes: rituals you install
 
