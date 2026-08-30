@@ -53,7 +53,9 @@ trial.coding.replies("wrote a test", uses=["Bash"])
 trial.decide.answers(answer=True, when="*proceed*")
 ```
 
-`always=True` keeps one answer standing instead of consuming it.
+`always=True` keeps one answer standing instead of consuming it. A `decide`
+answer is checked against the options the step offered, and one that is not
+among them raises before the ritual sees it — the real channel's contract.
 
 **Nothing defaults.** An unscripted call raises `TrialScriptError` naming the
 call and what the script still held. An invented `exit_code=0` would send the
@@ -65,6 +67,11 @@ than no test at all.
 `trial.shell.commands`, `trial.coding.prompts`, `trial.coding.gated`,
 `trial.decide.prompts`. There is no `assert_called_with` here — the recording
 is the assertion surface.
+
+The cast records too: `trial.steps` is the step names in the order they ran,
+`trial.deltas` and `trial.events` the grimoire as it happened, and
+`trial.coding.calls` the calls as the medium built them — `calls[1].resume` is
+how a test proves the second call joined the first one's thread.
 
 ## What the doubles do not replace
 

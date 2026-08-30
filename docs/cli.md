@@ -114,10 +114,10 @@ Three kinds:
 ## `vekna`
 
 With no subcommand, the daemon. The first `vekna` binds
-`$XDG_RUNTIME_DIR/vekna.sock` (falling back to `/tmp/vekna-<uid>/vekna.sock`,
-in a directory of the user's own) and renders every cast running anywhere on this
-account; each one after attaches to it as another surface, and sees the same
-view.
+`$XDG_RUNTIME_DIR/vekna.sock` (mode `0600`, falling back to
+`/tmp/vekna-<uid>/vekna.sock`, in a directory of the user's own) and renders
+every cast running anywhere on this account; each one after attaches to it as
+another surface, and sees the same view.
 
 Both ends have to compute the same path, and `XDG_RUNTIME_DIR` is what decides
 it. A sandbox that cannot write to the session's runtime directory exports a
@@ -189,6 +189,11 @@ trailing `↳` names the cast this one was carried on from. A cast that ran with
 no daemon listening leaves no record: the journal is the daemon's, and there was
 none.
 
+The journal itself is `~/.local/state/vekna/runs/<cast_id>/` — `run.json` for
+what the cast was and how it ended, `events.jsonl` for the wire verbatim. The
+root is trimmed to the newest 200 casts at startup, and whatever is still
+running is spared.
+
 ### `vekna cast --continue`
 
 Runs a cast on from where it was interrupted, in the directory it ran in.
@@ -212,3 +217,7 @@ prefix is resolved against the journal, and one naming two casts is refused
 rather than guessed. What comes back is a cast of its own, with an id of its
 own; `vekna log` and the drilled-in header both say which cast it carries on
 from.
+
+A run the daemon could not write in full is marked as having a hole in it, and
+`--continue` refuses it rather than replaying a journal that is missing a rite:
+that rite, and everything after it, would run a second time.

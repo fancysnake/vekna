@@ -1,7 +1,8 @@
 # Hand — the acting half
 
-Ideas, not a plan. One file is one release's worth of work; nothing here says
-when or in what order.
+Ideas, not a plan. They live as GitHub issues under the
+[Hand milestone](https://github.com/fancysnake/vekna/milestone/3), sized `S` /
+`M` / `L` / `Epic`; nothing there says when or in what order.
 
 Where [Eye](../eye/README.md) is the surfaces that watch, Hand is what a ritual
 can *do* — and what it can be held to. The engine growing the parts a long,
@@ -13,7 +14,7 @@ The name was already waiting: `vekna hand` is the acting half of the Hand/Eye
 easter egg in [`../reborn/common.md`](../reborn/common.md). The Eye observes;
 the Hand acts.
 
-Shipped ones move to `../done/hand/` and stop being edited. Shared context is
+Shipped ones close and land in `CHANGELOG.md`. Shared context is
 [`../reborn/common.md`](../reborn/common.md).
 
 ## Where these came from

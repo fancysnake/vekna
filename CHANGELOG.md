@@ -80,8 +80,9 @@ when.
   agent's own question are all answered on the stdin of the terminal that ran
   the cast, attached or not. The wire carries only that the cast is *waiting*:
   the daemon raises it with the prompt and stops when it is answered. Answering
-  from `vekna` itself is deferred — see
-  [the feature doc](docs/done/reborn/vekna-daemon.md) for what it costs.
+  from `vekna` itself is deferred: the cast's local read is a blocking thread
+  that cannot be cancelled, so the loser of the race would stay blocked and eat
+  the next line typed into that terminal.
 - **A durable journal.** Every event the daemon sees is written under
   `~/.local/state/vekna/runs/<cast_id>/`: `run.json` for what the cast was and
   how it ended, `events.jsonl` for the wire verbatim. `vekna log` lists them

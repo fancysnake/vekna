@@ -89,16 +89,16 @@ map, layout, patterns, and drift flags:
 
 - [`tests/CLAUDE.md`](tests/CLAUDE.md) — testing conventions, loaded when you
   work under `tests/`
-- [`docs/README.md`](docs/README.md) — docs index, how the idea files work,
+- [`docs/README.md`](docs/README.md) — docs index, how the ideas work,
   release names
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
 - [`docs/reborn/common.md`](docs/reborn/common.md) — shared context every idea
-  file assumes: premise, vocabulary, process model, wire, CLI surface
+  issue assumes: premise, vocabulary, process model, wire, CLI surface
 - [`docs/reborn/`](docs/reborn/README.md) — Reborn, the pivot to rituals and
   casts
 - [`docs/eye/`](docs/eye/README.md) — Eye, the surfaces that watch
 - [`docs/hand/`](docs/hand/README.md) — Hand, the acting half: failure paths,
   bounds, budgets, skills, replay
-- [`docs/done/`](docs/done/) — shipped ideas, filed under their track. A file
-  moves here instead of gaining a status line
+- Ideas are GitHub issues, one milestone per track: Reborn, Eye, Hand.
+  `CHANGELOG.md` records what shipped
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight
