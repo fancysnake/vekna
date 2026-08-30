@@ -173,7 +173,7 @@ CastStatus = Literal["running", "ok", "error", "disconnected"]
 # exactly like the log of a cast that was killed. The resume is the same either
 # way — replay what landed, run live from there — so this is not a gate but the
 # operator's answer to whether a run lost anything, and what a kept recording
-# (`docs/hand/replay.md`) refuses to be made from.
+# (issue #114) refuses to be made from.
 class RunRecord(BaseModel):
     hello: CastHello
     status: CastStatus = "running"
