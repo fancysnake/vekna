@@ -9,7 +9,7 @@ jobs = 8
 markdownlint-cli2 = "0.23.2"
 node = "26"
 pipx = "1.16.7"
-"pipx:poetry" = "2.4.1"
+"pipx:poetry" = "2.4.3"
 python = "3.11"
 
 [hooks]
