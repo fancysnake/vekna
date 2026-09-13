@@ -21,6 +21,9 @@ _FENCE = re.compile(r"^```bash$(.*?)^```$", re.DOTALL | re.MULTILINE)
 def _paths(group: click.Group, prefix: str = "vekna") -> set[str]:
     found: set[str] = set()
     for name, command in group.commands.items():
+        # A hidden command is hidden from the page too.
+        if command.hidden:
+            continue
         found.add(path := f"{prefix} {name}")
         if isinstance(command, click.Group):
             found |= _paths(command, path)

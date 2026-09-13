@@ -88,3 +88,18 @@ class TestEntry:
 
         assert not result.exit_code
         assert "countdown" in result.output
+
+    @staticmethod
+    def test_mistyping_cast_as_cats_meows():
+        result = CliRunner().invoke(
+            init_command(), ["cats", "countdown", "--start", "1"]
+        )
+
+        assert not result.exit_code
+        assert "MEOW" in result.output
+
+    @staticmethod
+    def test_the_cats_stay_out_of_the_help():
+        result = CliRunner().invoke(init_command(), ["--help"])
+
+        assert "cats" not in result.output

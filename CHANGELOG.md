@@ -13,6 +13,11 @@ when.
 
 ## [0.8.0] - 2026-08-30
 
+### Added
+
+- `vekna cats` meows. One transposition from `cast`, and it eats whatever the
+  cast was going to get, so the slip costs a laugh rather than a usage error.
+
 ### Changed
 
 - **A run marked `gapped` is resumable again.** A gap costs the tail of the log,
@@ -46,6 +51,7 @@ when.
   write cut mid-character comes back out of `read_text` as a
   `UnicodeDecodeError`, which the reader did not catch, so `vekna log` and
   `prune` ended in the parser rather than in a listing.
+
 
 ## [0.7.0] - 2026-08-29
 
