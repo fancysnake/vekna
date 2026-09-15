@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,7 +8,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from vekna.inits.cli import daemon, init_command
+from vekna.inits.cli import _KEPT, daemon, init_command
+from vekna.links.journal import Journal
 from vekna.links.socket_server import attach
 from vekna.pacts.screen import Screen
 from vekna.wire import (
@@ -305,6 +307,33 @@ class TestDebug:
         await running
         assert not (tmp_path / "debug.log").exists()
         writer.close()
+
+
+@pytest.mark.asyncio
+class TestPruning:
+    @staticmethod
+    async def test_a_runs_root_that_will_not_clean_is_said_and_the_daemon_starts(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path / "runs")
+        for index in range(_KEPT + 1):
+            journal.record(_hello(f"c{index}"))
+            journal.record(CastGoodbye(cast_id=f"c{index}", status="ok"))
+
+        def rmtree(path: Path) -> None:
+            raise PermissionError(13, "Permission denied", str(path))
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+        keys = _Keys()
+        running = asyncio.create_task(daemon(screen=keys))
+        await _eventually(lambda: keys.painted("could not prune 1 old cast(s): "))
+        bound = await asyncio.to_thread(socket_path.exists)
+
+        keys.press("q")
+
+        assert await running == 0
+        assert bound
+        assert keys.painted("[Errno 13] Permission denied")
 
 
 class TestTheBareCommand:

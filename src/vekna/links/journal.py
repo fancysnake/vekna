@@ -104,13 +104,21 @@ class Journal:
     # as long as the machine lives and every `vekna log` pays for all of it.
     # A cast still running is left alone whatever its age, and so is a record
     # this cannot read: deleting what it could not read back is not its call.
-    def prune(self, *, keep: int) -> None:
+    # A directory that will not go is named and passed over rather than
+    # raised: housekeeping must not stop a daemon from starting, and the next
+    # directory may well go — but the caller has to hear which did not, or the
+    # runs root grows past `keep` for good with nothing saying why.
+    def prune(self, *, keep: int) -> list[str]:
+        failed: list[str] = []
         for record in self._newest_first()[keep:]:
-            if record.status != "running":
-                shutil.rmtree(
-                    run_file(self._root, record.hello.cast_id).parent,
-                    ignore_errors=True,
-                )
+            if record.status == "running":
+                continue
+            directory = run_file(self._root, record.hello.cast_id).parent
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                failed.append(f"{directory}: {error}")
+        return failed
 
     def _newest_first(self) -> list[RunRecord]:
         found = [record for record in self._all() if record is not None]

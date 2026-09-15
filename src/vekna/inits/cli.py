@@ -228,9 +228,16 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
     if await alive(path):
         return await _as_peer(path=path, screen=where)
     journal = Journal(default_runs_root())
-    await asyncio.to_thread(journal.prune, keep=_KEPT)
     hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
     dashboard = Dashboard(casts=hub, screen=where)
+    if debug is not None:
+        dashboard.say(f"logging every event to {debug}")
+    # Pruned once the view exists to say how it went, and before the socket
+    # binds so nothing is being written while it runs. The view holds one note,
+    # so this one comes after the debug banner: a runs root that cannot be
+    # cleaned is the thing an operator has to hear.
+    if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
+        dashboard.say(f"could not prune {len(failed)} old cast(s): {failed[0]}")
 
     def heard(message: CastMessage) -> None:
         hub.apply(message)
@@ -242,8 +249,6 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
         on_attach=hub.attach_surface,
         on_detach=hub.detach_surface,
     )
-    if debug is not None:
-        dashboard.say(f"logging every event to {debug}")
     try:
         await dashboard.run()
     finally:

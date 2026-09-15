@@ -1,3 +1,4 @@
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -218,3 +219,26 @@ class TestPruning:
         journal.prune(keep=0)
 
         assert [path.name for path in tmp_path.iterdir()] == ["running"]
+
+    @staticmethod
+    def test_a_directory_that_will_not_go_is_named_and_the_rest_still_go(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        for cast_id in ("stuck", "loose"):
+            journal.record(_hello(cast_id))
+            journal.record(CastGoodbye(cast_id=cast_id, status="ok"))
+        real_rmtree = shutil.rmtree
+
+        def rmtree(path: Path) -> None:
+            if path.name == "stuck":
+                raise PermissionError(13, "Permission denied", str(path))
+            real_rmtree(path)
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+        failed = journal.prune(keep=0)
+
+        assert [path.name for path in tmp_path.iterdir()] == ["stuck"]
+        stuck = tmp_path / "stuck"
+        assert failed == [f"{stuck}: [Errno 13] Permission denied: '{stuck}'"]
