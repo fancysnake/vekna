@@ -15,7 +15,8 @@ when.
 
 - `ritual-scribe` ships as a Claude Code plugin. The repo is a plugin
   marketplace: `claude plugin marketplace add fancysnake/vekna`, then
-  `claude plugin install ritual-scribe@vekna`.
+  `claude plugin install ritual-scribe@vekna`. The plugin carries the package
+  version; the release workflow refuses a tag they disagree on.
 - `vekna cats` meows. One transposition from `cast`, and it eats whatever the
   cast was going to get, so the slip costs a laugh rather than a usage error.
 

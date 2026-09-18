@@ -11,7 +11,7 @@
       "name": "ritual-scribe",
       "source": "./plugins/ritual-scribe",
       "description": "Write vekna rituals: @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide mediums",
-      "version": "0.1.0",
+      "version": "0.7.0",
       "category": "development",
       "keywords": ["vekna", "ritual", "coding-agent"]
     }
