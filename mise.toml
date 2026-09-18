@@ -89,6 +89,22 @@ run = "poetry install --with docs --quiet && mkdocs build --strict"
 description = "Build the site and fail on broken internal links"
 run = { task = "site:build" }
 
+# The plugin carries the package version, so a bump is three files that must
+# agree. `poetry version` is what validates the string; the manifests follow it.
+[tasks."release:bump"]
+description = "Set the package version in pyproject.toml and both plugin manifests"
+usage = 'arg "<version>"'
+run = """
+set -eu
+poetry version "$usage_version"
+declared=$(poetry version -s)
+for manifest in plugins/ritual-scribe/.claude-plugin/plugin.json .claude-plugin/marketplace.json; do
+    jq --arg v "$declared" '(.. | objects | select(has("version")) | .version) = $v' "$manifest" > "$manifest.tmp"
+    mv "$manifest.tmp" "$manifest"
+done
+git --no-pager diff --stat -- pyproject.toml plugins .claude-plugin
+"""
+
 # What the tag does, minus the publish: each artifact is built and then
 # installed somewhere that has never seen this project, because `poetry install`
 # leaves a venv where everything imports whether the artifact carries it or not.

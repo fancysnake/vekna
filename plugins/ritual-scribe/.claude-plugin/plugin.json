@@ -8,5 +8,9 @@
   "homepage": "https://vekna.fancysnake.dev",
   "repository": "https://github.com/fancysnake/vekna",
   "license": "BSD-3-Clause",
-  "keywords": ["vekna", "ritual", "coding-agent"]
+  "keywords": [
+    "vekna",
+    "ritual",
+    "coding-agent"
+  ]
 }
