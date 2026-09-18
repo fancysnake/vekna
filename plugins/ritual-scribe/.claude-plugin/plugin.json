@@ -1,0 +1,12 @@
+{
+  "name": "ritual-scribe",
+  "description": "Write vekna rituals: @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide mediums",
+  "version": "0.1.0",
+  "author": {
+    "name": "fancysnake"
+  },
+  "homepage": "https://vekna.fancysnake.dev",
+  "repository": "https://github.com/fancysnake/vekna",
+  "license": "BSD-3-Clause",
+  "keywords": ["vekna", "ritual", "coding-agent"]
+}

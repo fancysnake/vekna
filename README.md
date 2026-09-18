@@ -76,6 +76,16 @@ line is the cast's result, as JSON:
 result: {"outcome":"green"}
 ```
 
+## Claude Code plugin
+
+The `ritual-scribe` skill teaches Claude Code to write rituals. Install it from
+this repo's marketplace:
+
+```bash
+claude plugin marketplace add fancysnake/vekna
+claude plugin install ritual-scribe@vekna
+```
+
 ## Commands
 
 | Command | What it does |
