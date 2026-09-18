@@ -63,5 +63,5 @@ unit: the mediums are `links`.
   `trial.decide`, not at `trial.coding` — the folio builds both out of the
   channel.
 
-`.claude/skills/ritual-scribe/SKILL.md` § *Testing a ritual* is the longer
+`plugins/ritual-scribe/skills/ritual-scribe/SKILL.md` § *Testing a ritual* is the longer
 version, with the examples.
