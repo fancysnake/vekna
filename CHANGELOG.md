@@ -11,10 +11,21 @@ when.
 
 ## [Unreleased] - ???
 
+## [0.8.0] - 2026-09-18
+
 ### Added
 
-- `vekna cats` meows. One transposition from `cast`, and it eats whatever the
-  cast was going to get, so the slip costs a laugh rather than a usage error.
+- **`ritual-scribe` is a Claude Code plugin.** The repo is its marketplace:
+
+  ```bash
+  claude plugin marketplace add fancysnake/vekna
+  claude plugin install ritual-scribe@vekna
+  ```
+
+  The plugin carries the package version, and the release workflow refuses a
+  tag the two disagree on.
+- `vekna cats` meows. It is one transposition from `cast`, and it eats the
+  cast's arguments, so the slip costs a laugh rather than a usage error.
 
 ## [0.7.0] - 2026-08-29
 
@@ -633,7 +644,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.7.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/fancysnake/vekna/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fancysnake/vekna/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/fancysnake/vekna/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fancysnake/vekna/compare/v0.5.0...v0.6.0
