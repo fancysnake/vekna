@@ -5,7 +5,9 @@ jobs = 8
 [tools]
 # Pinned to the same version `.pre-commit-config.yaml` pins, so the hook and the
 # task cannot disagree about what passes. `node` is here only because the
-# linter is npm-backed and its shim needs one on PATH.
+# linter is npm-backed and its shim needs one on PATH. `jq` is what
+# `release:bump` edits the plugin manifest with.
+jq = "1.8.2"
 markdownlint-cli2 = "0.23.2"
 node = "26"
 pipx = "1.17.2"
@@ -89,20 +91,18 @@ run = "poetry install --with docs --quiet && mkdocs build --strict"
 description = "Build the site and fail on broken internal links"
 run = { task = "site:build" }
 
-# The plugin carries the package version, so a bump is three files that must
-# agree. `poetry version` is what validates the string; the manifests follow it.
+# The plugin carries the package version, so a bump is two files that must
+# agree. `poetry version` is what validates the string; the manifest follows it.
 [tasks."release:bump"]
-description = "Set the package version in pyproject.toml and both plugin manifests"
+description = "Set the package version in pyproject.toml and the plugin manifest"
 usage = 'arg "<version>"'
 run = """
 set -eu
 poetry version "$usage_version"
-declared=$(poetry version -s)
-for manifest in plugins/ritual-scribe/.claude-plugin/plugin.json .claude-plugin/marketplace.json; do
-    jq --arg v "$declared" '(.. | objects | select(has("version")) | .version) = $v' "$manifest" > "$manifest.tmp"
-    mv "$manifest.tmp" "$manifest"
-done
-git --no-pager diff --stat -- pyproject.toml plugins .claude-plugin
+manifest=plugins/ritual-scribe/.claude-plugin/plugin.json
+jq --arg v "$(poetry version -s)" '.version = $v' "$manifest" > "$manifest.tmp"
+mv "$manifest.tmp" "$manifest"
+git --no-pager diff --stat -- pyproject.toml "$manifest"
 """
 
 # What the tag does, minus the publish: each artifact is built and then

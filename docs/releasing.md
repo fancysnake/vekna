@@ -74,8 +74,8 @@ repository setting still has to be told once.
 ## Every release
 
 - [ ] Branch off `main`. Never commit the release directly to it.
-- [ ] `mise run release:bump <version>` — `pyproject.toml` and both plugin
-      manifests, which the tag check also compares
+- [ ] `mise run release:bump <version>` — `pyproject.toml` and the plugin
+      manifest, which the tag check also compares
 - [ ] `CHANGELOG.md`: rename `## [Unreleased] - ???` to the version and today's
       date, and open a fresh `Unreleased` above it
 - [ ] `mise run fullcheck` — green, no exceptions

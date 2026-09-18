@@ -48,13 +48,12 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match pyproject version $declared" >&2
             exit 1
           fi
-          for manifest in plugins/ritual-scribe/.claude-plugin/plugin.json .claude-plugin/marketplace.json; do
-            plugin=$(jq -r '.. | .version? // empty' "$manifest")
-            if [ "$plugin" != "$tagged" ]; then
-              echo "$manifest declares version $plugin, tag is $tagged" >&2
-              exit 1
-            fi
-          done
+          manifest=plugins/ritual-scribe/.claude-plugin/plugin.json
+          plugin=$(jq -r .version "$manifest")
+          if [ "$plugin" != "$tagged" ]; then
+            echo "$manifest declares version $plugin, tag is $tagged" >&2
+            exit 1
+          fi
 
       - run: mise run release:build
 
