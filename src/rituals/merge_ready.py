@@ -89,11 +89,11 @@ def _complaint(failure: Red) -> str:
 # a plausible bound, so tripping it means a ritual that will not settle.
 @ritual("merge_ready", max_steps=32)
 def merge_ready(components: MergeReady) -> Transition:
-    return goto(gates, Attempt(budget=components.bound))
+    return goto(quality_gates, Attempt(budget=components.bound))
 
 
 @step
-async def gates(state: Attempt) -> Transition:
+async def quality_gates(state: Attempt) -> Transition:
     # Both gates take minutes, and neither reads the other's output. Running
     # them at once is not only faster: one cast then tells you everything that
     # is red, rather than the first thing that is red.
@@ -128,4 +128,4 @@ async def gates(state: Attempt) -> Transition:
 @step
 async def repair(failure: Red) -> Transition:
     await coding(_REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
-    return goto(gates, Attempt(budget=failure.budget - 1))
+    return goto(quality_gates, Attempt(budget=failure.budget - 1))
