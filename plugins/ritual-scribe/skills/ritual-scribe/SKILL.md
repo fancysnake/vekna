@@ -573,7 +573,7 @@ Designed, **not built**. Do not write against any of it.
 - **`@step(max_visits=N)`** — `@step` is a bare decorator; the only engine bound
   is `max_steps`.
 - **`@step(goes_to=[...])`** and declared edges — rejected in favour of
-  steps-as-DTOs (`docs/reborn/steps-as-dtos.md`), itself unbuilt.
+  steps-as-DTOs (issue #103), itself unbuilt.
 - **Locks** — nothing lock-shaped is importable.
 - **Annotation-gated dispatch** — `goto(payload)` with no named target. Name the
   target.

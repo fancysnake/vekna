@@ -367,12 +367,11 @@ class TestFramesOnDisk:
 
         assert "events.jsonl cannot be read" in capsys.readouterr().err
 
-    # The hole the reader cannot see for itself. Resuming across it would run
-    # the medium whose result fell in it a second time, so it is refused.
+    # A gap costs the tail, which is what an interrupted cast loses anyway: the
+    # journal never appends past a failed write, so there is no hole to resume
+    # across and the rites that landed still come off the record.
     @staticmethod
-    def test_a_gapped_journal_is_refused(
-        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_a_gapped_journal_resumes_from_what_landed(project: Path, tmp_path: Path):
         cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
         run = tmp_path / "runs" / cast_id / "run.json"
         run.write_text(
@@ -381,6 +380,6 @@ class TestFramesOnDisk:
             .model_dump_json()
         )
 
-        assert main(["--resume", cast_id]) == _USAGE_EXIT
+        assert main(["--resume", cast_id]) == 0
 
-        assert "could not write part of" in capsys.readouterr().err
+        assert (project / "ran.log").read_text() == "from-the-journal\nran-0\n"

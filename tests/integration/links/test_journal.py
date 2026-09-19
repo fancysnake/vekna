@@ -88,17 +88,52 @@ class TestRecording:
             journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
         _appends_again(events)
 
-        journal.record(CastGoodbye(cast_id="c1", status="ok"))
+        with pytest.raises(OSError, match="log ends there"):
+            journal.record(CastGoodbye(cast_id="c1", status="ok"))
 
         record = journal.read("c1")
         assert record is not None
         assert record.status == "ok"
         assert record.gapped
 
-    # The disk that lost the event is the disk the gap marker is written to, so
-    # both go at once. What is left must not read back as a run to resume.
+    # How the run ended is what the record says, and the append is not what
+    # carries it. A cast that ended on a failed write and stayed `running` was
+    # a row `prune` would never come back for.
     @staticmethod
-    def test_a_gap_that_cannot_be_written_takes_the_record_with_it(tmp_path: Path):
+    def test_a_goodbye_that_cannot_be_appended_still_closes_the_run(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        _no_appends(tmp_path / "c1" / "events.jsonl")
+
+        with pytest.raises(IsADirectoryError):
+            journal.record(CastGoodbye(cast_id="c1", status="ok"))
+
+        journal.prune(keep=0)
+        assert not list(tmp_path.iterdir())
+
+    # A hole in the middle of the log is the one damage that reads as nothing,
+    # and nothing reads the frames past it anyway: the ledger spends itself at
+    # the first rite it cannot find. So the log ends at the gap whatever the
+    # disk does afterwards, and what is left is a prefix of what the daemon saw.
+    @staticmethod
+    def test_a_gapped_log_never_appends_again(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        _appends_again(events)
+
+        with pytest.raises(OSError, match="log ends there"):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
+
+        assert not list(journal.events("c1"))
+
+    # The record is what says the run lost something, so it is the one thing
+    # that must survive the disk that lost it.
+    @staticmethod
+    def test_a_gap_that_cannot_be_written_keeps_the_record(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello())
         _no_appends(tmp_path / "c1" / "events.jsonl")
@@ -106,6 +141,51 @@ class TestRecording:
 
         with pytest.raises(IsADirectoryError):
             journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.hello == _hello()
+
+    # The disk that lost the event is the disk the gap marker is written to, so
+    # both can fail at once, and the mark is owed until it lands. What the disk
+    # coming back buys is that mark — not the log, which ended at the gap.
+    @staticmethod
+    def test_a_recovered_disk_marks_the_gap_and_no_more(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        events = tmp_path / "c1" / "events.jsonl"
+        _no_appends(events)
+        (tmp_path / "c1" / "run.part").mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        _appends_again(events)
+        (tmp_path / "c1" / "run.part").rmdir()
+
+        with pytest.raises(OSError, match="log ends there"):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.gapped
+        assert not list(journal.events("c1"))
+
+    # A record nothing can read back is one no resume accepts either, so there
+    # is no gap left to mark and nothing left to retry. A write cut
+    # mid-character is a `UnicodeDecodeError`, which is not the parser's.
+    @staticmethod
+    def test_a_torn_record_is_no_gap_left_to_mark(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+        _no_appends(tmp_path / "c1" / "events.jsonl")
+        (tmp_path / "c1" / "run.part").mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        (tmp_path / "c1" / "run.part").rmdir()
+        # Cut mid-character, the way a daemon killed inside a write leaves it.
+        (tmp_path / "c1" / "run.json").write_bytes(b'{"hello": {"cast_i\xff')
+
+        with pytest.raises(OSError, match="log ends there"):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r2", delta="after"))
 
         assert journal.read("c1") is None
 
@@ -120,6 +200,20 @@ class TestRecording:
             journal.record(_hello())
 
         assert journal.read("c1") is None
+
+    # The record goes down before the log does, so a record that cannot be
+    # written is a log that never starts. The other order left frames on disk
+    # that `vekna log` never lists and a resume is told were never recorded.
+    @staticmethod
+    def test_a_hello_whose_record_fails_never_starts_the_log(tmp_path: Path):
+        journal = Journal(tmp_path)
+        (tmp_path / "c1").mkdir()
+        (tmp_path / "c1" / "run.part").mkdir()
+
+        with pytest.raises(IsADirectoryError):
+            journal.record(_hello())
+
+        assert not (tmp_path / "c1" / "events.jsonl").exists()
 
     @staticmethod
     def test_a_resumed_cast_records_what_it_carries_on_from(tmp_path: Path):
@@ -192,6 +286,22 @@ class TestReading:
 
         assert journal.read("c1") is None
         assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c0"]
+
+    # Cut mid-character the write comes back as a `UnicodeDecodeError`, out of
+    # `read_text` and never past the parser, so the whole `ValueError` set is
+    # what a reader has to hold — a listing must not end in a traceback.
+    @staticmethod
+    def test_a_record_cut_mid_character_hides_nothing_either(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0"))
+        journal.record(CastGoodbye(cast_id="c0", status="ok"))
+        journal.record(_hello("c1", started_at=_WHEN + timedelta(minutes=1)))
+        (tmp_path / "c1" / "run.json").write_bytes(b'{"hello": {"cast_i\xff')
+
+        assert journal.read("c1") is None
+        assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c0"]
+        journal.prune(keep=0)
+        assert [path.name for path in tmp_path.iterdir()] == ["c1"]
 
 
 class TestPruning:
