@@ -35,15 +35,23 @@ jobs:
 
       # Refuses to publish a wheel whose version is not the tag. Getting these
       # out of step means a release nobody can reproduce from the repository.
+      # The Claude Code plugin carries the package version too — the skill
+      # describes this code, so it has no release of its own.
       # A rehearsal has no tag to disagree with, so it skips this and nothing
       # else.
-      - name: Check the tag matches the package version
+      - name: Check the tag matches the package and plugin versions
         if: github.ref_type == 'tag'
         run: |
           tagged="${GITHUB_REF_NAME#v}"
           declared=$(mise exec -- poetry version -s)
           if [ "$tagged" != "$declared" ]; then
             echo "tag $GITHUB_REF_NAME does not match pyproject version $declared" >&2
+            exit 1
+          fi
+          manifest=plugins/ritual-scribe/.claude-plugin/plugin.json
+          plugin=$(jq -r .version "$manifest")
+          if [ "$plugin" != "$tagged" ]; then
+            echo "$manifest declares version $plugin, tag is $tagged" >&2
             exit 1
           fi
 
