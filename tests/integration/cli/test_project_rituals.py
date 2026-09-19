@@ -56,6 +56,6 @@ class TestProjectRituals:
         rituals_show("merge_ready")
 
         out = capsys.readouterr().out
-        assert "  (start) → gates\n" in out
-        assert "  gates → repair, (done)\n" in out
-        assert "  repair → gates\n" in out
+        assert "  (start) → quality_gates\n" in out
+        assert "  quality_gates → repair, (done)\n" in out
+        assert "  repair → quality_gates\n" in out

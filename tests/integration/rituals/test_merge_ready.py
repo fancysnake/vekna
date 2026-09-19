@@ -7,8 +7,8 @@ from rituals.merge_ready import (
     MergeReady,
     MergeReport,
     SuiteFailure,
-    gates,
     merge_ready,
+    quality_gates,
     repair,
 )
 from vekna.lexicon import StepBudgetExceededError, done, goto
@@ -25,7 +25,7 @@ class TestGates:
         trial.shell.replies(when=_LINT, exit_code=0)
         trial.shell.replies(when=_SUITE, exit_code=0)
 
-        transition = trial.walk(gates, Attempt(budget=3))
+        transition = trial.walk(quality_gates, Attempt(budget=3))
 
         assert transition == done(MergeReport(green=True, remaining=3))
         assert sorted(trial.shell.commands) == [_LINT, _SUITE]
@@ -43,7 +43,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=0)
         trial.decide.answers(answer=True, when=_SPEND)
 
-        transition = trial.walk(gates, Attempt(budget=1))
+        transition = trial.walk(quality_gates, Attempt(budget=1))
 
         assert transition == goto(repair, LintFailure(budget=1, lint="E501"))
 
@@ -53,7 +53,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=1, stdout="1 failed")
         trial.decide.answers(answer=True, when=_SPEND)
 
-        transition = trial.walk(gates, Attempt(budget=2))
+        transition = trial.walk(quality_gates, Attempt(budget=2))
 
         assert transition == goto(repair, SuiteFailure(budget=2, suite="1 failed"))
 
@@ -63,7 +63,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=1, stdout="1 failed")
         trial.decide.answers(answer=True, when=_SPEND)
 
-        transition = trial.walk(gates, Attempt(budget=2))
+        transition = trial.walk(quality_gates, Attempt(budget=2))
 
         assert transition == goto(
             repair, BothRed(budget=2, lint="E501", suite="1 failed")
@@ -79,7 +79,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=0)
         trial.decide.answers(answer=True, when=_SPEND)
 
-        transition = trial.walk(gates, Attempt(budget=1))
+        transition = trial.walk(quality_gates, Attempt(budget=1))
 
         assert transition == goto(
             repair, LintFailure(budget=1, lint="mise: no such task\n")
@@ -91,7 +91,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=1, stdout="1 failed")
         trial.decide.answers(answer=False)
 
-        trial.walk(gates, Attempt(budget=1))
+        trial.walk(quality_gates, Attempt(budget=1))
 
         asked = "the linters and the suite are red, 1 attempt left"
         assert trial.decide.prompts == [f"{asked} — hand it to the agent?"]
@@ -102,7 +102,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=0)
         trial.decide.answers(answer=False)
 
-        trial.walk(gates, Attempt(budget=2))
+        trial.walk(quality_gates, Attempt(budget=2))
 
         assert "the linters are red, 2 attempts left" in trial.decide.prompts[0]
 
@@ -112,7 +112,7 @@ class TestGates:
         trial.shell.replies(when=_SUITE, exit_code=0)
         trial.decide.answers(answer=False, when=_SPEND)
 
-        transition = trial.walk(gates, Attempt(budget=2))
+        transition = trial.walk(quality_gates, Attempt(budget=2))
 
         assert transition == done(MergeReport(green=False, remaining=2))
 
@@ -121,7 +121,7 @@ class TestGates:
         trial.shell.replies(when=_LINT, exit_code=1, stdout="E501")
         trial.shell.replies(when=_SUITE, exit_code=0)
 
-        transition = trial.walk(gates, Attempt(budget=0))
+        transition = trial.walk(quality_gates, Attempt(budget=0))
 
         assert transition == done(MergeReport(green=False, remaining=0))
         assert not trial.decide.asked
@@ -134,7 +134,7 @@ class TestRepair:
 
         transition = trial.walk(repair, LintFailure(budget=2, lint="E501"))
 
-        assert transition == goto(gates, Attempt(budget=1))
+        assert transition == goto(quality_gates, Attempt(budget=1))
         assert "The linters said:\n\nE501" in trial.coding.prompts[0]
         assert "The suite said" not in trial.coding.prompts[0]
 
@@ -170,7 +170,7 @@ class TestMergeReadyWhole:
         result = trial.cast(merge_ready, MergeReady(bound=2))
 
         assert result == MergeReport(green=True, remaining=1)
-        assert trial.steps == ["gates", "repair", "gates"]
+        assert trial.steps == ["quality_gates", "repair", "quality_gates"]
         assert "E501" in trial.coding.prompts[0]
 
     # Every pass meets a failure the previous pass tried and failed to fix, so
