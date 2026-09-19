@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from rituals.review import (
+from rituals.branch_review import (
     Diff,
     Finding,
     Judgement,
