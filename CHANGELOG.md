@@ -27,6 +27,14 @@ when.
 - `vekna cats` meows. It is one transposition from `cast`, and it eats the
   cast's arguments, so the slip costs a laugh rather than a usage error.
 
+### Fixed
+
+- **A runs root that cannot be pruned says so.** The daemon trims old casts at
+  startup, and a directory it could not remove was passed over in silence, so
+  the root could grow past its limit for good with nothing saying why. The
+  dashboard now names the directory and the error; the daemon still starts.
+  ([#78](https://github.com/fancysnake/vekna/issues/78))
+
 ## [0.7.0] - 2026-08-29
 
 ### Changed
