@@ -12,6 +12,7 @@ modules = ["cabinet.rituals"]
 remote = "https-origin"
 sign_commits = false
 review_skill = ".claude/skills/thermo-nuclear-code-quality-review/SKILL.md"
+gate = "mise run lint:py"
 
 [cabinet.ci]
 gate_checks = ["checks", "test"]
