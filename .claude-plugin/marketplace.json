@@ -1,0 +1,16 @@
+{
+  "name": "vekna",
+  "owner": {
+    "name": "fancysnake"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for writing and casting vekna rituals"
+  },
+  "plugins": [
+    {
+      "name": "ritual-scribe",
+      "source": "./plugins/ritual-scribe",
+      "category": "development"
+    }
+  ]
+}

@@ -15,3 +15,8 @@
   project is built on — read as +25 typing debt and failed `fullcheck`. Worked
   around by calling them `view`; the metric wants a way to say "this symbol,
   imported from this module".
+- Adding `jq` to mise `[tools]` made `mise install` fetch it through aqua,
+  which verifies GitHub artifact attestations against sigstore's TUF root. From
+  the sandboxed shell that endpoint was unreachable, so every `mise run` and
+  `mise exec` aborted until `MISE_DISABLE_TOOLS=jq` was set. Worked outside the
+  sandbox; log it if it recurs.

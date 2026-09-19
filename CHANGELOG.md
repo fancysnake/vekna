@@ -11,13 +11,6 @@ when.
 
 ## [Unreleased] - ???
 
-## [0.8.0] - 2026-08-30
-
-### Added
-
-- `vekna cats` meows. One transposition from `cast`, and it eats whatever the
-  cast was going to get, so the slip costs a laugh rather than a usage error.
-
 ### Changed
 
 - **A run marked `gapped` is resumable again.** A gap costs the tail of the log,
@@ -52,6 +45,21 @@ when.
   `UnicodeDecodeError`, which the reader did not catch, so `vekna log` and
   `prune` ended in the parser rather than in a listing.
 
+## [0.8.0] - 2026-09-18
+
+### Added
+
+- **`ritual-scribe` is a Claude Code plugin.** The repo is its marketplace:
+
+  ```bash
+  claude plugin marketplace add fancysnake/vekna
+  claude plugin install ritual-scribe@vekna
+  ```
+
+  The plugin carries the package version, and the release workflow refuses a
+  tag the two disagree on.
+- `vekna cats` meows. It is one transposition from `cast`, and it eats the
+  cast's arguments, so the slip costs a laugh rather than a usage error.
 
 ## [0.7.0] - 2026-08-29
 
