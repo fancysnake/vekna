@@ -6,7 +6,7 @@ authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.11,<4"
+requires-python = ">=3.11,<3.15"
 keywords = ["agents", "claude", "llm", "orchestration", "workflow"]
 # No `License ::` classifier: PEP 639 supersedes it with the `License-Expression`
 # metadata field that `license` above produces, and PyPI rejects carrying both.
@@ -73,6 +73,7 @@ dev = [
     "tingle (>=0.7.2,<0.8.0)",
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
+    "cabinet @ git+https://github.com/fancysnake/cabinet.git@v0.3.0",
 ]
 
 # Only `site:*` and the site workflow install this one — nothing else needs a

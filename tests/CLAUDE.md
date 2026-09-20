@@ -52,10 +52,10 @@ unit: the mediums are `links`.
   default answer. A `decide` answer outside the offered options raises too —
   unless the options came with `free`, as an agent's `ask_human` always does,
   where they are suggestions and any answer stands.
-  Inside an `asyncio.TaskGroup` — `merge_ready.gates` runs its two gates in one
-  — it arrives wrapped, so a cast that reaches a grouped step needs
-  `pytest.raises(BaseExceptionGroup)` and an assertion on `.exceptions[0]`.
-  That is Python's doing, not the trial's.
+  Inside an `asyncio.TaskGroup` — `merge_ready.quality_gates` runs its two
+  gates in one — it arrives wrapped, so a cast that reaches a grouped step
+  needs `pytest.raises(BaseExceptionGroup)` and an assertion on
+  `.exceptions[0]`. That is Python's doing, not the trial's.
 - A `Trial` answers only inside its `with` block; the `trial` fixture hands you
   one already entered. Outside it, `cast`/`walk` raise `TrialError` rather than
   letting `shell()` fall through to real bash.
