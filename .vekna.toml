@@ -12,7 +12,12 @@ files = ["src/rituals"]
 # `__init__`, so cabinet's services are still bound. A module named here and not
 # installed takes every ritual down with it, this repo's included — vekna's bug,
 # not this file's.
-modules = ["cabinet.rituals.cover", "cabinet.rituals.labels", "cabinet.rituals.refresh"]
+modules = [
+    "cabinet.rituals.cover",
+    "cabinet.rituals.labels",
+    "cabinet.rituals.refresh",
+    "cabinet.rituals.review",
+]
 
 [cabinet]
 # `origin` is ssh and a cast has no terminal for ssh to ask a passphrase on, so
