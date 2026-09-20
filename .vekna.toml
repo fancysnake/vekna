@@ -6,13 +6,34 @@
 # in the repo finds the same source.
 [rituals]
 files = ["src/rituals"]
-modules = ["cabinet.rituals"]
+# The cabinet facades this repo casts, named one by one rather than as the whole
+# package, which also carries a `review` whose ritual name and `gates` step
+# collide with this repo's own. Importing a facade imports the package
+# `__init__`, so cabinet's services are still bound. A module named here and not
+# installed takes every ritual down with it, this repo's included — vekna's bug,
+# not this file's.
+modules = ["cabinet.rituals.cover", "cabinet.rituals.labels", "cabinet.rituals.refresh"]
 
 [cabinet]
+# `origin` is ssh and a cast has no terminal for ssh to ask a passphrase on, so
+# cabinet pushes through a second remote that is https with `gh` behind it. A
+# fresh clone has to make that remote before the first cast — CLAUDE.md carries
+# the two commands.
 remote = "https-origin"
 sign_commits = false
-review_skill = ".claude/skills/thermo-nuclear-code-quality-review/SKILL.md"
-gate = "mise run lint:py"
+# Both halves of what CI calls green: a gate that only linted would let a red
+# suite land, since a green gate goes straight to commit and push. `coverage` is
+# named because cabinet's default is `mise run diff-cover`, which is not a task
+# here. The CI jobs these stand in for are cabinet's own `gate_checks` default,
+# `["checks", "test"]`, matched by prefix — which is how the bare `test` covers
+# `test (3.11)` through `test (3.14)`.
+gate = "mise run gate"
+coverage = "mise run test:py:cov:diff"
 
-[cabinet.ci]
-gate_checks = ["checks", "test"]
+# What the repair agent may run to check itself. The same list builds the SDK's
+# `Bash(<prefix>:*)` allowlist and the sentence in the prompt, so it cannot
+# promise a command that is then refused. Narrow on purpose: the ritual re-runs
+# the task that broke as soon as the agent stops, so a sweep the agent runs is
+# minutes spent on an answer it is about to be handed.
+[cabinet.agent]
+may_run = ["mise run lint:py", "mise run test:py"]

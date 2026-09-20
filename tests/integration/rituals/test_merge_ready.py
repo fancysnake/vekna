@@ -19,7 +19,7 @@ _SUITE = "mise run test:py"
 _SPEND = "*hand it to the agent?*"
 
 
-class TestGates:
+class TestQualityGates:
     @staticmethod
     def test_both_green_ends_the_ritual_with_the_budget_untouched(trial: Trial) -> None:
         trial.shell.replies(when=_LINT, exit_code=0)

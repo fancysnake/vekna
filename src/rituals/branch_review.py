@@ -1,4 +1,4 @@
-# review — read the diff this branch adds, and say what is wrong with it.
+# branch_review — read the diff this branch adds, and say what is wrong with it.
 
 import hashlib
 import shlex
@@ -74,7 +74,7 @@ class Review(BaseModel):
 
 
 @ritual("branch_review")
-def review(components: ReviewRequest) -> Transition:
+def branch_review(components: ReviewRequest) -> Transition:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.
     return goto(collect, components)
