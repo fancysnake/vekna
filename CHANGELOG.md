@@ -11,6 +11,13 @@ when.
 
 ## [Unreleased] - ???
 
+### Changed
+
+- **The supported Python range is `>=3.11,<3.15`**, down from `>=3.11,<4`. The
+  development environment installs cabinet, which caps itself there, and a
+  range the lock cannot resolve is a promise the project does not keep. 3.15 is
+  not released; what this costs is the claim to work on it untested.
+
 ## [0.8.0] - 2026-09-18
 
 ### Added

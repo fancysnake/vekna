@@ -12,7 +12,7 @@ import pytest
 from vekna.lexicon._inits import rituals_list, rituals_show
 
 _ROOT = Path(__file__).resolve().parents[3]
-_EXPECTED = ("cover_diff", "merge_ready", "review", "triage")
+_EXPECTED = ("branch_review", "cover_diff", "merge_ready", "triage")
 
 
 @pytest.fixture
@@ -35,7 +35,12 @@ class TestProjectRituals:
             assert f"{name}" in out
         # The flag rendering that broke on 3.11: an optional Annotated component
         # names the type it validates, not `Optional` or `Annotated`.
-        assert "review  [--base <str>] [--only <Path>] [--focus <str>]\n" in out
+        # A whole line: `review` is a suffix of `branch_review`, so a substring
+        # check passes on a listing that has lost the rename.
+        assert (
+            "branch_review  [--base <str>] [--only <Path>] [--focus <str>]"
+            in out.splitlines()
+        )
         assert "triage  --link <AnyUrl>\n" in out
 
     @staticmethod
@@ -52,10 +57,10 @@ class TestProjectRituals:
         assert "(start) → " in out
 
     @staticmethod
-    def test_the_concurrent_gates_step_is_reachable(capsys):
+    def test_the_concurrent_quality_gates_step_is_reachable(capsys):
         rituals_show("merge_ready")
 
         out = capsys.readouterr().out
-        assert "  (start) → gates\n" in out
-        assert "  gates → repair, (done)\n" in out
-        assert "  repair → gates\n" in out
+        assert "  (start) → quality_gates\n" in out
+        assert "  quality_gates → repair, (done)\n" in out
+        assert "  repair → quality_gates\n" in out

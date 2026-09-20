@@ -46,10 +46,10 @@ until green or until the retry budget runs out.
 The repair thread uses `Session.CONTINUE` with a key, which is the case sessions
 exist for: an agent on its fourth attempt remembering the three that failed.
 
-## `review` — read the diff this branch adds, and say what is wrong with it
+## `branch_review` — read the diff this branch adds, and say what is wrong with it
 
 ```bash
-vekna cast review --base main --focus "the new locking code"
+vekna cast branch_review --base main --focus "the new locking code"
 ```
 
 Reviews only what the diff changes, after reading the project's own conventions
