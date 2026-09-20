@@ -16,6 +16,7 @@ exclude_docs: |
   reborn/
   eye/
   hand/
+  high-magic/
 
 theme:
   name: material

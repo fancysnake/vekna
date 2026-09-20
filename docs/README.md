@@ -19,6 +19,9 @@ anyone sending a patch.
   assume
 - [`eye/`](eye/README.md) — the surfaces that watch
 - [`hand/`](hand/README.md) — the acting half
+- [`high-magic/`](high-magic/README.md) — the factory: worktrees managed, casts
+  queued, the lich folded into the dashboard; [`high-magic/plan.md`](high-magic/plan.md)
+  is the order
 
 Add a page to the site and it needs a `nav` entry in `mkdocs.yml`. Add one to a
 track and it needs nothing, because the whole directory is excluded.
