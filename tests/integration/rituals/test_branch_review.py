@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from rituals.review import (
+from rituals.branch_review import (
     Diff,
     Finding,
     Judgement,
     Review,
     ReviewRequest,
+    branch_review,
     collect,
     judge,
-    review,
 )
 from vekna.lexicon import RitualError, done, goto
 from vekna.trial import Trial
@@ -132,7 +132,7 @@ class TestReviewWhole:
         trial.shell.replies(when="git diff --end-of-options main...HEAD", stdout=_DIFF)
         trial.coding.replies(Judgement(verdict="fix", findings=[_FINDING]))
 
-        result = trial.cast(review, ReviewRequest(base="main"))
+        result = trial.cast(branch_review, ReviewRequest(base="main"))
 
         assert result == Review(
             base="main", verdict="fix", findings=[_FINDING], pinned=_pinned(_DIFF)

@@ -20,6 +20,10 @@ when.
 - **`vekna log` says which runs lost part of their log**, with `◌ gap` at the end
   of the row. It said nothing, which was the other half of telling a damaged run
   less than the truth.
+- **The supported Python range is `>=3.11,<3.15`**, down from `>=3.11,<4`. The
+  development environment installs cabinet, which caps itself there, and a
+  range the lock cannot resolve is a promise the project does not keep. 3.15 is
+  not released; what this costs is the claim to work on it untested.
 
 ### Fixed
 
