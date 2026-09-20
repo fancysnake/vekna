@@ -74,14 +74,15 @@ run = [
     { task = "lint:tingle" },
 ]
 
-# What a cast runs between repair rounds, named in `.vekna.toml` as `[cabinet]
-# gate`. `fullcheck` is too much to pay per round — diff coverage, markdown and
-# tingle on every attempt — and `lint:py` alone is too little, since a green
-# gate is what sends a branch to commit and push. `-x` because the agent reading
-# this only needs the first failure.
-[tasks.gate]
-description = "Format, lint and test, stopping at the first failure"
-run = [{ task = "format:py" }, { task = "lint:py" }, { task = "test:py -x" }]
+[tasks.pr-fix]
+description = "Pull Request Formatting and Readiness Check"
+run = [
+    "mise install",
+    "poetry install",
+    { task = "format:py" },
+    { task = "lint:py" },
+    { task = "test:py:cov", args = ['-xvv', '--fail-under=100'] },
+]
 
 [tasks."site:dev"]
 description = "Serve the documentation site with live reload"

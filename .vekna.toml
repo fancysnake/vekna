@@ -32,7 +32,7 @@ sign_commits = false
 # here. The CI jobs these stand in for are cabinet's own `gate_checks` default,
 # `["checks", "test"]`, matched by prefix — which is how the bare `test` covers
 # `test (3.11)` through `test (3.14)`.
-gate = "mise run gate"
+gate = "mise run pr-fix"
 coverage = "mise run test:py:cov:diff"
 
 # What the repair agent may run to check itself. The same list builds the SDK's
