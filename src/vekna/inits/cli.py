@@ -233,9 +233,7 @@ async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> 
     if debug is not None:
         dashboard.say(f"logging every event to {debug}")
     # Pruned once the view exists to say how it went, and before the socket
-    # binds so nothing is being written while it runs. The view holds one note,
-    # so this one comes after the debug banner: a runs root that cannot be
-    # cleaned is the thing an operator has to hear.
+    # binds so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         dashboard.say(f"could not prune {len(failed)} old cast(s): {failed[0]}")
 

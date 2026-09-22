@@ -230,9 +230,11 @@ class TestPruning:
             journal.record(CastGoodbye(cast_id=cast_id, status="ok"))
         real_rmtree = shutil.rmtree
 
-        def rmtree(path: Path) -> None:
+        # What `rmtree(ignore_errors=True)` does to a directory it cannot
+        # unlink: nothing, and it says nothing either.
+        def rmtree(path: Path, **_kwargs: object) -> None:
             if path.name == "stuck":
-                raise PermissionError(13, "Permission denied", str(path))
+                return
             real_rmtree(path)
 
         monkeypatch.setattr(shutil, "rmtree", rmtree)
@@ -240,5 +242,4 @@ class TestPruning:
         failed = journal.prune(keep=0)
 
         assert [path.name for path in tmp_path.iterdir()] == ["stuck"]
-        stuck = tmp_path / "stuck"
-        assert failed == [f"{stuck}: [Errno 13] Permission denied: '{stuck}'"]
+        assert failed == [tmp_path / "stuck"]
