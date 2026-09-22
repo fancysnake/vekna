@@ -7,9 +7,15 @@ replicated and scaled. A project runs several casts at once across a pool of
 worktrees, a ritual fans its work out into a queue instead of walking a list,
 and one window shows the whole of it.
 
-The shared context is still [`../reborn/common.md`](../reborn/common.md). This
-page is the delta: what that document says that stops being true, and what is
-added. [`plan.md`](plan.md) is the order.
+The shared context is still [`../reborn/common.md`](../reborn/common.md), whose
+first line names `reborn/`, `eye/` and `hand/` as the tracks that assume it —
+this one does too. It stays a delta rather than an edit in place because the
+track is an experiment: rewriting common.md now would assert a decision that
+[#101](https://github.com/fancysnake/vekna/issues/101),
+[#104](https://github.com/fancysnake/vekna/issues/104) and
+[#108](https://github.com/fancysnake/vekna/issues/108) still contradict. What
+that document says that stops being true is listed below, and nowhere else.
+[`plan.md`](plan.md) is the order this timeline goes in.
 
 ## Two ideas
 
@@ -38,16 +44,26 @@ and the boundary stays the unit of determinism, which is what
   project opens that project's dashboard: its casts, its queue, its slots and
   trees; trigger a ritual, attach to a cast to answer it. The lich as a
   separate process, its generated name, its phylactery row, and its
-  one-cast-at-a-time refusal all go. Resolved decision 12 falls, and "two
-  casts in one lich" leaves the not-planned list. What survives of
+  one-cast-at-a-time refusal all go. What survives of
   [#101](https://github.com/fancysnake/vekna/issues/101) is the per-project
-  scheduler, and it lives inside the daemon the way the hub does. The word
-  survives too: a project's **lich** is its queue, its slots and its trees.
-- **The daemon starts casts.** The 0.6.0 line "it observes and records; it
-  starts nothing" moves to the past tense. It spawns `vekna cast` subprocesses
-  the way `--continue` already does, with a cwd; it still imports no lexicon
-  and loads no ritual. **Worktrees are pooled, processes are not**: "pooled
-  cast processes" stays not planned.
+  scheduler, and it lives inside the daemon the way the hub does. **The word
+  goes with the process.** What is left is a place rather than a person: a
+  project's **circle** is its queue, its slots and its trees.
+
+  Struck in common.md, in full: the **lich** role in the premise and the
+  **Lich** and **Phylactery** glossary rows; the `lich "hollow-vesper"`
+  diagram and its `phylactery: one registry row` line; the `LichRose` /
+  `LichFell` / `LichStatus` and `CastRequested` / `CastRefused` /
+  `CastKillRequested` wire rows, the first gone outright and the second
+  re-aimed surface ↔ daemon with no routing by lich name; resolved decisions
+  12 and 13, the refusal and the phylactery keyed by name; and the whole
+  not-planned entry "two casts in one lich, or one lich over several project
+  roots", both halves of which this track does on purpose.
+- **The daemon starts casts.** common.md's premise gives spawning to the lich
+  and leaves the daemon routing commands to it; here the daemon spawns `vekna
+  cast` subprocesses itself, the way `--resume` already does, with a cwd. It
+  still imports no lexicon and loads no ritual. **Worktrees are pooled,
+  processes are not**: "pooled cast processes" stays not planned.
 - **The daemon outlives the window.** Queued casts cannot die because a
   terminal closed. It detaches on first start, every `vekna` attaches as a
   peer, `q` detaches, and `vekna stop` is the explicit end. Today the first
@@ -70,13 +86,17 @@ and the boundary stays the unit of determinism, which is what
   networking. That only becomes true across machines, which stays out of
   scope.
 
-## The lich, as it is now
+Outside common.md, one sentence dates with it: `CHANGELOG.md`'s 0.6.0 entry says
+of the daemon "it observes and records; it starts nothing". True when it was
+written, past tense here.
+
+## The circle, as it is now
 
 A per-project scheduler inside the daemon. Its numbers live in the project's
 `.vekna.toml`, with a global default in the user config:
 
 ```toml
-[lich]
+[circle]
 processes = 4
 worktrees = 2
 prepare = "mise install && poetry install"
@@ -84,7 +104,8 @@ prepare = "mise install && poetry install"
 
 A cast is enqueued with what it needs: a slot always, a tree if its ritual
 says so. The scheduler spawns it when both are free, in the tree it leased,
-and releases both when the cast ends however it ends.
+and releases both when the cast ends however it ends — or the slot alone,
+earlier, when the cast blocks on a child it is waiting for.
 
 ### Worktrees
 
@@ -98,14 +119,19 @@ and releases both when the cast ends however it ends.
 - **Lease**: a tree is free when its HEAD is its parking branch and no live
   cast holds it. The cast checks out whatever it needs, as cabinet's rituals
   do today.
-- **Release**: after the cast ends, the daemon runs `git checkout
-  vekna/wt-<n>` in the tree. That one command is also the cleanliness check:
-  it fails on a dirty tree or a merge in progress. A failed release marks the
-  tree **blocked** and reports it. Nothing ever resets a tree; uncommitted
+- **Release**: after the cast ends, the daemon checks the tree and only then
+  parks it. The check is its own step, because `git checkout` is not one — it
+  carries local changes across a branch switch whenever they do not conflict,
+  so a tree that failed nothing would still hand the next cast the last one's
+  edits. A non-empty `git status --porcelain`, or a merge, rebase or
+  cherry-pick in progress, marks the tree **blocked** and reports it; a clean
+  tree gets `git checkout vekna/wt-<n>`. Gitignored files are not dirt: the
+  venv and whatever else `prepare` left are the reason a tree is reused, and
+  `--porcelain` does not list them. Nothing ever resets a tree; uncommitted
   work is somebody's until they say otherwise.
 - **Crash**: a tree on a non-parking branch with no live cast is one a dead
-  cast left behind. The daemon attempts the same release on restart, and
-  blocked-or-free is git's answer, not a remembered one.
+  cast left behind. The daemon runs the same check and release on restart, so
+  blocked-or-free is read off the tree, not remembered.
 - **Creation** is on demand up to the configured count: `git worktree add
   <path> -b vekna/wt-<n> <base>`, then `prepare` once. Trees are persistent:
   a fresh tree has no venv, no `mise trust`, no gitignored files, and
@@ -127,22 +153,43 @@ and releases both when the cast ends however it ends.
 Two mediums, in `folio/flow`, over the daemon link a cast already has:
 
 ```python
-from vekna.folio.flow import cast, enqueue
+from vekna.folio.flow import await_cast, enqueue
 
 cast_id = await enqueue("refresh", Sweep(pull_request=pr.number))   # proceed
-report = await cast("refresh", Sweep(pull_request=pr.number))       # await
+report = await await_cast("refresh", Sweep(pull_request=pr.number))  # await
 ```
 
-- `enqueue` returns a cast id and the step continues. `cast` waits for the
-  child's result, validated against `output=` the way coding's is.
-- Spawn is **by ritual name**, since the daemon runs `vekna cast <name>` and
-  loads nothing. That is what makes
-  [#128](https://github.com/fancysnake/vekna/issues/128) a dependency.
-- **Standalone denies**, like locks. A cast with no daemon has no queue, and
-  a queue that silently ran inline would hide the one thing this exists for.
+- `enqueue` returns a cast id and the step continues. `await_cast` waits for
+  the child's result, validated against `output=` the way coding's is. Not
+  `cast`: the noun is the project's central one, the verb is its CLI's, and
+  `typing.cast` is imported in `inits/cli.py` already — a ritual importing
+  `cast` makes every later sentence about a cast ambiguous.
+- **An awaiting parent gives up its process slot** and keeps its tree. A
+  parent blocked in `await_cast` is idle; holding a slot while its child
+  queues for one is the deadlock the mid-cast tree lease is refused for
+  above, and with `processes = 4` it takes four parents. The tree stays
+  leased, because the parent's checkout has to survive until it resumes.
+- **The result rides on the wire.** `CastGoodbye` today is status and detail,
+  and detail is prose for a human. It gains a result field carrying the
+  child's return model as JSON, the way `CastHello` already carries
+  components; the parent validates it against `output=`, being the side with
+  the lexicon. The daemon relays it and validates nothing.
 - **A queued cast is a run record** with status `queued` and no events. `vekna
   log` lists it, prune spares it as it spares a running one, the dashboard
   gains the status.
+- **The payload rides in that record, and spawn is by id.** The typed
+  components are dumped into the record's `CastHello` — by the enqueuing cast,
+  which is the process that has the lexicon and the model — and the daemon
+  spawns `vekna cast --resume <cast_id>` with a cwd. The child reads its own
+  record and validates the components against the ritual's model, exactly as
+  `--resume` does today (`_resume`, `lexicon/_inits.py`). Nothing typed crosses
+  the daemon, which is what lets it stay a process that loads no lexicon.
+- **The ritual name rides there too**, resolved by the enqueuing cast rather
+  than by the daemon, which has no compendium to resolve it against. It has to
+  be a name that means one ritual from any directory, and that is what makes
+  [#128](https://github.com/fancysnake/vekna/issues/128) a dependency.
+- **Standalone denies**, like locks. A cast with no daemon has no queue, and
+  a queue that silently ran inline would hide the one thing this exists for.
 - The child is an ordinary cast with its own journal, hello and goodbye. One
   field on `CastHello` says which cast enqueued it, and "what did this sweep
   spawn" is a query over the journal, not a list something maintains.
@@ -165,20 +212,8 @@ report = await cast("refresh", Sweep(pull_request=pr.number))       # await
 
 ## What it depends on
 
-Hand issues that are not started, in the order they bite:
-
-1. [#113](https://github.com/fancysnake/vekna/issues/113), the unattended
-   half. A spawned cast that reaches a `decide` with no surface attached must
-   fail at that boundary with a route, not die on the third empty line.
-2. [#111](https://github.com/fancysnake/vekna/issues/111), budgets. One cast
-   overspending is a nuisance; thirty enqueued ones doing it is a bill.
-3. [#110](https://github.com/fancysnake/vekna/issues/110), cancellation. Kill
-   on a queued or running job has to reach the agent subprocess.
-4. [#128](https://github.com/fancysnake/vekna/issues/128), namespaces. Spawn
-   is by name.
-5. [#103](https://github.com/fancysnake/vekna/issues/103) first, if at all.
-   It breaks the public surface; landing it before `enqueue` exists is one
-   break instead of two.
+Groups 1 and 2 of [`plan.md`](plan.md), which say which issues and in what
+order. Nothing here restates them.
 
 ## What it does to cabinet
 

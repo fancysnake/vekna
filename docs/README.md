@@ -15,22 +15,28 @@ anyone sending a patch.
 - [`releasing.md`](releasing.md) — the manual half of a release: the accounts,
   the DNS, and the order to do a tag in
 - [`reborn/`](reborn/README.md) — the pivot to rituals and casts, plus
-  [`reborn/common.md`](reborn/common.md), the shared context all three tracks
-  assume
+  [`reborn/common.md`](reborn/common.md), the shared context the tracks assume
 - [`eye/`](eye/README.md) — the surfaces that watch
 - [`hand/`](hand/README.md) — the acting half
 - [`high-magic/`](high-magic/README.md) — the factory: worktrees managed, casts
-  queued, the lich folded into the dashboard; [`high-magic/plan.md`](high-magic/plan.md)
-  is the order
+  queued, the lich folded into the dashboard. An alternate path, on assumptions
+  the other three do not make, so it keeps its delta against `common.md` and its
+  own order in [`high-magic/plan.md`](high-magic/plan.md)
 
 Add a page to the site and it needs a `nav` entry in `mkdocs.yml`. Add one to a
 track and it needs nothing, because the whole directory is excluded.
 
 ## How the ideas work
 
-A track is a GitHub milestone, and an idea is an issue in it. They are not a
-release plan, and reading them in order buys nothing — order is decided when
-work starts, not when an issue is written.
+A track is a GitHub milestone, and an idea is an issue in it. A milestone
+groups by category, not by release: there is no timeline across the tracks and
+none inside one, so reading them in order buys nothing. Order is decided when
+work starts.
+
+[`high-magic/`](high-magic/README.md) is the exception that says so out loud.
+It is an alternate path rather than a category, and a path is a sequence, so
+[`high-magic/plan.md`](high-magic/plan.md) orders it — that path only, and no
+issue is edited to say where it sits.
 
 - **One issue is one feature**, labelled with what it costs: `S`, `M`, `L`, or
   `Epic` for something big enough that it wants splitting into smaller

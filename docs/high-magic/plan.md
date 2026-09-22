@@ -1,30 +1,27 @@
 # High Magic — the order
 
-The one page under `docs/` that says *when*. [`README.md`](README.md) says
-what; this says what goes first and why, grouped by what unblocks what. An
-issue is named by number; a group is done when its issues are closed.
+The order this timeline goes in, and nobody else's: the issues outside it are
+grouped by category, not by release. [`README.md`](README.md) says what this
+track is; this says what goes first and why, grouped by what unblocks what. An
+issue is named by number.
 
 Revise it when the order changes, not when something ships. Shipping is
-`CHANGELOG.md`'s to record.
+`CHANGELOG.md`'s to record, and what is closed is GitHub's to show.
 
-## 1. In flight
+## 1. Break the API once
 
-- [#78](https://github.com/fancysnake/vekna/issues/78) — prune reports what
-  it could not remove. `PLAN.md` is written for it.
-
-## 2. Break the API once
-
-The queue spawns by name and the `enqueue` medium should land on the surface
-the engine will keep, not the one it is about to lose.
+The queue carries a ritual name and the `enqueue` medium should land on the
+surface the engine will keep, not the one it is about to lose.
 
 - [#103](https://github.com/fancysnake/vekna/issues/103) — steps as DTOs. The
-  one breaking change; everything after it builds on the new shape.
+  one breaking change, if it lands at all; everything after it builds on the
+  new shape.
 - [#128](https://github.com/fancysnake/vekna/issues/128) — namespaces for tome
-  rituals. Spawn by name needs unambiguous names.
+  rituals. A queued name resolved from any directory needs to be unambiguous.
 - [#129](https://github.com/fancysnake/vekna/issues/129) — every collision at
   once. Same code as #128; done together.
 
-## 3. Hand prerequisites
+## 2. Hand prerequisites
 
 In dependency order: a timeout and a budget overrun both arrive as a
 `Failure`, so the failure route comes first.
@@ -38,30 +35,31 @@ In dependency order: a timeout and a budget overrun both arrive as a
 - [#111](https://github.com/fancysnake/vekna/issues/111) — cast budgets. One
   cast overspending is a nuisance; thirty enqueued ones doing it is a bill.
 
-## 4. Journal hygiene
+## 3. Journal hygiene
 
 The queue stores its entries as run records, so these stop being cosmetic.
 
+- [#78](https://github.com/fancysnake/vekna/issues/78) — prune reports what it
+  could not remove.
 - [#77](https://github.com/fancysnake/vekna/issues/77) — the event log stays
   a prefix.
 - [#134](https://github.com/fancysnake/vekna/issues/134) — unreadable run
   directories do not leak.
 
-## 5. The factory
+## 4. The factory
 
-New issues, replacing [#101](https://github.com/fancysnake/vekna/issues/101).
-Each is filed when the one before it is closed, so its scope is written
-against what actually shipped.
+New issues, replacing [#101](https://github.com/fancysnake/vekna/issues/101),
+filed in this order — each written against the shape the one before it leaves.
 
 1. **The daemon that outlives the window.** Detach on first start, `vekna`
    attaches, `q` detaches, `vekna stop`. Project identity from the git
    common dir on `CastHello`. The project view as the default screen, the
    global one as a tab.
-2. **Spawn.** The daemon runs `vekna cast <name>` with a cwd, behind a
-   process-slot counter from `[lich] processes`. Answers over the wire for
-   spawned casts. Start a ritual from the dashboard.
+2. **Spawn.** The daemon runs `vekna cast --resume <cast_id>` with a cwd,
+   behind a process-slot counter from `[circle] processes`. Answers over the
+   wire for spawned casts. Start a ritual from the dashboard.
 3. **The worktree pool.** Parking branches, derivation from `git worktree
-   list`, lease and release, `prepare`, `[lich] worktrees`,
+   list`, lease and release, `prepare`, `[circle] worktrees`,
    `@ritual(worktree=True)`.
 4. **The queue.** `enqueue` and `cast` in `folio/flow`, the `queued` run
    record, prune sparing it, the dashboard status, the spawning cast on
@@ -69,21 +67,21 @@ against what actually shipped.
 5. [#94](https://github.com/fancysnake/vekna/issues/94) — a component
    answered once per repo. Enqueued casts carry components nobody typed.
 
-## 6. Locks
+## 5. Locks
 
 - [#102](https://github.com/fancysnake/vekna/issues/102) — coordinated locks.
   The scheduler's counters do not need the tree; `system:claude-quota`
   across many parallel casts is the first thing that will. Swap ahead of
-  group 5 if `lock()` is wanted sooner — the scheduler never reads it either
+  group 4 if `lock()` is wanted sooner — the scheduler never reads it either
   way.
 
-## 7. Cabinet
+## 6. Cabinet
 
-After group 5 ships, in [cabinet](https://github.com/fancysnake/cabinet):
+After group 4 ships, in [cabinet](https://github.com/fancysnake/cabinet):
 one pull request per cast, `list_prs` enqueues and is done, `sync_base`
 without a checkout, `check_clean` and `release` removed.
 
-## 8. Surfaces
+## 7. Surfaces
 
 Cheapest first.
 
@@ -101,23 +99,10 @@ Cheapest first.
 
 ## Unordered
 
-Nothing above depends on these. Pick one up when it is the cheapest thing on
-the table.
-
-[#91](https://github.com/fancysnake/vekna/issues/91),
-[#92](https://github.com/fancysnake/vekna/issues/92),
-[#93](https://github.com/fancysnake/vekna/issues/93),
-[#95](https://github.com/fancysnake/vekna/issues/95),
-[#96](https://github.com/fancysnake/vekna/issues/96),
-[#97](https://github.com/fancysnake/vekna/issues/97),
-[#98](https://github.com/fancysnake/vekna/issues/98),
-[#100](https://github.com/fancysnake/vekna/issues/100),
-[#112](https://github.com/fancysnake/vekna/issues/112),
-[#114](https://github.com/fancysnake/vekna/issues/114),
-[#115](https://github.com/fancysnake/vekna/issues/115),
-[#131](https://github.com/fancysnake/vekna/issues/131),
-[#132](https://github.com/fancysnake/vekna/issues/132),
-[#79](https://github.com/fancysnake/vekna/issues/79).
+Everything not named above. Nothing above depends on it; pick one up when it
+is the cheapest thing on the table. The
+[milestones](https://github.com/fancysnake/vekna/milestones) are the list, and
+they stay current on their own.
 
 [#133](https://github.com/fancysnake/vekna/issues/133) is the 1.0 bump
 itself.
