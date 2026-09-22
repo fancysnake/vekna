@@ -3,11 +3,6 @@
 Shared context every idea under `reborn/`, `eye/` and `hand/` assumes. Read
 once. This is the only file the others point at.
 
-[`../high-magic/`](../high-magic/README.md) assumes it too, and strikes parts of
-it: an alternate path whose "What changes in common.md" section lists what stops
-being true there — the lich, decisions 12 and 13, who spawns a cast. It is a
-proposal, so nothing of it is written into this page.
-
 ## Premise
 
 One binary, `vekna`, three roles with separate lifetimes:

@@ -109,10 +109,7 @@ map, layout, patterns, and drift flags:
 - [`docs/eye/`](docs/eye/README.md) — Eye, the surfaces that watch
 - [`docs/hand/`](docs/hand/README.md) — Hand, the acting half: failure paths,
   bounds, budgets, skills, replay
-- [`docs/high-magic/`](docs/high-magic/README.md) — High Magic, the factory:
-  many casts per project, worktrees pooled, casts queued. A proposal on
-  assumptions the other tracks do not make, so it reads as a delta against
-  `common.md` rather than as settled context
-- Ideas are GitHub issues, one milestone per track: Reborn, Eye, Hand.
-  `CHANGELOG.md` records what shipped
+- Ideas are GitHub issues, one milestone per track: Reborn, Eye, Hand, and
+  High Magic, whose epic [#142](https://github.com/fancysnake/vekna/issues/142)
+  orders the factory path by blocked-by. `CHANGELOG.md` records what shipped
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight
