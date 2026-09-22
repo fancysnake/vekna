@@ -14,14 +14,11 @@ anyone sending a patch.
 
 - [`releasing.md`](releasing.md) — the manual half of a release: the accounts,
   the DNS, and the order to do a tag in
-- [`reborn/`](reborn/README.md) — the pivot to rituals and casts, plus
-  [`reborn/common.md`](reborn/common.md), the shared context all three tracks
-  assume
-- [`eye/`](eye/README.md) — the surfaces that watch
-- [`hand/`](hand/README.md) — the acting half
+- [`common.md`](common.md) — the shared context every idea issue assumes:
+  premise, vocabulary, process model, wire, CLI surface, resolved decisions
 
-Add a page to the site and it needs a `nav` entry in `mkdocs.yml`. Add one to a
-track and it needs nothing, because the whole directory is excluded.
+Add a page to the site and it needs a `nav` entry in `mkdocs.yml`; the files
+above are listed in `exclude_docs` instead.
 
 ## How the ideas work
 

@@ -6,16 +6,14 @@ repo_url: https://github.com/fancysnake/vekna
 repo_name: fancysnake/vekna
 copyright: BSD-3-Clause
 
-# `docs/` holds the plan as well as the manual — `reborn/` and its siblings are
+# `docs/` holds the plan as well as the manual — `common.md` and the runbook are
 # written for the author, and read as noise to anyone arriving from PyPI. They
 # stay in the repository and out of the build; a second directory tree would buy
 # the same thing and cost a second place to look.
 exclude_docs: |
   README.md
   releasing.md
-  reborn/
-  eye/
-  hand/
+  common.md
 
 theme:
   name: material
