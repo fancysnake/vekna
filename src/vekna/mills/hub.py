@@ -22,7 +22,7 @@ from vekna.wire import (
     WireMessage,
 )
 
-_LOCKS_LATER = "locks arrive at 0.7.0"
+_LOCKS_LATER = "locks are not built yet"
 _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"

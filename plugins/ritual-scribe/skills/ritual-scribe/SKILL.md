@@ -522,7 +522,7 @@ run fullcheck` keeps them correct. Four rituals, four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
   a business budget counted down until it routes to `done`.
-- **`review`** — `output=` on a model the agent fills, which the ritual widens
+- **`branch_review`** — `output=` on a model the agent fills, which the ritual widens
   with provenance the agent was never asked to invent.
 - **`merge_ready`** — a union payload routing three failure shapes into one
   repair step, a `TaskGroup` running both gates at once, a keyed session.
@@ -573,7 +573,7 @@ Designed, **not built**. Do not write against any of it.
 - **`@step(max_visits=N)`** — `@step` is a bare decorator; the only engine bound
   is `max_steps`.
 - **`@step(goes_to=[...])`** and declared edges — rejected in favour of
-  steps-as-DTOs (#103), itself unbuilt.
+  steps-as-DTOs (issue #103), itself unbuilt.
 - **Locks** — nothing lock-shaped is importable.
 - **Annotation-gated dispatch** — `goto(payload)` with no named target. Name the
   target.
