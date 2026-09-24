@@ -9,14 +9,34 @@ This file is the record of what shipped. What is only an idea is in
 [`docs/`](docs/README.md), under the track it belongs to, and says nothing about
 when.
 
-## [Unreleased] - ???
+## [Unreleased]
+
+## [0.9.0] - 2026-09-24
 
 ### Changed
 
+- **A run marked `gapped` is resumable.** A gap costs the tail of the log, which
+  is what every interrupted cast loses: the resume replays the rites that landed
+  and runs live from there.
+- **`vekna log` marks a run that lost part of its log** with `◌ gap` at the end
+  of the row.
 - **The supported Python range is `>=3.11,<3.15`**, down from `>=3.11,<4`. The
-  development environment installs cabinet, which caps itself there, and a
-  range the lock cannot resolve is a promise the project does not keep. 3.15 is
-  not released; what this costs is the claim to work on it untested.
+  development environment installs cabinet, which caps itself there.
+
+### Fixed
+
+- **A journal that cannot record a gap no longer destroys the record.** A log
+  that lost an event ends there, the mark is retried on every following event,
+  and the record stays — so `events.jsonl` is always a prefix of what the daemon
+  saw.
+- **A run that ends on a failed write is closed rather than left `running`,**
+  a row `vekna log` showed forever and `prune` never collected.
+- **A hello whose record cannot be written no longer leaves an orphan log.** The
+  record goes down first, and a log that has no record never starts.
+- **One torn record no longer hides every healthy cast behind a traceback.** A
+  write cut mid-character raises `UnicodeDecodeError`, which `vekna log` and
+  `prune` now skip like any torn record.
+- The daemon's refusal of a lock no longer promises it for `0.7.0`.
 
 ## [0.8.0] - 2026-09-18
 
@@ -651,7 +671,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/fancysnake/vekna/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/fancysnake/vekna/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fancysnake/vekna/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/fancysnake/vekna/compare/v0.6.0...v0.6.1

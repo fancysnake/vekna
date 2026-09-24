@@ -182,12 +182,16 @@ vekna log
 91bb0c4d  ✗  fix_demo          2026-08-21 14:02  /home/you/vekna
 7c01ffab  ▶  triage            2026-08-21 13:58  /home/you/ludamus
 3f9a2b11  ✓  merge_ready       2026-08-21 13:40  /home/you/vekna  ↳ 91bb0c4d
+6f1c2a9e  ✗  cover_diff        2026-08-21 13:12  /home/you/vekna  ◌ gap
 ```
 
 The id is cut to eight characters, the timestamp is in your own zone, and a
 trailing `↳` names the cast this one was carried on from. A cast that ran with
 no daemon listening leaves no record: the journal is the daemon's, and there was
 none.
+
+`◌ gap` is a run whose log the daemon could not finish writing. It is still
+resumable; what it lost is the tail.
 
 The journal itself is `~/.local/state/vekna/runs/<cast_id>/` — `run.json` for
 what the cast was and how it ended, `events.jsonl` for the wire verbatim. The
@@ -218,6 +222,7 @@ rather than guessed. What comes back is a cast of its own, with an id of its
 own; `vekna log` and the drilled-in header both say which cast it carries on
 from.
 
-A run the daemon could not write in full is marked as having a hole in it, and
-`--continue` refuses it rather than replaying a journal that is missing a rite:
-that rite, and everything after it, would run a second time.
+A run the daemon could not write in full is resumed like any other. The log
+never grows past a write it lost, so what a gap costs is the tail — the same
+thing an interrupted cast loses — and the replay stops there and runs live from
+there.
