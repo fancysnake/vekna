@@ -108,20 +108,21 @@ class Journal:
     # raised: housekeeping must not stop a daemon from starting, and the next
     # directory may well go — but the caller has to hear which did not, or the
     # runs root grows past `keep` for good with nothing saying why.
-    # `ignore_errors` so one entry that will not unlink does not abandon the
-    # rest of the directory: a cast whose `run.json` went first reads back as
-    # nothing, drops out of `_newest_first`, and is never pruned again. What
-    # still stands afterwards is what failed, and the path is all the caller
-    # gets — wording it is the surface's.
-    def prune(self, *, keep: int) -> list[Path]:
-        failed: list[Path] = []
+    # A first failure aborts `rmtree`, so the sweep that follows it takes what
+    # else can go: a cast whose `run.json` went first reads back as nothing,
+    # drops out of `_newest_first`, and is never pruned again. The caller gets
+    # the directory and the error that stopped it; wording is the surface's.
+    def prune(self, *, keep: int) -> list[str]:
+        failed: list[str] = []
         for record in self._newest_first()[keep:]:
             if record.status == "running":
                 continue
             directory = run_file(self._root, record.hello.cast_id).parent
-            shutil.rmtree(directory, ignore_errors=True)
-            if directory.exists():
-                failed.append(directory)
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                failed.append(f"{directory}: {error}")
+                shutil.rmtree(directory, ignore_errors=True)
         return failed
 
     def _newest_first(self) -> list[RunRecord]:

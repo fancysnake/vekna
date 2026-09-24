@@ -325,9 +325,11 @@ class TestPruning:
             )
             journal.record(CastGoodbye(cast_id=f"c{index}", status="ok"))
 
-        # A directory nothing can unlink, said the way `ignore_errors=True`
-        # says it: silently, leaving it where it was.
-        monkeypatch.setattr(shutil, "rmtree", lambda *_args, **_kwargs: None)
+        def rmtree(*_args: object, ignore_errors: bool = False) -> None:
+            if not ignore_errors:
+                raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
         keys = _Keys()
         running = asyncio.create_task(daemon(screen=keys))
         await _eventually(lambda: keys.painted("could not prune 1 old cast(s): "))
@@ -337,7 +339,7 @@ class TestPruning:
 
         assert await running == 0
         assert bound
-        assert keys.painted(str(tmp_path / "runs" / "c0"))
+        assert keys.painted(f"{tmp_path / 'runs' / 'c0'}: [Errno 13] Permission denied")
 
 
 class TestTheBareCommand:
