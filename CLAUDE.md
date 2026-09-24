@@ -102,13 +102,9 @@ map, layout, patterns, and drift flags:
 - [`docs/README.md`](docs/README.md) — docs index, how the ideas work,
   release names
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
-- [`docs/reborn/common.md`](docs/reborn/common.md) — shared context every idea
-  issue assumes: premise, vocabulary, process model, wire, CLI surface
-- [`docs/reborn/`](docs/reborn/README.md) — Reborn, the pivot to rituals and
-  casts
-- [`docs/eye/`](docs/eye/README.md) — Eye, the surfaces that watch
-- [`docs/hand/`](docs/hand/README.md) — Hand, the acting half: failure paths,
-  bounds, budgets, skills, replay
-- Ideas are GitHub issues, one milestone per track: Reborn, Eye, Hand.
-  `CHANGELOG.md` records what shipped
+- [`docs/common.md`](docs/common.md) — shared context every idea issue
+  assumes: premise, vocabulary, process model, wire, CLI surface
+- Ideas are GitHub issues, one milestone per track: Reborn, Eye, Hand, and
+  High Magic, whose epic [#142](https://github.com/fancysnake/vekna/issues/142)
+  orders the factory path by blocked-by. `CHANGELOG.md` records what shipped
 - `CURRENT_TASK.md` / `PLAN.md` — the task in flight
