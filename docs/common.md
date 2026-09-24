@@ -1,7 +1,7 @@
 # Common knowledge
 
-Shared context every idea under `reborn/`, `eye/` and `hand/` assumes. Read
-once. This is the only file the others point at.
+Shared context every idea issue assumes, whichever milestone holds it. Read
+once. This is the only file the issues point at.
 
 ## Premise
 
@@ -279,8 +279,7 @@ CLI-facing interface, and both boundaries reject a value of the wrong model.
 - `Text` — string, `multiline=True/False`. `--text=-` reads stdin; multiline
   opens `$EDITOR`.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
-- `Process`, `Executable` — deferred to `folio/process` (lifetime ≠ value),
-  which is [`../hand/budgets-and-processes.md`](../hand/budgets-and-processes.md).
+- `Process`, `Executable` — deferred to `folio/process` (lifetime ≠ value).
 
 **Output direction — deferred.** "Inputs and outputs are both Components on one
 interface" is unbuilt, and reads badly against the word: an output is not
@@ -370,9 +369,9 @@ unflavored surface. The exact flavor (output styling, verb choices, where the
 skin diverges from the plain path) is **to be shaped** — treat this as the
 intent, not a spec.
 
-The same lore names two of the idea tracks: [`../eye/`](../eye/README.md), the
-surfaces that watch, and [`../hand/`](../hand/README.md), the engine's acting
-half. `vekna lich` needs no skin — it is already the word.
+The same lore names two of the idea tracks: Eye, the surfaces that watch, and
+Hand, the engine's acting half. `vekna lich` needs no skin — it is already the
+word.
 
 ## Dependency policy
 
