@@ -353,3 +353,28 @@ class TestPruning:
 
         assert [path.name for path in tmp_path.iterdir()] == ["stuck"]
         assert failed == [f"{tmp_path / 'stuck'}: [Errno 13] Permission denied"]
+
+    # The sweep after the first failure is what takes a partly-removed cast,
+    # and an operator told a directory could not be pruned goes looking for one
+    # that is no longer there.
+    @staticmethod
+    def test_a_directory_the_sweep_takes_is_not_reported(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("half"))
+        journal.record(CastGoodbye(cast_id="half", status="ok"))
+        real_rmtree = shutil.rmtree
+
+        def rmtree(path: Path, **kwargs: object) -> None:
+            if not kwargs.get("ignore_errors"):
+                (path / "run.json").unlink()
+                raise PermissionError(13, "Permission denied")
+            real_rmtree(path)
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+        failed = journal.prune(keep=0)
+
+        assert not list(tmp_path.iterdir())
+        assert not failed

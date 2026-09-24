@@ -149,8 +149,11 @@ class Journal:
     # runs root grows past `keep` for good with nothing saying why.
     # A first failure aborts `rmtree`, so the sweep that follows it takes what
     # else can go: a cast whose `run.json` went first reads back as nothing,
-    # drops out of `_newest_first`, and is never pruned again. The caller gets
-    # the directory and the error that stopped it; wording is the surface's.
+    # drops out of `_newest_first`, and is never pruned again. Only what the
+    # sweep also left behind is reported, and with the error that stopped the
+    # first pass rather than whatever the sweep swallowed: a directory that is
+    # gone — swept, or taken by another daemon between the two calls — is no
+    # longer the operator's problem. Wording is the surface's.
     def prune(self, *, keep: int) -> list[str]:
         failed: list[str] = []
         for record in self._newest_first()[keep:]:
@@ -160,8 +163,9 @@ class Journal:
             try:
                 shutil.rmtree(directory)
             except OSError as error:
-                failed.append(f"{directory}: {error}")
                 shutil.rmtree(directory, ignore_errors=True)
+                if directory.exists():
+                    failed.append(f"{directory}: {error}")
         return failed
 
     def _newest_first(self) -> list[RunRecord]:
