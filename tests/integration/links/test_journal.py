@@ -1,3 +1,4 @@
+import os
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -389,19 +390,22 @@ class TestPruning:
         journal = Journal(tmp_path)
         journal.record(_hello("stuck"))
         journal.record(CastGoodbye(cast_id="stuck", status="ok"))
+        statted: list[Path] = []
 
-        # Closed once the listing is done, the way a permission change between
-        # the removal and the check leaves the directory unstattable.
         def rmtree(_path: Path, **kwargs: object) -> None:
-            tmp_path.chmod(0o600)
             if not kwargs.get("ignore_errors"):
                 raise PermissionError(13, "Permission denied")
 
+        # The way a permission change between the removal and the check leaves
+        # the directory unstattable — for root as much as for anyone else.
+        def lstat(path: Path) -> os.stat_result:
+            statted.append(path)
+            raise PermissionError(13, "Permission denied")
+
         monkeypatch.setattr(shutil, "rmtree", rmtree)
+        monkeypatch.setattr(os, "lstat", lstat)
 
-        try:
-            failed = journal.prune(keep=0)
-        finally:
-            tmp_path.chmod(0o700)
+        failed = journal.prune(keep=0)
 
+        assert statted == [tmp_path / "stuck"]
         assert failed == [f"{tmp_path / 'stuck'}: [Errno 13] Permission denied"]
