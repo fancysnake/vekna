@@ -378,3 +378,30 @@ class TestPruning:
 
         assert not list(tmp_path.iterdir())
         assert not failed
+
+    # A directory the daemon cannot stat is not a directory that went, and
+    # prune runs while a daemon is starting: neither a raise nor a dropped
+    # report is an answer an operator can act on.
+    @staticmethod
+    def test_a_directory_whose_absence_cannot_be_confirmed_is_reported(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("stuck"))
+        journal.record(CastGoodbye(cast_id="stuck", status="ok"))
+
+        # Closed once the listing is done, the way a permission change between
+        # the removal and the check leaves the directory unstattable.
+        def rmtree(_path: Path, **kwargs: object) -> None:
+            tmp_path.chmod(0o600)
+            if not kwargs.get("ignore_errors"):
+                raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+        try:
+            failed = journal.prune(keep=0)
+        finally:
+            tmp_path.chmod(0o700)
+
+        assert failed == [f"{tmp_path / 'stuck'}: [Errno 13] Permission denied"]

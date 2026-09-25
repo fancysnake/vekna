@@ -1,4 +1,5 @@
 import contextlib
+import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -153,7 +154,8 @@ class Journal:
     # sweep also left behind is reported, and with the error that stopped the
     # first pass rather than whatever the sweep swallowed: a directory that is
     # gone — swept, or taken by another daemon between the two calls — is no
-    # longer the operator's problem. Wording is the surface's.
+    # longer the operator's problem, and only a directory confirmed gone counts
+    # as that. Wording is the surface's.
     def prune(self, *, keep: int) -> list[str]:
         failed: list[str] = []
         for record in self._newest_first()[keep:]:
@@ -164,7 +166,7 @@ class Journal:
                 shutil.rmtree(directory)
             except OSError as error:
                 shutil.rmtree(directory, ignore_errors=True)
-                if directory.exists():
+                if not _gone(directory):
                     failed.append(f"{directory}: {error}")
         return failed
 
@@ -201,3 +203,18 @@ class Journal:
         record.status = goodbye.status
         record.detail = goodbye.detail
         self._write(record)
+
+
+# Absence is established, not read off a falsy answer: `Path.exists` raises on
+# an unreadable parent for the versions this runs on and answers `False` for
+# the newest, so trusting it either drops a directory prune never removed or
+# takes down the daemon start that prune is housekeeping for. Only `ENOENT`
+# means gone; every other error leaves the directory to be reported.
+def _gone(path: Path) -> bool:
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
