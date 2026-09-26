@@ -197,7 +197,8 @@ resumable; what it lost is the tail.
 `damaged` is a run whose `run.json` is missing or cannot be read — a daemon
 killed inside a write, a disk that lost the file. The id is the directory's
 name and the time is the directory's; nothing else is known, and
-`vekna cast --continue` refuses it.
+`vekna cast --continue` refuses it — saying the run is damaged, not that the
+journal never saw it.
 
 The journal itself is `~/.local/state/vekna/runs/<cast_id>/` — `run.json` for
 what the cast was and how it ended, `events.jsonl` for the wire verbatim. The

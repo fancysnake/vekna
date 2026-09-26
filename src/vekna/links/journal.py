@@ -4,6 +4,7 @@ import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from stat import S_ISDIR
 
 from vekna.pacts.casts import DamagedRun, Run
 from vekna.wire import (
@@ -183,13 +184,23 @@ class Journal:
         if not self._root.is_dir():
             return
         for directory in self._root.iterdir():
-            if not directory.is_dir():
+            # One stat answers both questions asked here — whether this is a run
+            # directory at all, and the only time a damaged one has. A directory
+            # a prune or an operator's `rm` took between the listing and this is
+            # gone, and a run that is gone is not a row: neither `vekna log` nor
+            # the daemon start behind `prune` may end in the traceback the read
+            # below already keeps them out of.
+            try:
+                found = directory.stat()
+            except OSError:
+                continue
+            if not S_ISDIR(found.st_mode):
                 continue
             if (record := self.read(directory.name)) is not None:
                 yield record
-            else:
-                seen_at = datetime.fromtimestamp(directory.stat().st_mtime, UTC)
-                yield DamagedRun(cast_id=directory.name, seen_at=seen_at)
+                continue
+            seen_at = datetime.fromtimestamp(found.st_mtime, UTC)
+            yield DamagedRun(cast_id=directory.name, seen_at=seen_at)
 
     # Written beside itself and moved into place, because a plain write
     # truncates first: a daemon killed between the two leaves half a record
@@ -218,8 +229,17 @@ def _cast_id(run: Run) -> str:
     return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
 
 
+# A damaged run's time always carries a zone, and a record's `started_at` need
+# not: the field is a plain `datetime`, so a `run.json` written by hand or by
+# something that is not this daemon can land without one, and sorting the two
+# against each other raises. Read as UTC, which is the zone this daemon's own
+# writer records in — the alternative, calling such a record damaged, has
+# `prune` deleting a run that resumes perfectly well.
 def _started(run: Run) -> datetime:
-    return run.seen_at if isinstance(run, DamagedRun) else run.hello.started_at
+    if isinstance(run, DamagedRun):
+        return run.seen_at
+    started = run.hello.started_at
+    return started if started.tzinfo is not None else started.replace(tzinfo=UTC)
 
 
 # Absence is established, not read off a falsy answer: `Path.exists` raises on

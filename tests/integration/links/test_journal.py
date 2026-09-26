@@ -334,6 +334,44 @@ class TestReading:
         journal.prune(keep=0)
         assert not list(tmp_path.iterdir())
 
+    # A `started_at` with no zone, which the field's type accepts and a hand
+    # written or foreign `run.json` can carry, against the damaged row's time,
+    # which always has one: the sort raised, and `vekna log` and the startup
+    # prune died over a run they were both meant to be listing. Read as UTC and
+    # the record stays a record — nothing here makes it damaged, because `prune`
+    # collects damaged runs and this one resumes.
+    @staticmethod
+    def test_a_record_with_no_zone_sorts_against_a_damaged_run(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0", started_at=_WHEN.replace(tzinfo=None)))
+        (tmp_path / "c1").mkdir()
+
+        recent = journal.recent(limit=5)
+
+        assert _ids(recent) == ["c1", "c0"]
+        assert not isinstance(recent[1], DamagedRun)
+
+    # Another daemon's prune, or an operator's `rm`, between the listing and the
+    # stat of what it named: nothing left to read and nothing left to date it by,
+    # and a listing must not end in a traceback over a run that is gone.
+    @staticmethod
+    def test_a_directory_that_goes_mid_listing_is_skipped(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0"))
+        (tmp_path / "gone").mkdir()
+        real_stat = Path.stat
+
+        def stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+            if path.name == "gone":
+                raise FileNotFoundError(2, "No such file or directory")
+            return real_stat(path, follow_symlinks=follow_symlinks)
+
+        monkeypatch.setattr(Path, "stat", stat)
+
+        assert _ids(journal.recent(limit=5)) == ["c0"]
+
 
 class TestPruning:
     @staticmethod

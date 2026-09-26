@@ -227,6 +227,22 @@ class TestResumeCommand:
         assert result.exit_code == 1
         assert "no cast 'nope' in the journal" in result.output
 
+    # The id is a row `vekna log` is printing, so the refusal says what is wrong
+    # with it rather than that the journal never saw it.
+    @staticmethod
+    @pytest.mark.usefixtures("project")
+    def test_it_refuses_a_damaged_cast_as_damaged(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        (tmp_path / "runs" / "torn").mkdir(parents=True)
+        (tmp_path / "runs" / "torn" / "run.json").write_text('{"hello": {"cast_i')
+
+        result = CliRunner().invoke(init_command(), ["cast", "--continue", "torn"])
+
+        assert result.exit_code == 1
+        assert "cast 'torn' is damaged" in result.output
+
     # The directory is the record's, not this shell's, so a project moved or
     # deleted between the two casts is the likeliest thing to have changed.
     @staticmethod
