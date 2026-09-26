@@ -1,8 +1,10 @@
 import contextlib
 import shutil
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
+from vekna.pacts.casts import DamagedRun, Run
 from vekna.wire import (
     CastGoodbye,
     CastHello,
@@ -135,33 +137,39 @@ class Journal:
 
     # Newest first, by when the cast started rather than by when its directory
     # was written: a resumed cast and the one it resumed sit next to each other
-    # in the order they were run.
-    def recent(self, *, limit: int) -> list[RunRecord]:
+    # in the order they were run. A damaged run has only its directory's time,
+    # which puts the crash an operator came to look for near the top rather
+    # than behind every healthy row.
+    def recent(self, *, limit: int) -> list[Run]:
         return self._newest_first()[:limit]
 
     # Nothing else ever removes a cast, so without this the runs root grows for
     # as long as the machine lives and every `vekna log` pays for all of it.
-    # A cast still running is left alone whatever its age, and so is a record
-    # this cannot read: deleting what it could not read back is not its call.
+    # A cast still running is left alone whatever its age. A directory whose
+    # record cannot be read is collected like a finished cast: nothing resumes
+    # it, and left alone it was the one thing here that never went away. It is
+    # not a hello mid-write, because this runs before the daemon serves.
     def prune(self, *, keep: int) -> None:
-        for record in self._newest_first()[keep:]:
-            if record.status != "running":
-                shutil.rmtree(
-                    run_file(self._root, record.hello.cast_id).parent,
-                    ignore_errors=True,
-                )
+        for run in self._newest_first()[keep:]:
+            if isinstance(run, DamagedRun) or run.status != "running":
+                shutil.rmtree(self._root / _cast_id(run), ignore_errors=True)
 
-    def _newest_first(self) -> list[RunRecord]:
-        found = [record for record in self._all() if record is not None]
-        found.sort(key=lambda record: record.hello.started_at, reverse=True)
+    def _newest_first(self) -> list[Run]:
+        found = list(self._all())
+        found.sort(key=_started, reverse=True)
         return found
 
-    def _all(self) -> Iterator[RunRecord | None]:
+    def _all(self) -> Iterator[Run]:
         if not self._root.is_dir():
             return
         for directory in self._root.iterdir():
-            if directory.is_dir():
-                yield self.read(directory.name)
+            if not directory.is_dir():
+                continue
+            if (record := self.read(directory.name)) is not None:
+                yield record
+            else:
+                seen_at = datetime.fromtimestamp(directory.stat().st_mtime, UTC)
+                yield DamagedRun(cast_id=directory.name, seen_at=seen_at)
 
     # Written beside itself and moved into place, because a plain write
     # truncates first: a daemon killed between the two leaves half a record
@@ -184,3 +192,11 @@ class Journal:
         record.status = goodbye.status
         record.detail = goodbye.detail
         self._write(record)
+
+
+def _cast_id(run: Run) -> str:
+    return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
+
+
+def _started(run: Run) -> datetime:
+    return run.seen_at if isinstance(run, DamagedRun) else run.hello.started_at

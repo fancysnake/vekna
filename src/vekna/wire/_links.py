@@ -82,8 +82,8 @@ def events_log(root: Path, cast_id: str) -> Path:
 
 
 # No record is None: a cast that ran with no daemon listening leaves none. A
-# record that will not parse is the caller's to answer for — the listing skips
-# it, a resume says which file it was.
+# record that will not parse is the caller's to answer for — the listing shows
+# it as damaged, a resume says which file it was.
 def read_record(root: Path, cast_id: str) -> RunRecord | None:
     path = run_file(root, cast_id)
     if not path.is_file():
