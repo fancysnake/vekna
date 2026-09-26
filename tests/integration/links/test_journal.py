@@ -1,3 +1,5 @@
+import os
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -328,3 +330,82 @@ class TestPruning:
         journal.prune(keep=0)
 
         assert [path.name for path in tmp_path.iterdir()] == ["running"]
+
+    @staticmethod
+    def test_a_directory_that_will_not_go_is_named_and_the_rest_still_go(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        for cast_id in ("stuck", "loose"):
+            journal.record(_hello(cast_id))
+            journal.record(CastGoodbye(cast_id=cast_id, status="ok"))
+        real_rmtree = shutil.rmtree
+
+        def rmtree(path: Path, **kwargs: object) -> None:
+            if path.name == "stuck":
+                if kwargs.get("ignore_errors"):
+                    return
+                raise PermissionError(13, "Permission denied")
+            real_rmtree(path)
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+        failed = journal.prune(keep=0)
+
+        assert [path.name for path in tmp_path.iterdir()] == ["stuck"]
+        assert failed == [f"{tmp_path / 'stuck'}: [Errno 13] Permission denied"]
+
+    # The sweep after the first failure is what takes a partly-removed cast,
+    # and an operator told a directory could not be pruned goes looking for one
+    # that is no longer there.
+    @staticmethod
+    def test_a_directory_the_sweep_takes_is_not_reported(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("half"))
+        journal.record(CastGoodbye(cast_id="half", status="ok"))
+        real_rmtree = shutil.rmtree
+
+        def rmtree(path: Path, **kwargs: object) -> None:
+            if not kwargs.get("ignore_errors"):
+                (path / "run.json").unlink()
+                raise PermissionError(13, "Permission denied")
+            real_rmtree(path)
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+        failed = journal.prune(keep=0)
+
+        assert not list(tmp_path.iterdir())
+        assert not failed
+
+    # A directory the daemon cannot stat is not a directory that went, and
+    # prune runs while a daemon is starting: neither a raise nor a dropped
+    # report is an answer an operator can act on.
+    @staticmethod
+    def test_a_directory_whose_absence_cannot_be_confirmed_is_reported(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("stuck"))
+        journal.record(CastGoodbye(cast_id="stuck", status="ok"))
+        statted: list[Path] = []
+
+        def rmtree(_path: Path, **kwargs: object) -> None:
+            if not kwargs.get("ignore_errors"):
+                raise PermissionError(13, "Permission denied")
+
+        # The way a permission change between the removal and the check leaves
+        # the directory unstattable — for root as much as for anyone else.
+        def lstat(path: Path) -> os.stat_result:
+            statted.append(path)
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+        monkeypatch.setattr(os, "lstat", lstat)
+
+        failed = journal.prune(keep=0)
+
+        assert statted == [tmp_path / "stuck"]
+        assert failed == [f"{tmp_path / 'stuck'}: [Errno 13] Permission denied"]

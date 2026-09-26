@@ -1,4 +1,5 @@
 import contextlib
+import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -143,13 +144,31 @@ class Journal:
     # as long as the machine lives and every `vekna log` pays for all of it.
     # A cast still running is left alone whatever its age, and so is a record
     # this cannot read: deleting what it could not read back is not its call.
-    def prune(self, *, keep: int) -> None:
+    # A directory that will not go is named and passed over rather than
+    # raised: housekeeping must not stop a daemon from starting, and the next
+    # directory may well go — but the caller has to hear which did not, or the
+    # runs root grows past `keep` for good with nothing saying why.
+    # A first failure aborts `rmtree`, so the sweep that follows it takes what
+    # else can go: a cast whose `run.json` went first reads back as nothing,
+    # drops out of `_newest_first`, and is never pruned again. Only what the
+    # sweep also left behind is reported, and with the error that stopped the
+    # first pass rather than whatever the sweep swallowed: a directory that is
+    # gone — swept, or taken by another daemon between the two calls — is no
+    # longer the operator's problem, and only a directory confirmed gone counts
+    # as that. Wording is the surface's.
+    def prune(self, *, keep: int) -> list[str]:
+        failed: list[str] = []
         for record in self._newest_first()[keep:]:
-            if record.status != "running":
-                shutil.rmtree(
-                    run_file(self._root, record.hello.cast_id).parent,
-                    ignore_errors=True,
-                )
+            if record.status == "running":
+                continue
+            directory = run_file(self._root, record.hello.cast_id).parent
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                shutil.rmtree(directory, ignore_errors=True)
+                if not _gone(directory):
+                    failed.append(f"{directory}: {error}")
+        return failed
 
     def _newest_first(self) -> list[RunRecord]:
         found = [record for record in self._all() if record is not None]
@@ -184,3 +203,18 @@ class Journal:
         record.status = goodbye.status
         record.detail = goodbye.detail
         self._write(record)
+
+
+# Absence is established, not read off a falsy answer: `Path.exists` raises on
+# an unreadable parent for the versions this runs on and answers `False` for
+# the newest, so trusting it either drops a directory prune never removed or
+# takes down the daemon start that prune is housekeeping for. Only `ENOENT`
+# means gone; every other error leaves the directory to be reported.
+def _gone(path: Path) -> bool:
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False

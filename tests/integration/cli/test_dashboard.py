@@ -57,6 +57,37 @@ class TestPicking:
 
 
 @pytest.mark.asyncio
+class TestSaying:
+    @staticmethod
+    async def test_two_notes_before_the_first_frame_are_both_painted():
+        dashboard, keys = _dashboard("q")
+        dashboard.say("logging every event to /tmp/debug.log")
+        dashboard.say("could not prune 1 old cast(s)")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert any(
+            "logging every event to /tmp/debug.log · could not prune 1 old cast(s)"
+            in frame
+            for frame in keys.frames
+        )
+
+    # Joined only while nothing has been painted yet: a note that has had its
+    # frame has been said, and the next one starts clean.
+    @staticmethod
+    async def test_a_note_already_painted_is_not_joined_onto():
+        dashboard, keys = _dashboard()
+        dashboard.say("said once")
+        dashboard.stop()
+
+        dashboard.say("and later")
+        dashboard.stop()
+
+        assert "said once" not in keys.frames[-1]
+        assert "and later" in keys.frames[-1]
+
+
+@pytest.mark.asyncio
 class TestLoops:
     @staticmethod
     async def test_painting_ends_itself_once_the_view_is_stopped():

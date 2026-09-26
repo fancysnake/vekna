@@ -11,6 +11,17 @@ when.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-26
+
+### Fixed
+
+- **The daemon names the old casts it could not prune.** A directory the
+  startup sweep could not remove was passed over in silence, so the runs root
+  could grow past its limit for good. The dashboard shows each directory still
+  there after the sweep with the error that stopped it, the sweep goes on, and
+  the daemon still starts.
+  ([#78](https://github.com/fancysnake/vekna/issues/78))
+
 ## [0.9.0] - 2026-09-24
 
 ### Changed
@@ -671,7 +682,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.9.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/fancysnake/vekna/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/fancysnake/vekna/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/fancysnake/vekna/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fancysnake/vekna/compare/v0.6.1...v0.7.0
