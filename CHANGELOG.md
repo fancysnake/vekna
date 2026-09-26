@@ -11,6 +11,14 @@ when.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A run directory the journal cannot read no longer leaks.** `vekna log`
+  lists it as `damaged`, with the id and the directory's time, and the startup
+  trim collects it past the newest 200 like a finished cast. Before, it was
+  neither listed nor ever removed. `vekna cast --continue` on such an id says
+  the run is damaged instead of claiming the journal never saw it.
+
 ## [0.9.1] - 2026-09-26
 
 ### Fixed

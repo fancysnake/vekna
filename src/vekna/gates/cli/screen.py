@@ -2,7 +2,7 @@ from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from vekna.pacts.casts import CastView, RiteView
+from vekna.pacts.casts import CastView, DamagedRun, RiteView, Run
 from vekna.wire import CastHello, RunRecord
 
 _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
@@ -10,6 +10,7 @@ _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
 _WAITING = "⏸"
 _MEDIUM = "↳"
 _GAP = "◌"
+_DAMAGED = "?"
 _HOME = "\x1b[H\x1b[2J"
 _LIST_KEYS = "number to drill in · q to quit"
 _CAST_KEYS = "b back · q quit"
@@ -250,17 +251,28 @@ def _drilled(view: CastView, now: datetime) -> list[str]:
 # `vekna log` reads the journal rather than the daemon: the daemon writes
 # every cast it sees to disk as it sees it, so what is on disk is what it knows,
 # and a listing needs no socket at all.
-def listing(records: Sequence[RunRecord]) -> str:
+def listing(records: Sequence[Run]) -> str:
     if not records:
         return "no casts recorded\n"
-    # In the reader's own time: the record carries UTC, and an operator east of
-    # it reading a bare wall clock has no way to tell.
-    return "".join(
+    return "".join(_row(record) for record in records)
+
+
+# In the reader's own time: the record carries UTC, and an operator east of
+# it reading a bare wall clock has no way to tell.
+# A damaged run is a row with its id and its directory's time and nothing else,
+# because nothing else survived — and a run that lost its record is exactly
+# what an operator runs `vekna log` after a crash to find out about.
+def _row(record: Run) -> str:
+    if isinstance(record, DamagedRun):
+        return (
+            f"{record.cast_id[:_ID]}  {_DAMAGED}  {'damaged':<16}"
+            f"  {record.seen_at.astimezone():%Y-%m-%d %H:%M}\n"
+        )
+    return (
         f"{record.hello.cast_id[:_ID]}  {_CAST_GLYPH[record.status]}"
         f"  {record.hello.ritual:<16}"
         f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
         f"  {record.hello.project_root}{_carried(record.hello)}{_lost(record)}\n"
-        for record in records
     )
 
 
