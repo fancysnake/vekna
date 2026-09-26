@@ -1,4 +1,5 @@
 import contextlib
+import os
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -149,10 +150,29 @@ class Journal:
     # record cannot be read is collected like a finished cast: nothing resumes
     # it, and left alone it was the one thing here that never went away. It is
     # not a hello mid-write, because this runs before the daemon serves.
-    def prune(self, *, keep: int) -> None:
+    # A directory that will not go is named and passed over rather than
+    # raised: housekeeping must not stop a daemon from starting, and the next
+    # directory may well go — but the caller has to hear which did not, or the
+    # runs root grows past `keep` for good with nothing saying why.
+    # A first failure aborts `rmtree`, so the sweep that follows it takes what
+    # else can go. Only what the sweep also left behind is reported, and with
+    # the error that stopped the first pass rather than whatever the sweep
+    # swallowed: a directory that is gone — swept, or taken by another daemon
+    # between the two calls — is no longer the operator's problem, and only a
+    # directory confirmed gone counts as that. Wording is the surface's.
+    def prune(self, *, keep: int) -> list[str]:
+        failed: list[str] = []
         for run in self._newest_first()[keep:]:
-            if isinstance(run, DamagedRun) or run.status != "running":
-                shutil.rmtree(self._root / _cast_id(run), ignore_errors=True)
+            if not isinstance(run, DamagedRun) and run.status == "running":
+                continue
+            directory = run_file(self._root, _cast_id(run)).parent
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                shutil.rmtree(directory, ignore_errors=True)
+                if not _gone(directory):
+                    failed.append(f"{directory}: {error}")
+        return failed
 
     def _newest_first(self) -> list[Run]:
         found = list(self._all())
@@ -200,3 +220,18 @@ def _cast_id(run: Run) -> str:
 
 def _started(run: Run) -> datetime:
     return run.seen_at if isinstance(run, DamagedRun) else run.hello.started_at
+
+
+# Absence is established, not read off a falsy answer: `Path.exists` raises on
+# an unreadable parent for the versions this runs on and answers `False` for
+# the newest, so trusting it either drops a directory prune never removed or
+# takes down the daemon start that prune is housekeeping for. Only `ENOENT`
+# means gone; every other error leaves the directory to be reported.
+def _gone(path: Path) -> bool:
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False

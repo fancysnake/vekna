@@ -35,8 +35,11 @@ class Dashboard:
     def changed(self) -> None:
         self._changed.set()
 
+    # Joined onto whatever has not been painted yet: two things said before the
+    # first frame are both worth hearing, and the caller should not have to know
+    # which of them the view would otherwise drop.
     def say(self, note: str) -> None:
-        self._note = note
+        self._note = f"{self._note} · {note}" if self._note else note
         self.changed()
 
     # Painted here rather than left to the loop: whatever ended the view is the

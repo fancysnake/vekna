@@ -1,13 +1,15 @@
 import asyncio
 import contextlib
+import shutil
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from vekna.inits.cli import daemon, init_command
+from vekna.links.journal import Journal
 from vekna.links.socket_server import attach
 from vekna.pacts.screen import Screen
 from vekna.wire import (
@@ -27,13 +29,15 @@ _PATIENCE = 400
 _TICK = 0.01
 
 
-def _hello(cast_id: str = "c1", ritual: str = "fix_demo") -> CastHello:
+def _hello(
+    cast_id: str = "c1", ritual: str = "fix_demo", started_at: datetime = _WHEN
+) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root="/home/someone/proj",
         ritual=ritual,
         components={},
-        started_at=_WHEN,
+        started_at=started_at,
     )
 
 
@@ -305,6 +309,37 @@ class TestDebug:
         await running
         assert not (tmp_path / "debug.log").exists()
         writer.close()
+
+
+@pytest.mark.asyncio
+class TestPruning:
+    @staticmethod
+    async def test_a_runs_root_that_will_not_clean_is_said_and_the_daemon_starts(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("vekna.inits.cli._KEPT", 1)
+        journal = Journal(tmp_path / "runs")
+        for index in range(2):
+            journal.record(
+                _hello(f"c{index}", started_at=_WHEN + timedelta(minutes=index))
+            )
+            journal.record(CastGoodbye(cast_id=f"c{index}", status="ok"))
+
+        def rmtree(*_args: object, ignore_errors: bool = False) -> None:
+            if not ignore_errors:
+                raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+        keys = _Keys()
+        running = asyncio.create_task(daemon(screen=keys))
+        await _eventually(lambda: keys.painted("could not prune 1 old cast(s): "))
+        bound = await asyncio.to_thread(socket_path.exists)
+
+        keys.press("q")
+
+        assert await running == 0
+        assert bound
+        assert keys.painted(f"{tmp_path / 'runs' / 'c0'}: [Errno 13] Permission denied")
 
 
 class TestTheBareCommand:
