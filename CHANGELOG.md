@@ -11,14 +11,15 @@ when.
 
 ## [Unreleased]
 
-## [0.9.1] - 2026-09-24
+## [0.9.1] - 2026-09-26
 
 ### Fixed
 
 - **The daemon names the old casts it could not prune.** A directory the
   startup sweep could not remove was passed over in silence, so the runs root
-  could grow past its limit for good. The dashboard shows the directory and the
-  error, the sweep goes on, and the daemon still starts.
+  could grow past its limit for good. The dashboard shows each directory still
+  there after the sweep with the error that stopped it, the sweep goes on, and
+  the daemon still starts.
   ([#78](https://github.com/fancysnake/vekna/issues/78))
 
 ## [0.9.0] - 2026-09-24
