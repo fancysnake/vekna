@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 
 from vekna.gates.cli.screen import listing, paint
-from vekna.pacts.casts import CastView, RiteStatus, RiteView
+from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView
 from vekna.wire import CastHello, DecideRequested, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -150,6 +150,15 @@ class TestListing:
     @staticmethod
     def test_an_intact_run_says_nothing_about_gaps():
         assert "◌" not in listing([RunRecord(hello=_hello())])
+
+    # A run whose record is gone is still a row — its id is what the operator
+    # has to go on, and its directory's time is the only time it has.
+    @staticmethod
+    @pytest.mark.usefixtures("_tokyo")
+    def test_a_damaged_run_is_a_row_with_only_its_id():
+        line = listing([DamagedRun(cast_id="c1abcdef99", seen_at=_WHEN)])
+
+        assert line == "c1abcdef  ?  damaged           2026-01-01 21:00\n"
 
 
 class TestTheList:

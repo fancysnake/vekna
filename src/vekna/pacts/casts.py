@@ -3,9 +3,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted
+from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted, RunRecord
 
 RiteStatus = Literal["running", "ok", "error"]
+
+
+# A run directory whose record cannot be read back — torn, cut mid-character,
+# refused by the disk, or never written at all. The id is the directory's name
+# and the time is the directory's, because nothing else about it is known. Not
+# on the wire: a resume refuses it, and only the journal and `vekna log` meet it.
+@dataclass(frozen=True)
+class DamagedRun:
+    cast_id: str
+    seen_at: datetime
+
+
+Run = RunRecord | DamagedRun
 
 # The tail of a rite's output, not all of it. The journal has the whole stream
 # and a surface only ever paints a screenful, so a cast that streams for an hour

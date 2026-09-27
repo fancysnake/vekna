@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from vekna.links.journal import Journal
+from vekna.pacts.casts import DamagedRun, Run
 from vekna.wire import CastGoodbye, CastHello, RiteDelta
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -21,6 +22,13 @@ def _no_appends(log: Path) -> None:
 def _appends_again(log: Path) -> None:
     log.rmdir()
     log.touch()
+
+
+def _ids(runs: list[Run]) -> list[str]:
+    return [
+        run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
+        for run in runs
+    ]
 
 
 def _hello(cast_id: str = "c1", *, started_at: datetime = _WHEN) -> CastHello:
@@ -278,22 +286,29 @@ class TestReading:
         assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c1"]
 
     # What a daemon killed mid-write leaves behind, which is exactly when an
-    # operator runs `vekna casts`.
+    # operator runs `vekna log`: the torn one is a row too, with the id and the
+    # directory's time being all that is left of it, and it sorts by that time.
     @staticmethod
-    def test_a_torn_record_hides_neither_itself_nor_the_others(tmp_path: Path):
+    def test_a_torn_record_is_listed_as_damaged_beside_the_others(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello("c0"))
         journal.record(_hello("c1", started_at=_WHEN + timedelta(minutes=1)))
         (tmp_path / "c1" / "run.json").write_text('{"hello": {"cast_i')
 
+        recent = journal.recent(limit=5)
+
         assert journal.read("c1") is None
-        assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c0"]
+        assert _ids(recent) == ["c1", "c0"]
+        assert isinstance(recent[0], DamagedRun)
+        assert recent[0].seen_at > _WHEN
 
     # Cut mid-character the write comes back as a `UnicodeDecodeError`, out of
     # `read_text` and never past the parser, so the whole `ValueError` set is
-    # what a reader has to hold — a listing must not end in a traceback.
+    # what a reader has to hold — a listing must not end in a traceback. And
+    # nothing resumes a run like this, so `prune` collects it like a finished
+    # one rather than leaving it for as long as the machine lives.
     @staticmethod
-    def test_a_record_cut_mid_character_hides_nothing_either(tmp_path: Path):
+    def test_a_record_cut_mid_character_is_listed_and_collected(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello("c0"))
         journal.record(CastGoodbye(cast_id="c0", status="ok"))
@@ -301,9 +316,61 @@ class TestReading:
         (tmp_path / "c1" / "run.json").write_bytes(b'{"hello": {"cast_i\xff')
 
         assert journal.read("c1") is None
-        assert [record.hello.cast_id for record in journal.recent(limit=5)] == ["c0"]
+        assert _ids(journal.recent(limit=5)) == ["c1", "c0"]
         journal.prune(keep=0)
-        assert [path.name for path in tmp_path.iterdir()] == ["c1"]
+        assert not list(tmp_path.iterdir())
+
+    # A hello that got as far as the directory and no further: no record to
+    # read, and before this nothing listed it and nothing collected it.
+    @staticmethod
+    def test_an_empty_run_directory_is_damaged(tmp_path: Path):
+        journal = Journal(tmp_path)
+        (tmp_path / "c1").mkdir()
+
+        recent = journal.recent(limit=5)
+
+        assert _ids(recent) == ["c1"]
+        assert isinstance(recent[0], DamagedRun)
+        journal.prune(keep=0)
+        assert not list(tmp_path.iterdir())
+
+    # A `started_at` with no zone, which the field's type accepts and a hand
+    # written or foreign `run.json` can carry, against the damaged row's time,
+    # which always has one: the sort raised, and `vekna log` and the startup
+    # prune died over a run they were both meant to be listing. Read as UTC and
+    # the record stays a record — nothing here makes it damaged, because `prune`
+    # collects damaged runs and this one resumes.
+    @staticmethod
+    def test_a_record_with_no_zone_sorts_against_a_damaged_run(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0", started_at=_WHEN.replace(tzinfo=None)))
+        (tmp_path / "c1").mkdir()
+
+        recent = journal.recent(limit=5)
+
+        assert _ids(recent) == ["c1", "c0"]
+        assert not isinstance(recent[1], DamagedRun)
+
+    # Another daemon's prune, or an operator's `rm`, between the listing and the
+    # stat of what it named: nothing left to read and nothing left to date it by,
+    # and a listing must not end in a traceback over a run that is gone.
+    @staticmethod
+    def test_a_directory_that_goes_mid_listing_is_skipped(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0"))
+        (tmp_path / "gone").mkdir()
+        real_stat = Path.stat
+
+        def stat(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+            if path.name == "gone":
+                raise FileNotFoundError(2, "No such file or directory")
+            return real_stat(path, follow_symlinks=follow_symlinks)
+
+        monkeypatch.setattr(Path, "stat", stat)
+
+        assert _ids(journal.recent(limit=5)) == ["c0"]
 
 
 class TestPruning:
@@ -330,6 +397,20 @@ class TestPruning:
         journal.prune(keep=0)
 
         assert [path.name for path in tmp_path.iterdir()] == ["running"]
+
+    # Counted against `keep` like any other run: the newest damaged directory
+    # is what the operator is about to look at, and the finished cast behind
+    # it is the one past the line.
+    @staticmethod
+    def test_a_damaged_run_counts_against_keep(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("c0"))
+        journal.record(CastGoodbye(cast_id="c0", status="ok"))
+        (tmp_path / "c1").mkdir()
+
+        journal.prune(keep=1)
+
+        assert [path.name for path in tmp_path.iterdir()] == ["c1"]
 
     @staticmethod
     def test_a_directory_that_will_not_go_is_named_and_the_rest_still_go(
