@@ -150,6 +150,21 @@ class TestStepTable:
             def again(state: Third) -> Done[State]:
                 return Done(State(x=state.x))
 
+    # The rejected step is registered nowhere: `vekna --help` swallows the
+    # error and carries on, so a half-filled table would outlive it.
+    @staticmethod
+    def test_a_collision_on_a_second_payload_registers_neither():
+        class Fresh(BaseModel):
+            pass
+
+        with pytest.raises(RitualDefinitionError, match="'noop'"):
+
+            @step
+            def both(_: Fresh | State) -> Done[None]:
+                return Done(None)
+
+        assert step_taking(Fresh) is None
+
     @staticmethod
     def test_the_same_step_registered_twice_is_one_step():
         register_step(noop)

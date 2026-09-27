@@ -15,6 +15,7 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._mills.dispatch import component_flags
+from vekna.lexicon._mills.engine import step_taking
 
 
 class Ping(BaseModel):
@@ -74,6 +75,15 @@ class TestStepDecorator:
         with pytest.raises(StepBoundaryError, match="expected Ping, got str"):
             asyncio.run(wrapped.run("not a ping"))
 
+    # The legacy shim tolerates an absent payload; a step that declares its
+    # exits does not.
+    @staticmethod
+    def test_rejects_an_absent_payload():
+        wrapped = step(_emit)
+
+        with pytest.raises(StepBoundaryError, match="expected Ping, got NoneType"):
+            asyncio.run(wrapped.run(None))
+
     @staticmethod
     def test_rejects_function_without_single_param():
         def _two(first: Ping, second: Ping) -> Done[Pong]:
@@ -109,12 +119,37 @@ class TestStepDecorator:
             step(_mute)
 
     @staticmethod
-    def test_rejects_an_exit_that_is_not_a_model():
+    def test_rejects_an_exit_that_is_not_a_model_naming_it():
         def _stray(payload: Ping) -> int | Done[Pong]:
             return payload.n
 
-        with pytest.raises(RitualDefinitionError, match="declare its exits"):
+        with pytest.raises(RitualDefinitionError, match=r"Done\[\.\.\.\], not int"):
             step(_stray)
+
+    # What a migrating author writes first, and the anonymous message read as
+    # though the annotation had been ignored.
+    @staticmethod
+    def test_rejects_a_bare_done_and_says_to_name_what_it_carries():
+        def _vague(payload: Ping) -> Done:
+            return Done(Pong(n=payload.n))
+
+        with pytest.raises(RitualDefinitionError, match="bare Done: name what it"):
+            step(_vague)
+
+    # `Goto` is what marks the deprecated path; the erased `BaseModel` is an
+    # exit like any other, and `check_exits` is what refuses it.
+    @staticmethod
+    def test_an_erased_basemodel_exit_is_not_the_legacy_path():
+        class Fresh(BaseModel):
+            pass
+
+        def _erased(payload: Fresh) -> BaseModel | Done[Pong]:
+            return Done(Pong(n=len(repr(payload))))
+
+        wrapped = step(_erased)
+
+        assert wrapped.exits == (BaseModel,)
+        assert step_taking(Fresh) is wrapped
 
 
 # A step two others transition into admits either shape.

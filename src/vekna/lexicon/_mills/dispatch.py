@@ -1,5 +1,6 @@
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
+from types import NoneType
 from typing import ParamSpec, Protocol, TypeVar, cast
 
 from pydantic import BaseModel
@@ -14,7 +15,13 @@ from vekna.lexicon._pacts import (
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 
-from ._annotations import _component_flags, _components_model, _exits, _payloads
+from ._annotations import (
+    _component_flags,
+    _components_model,
+    _exits,
+    _optional_payload,
+    _payloads,
+)
 from .engine import medium_rite, register_step
 
 _P = ParamSpec("_P")
@@ -34,8 +41,9 @@ _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 
 # The same contract with the payload type erased, which is the shape the
 # wrappers actually call. `_Erased` next door is the reflection half and says
-# nothing about the return, so the call side names it here.
-_Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
+# nothing about the return, so the call side names it here. The `| None` is the
+# legacy `goto(target)` with no payload — it goes with the shim.
+_Called = Callable[[BaseModel | None], Transition | Awaitable[Transition]]
 
 _SUMMARY_WIDTH = 60
 
@@ -120,14 +128,20 @@ async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
 def step(func: _Written[_PayloadT]) -> Step:
     name = func.__name__
     erased = cast("_Called", func)
-    payloads = _payloads(erased)
     exits, ends = _exits(erased, decorator="step")
+    legacy = exits is None
+    payloads = _payloads(erased, legacy=legacy)
+    # ponytail: a legacy step annotated `Work | None` is fed by a bare
+    # `goto(target)`; on the new path a payload is a model and nothing else.
+    accepted: tuple[type, ...] = (
+        (*payloads, NoneType) if legacy and _optional_payload(erased) else payloads
+    )
 
-    async def run(payload: BaseModel) -> Transition:
+    async def run(payload: BaseModel | None) -> Transition:
         # The cast above is discharged here: what the annotation declared is
         # checked against what arrived, and only then is the step called. The
         # engine routes by class and cannot miss; the trial's `walk` can.
-        if not isinstance(payload, payloads):
+        if not isinstance(payload, accepted):
             expected = " | ".join(model.__name__ for model in payloads)
             msg = f"step {name!r} expected {expected}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
@@ -136,7 +150,7 @@ def step(func: _Written[_PayloadT]) -> Step:
     the_step = Step(name=name, run=run, payloads=payloads, exits=exits, ends=ends)
     # A legacy step is reached by `goto`, never by class, and its payload class
     # may be shared — cabinet feeds one `Work` to fifteen steps.
-    if exits is not None:
+    if not legacy:
         register_step(the_step)
     return the_step
 

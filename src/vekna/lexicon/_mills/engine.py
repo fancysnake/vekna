@@ -146,6 +146,9 @@ class Compendium:
 _steps: dict[type[BaseModel], Step] = {}
 
 
+# Every payload checked before any is written: a step admitting `Lint | Coverage`
+# whose second class collides would otherwise leave the first registered to a
+# step this refused, and the sweep swallows the error and carries on.
 def register_step(the_step: Step) -> None:
     for payload in the_step.payloads:
         if (first := _steps.get(payload)) is not None and first is not the_step:
@@ -154,7 +157,7 @@ def register_step(the_step: Step) -> None:
                 f"and step {the_step.name!r} — one payload class, one step"
             )
             raise RitualDefinitionError(msg)
-        _steps[payload] = the_step
+    _steps.update(dict.fromkeys(the_step.payloads, the_step))
 
 
 def step_taking(payload: type[BaseModel]) -> Step | None:
@@ -441,6 +444,7 @@ async def run_cast(
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
                 break
+            # ponytail: the legacy branch, named by the deletion note on `Goto`.
             if isinstance(transition, Goto):
                 the_step, payload = transition.target, transition.payload
             else:

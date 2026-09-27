@@ -49,9 +49,20 @@ def land(landed: Landed) -> Done[Landed]:
     return Done(landed)
 
 
+# The other legacy shape: an optional payload, reached by a bare `goto`.
+@step
+def nudge(work: Work | None) -> Transition:
+    return done(work or Work(left=-1))
+
+
 @ritual("hopping")
 def hopping(_: NoComponents) -> Transition:
     return goto(hop, Work(left=2))
+
+
+@ritual("nudging")
+def nudging(_: NoComponents) -> Transition:
+    return goto(nudge)
 
 
 def _cast(the_ritual) -> BaseModel | None:
@@ -79,6 +90,14 @@ class TestLegacyStep:
     @staticmethod
     def test_goto_names_its_target_and_the_engine_follows_it():
         assert _cast(hopping) == Landed(left=0)
+
+    @staticmethod
+    def test_a_bare_goto_reaches_a_step_whose_payload_is_optional():
+        assert _cast(nudging) == Work(left=-1)
+
+    @staticmethod
+    def test_an_optional_payload_declares_the_model_alone():
+        assert nudge.payloads == (Work,)
 
     @staticmethod
     def test_goto_rejects_a_payload_that_is_not_a_model():

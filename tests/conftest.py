@@ -1,6 +1,6 @@
 import asyncio
 import io
-from collections.abc import Iterator
+from collections.abc import Awaitable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -61,9 +61,11 @@ def _own_steps() -> Iterator[None]:
 # rite tree, so a test asserting on output still gets to say what the ritual is
 # called.
 def entry(*, name: str = "r", payload: BaseModel) -> Ritual:
-    async def _enter(_: BaseModel) -> Transition:
-        await asyncio.sleep(0)
-        return payload
+    # A `def` handing back the sleep, rather than an `async def` awaiting one:
+    # the body has nothing of its own to await, and the yield to the scheduler
+    # is what a hand-built `run` owes its caller.
+    def _enter(_: BaseModel) -> Awaitable[Transition]:
+        return asyncio.sleep(0, result=payload)
 
     return Ritual(
         name=name,

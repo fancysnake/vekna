@@ -268,19 +268,21 @@ class Done(Generic[_ResultT_co]):
 @dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
-    run: Callable[[BaseModel], Awaitable["Transition"]]
+    run: Callable[[BaseModel | None], Awaitable["Transition"]]
     payloads: tuple[type[BaseModel], ...]
     exits: tuple[type[BaseModel], ...] | None
     ends: bool
 
 
 # ponytail: the pre-#103 transition, kept so cabinet 0.3.0 still casts. Delete
-# `Goto`, `goto`, `done` and the `Goto` arm of `Transition` once cabinet ships
-# on return-annotated steps.
+# `Goto`, `goto`, `done`, the `Goto` arm of `Transition`, the `Goto` branch in
+# `run_cast`, the `| None` on `Step.run` and `_optional_payload` once cabinet
+# ships on return-annotated steps. An absent payload is part of that path: a
+# legacy step annotated `Work | None` was reached by a bare `goto(target)`.
 @dataclass(frozen=True)
 class Goto:
     target: Step
-    payload: BaseModel
+    payload: BaseModel | None = None
 
     def __post_init__(self) -> None:
         _checked(self.payload, kind="goto")
@@ -292,7 +294,7 @@ class Goto:
 Transition = BaseModel | Done[BaseModel | None] | Goto
 
 
-def goto(target: Step, payload: BaseModel) -> Goto:
+def goto(target: Step, payload: BaseModel | None = None) -> Goto:
     return Goto(target=target, payload=payload)
 
 

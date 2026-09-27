@@ -14,8 +14,9 @@ when.
 ### Changed
 
 - **A step returns the next step's payload, and its return annotation is the
-  graph.** `goto`, `Goto` and `done` are gone: a step `return`s the payload of
-  the step to run next, or `Done(result)`, and annotates its exits —
+  graph.** `goto`, `Goto` and `done` are no longer how a step routes — they
+  stay importable this release, deprecated (below): a step `return`s the payload
+  of the step to run next, or `Done(result)`, and annotates its exits —
   `-> WriteTests | Done[CoverReport]`. A payload class is one step's identity,
   so the engine routes by the returned value's class; two steps taking one
   class is an error naming both, while two steps merely sharing a name is not.
@@ -28,9 +29,10 @@ when.
   ([#103](https://github.com/fancysnake/vekna/issues/103))
 - **`goto`/`done` stay importable for one release, deprecated.** A step still
   annotated `-> Transition` declares no exits, is not registered by payload
-  class, and is reached only by `goto`; `rituals show` draws it as `?`. This is
-  so an installed tome keeps casting while it migrates; the next release
-  removes it.
+  class, and is reached only by `goto`; `rituals show` draws it as `?`. A bare
+  `goto(target)` with no payload, and a legacy step annotated `payload: Work |
+  None`, keep working as they did. This is so an installed tome keeps casting
+  while it migrates; the next release removes it.
 
 ## [0.9.2] - 2026-09-27
 

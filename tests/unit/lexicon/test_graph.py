@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from vekna.lexicon import Done, NoComponents, RitualDefinitionError, ritual, step
 from vekna.lexicon._mills.graph import ENDS, START, step_graph
-from vekna.lexicon._pacts import Ritual, Transition
+from vekna.lexicon._pacts import Ritual, Step, Transition
 
 
 class Tick(BaseModel):
@@ -130,6 +130,48 @@ class TestStepGraph:
         with pytest.raises(
             RitualDefinitionError, match=r"\(start\) may return Stray, which no step"
         ):
+            step_graph(_hand_built_ritual(exits=(Stray,)))
+
+    # A step's name routes nothing, so two of one name are legal — and the
+    # second one's exits are checked like any other.
+    @staticmethod
+    def test_two_steps_of_one_name_are_both_walked():
+        class Left(BaseModel):
+            pass
+
+        class Right(BaseModel):
+            pass
+
+        class Astray(BaseModel):
+            pass
+
+        def _ends() -> Step:
+            @step
+            def measure(_: Left) -> Done[None]:
+                return Done(None)
+
+            return measure
+
+        def _strays() -> Step:
+            @step
+            def measure(_: Right) -> Astray:
+                return Astray()
+
+            return measure
+
+        _ends()
+        _strays()
+
+        with pytest.raises(RitualDefinitionError, match="measure may return Astray"):
+            step_graph(_hand_built_ritual(exits=(Left, Right)))
+
+    # A library holds many rituals, and `(start)` names none of them.
+    @staticmethod
+    def test_an_unwired_exit_on_a_ritual_names_the_ritual():
+        class Stray(BaseModel):
+            pass
+
+        with pytest.raises(RitualDefinitionError, match="ritual 'handmade'"):
             step_graph(_hand_built_ritual(exits=(Stray,)))
 
     @staticmethod

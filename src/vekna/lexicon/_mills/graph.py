@@ -16,51 +16,52 @@ UNKNOWN = "?"
 # An exit no step takes is the one mis-wire mypy cannot see — the annotation
 # is well-typed, it just names a class nothing was decorated with. Refused
 # here, which every load route reaches before a cast starts.
-def _target(*, label: str, exit_type: type[BaseModel]) -> Step:
+def _target(*, ritual: str, label: str, exit_type: type[BaseModel]) -> Step:
     if (found := step_taking(exit_type)) is None:
-        msg = f"{label} may return {exit_type.__name__}, which no step takes"
+        msg = (
+            f"ritual {ritual!r}: {label} may return {exit_type.__name__}, "
+            "which no step takes"
+        )
         raise RitualDefinitionError(msg)
     return found
 
 
-def _walk(
-    *,
-    label: str,
-    exits: tuple[type[BaseModel], ...] | None,
-    ends: bool,
-    seen: set[str],
-    graph: list[tuple[str, list[str]]],
-) -> None:
-    if exits is None:
-        graph.append((label, [UNKNOWN]))
-        return
-    targets = [_target(label=label, exit_type=exit_type) for exit_type in exits]
-    # A union exit names one step several times; the graph names it once.
-    names: list[str] = []
-    for target in targets:
-        if target.name not in names:
-            names.append(target.name)
-    graph.append((label, [*names, ENDS] if ends else names))
-    for target in targets:
-        if target.name in seen:
-            continue
-        seen.add(target.name)
-        _walk(
-            label=target.name,
-            exits=target.exits,
-            ends=target.ends,
-            seen=seen,
-            graph=graph,
-        )
-
-
+# The walk is a closure because the ritual's name, the nodes already drawn and
+# the graph being built are the same for the whole of it — only the node moves.
+# The name is carried for the diagnostic alone: a library holds many rituals,
+# and `START` is a display label that names none of them.
 def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
     graph: list[tuple[str, list[str]]] = []
-    _walk(
-        label=START,
-        exits=the_ritual.exits,
-        ends=the_ritual.ends,
-        seen={START},
-        graph=graph,
-    )
+    # The steps already walked, by identity rather than by name: a name routes
+    # nothing, so one graph may hold two `measure` steps, and skipping the
+    # second as seen would leave its exits unchecked.
+    seen: set[Step] = set()
+
+    def walk(
+        *, label: str, exits: tuple[type[BaseModel], ...] | None, ends: bool
+    ) -> None:
+        if exits is None:
+            graph.append((label, [UNKNOWN]))
+            return
+        targets = [
+            _target(ritual=the_ritual.name, label=label, exit_type=exit_type)
+            for exit_type in exits
+        ]
+        # A union exit names one step several times; the graph draws it once,
+        # in the order the annotation put them — which a dict keyed by name is.
+        names = list({target.name: None for target in targets})
+        graph.append((label, [*names, ENDS] if ends else names))
+        for target in targets:
+            if target in seen:
+                continue
+            seen.add(target)
+            walk(label=target.name, exits=target.exits, ends=target.ends)
+
+    walk(label=START, exits=the_ritual.exits, ends=the_ritual.ends)
     return graph
+
+
+# The walk for its refusals rather than its drawing: every exit resolves, or
+# `_target` says which one does not. The graph it builds on the way is dropped.
+def check_exits(the_ritual: Ritual) -> None:
+    step_graph(the_ritual)

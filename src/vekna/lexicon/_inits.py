@@ -18,7 +18,7 @@ from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
-from ._mills.graph import step_graph
+from ._mills.graph import check_exits, step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
     Done,
@@ -197,14 +197,14 @@ def _build_library(cwd: Path) -> _Library:
                 _register(
                     compendium=compendium, found=load_rituals_module(module, root=cwd)
                 )
+    # Every exit resolved before anything is cast: an annotation naming a class
+    # no step takes is well-typed, so this check is the only thing that catches
+    # it, and here it catches it on `list` and `show` as well as `cast`.
+    for name in compendium.names():
+        check_exits(compendium.ritual(name))
     # A near miss is only ever found when discovery came back empty, so
     # anything seen here was named by a config — and a config that loaded is
     # the answer to where the rituals were meant to come from.
-    # Every exit resolved before anything is cast: an annotation naming a class
-    # no step takes is well-typed, so this walk is the only thing that catches
-    # it, and here it catches it on `list` and `show` as well as `cast`.
-    for name in compendium.names():
-        step_graph(compendium.ritual(name))
     loaded = bool(seen_files or seen_modules)
     return _Library(compendium, _no_rituals(None if loaded else discovered.near_miss))
 

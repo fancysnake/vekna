@@ -36,7 +36,7 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def check(attempt: Attempt) -> Attempt | Done[Report]:
+    async def check(attempt: Attempt) -> Fixing | Done[Report]:
         result = await shell("test -f .fixed")
         if result.exit_code == 0:
             return Done(Report(fixed=True, remaining=attempt.budget))
