@@ -13,6 +13,7 @@ from vekna.lexicon._pacts import (
     CodingFocusProtocol,
     Done,
     FocusMissingError,
+    Goto,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -440,9 +441,12 @@ async def run_cast(
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
                 break
-            the_step = step_for(transition)
+            if isinstance(transition, Goto):
+                the_step, payload = transition.target, transition.payload
+            else:
+                the_step, payload = step_for(transition), transition
             async with _rite(name=the_step.name, category="step"):
-                transition = await the_step.run(transition)
+                transition = await the_step.run(payload)
     if isinstance(transition, Done):
         return transition.result
     # Leaving the loop still mid-flight means the budget ran out, not that the

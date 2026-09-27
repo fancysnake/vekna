@@ -134,7 +134,10 @@ def step(func: _Written[_PayloadT]) -> Step:
         return await _settled(erased(payload))
 
     the_step = Step(name=name, run=run, payloads=payloads, exits=exits, ends=ends)
-    register_step(the_step)
+    # A legacy step is reached by `goto`, never by class, and its payload class
+    # may be shared — cabinet feeds one `Work` to fifteen steps.
+    if exits is not None:
+        register_step(the_step)
     return the_step
 
 

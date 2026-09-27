@@ -5,7 +5,7 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import Done, RitualDefinitionError
+from vekna.lexicon._pacts import Done, Goto, RitualDefinitionError
 
 _NAMELESS = "value"
 
@@ -123,22 +123,22 @@ def _type_name(annotation: type[Any] | UnionType | None) -> str:
     return _plain_name(annotation)
 
 
-# A body may be `def` handing back an awaitable, so the transition is under
-# one wrapper at most.
-def _unwrapped(annotation: Any | None) -> Any | None:
-    if get_origin(annotation) in {Awaitable, Coroutine}:
-        return get_args(annotation)[-1]
-    return annotation
-
-
 # The exits a body declares: the payload classes it may return, and whether it
 # may return `Done`. `Done[T]` is only ever a return, so its `T` goes unread
-# here — mypy is the one that checks it.
+# here — mypy is the one that checks it. None for the legacy `-> Transition`,
+# recognisable by the erased `BaseModel` (or `Goto`) among its members: it
+# declares nothing, and `goto` names its targets at runtime.
 def _exits(
     func: _Erased, *, decorator: str
-) -> tuple[tuple[type[BaseModel], ...], bool]:
-    annotation = _unwrapped(get_type_hints(func).get("return"))
+) -> tuple[tuple[type[BaseModel], ...] | None, bool]:
+    annotation = get_type_hints(func).get("return")
+    # A body may be `def` handing back an awaitable, so the transition is under
+    # one wrapper at most.
+    if get_origin(annotation) in {Awaitable, Coroutine}:
+        annotation = get_args(annotation)[-1]
     members = get_args(annotation) if _is_union(annotation) else (annotation,)
+    if BaseModel in members or Goto in members:
+        return None, True
     exits: list[type[BaseModel]] = []
     ends = False
     for member in members:

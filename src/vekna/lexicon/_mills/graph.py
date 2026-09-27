@@ -8,6 +8,9 @@ from .engine import step_taking
 # it leaves.
 START = "(start)"
 ENDS = "(done)"
+# A legacy `-> Transition` step declares no exits; the graph says so rather
+# than guessing.
+UNKNOWN = "?"
 
 
 # An exit no step takes is the one mis-wire mypy cannot see — the annotation
@@ -23,11 +26,14 @@ def _target(*, label: str, exit_type: type[BaseModel]) -> Step:
 def _walk(
     *,
     label: str,
-    exits: tuple[type[BaseModel], ...],
+    exits: tuple[type[BaseModel], ...] | None,
     ends: bool,
     seen: set[str],
     graph: list[tuple[str, list[str]]],
 ) -> None:
+    if exits is None:
+        graph.append((label, [UNKNOWN]))
+        return
     targets = [_target(label=label, exit_type=exit_type) for exit_type in exits]
     # A union exit names one step several times; the graph names it once.
     names: list[str] = []

@@ -588,7 +588,9 @@ Designed, **not built**. Do not write against any of it.
   is `max_steps`.
 - **`@step(goes_to=[...])`** and declared edges — rejected: the return
   annotation already is the declaration (issue #103).
-- **`goto`/`done`** — gone. A step returns the payload or `Done(...)`.
+- **`goto`/`done`** — deprecated, importable for one release so installed
+  tomes keep casting. A step annotated `-> Transition` is drawn as `?` and
+  checked by nothing. Never write new code against it.
 - **Locks** — nothing lock-shaped is importable.
 - **Parallel steps** — not happening. Concurrency stays inside a step body.
 

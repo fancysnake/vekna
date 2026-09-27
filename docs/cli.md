@@ -96,7 +96,9 @@ steps:
 
 An exit no step takes is refused as the library loads, so `list`, `show` and
 `cast` all stop with `<step> may return <Class>, which no step takes` — usually
-a submodule that was never swept because it is missing an `__init__.py`.
+a submodule that was never swept because it is missing an `__init__.py`. A `?`
+is a step still written with the deprecated `goto`: it declares nothing, so
+nothing can be drawn.
 
 ## Notifications
 

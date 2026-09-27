@@ -24,9 +24,13 @@ when.
   at decoration. `Done[T]` is generic, so a ritual's result type is stated.
   `rituals show` draws the graph off the annotations — exhaustive, with no
   best-effort source parsing — and an exit no step takes stops `list`, `show`
-  and `cast` before anything runs. `trial.walk` requires a payload. Breaking
-  for every `rituals.py` and every tome.
+  and `cast` before anything runs. `trial.walk` requires a payload.
   ([#103](https://github.com/fancysnake/vekna/issues/103))
+- **`goto`/`done` stay importable for one release, deprecated.** A step still
+  annotated `-> Transition` declares no exits, is not registered by payload
+  class, and is reached only by `goto`; `rituals show` draws it as `?`. This is
+  so an installed tome keeps casting while it migrates; the next release
+  removes it.
 
 ## [0.9.1] - 2026-09-26
 
