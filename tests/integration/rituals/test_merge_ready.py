@@ -11,7 +11,7 @@ from rituals.merge_ready import (
     quality_gates,
     repair,
 )
-from vekna.lexicon import StepBudgetExceededError, done, goto
+from vekna.lexicon import Done, StepBudgetExceededError
 from vekna.trial import Trial
 
 _LINT = "mise run lint:py"
@@ -27,7 +27,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=3))
 
-        assert transition == done(MergeReport(green=True, remaining=3))
+        assert transition == Done(MergeReport(green=True, remaining=3))
         assert sorted(trial.shell.commands) == [_LINT, _SUITE]
 
     # Which of the two lands first is the scheduler's business, so the payload
@@ -45,7 +45,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=1))
 
-        assert transition == goto(repair, LintFailure(budget=1, lint="E501"))
+        assert transition == LintFailure(budget=1, lint="E501")
 
     @staticmethod
     def test_a_red_suite_alone_picks_the_suite_payload(trial: Trial) -> None:
@@ -55,7 +55,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=2))
 
-        assert transition == goto(repair, SuiteFailure(budget=2, suite="1 failed"))
+        assert transition == SuiteFailure(budget=2, suite="1 failed")
 
     @staticmethod
     def test_both_red_carries_both_complaints(trial: Trial) -> None:
@@ -65,9 +65,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=2))
 
-        assert transition == goto(
-            repair, BothRed(budget=2, lint="E501", suite="1 failed")
-        )
+        assert transition == BothRed(budget=2, lint="E501", suite="1 failed")
 
     # A task that dies before it starts says so on stderr and nowhere else.
     # Passing stdout alone hands the repair agent an empty complaint.
@@ -81,9 +79,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=1))
 
-        assert transition == goto(
-            repair, LintFailure(budget=1, lint="mise: no such task\n")
-        )
+        assert transition == LintFailure(budget=1, lint="mise: no such task\n")
 
     @staticmethod
     def test_the_prompt_names_what_is_red_and_what_is_left(trial: Trial) -> None:
@@ -114,7 +110,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=2))
 
-        assert transition == done(MergeReport(green=False, remaining=2))
+        assert transition == Done(MergeReport(green=False, remaining=2))
 
     @staticmethod
     def test_a_spent_budget_never_asks_at_all(trial: Trial) -> None:
@@ -123,7 +119,7 @@ class TestQualityGates:
 
         transition = trial.walk(quality_gates, Attempt(budget=0))
 
-        assert transition == done(MergeReport(green=False, remaining=0))
+        assert transition == Done(MergeReport(green=False, remaining=0))
         assert not trial.decide.asked
 
 
@@ -134,7 +130,7 @@ class TestRepair:
 
         transition = trial.walk(repair, LintFailure(budget=2, lint="E501"))
 
-        assert transition == goto(quality_gates, Attempt(budget=1))
+        assert transition == Attempt(budget=1)
         assert "The linters said:\n\nE501" in trial.coding.prompts[0]
         assert "The suite said" not in trial.coding.prompts[0]
 

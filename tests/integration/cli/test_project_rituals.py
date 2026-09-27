@@ -2,7 +2,7 @@
 # test builds a rituals file of its own, so nothing checked the one this project
 # ships. Loading it exercises what no unit test can: that the module imports,
 # that every annotation resolves, that each `@ritual` declares a model the CLI
-# can render flags from, and that every `goto` names a step the graph can find.
+# can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — three of the four rituals call an agent.
 
 from pathlib import Path
@@ -51,8 +51,8 @@ class TestProjectRituals:
         out = capsys.readouterr().out
         assert not exit_code
         assert out.startswith(f"{name}\n")
-        # `?` is what step_graph prints for a goto whose target it cannot find,
-        # and `(start)` proves the entrypoint's own transition was read.
+        # `?` is what `show` prints for a node with no exits at all, and
+        # `(start)` proves the entrypoint's own exits were read.
         assert "?" not in out
         assert "(start) → " in out
 

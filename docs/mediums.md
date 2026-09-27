@@ -35,7 +35,7 @@ Hands a choice back to you mid-cast. The cast blocks until you answer.
 from vekna.folio.flow import decide
 
 if not await decide("Push to main?"):               # -> bool
-    return done(Verdict(outcome="stopped"))
+    return Done(Verdict(outcome="stopped"))
 
 took = await decide("what now?", options=_TOOK)     # -> the option offered
 note = await decide("why?", free=True)              # -> str

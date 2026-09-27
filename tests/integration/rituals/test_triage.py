@@ -12,7 +12,7 @@ from rituals.triage import (
     size_up,
     triage,
 )
-from vekna.lexicon import RitualError, done, goto
+from vekna.lexicon import Done, RitualError
 from vekna.trial import Trial
 
 _ISSUE = "https://github.com/fancysnake/vekna/issues/57"
@@ -35,7 +35,7 @@ class TestReadLink:
 
         transition = trial.walk(read_link, Triage(link=AnyUrl(_ISSUE)))
 
-        assert transition == goto(size_up, Fetched(link=_ISSUE, body=_BODY))
+        assert transition == Fetched(link=_ISSUE, body=_BODY)
         assert trial.shell.commands == [f"gh issue view {_ISSUE} --json {_FIELDS}"]
 
     @staticmethod
@@ -83,7 +83,7 @@ class TestSizeUp:
 
         transition = trial.walk(size_up, Fetched(link=_ISSUE, body=_BODY))
 
-        assert transition == goto(route, Verdict(link=_ISSUE, reading=_READING))
+        assert transition == Verdict(link=_ISSUE, reading=_READING)
 
     # The issue body is written by whoever opened it. It is evidence, not
     # instruction: fenced, named as untrusted, and the tools are read-only.
@@ -128,7 +128,7 @@ class TestRoute:
 
         transition = trial.walk(route, Verdict(link=_ISSUE, reading=_READING))
 
-        assert transition == done(Triaged(link=_ISSUE, reading=_READING, took="ignore"))
+        assert transition == Done(Triaged(link=_ISSUE, reading=_READING, took="ignore"))
         assert not trial.coding.calls
 
     @staticmethod
@@ -140,7 +140,7 @@ class TestRoute:
 
         transition = trial.walk(route, Verdict(link=_ISSUE, reading=_READING))
 
-        assert transition == done(Triaged(link=_ISSUE, reading=_READING, took="file"))
+        assert transition == Done(Triaged(link=_ISSUE, reading=_READING, took="file"))
         assert "Record the triage below in TODO.md" in trial.coding.prompts[0]
 
     @staticmethod
@@ -153,7 +153,7 @@ class TestRoute:
 
         transition = trial.walk(route, Verdict(link=_ISSUE, reading=_READING))
 
-        assert transition == done(Triaged(link=_ISSUE, reading=_READING, took="fix"))
+        assert transition == Done(Triaged(link=_ISSUE, reading=_READING, took="fix"))
         assert "You are acting on the triage below" in trial.coding.prompts[0]
         assert trial.coding.gated == [("Bash", True)]
 

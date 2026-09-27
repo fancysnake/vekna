@@ -7,12 +7,11 @@ from pydantic import BaseModel
 
 from tests.conftest import entry
 from vekna.lexicon import (
+    Done,
     MediumBoundaryError,
     NoComponents,
     RitualError,
-    Transition,
     current_rite,
-    done,
     emit_delta,
     medium,
     ritual,
@@ -41,17 +40,29 @@ class Start(BaseModel):
     pass
 
 
+class Backwards(BaseModel):
+    pass
+
+
+class Whoami(BaseModel):
+    pass
+
+
+class Asked(BaseModel):
+    pass
+
+
 class Picked(BaseModel):
     choice: str
 
 
 @step
-async def choose(_state: Start) -> Transition:
+async def choose(_state: Start) -> Done[Picked]:
     choice = await pick(prompt="which?", options=["a", "b"])
-    return done(Picked(choice=choice))
+    return Done(Picked(choice=choice))
 
 
-chooser = entry(name="chooser", target=choose, payload=Start())
+chooser = entry(name="chooser", payload=Start())
 
 
 # `shell`'s shape: a positional-or-keyword string first, another string behind
@@ -64,12 +75,12 @@ async def sh(command: str, *, cwd: str | None = None) -> str:
 
 
 @step
-async def run_backwards(_state: Start) -> Transition:
+async def run_backwards(_state: Backwards) -> Done[None]:
     await sh(cwd="/very/long/repo/path", command="mise run lint:py")
-    return done(None)
+    return Done(None)
 
 
-backwards = entry(name="backwards", target=run_backwards, payload=Start())
+backwards = entry(name="backwards", payload=Backwards())
 
 
 @medium
@@ -79,19 +90,19 @@ async def whoami() -> None:
 
 
 @step
-async def identify(_state: Start) -> Transition:
+async def identify(_state: Whoami) -> Done[None]:
     await whoami()
-    return done(None)
+    return Done(None)
 
 
-identifier = entry(name="identifier", target=identify, payload=Start())
+identifier = entry(name="identifier", payload=Whoami())
 
 
 # The ritual body itself runs at the cast root, outside any rite.
 @ritual("rootless")
-def rootless(_: NoComponents) -> Transition:
+def rootless(_: NoComponents) -> Done[None]:
     emit_delta("nowhere to hang")
-    return done(None)
+    return Done(None)
 
 
 class TestMedium:
@@ -146,11 +157,11 @@ class TestMedium:
 # an author's rituals.py is a file they may never point a checker at.
 def _caller(call: dict[str, object]):
     @step
-    async def ask(_state: Start) -> Transition:
+    async def ask(_state: Asked) -> Done[None]:
         await pick(**call)
-        return done(None)
+        return Done(None)
 
-    return entry(name="caller", target=ask, payload=Start())
+    return entry(name="caller", payload=Asked())
 
 
 def _cast(the_ritual, grimoire):

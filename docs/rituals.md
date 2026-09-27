@@ -10,11 +10,13 @@ and prints its result.
   needs its material components. Typed values on the ritual's external
   interface — `File`, `Directory`, `Text`, `Url`, `GitRef` — declared as fields
   on one pydantic model, the ritual's only parameter.
-- **Step** — one deterministic hop. Takes a typed payload, returns `goto(...)`
-  or `done(...)`. A ritual is a trampoline over steps, bounded by `max_steps`.
-- **Transition** — what a step returns. Both carry a pydantic model or nothing,
-  checked as they are built: `goto(next_step, payload)` continues,
-  `done(result)` finishes.
+- **Step** — one deterministic hop. Takes a typed payload and returns the next
+  step's payload, or `Done(result)`. A ritual is a trampoline over steps,
+  bounded by `max_steps`.
+- **Transition** — what a step returns. A payload *is* the next step: each
+  payload class belongs to exactly one step, so returning `Attempt(...)` names
+  the step that takes an `Attempt`. `Done[T]` finishes with a `T`. The step's
+  return annotation lists its exits, and mypy checks every return against it.
 - **Medium** — what a step reaches out to: `coding` (an agent), `shell`,
   `decide` (ask the operator). Each call opens a rite of its own.
 - **Focus** — the backend behind a medium. `vekna.folio.coding_claude` is the
@@ -32,15 +34,22 @@ business — no shared mutable state between them, no hidden control flow.
 
 ```python
 @step
-async def review(state: Diff) -> Transition:
+async def review(state: Diff) -> Findings | Done[Verdict]:
     if state.lines > 500:
-        return done(Verdict(outcome="too big to review"))
-    return goto(comment, Findings(text=await coding(f"Review:\n{state.body}")))
+        return Done(Verdict(outcome="too big to review"))
+    return Findings(text=await coding(f"Review:\n{state.body}"))
 ```
+
+The return annotation is the declaration: `review` goes on to whichever step
+takes a `Findings`, or ends with a `Verdict`. There is no second place for the
+graph to live, so nothing drifts, and a step whose body returns something its
+annotation does not name fails `mypy`, not a cast.
 
 A step may admit several payload shapes — `Lint | Coverage` — which is how two
 different predecessors hand work to one successor. A ritual's components stay
-one model, because they are one CLI interface.
+one model, because they are one CLI interface. The one rule: **a payload class
+belongs to one step**. Two steps declaring the same class is an error naming
+both.
 
 `max_steps` bounds the trampoline. A ritual that loops forever stops with
 `StepBudgetExceededError` rather than running until you notice.
@@ -65,8 +74,9 @@ Validation is pydantic's. A field typed `Annotated[int, Field(ge=0)]` rejects
 the error names the field.
 
 `vekna rituals list` prints every ritual with the options it takes;
-`vekna rituals show <name>` adds the step graph, drawn from the `goto` calls in
-each step's body.
+`vekna rituals show <name>` adds the step graph, drawn from each step's return
+annotation. An exit no step takes — a class you annotated but never decorated a
+step with — is refused when the library loads, before anything is cast.
 
 ## Concurrency inside a step
 
@@ -77,7 +87,7 @@ its own command, which is what tells the two lines apart.
 
 ```python
 @step
-async def gates(state: Branch) -> Transition:
+async def gates(state: Branch) -> Red | Done[Report]:
     async with asyncio.TaskGroup() as group:
         lint = group.create_task(shell("mise run lint:py"))
         tests = group.create_task(shell("mise run test:py"))
@@ -113,9 +123,10 @@ modules = ["mycompany.rites"]
 
 These are additive: naming the file that would have been found anyway is how
 you are explicit about it, and loading it twice is not an error. Two
-*different* sources claiming one ritual name still is, and so are two of them
-declaring a step of the same name — both errors name the pair rather than
-letting whichever loaded first win.
+*different* sources claiming one ritual name still is, and so are two steps
+taking one payload class — both errors name the pair rather than letting
+whichever loaded first win. Two steps merely *named* alike are fine: a name
+routes nothing.
 
 ## Tomes: rituals you install
 

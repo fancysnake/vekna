@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.shell import shell
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import Done, ritual, step
 
 from .shared import Bound, said
 
@@ -35,7 +35,11 @@ class CoverDiff(BaseModel):
 
 class Uncovered(BaseModel):
     budget: int
-    report: str = ""
+
+
+class WriteTests(BaseModel):
+    budget: int
+    report: str
 
 
 class CoverReport(BaseModel):
@@ -45,33 +49,33 @@ class CoverReport(BaseModel):
 
 
 @ritual("cover_diff")
-def cover_diff(components: CoverDiff) -> Transition:
+def cover_diff(components: CoverDiff) -> Uncovered:
     # The entrypoint: map the CLI Components into the first step's payload.
-    return goto(measure, Uncovered(budget=components.bound))
+    return Uncovered(budget=components.bound)
 
 
 @step
-async def measure(state: Uncovered) -> Transition:
+async def measure(state: Uncovered) -> WriteTests | Done[CoverReport]:
     # `test:py:cov:diff` runs the suite under coverage, then fails when the
     # lines this branch changed are not exercised by a test.
     result = await shell("mise run test:py:cov:diff -- --fail-under 100")
     if result.exit_code == 0:
-        return done(CoverReport(covered=True, remaining=state.budget))
+        return Done(CoverReport(covered=True, remaining=state.budget))
     report = said(result)
     # `<=`, not `==`: the Components reject a negative bound, and this stays
     # right even if a future step arrives at one some other way. The report
     # rides out with the failure — a cast that gave up still has to say on what.
     if state.budget <= 0:
-        return done(CoverReport(covered=False, remaining=0, report=report))
-    return goto(write_tests, Uncovered(budget=state.budget, report=report))
+        return Done(CoverReport(covered=False, remaining=0, report=report))
+    return WriteTests(budget=state.budget, report=report)
 
 
 @step
-async def write_tests(state: Uncovered) -> Transition:
+async def write_tests(state: WriteTests) -> Uncovered:
     # The report names the uncovered lines, so the agent gets the failure
     # rather than a description of it.
     # Every command the agent runs is put to you first: without `gate_tools`
     # the call defaults to bypassPermissions, which is a lot of trust to hand
     # an agent whose brief is "make the coverage number go up".
     await coding(_FIX_UNCOVERED + state.report, opts=CodingOpts(gate_tools=["Bash"]))
-    return goto(measure, Uncovered(budget=state.budget - 1))
+    return Uncovered(budget=state.budget - 1)

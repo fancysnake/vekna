@@ -34,10 +34,10 @@ named `vekna`.
 
 | Term       | Meaning |
 |------------|---------|
-| **Ritual** | Workflow **entrypoint** — `@ritual` in `rituals.py`. Owns the external Component interface (CLI in, final out) and fires the opening transition into the first step. Not a step; never a `goto` target. |
-| **Step**   | One **task** in a workflow — `@step` async function. Typed input value → returns a `Transition`. Enforces its input/output type hints at runtime. Calls mediums in its body. |
-| **Workflow** | The graph of steps a ritual drives, connected by transitions. Shaped at runtime by `goto`/`done`, not declared up front. |
-| **Transition** | What a step returns: `goto(next_step, payload)` to continue, `done(result)` to finish. Both carry a pydantic model or nothing, checked as the transition is built. Routing lives in the value; target named by direct function reference. |
+| **Ritual** | Workflow **entrypoint** — `@ritual` in `rituals.py`. Owns the external Component interface (CLI in, final out) and returns the first step's payload. Not a step; no payload class names it. |
+| **Step**   | One **task** in a workflow — `@step` async function. Typed input value → returns the next step's payload or `Done[T]`. Its payload class *is* its identity: one class, one step. Its return annotation names its exits, checked by mypy. Calls mediums in its body. |
+| **Workflow** | The graph of steps a ritual drives, connected by transitions. Declared by each step's return annotation; walked one path at a time at runtime. |
+| **Transition** | What a step returns: a payload value to continue — the engine routes it to the one step whose payload class it is — or `Done(result)` to finish. A payload is a pydantic model; `Done[T]` carries a model or `None`. Routing lives in the value; the target is named by the value's class. |
 | **Cast**   | One invocation of a ritual. Unit of execution. Owns locks, has a journal. Runs in a cast process. |
 | **Rite**   | One **executed node** in the grimoire — a step or medium invocation. (`step`/`medium` are authored units; a rite is one run of one.) |
 | **Medium** | Kind of effect a step calls — typed call shape, declared value shape, `run()` body. ≈ port. (`shell`, `coding`, `decide`.) |
@@ -45,7 +45,7 @@ named `vekna`.
 | **Component** | What a ritual needs before it can be cast, the way a spell needs its material components. Typed value on its external interface (CLI in). `File`, `Directory`, `Text`. Declared as one field of the ritual's components model. |
 | **Folio**  | Bound bundle of Mediums and/or Foci, shaped like a future stand-alone dist. |
 | **Tome**   | A ritual library published as an installable package, named by `[rituals] modules`. Versioned and released like any other dependency; the project that casts from it needs nothing on disk but the config line. A folio ships mediums, a tome ships rituals. |
-| **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `goto`/`done`, `@medium`, components. |
+| **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `Done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
 | **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. |
@@ -59,50 +59,52 @@ A workflow is a **graph of steps**, not one imperative function:
 
 - **`@ritual`** marks the **entrypoint** — the only thing `vekna cast` invokes.
   It owns the external Component interface (CLI flags in, final result out) and
-  fires the opening `goto` into the first step. It is not a step and is never a
-  `goto` target.
+  returns the first step's payload. It is not a step, and no payload class
+  names it.
 - **`@step`** marks a **task** — an async function taking one typed value and
-  returning a **transition** (annotated `-> Transition`; it `return`s
-  `goto(...)`/`done(...)`, so the file stays lintable). Its body calls mediums
-  (`shell`, `coding`, `decide`). The engine validates the incoming value against
-  the step's input annotation **on entry** — so every value is checked by its
-  receiving step — raising on mismatch.
-- **Transitions** carry routing in the return value: `goto(next_step, payload)`
-  continues, `done(result)` finishes. Targets are named by direct function
-  reference. The engine trampolines step→step — emitting "finished A, starting
-  B" into the grimoire and cross-checking each payload against the target step's
-  input type — until a step returns `done`.
+  returning the **next step's payload**, or `Done(result)`. Its return
+  annotation names every exit — `-> Fix | Done[Report]` — and is the graph:
+  there is no second place for an edge to live, mypy checks every `return`
+  against it, and a mis-wire fails the type check rather than a cast. Its body
+  calls mediums (`shell`, `coding`, `decide`). The engine validates the
+  incoming value against the step's input annotation **on entry**, raising on
+  mismatch.
+- **A payload class is a step's identity.** One class, one step; a step may
+  take a union of several. The engine trampolines step→step — looking the
+  returned value's class up to find the step that takes it, emitting "finished
+  A, starting B" into the grimoire — until a step returns `Done`. Step values
+  are inert data: constructing one runs nothing, so a step cannot call a step.
 
 ```python
-from vekna.lexicon import ritual, step, goto, done, Transition
+from vekna.lexicon import Done, ritual, step
 from vekna.folio.shell import shell
 from vekna.folio.coding import coding
 
 class FixDemo(BaseModel): bound: int             # the ritual's components
-class Attempt(BaseModel): failures: str; budget: int
+class Attempt(BaseModel): budget: int            # run_tests's payload
+class Fix(BaseModel):     failures: str; budget: int   # claude_fix's payload
 class Report(BaseModel):  fixed: bool
 
 @ritual("fix_demo")                                # boundary: CLI in, final out
-def fix_demo(components: FixDemo) -> Transition:   # `def`: nothing to await
-    return goto(run_tests, Attempt(failures="", budget=components.bound))
+def fix_demo(components: FixDemo) -> Attempt:      # `def`: nothing to await
+    return Attempt(budget=components.bound)
 
 @step
-async def run_tests(a: Attempt) -> Transition:
+async def run_tests(a: Attempt) -> Fix | Done[Report]:
     fails = await shell("pytest")
-    if not fails:     return done(Report(fixed=True))
-    if a.budget == 0: return done(Report(fixed=False))
-    return goto(claude_fix, Attempt(failures=fails, budget=a.budget))
+    if not fails:     return Done(Report(fixed=True))
+    if a.budget == 0: return Done(Report(fixed=False))
+    return Fix(failures=fails, budget=a.budget)
 
 @step
-async def claude_fix(a: Attempt) -> Transition:
-    await coding(f"fix:\n{a.failures}")
-    return goto(run_tests, Attempt(failures="", budget=a.budget - 1))
+async def claude_fix(f: Fix) -> Attempt:
+    await coding(f"fix:\n{f.failures}")
+    return Attempt(budget=f.budget - 1)
 ```
 
-Routing lives in the value, not the type hint; the type hints are the data
-shapes, enforced at each boundary. **Annotation-gated dispatch** (route a
-payload to whichever step admits its type, so `goto(payload)` needs no named
-target) is a deferred, additive layer on top of explicit `goto`.
+Routing lives in the value; the type hints are the data shapes, enforced at
+each boundary, and the return hint is the edge list. `Done[T]` is generic, so a
+ritual's result type is stated rather than `BaseModel | None`.
 
 **Loop safety.** The trampoline is bounded. `@ritual(…, max_steps=N)` caps the
 total transitions in a cast (default in `_specs.py`); `@step(…, max_visits=N)`
@@ -111,14 +113,14 @@ optionally caps re-entry of one step. Exceeding either raises
 safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
 a step decides for itself.
 
-**Inferable graph.** Because each step declares its input type and its `goto`
-targets, a **static** workflow graph is derivable without running: an edge
-`A → B` exists where step `A`'s body does `goto(B, …)`, and `done(…)` is a
-terminal. Execution walks one path at runtime via `goto` (recorded in the
-grimoire). `vekna rituals show` dumps the static graph, read off each function's
-source text — so a `goto` whose target is computed rather than named does not
-appear. That makes the dump best-effort rather than exhaustive, and not a
-guaranteed superset of the edges a cast walks.
+**Inferable graph.** Because each step declares its input type and its exits,
+the workflow graph is read off the annotations: an edge `A → B` exists where
+`A`'s return annotation names `B`'s payload class, and `Done[...]` is a
+terminal. Execution walks one path at runtime (recorded in the grimoire).
+`vekna rituals show` draws the whole graph, and it is exhaustive — a computed
+target is not a thing that can exist. An exit naming a class no step takes is
+the one mis-wire mypy cannot see; the library refuses to load with it, so
+`list`, `show` and `cast` all stop before a cast starts.
 
 ## Process model
 
@@ -153,13 +155,14 @@ phylactery: one registry row
 1. `vekna cast write-tests --testdir=./tests`.
 2. The cast process loads `./rituals.py` or `./rituals/` (+ config modules),
    finds `@ritual('write-tests')`, validates Components against the entrypoint's
-   components model, and registers its `@step`s + mediums in the compendium.
+   components model, and registers its rituals in the compendium — steps
+   registered themselves, by payload class, when they were decorated.
 3. It probes `$XDG_RUNTIME_DIR/vekna.sock`. Reachable → attach + `CastHello`.
    Not → standalone. Either way the cast renders to its own stdout and takes
    its prompts on its own stdin; attaching adds a listener, not an owner.
-4. It runs the ritual: the engine fires the opening transition and trampolines
-   step→step on each returned `goto`, validating payloads at every boundary,
-   until a step returns `done`. Steps and the mediums they call emit
+4. It runs the ritual: the engine takes the opening payload and trampolines
+   step→step on each returned payload, validating it at every boundary, until
+   a step returns `Done`. Steps and the mediums they call emit
    `RiteStarted`/`RiteFinished`; locks emit `LockGranted`/`LockReleased`;
    every human prompt is announced as `DecideRequested` and closed by
    `DecideResolved` — the single prompt kind (choice, tool-use approval, free
@@ -281,13 +284,12 @@ CLI-facing interface, and both boundaries reject a value of the wrong model.
 - `Url`, `Email`, `GitRef` — Pydantic type re-exports.
 - `Process`, `Executable` — deferred to `folio/process` (lifetime ≠ value).
 
-**Output direction — deferred.** "Inputs and outputs are both Components on one
+**Output direction.** "Inputs and outputs are both Components on one
 interface" is unbuilt, and reads badly against the word: an output is not
-something the ritual needed in order to run. `done(result)` takes a pydantic
-model or nothing — checked as the transition is built, like every other
-boundary — but the ritual declares no output *type*, so nothing says which
-model a given ritual ends with. What does ship is an output shape declared at
-the medium call site, not baked into Medium variants:
+something the ritual needed in order to run. What a ritual ends with is
+`Done[T]` — every step that may finish says which `T` in its return annotation,
+checked as the value is built like every other boundary. An output shape is
+also declared at the medium call site, not baked into Medium variants:
 
 ```python
 r = await coding(prompt="...")                          # default agent telemetry
@@ -386,10 +388,10 @@ dep elsewhere. Tooling: poetry deps, `mise run …` commands.
 1. One `vekna` binary, three roles: the `vekna cast` process (imports
    lexicon/folios/user code), the lich (spawns casts, loads none), and the
    long-running daemon (imports neither). Blast radius = one cast.
-2. Vocabulary: ritual (workflow entrypoint) / step (task) / transition
-   (`goto`/`done`) / cast (invocation) / rite (one executed step-or-medium
-   node). "cast" = verb. A workflow is a graph of steps wired by transitions,
-   shaped at runtime.
+2. Vocabulary: ritual (workflow entrypoint) / step (task) / transition (the
+   next payload, or `Done`) / cast (invocation) / rite (one executed
+   step-or-medium node). "cast" = verb. A workflow is a graph of steps wired by
+   return annotations; a payload class is a step's identity (#103).
 3. GLIMPSE for the daemon; underscored GLIMPSE-flat for lexicon + folios.
    Promote files to packages on growth.
 4. Wire DTOs in own package (`vekna.wire`), versioned independently. No

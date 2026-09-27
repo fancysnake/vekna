@@ -9,7 +9,7 @@ from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.coding_claude import ClaudeOptions
 from vekna.folio.flow import decide
 from vekna.folio.shell import shell
-from vekna.lexicon import RitualError, Transition, Url, done, goto, ritual, step
+from vekna.lexicon import Done, RitualError, Url, ritual, step
 
 # The issue body is written by whoever opened it, which on a public repository
 # is anyone. It is evidence, not instruction: fenced and named as untrusted so
@@ -105,21 +105,21 @@ def _gh_view(link: Url) -> str:
 
 
 @ritual("triage")
-def triage(components: Triage) -> Transition:
-    return goto(read_link, components)
+def triage(components: Triage) -> Triage:
+    return components
 
 
 @step
-async def read_link(request: Triage) -> Transition:
+async def read_link(request: Triage) -> Fetched:
     result = await shell(_gh_view(request.link), stream=False)
     if result.exit_code:
         msg = f"gh could not read {request.link}: {result.stderr.strip()}"
         raise RitualError(msg)
-    return goto(size_up, Fetched(link=str(request.link), body=result.stdout))
+    return Fetched(link=str(request.link), body=result.stdout)
 
 
 @step
-async def size_up(fetched: Fetched) -> Transition:
+async def size_up(fetched: Fetched) -> Verdict:
     # Read-only, and it does read: the agent judges what the issue touches by
     # opening the code, not by guessing from the title.
     reading = await coding(
@@ -133,11 +133,11 @@ async def size_up(fetched: Fetched) -> Transition:
             )
         ),
     )
-    return goto(route, Verdict(link=fetched.link, reading=reading))
+    return Verdict(link=fetched.link, reading=reading)
 
 
 @step
-async def route(verdict: Verdict) -> Transition:
+async def route(verdict: Verdict) -> Done[Triaged]:
     # Three answers, and the ritual ends on two of them — which is the point of
     # asking before an agent starts editing anything.
     # The headline and the size, not the whole reading: the reading is in the
@@ -147,7 +147,7 @@ async def route(verdict: Verdict) -> Transition:
     )
     triaged = Triaged(link=verdict.link, reading=verdict.reading, took=took)
     if took == "ignore":
-        return done(triaged)
+        return Done(triaged)
     prompt = _ACT_ON if took == "fix" else _FILE_IT
     # The agent may run commands, and every one of them is gated: `gate_tools`
     # puts each Bash call to you before it happens.
@@ -155,4 +155,4 @@ async def route(verdict: Verdict) -> Transition:
         f"{prompt}{verdict.reading.asks}\n\nlink: {verdict.link}",
         opts=CodingOpts(gate_tools=["Bash"]),
     )
-    return done(triaged)
+    return Done(triaged)

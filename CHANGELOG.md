@@ -11,6 +11,23 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **A step returns the next step's payload, and its return annotation is the
+  graph.** `goto`, `Goto` and `done` are gone: a step `return`s the payload of
+  the step to run next, or `Done(result)`, and annotates its exits —
+  `-> WriteTests | Done[CoverReport]`. A payload class is one step's identity,
+  so the engine routes by the returned value's class; two steps taking one
+  class is an error naming both, while two steps merely sharing a name is not.
+  mypy checks every `return` against the annotation, so a mis-wire fails the
+  type check rather than a cast; a step without a return annotation is refused
+  at decoration. `Done[T]` is generic, so a ritual's result type is stated.
+  `rituals show` draws the graph off the annotations — exhaustive, with no
+  best-effort source parsing — and an exit no step takes stops `list`, `show`
+  and `cast` before anything runs. `trial.walk` requires a payload. Breaking
+  for every `rituals.py` and every tome.
+  ([#103](https://github.com/fancysnake/vekna/issues/103))
+
 ## [0.9.1] - 2026-09-26
 
 ### Fixed

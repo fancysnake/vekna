@@ -18,7 +18,7 @@ from vekna.wire import CastHello
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class Tick(BaseModel):
@@ -30,21 +30,21 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def tick(state: Tick) -> Transition:
+    async def tick(state: Tick) -> Tick | Done[Tick]:
         if not state.left:
-            return done(state)
-        return goto(tick, Tick(left=state.left - 1))
+            return Done(state)
+        return Tick(left=state.left - 1)
 
 
     @ritual("countdown")
-    async def countdown(components: Countdown) -> Transition:
-        return goto(tick, Tick(left=components.start))
+    async def countdown(components: Countdown) -> Tick:
+        return Tick(left=components.start)
     """)
 
 _SPINNER = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import NoComponents, Transition, goto, ritual, step
+    from vekna.lexicon import NoComponents, ritual, step
 
 
     class Spin(BaseModel):
@@ -52,13 +52,13 @@ _SPINNER = textwrap.dedent("""
 
 
     @step
-    async def spin(state: Spin) -> Transition:
-        return goto(spin, state)
+    async def spin(state: Spin) -> Spin:
+        return state
 
 
     @ritual("spinner", max_steps=2)
-    async def spinner(_: NoComponents) -> Transition:
-        return goto(spin, Spin())
+    async def spinner(_: NoComponents) -> Spin:
+        return Spin()
     """)
 
 _POLL_SECONDS = 0.01

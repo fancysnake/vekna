@@ -3,8 +3,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from types import UnionType
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Generic, Literal, Protocol, TypeVar
 
 from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, JsonValue
 
@@ -93,13 +92,11 @@ RiteEvent = RiteBegan | RiteStreamed | RiteEnded
 # back what it found and `_inits` registers it.
 # One per *module*, not per top-level source: a package is swept all the way
 # down, and a collision between two of its submodules should name which two.
-# `origin`, not `source`: a Ritual's and a Step's `source` is their own source
-# *code*, read by `graph.py`. This is the module that declared them.
+# The module that declared them, for the collision message.
 @dataclass(frozen=True, kw_only=True)
 class RitualSource:
     origin: str
     rituals: list["Ritual"]
-    steps: list["Step"]
 
 
 # What a resumed cast is handed: the record of what the interrupted cast was,
@@ -239,29 +236,45 @@ class FocusMissingError(RitualError):
     pass
 
 
+# A transition carries a pydantic model or nothing. The annotations alone would
+# not hold: a transition is written in a rituals.py, and whether mypy reads that
+# file is the author's call. This repo puts its own in `SRC_PATHS` and gets the
+# error at check time; everyone else gets it here.
+def _checked(value: object, *, kind: str) -> None:
+    if value is None or isinstance(value, BaseModel):  # type: ignore [misc]
+        return
+    msg = f"{kind} takes a pydantic model or nothing, got {type(value).__name__}"
+    raise RitualBoundaryError(msg)
+
+
+# Covariant, so a step declared `-> WriteTests | Done[CoverReport]` is a
+# `Callable[..., Transition]` — the shape the engine calls through.
+_ResultT_co = TypeVar("_ResultT_co", bound=BaseModel | None, covariant=True)
+
+
 @dataclass(frozen=True)
-class Done:
-    result: BaseModel | None = None
+class Done(Generic[_ResultT_co]):
+    result: _ResultT_co
+
+    def __post_init__(self) -> None:
+        _checked(self.result, kind="Done")
 
 
-# `source` is the decorated function's own source text, captured at definition
-# time so `rituals show` can read the step graph off it. None when the function
-# was built dynamically and has no source to read.
+# A step's payload is the next step, so what a step returns is a payload or
+# `Done`. Steps annotate the concrete union; this is the erased shape.
+Transition = BaseModel | Done[BaseModel | None]
+
+
+# `exits` are the payload classes a body may return, and `ends` whether it may
+# return `Done` — both read off the return annotation at decoration, so the
+# graph `rituals show` draws is the one mypy checked.
 @dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
-    run: Callable[[BaseModel | None], Awaitable["Transition"]]
-    input_type: type[BaseModel] | UnionType
-    source: str | None = None
-
-
-@dataclass(frozen=True)
-class Goto:
-    target: Step
-    payload: BaseModel | None = None
-
-
-Transition = Goto | Done
+    run: Callable[[BaseModel], Awaitable[Transition]]
+    payloads: tuple[type[BaseModel], ...]
+    exits: tuple[type[BaseModel], ...]
+    ends: bool
 
 
 # A ritual declares its components as a model, so one that needs nothing would
@@ -277,26 +290,8 @@ class Ritual:
     components: type[BaseModel]
     run: Callable[[BaseModel], Awaitable[Transition]]
     max_steps: int
-    source: str | None = None
-
-
-# A transition carries a pydantic model or nothing. The annotations alone would
-# not hold: a transition is written in a rituals.py, and whether mypy reads that
-# file is the author's call. This repo puts its own in `SRC_PATHS` and gets the
-# error at check time; everyone else gets it here.
-def _checked(value: object, *, kind: str) -> BaseModel | None:
-    if value is None or isinstance(value, BaseModel):  # type: ignore [misc]
-        return value
-    msg = f"{kind} takes a pydantic model or nothing, got {type(value).__name__}"
-    raise RitualBoundaryError(msg)
-
-
-def goto(target: Step, payload: BaseModel | None = None) -> Goto:
-    return Goto(target=target, payload=_checked(payload, kind="goto"))
-
-
-def done(result: BaseModel | None = None) -> Done:
-    return Done(result=_checked(result, kind="done"))
+    exits: tuple[type[BaseModel], ...]
+    ends: bool
 
 
 # Unknown keys are an error: a misspelt `module = [...]` would otherwise load

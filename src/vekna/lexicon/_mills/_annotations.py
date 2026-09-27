@@ -1,11 +1,11 @@
 import inspect
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType, UnionType
-from typing import Annotated, Any, TypeGuard, get_args, get_type_hints
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import RitualDefinitionError
+from vekna.lexicon._pacts import Done, RitualDefinitionError
 
 _NAMELESS = "value"
 
@@ -52,14 +52,15 @@ def _components_model(func: _Erased) -> type[BaseModel]:
     raise RitualDefinitionError(msg)
 
 
-def _is_model_union(annotation: type[Any] | UnionType | None) -> TypeGuard[UnionType]:
+def _model_members(
+    annotation: type[Any] | UnionType | None,
+) -> tuple[type[BaseModel], ...] | None:
     if not isinstance(annotation, UnionType):
-        return False
-
-    return all(
-        _as_model(member) is not None or member is NoneType
-        for member in get_args(annotation)
-    )
+        return None
+    members = [_as_model(member) for member in get_args(annotation)]
+    if any(member is None for member in members):
+        return None
+    return tuple(member for member in members if member is not None)
 
 
 def _is_union(annotation: type[Any] | UnionType | None) -> bool:
@@ -71,13 +72,14 @@ def _is_union(annotation: type[Any] | UnionType | None) -> bool:
 
 # A step may admit more than one payload shape — `Lint | Coverage` for a step
 # two others transition into — so a union is legal here where a ritual's
-# components, being one CLI interface, are not.
-def _payload_type(func: _Erased) -> type[BaseModel] | UnionType:
+# components, being one CLI interface, are not. A payload is the next step, so
+# `None` is not one.
+def _payloads(func: _Erased) -> tuple[type[BaseModel], ...]:
     annotation = _sole_annotation(func, decorator="step", noun="payload")
     if (model := _as_model(annotation)) is not None:
-        return model
-    if _is_model_union(annotation):
-        return annotation
+        return (model,)
+    if (members := _model_members(annotation)) is not None:
+        return members
     msg = (
         f"@step {func.__name__!r} needs a pydantic model, or a union of them, "
         "as its payload type"
@@ -119,3 +121,35 @@ def _type_name(annotation: type[Any] | UnionType | None) -> str:
         wrapped = get_args(annotation)
         return _type_name(wrapped[0])
     return _plain_name(annotation)
+
+
+# A body may be `def` handing back an awaitable, so the transition is under
+# one wrapper at most.
+def _unwrapped(annotation: Any | None) -> Any | None:
+    if get_origin(annotation) in {Awaitable, Coroutine}:
+        return get_args(annotation)[-1]
+    return annotation
+
+
+# The exits a body declares: the payload classes it may return, and whether it
+# may return `Done`. `Done[T]` is only ever a return, so its `T` goes unread
+# here — mypy is the one that checks it.
+def _exits(
+    func: _Erased, *, decorator: str
+) -> tuple[tuple[type[BaseModel], ...], bool]:
+    annotation = _unwrapped(get_type_hints(func).get("return"))
+    members = get_args(annotation) if _is_union(annotation) else (annotation,)
+    exits: list[type[BaseModel]] = []
+    ends = False
+    for member in members:
+        if get_origin(member) is Done:
+            ends = True
+        elif (model := _as_model(member)) is not None:
+            exits.append(model)
+        else:
+            msg = (
+                f"@{decorator} {func.__name__!r} must declare its exits: "
+                "a return annotation naming step payloads and Done[...]"
+            )
+            raise RitualDefinitionError(msg)
+    return tuple(exits), ends

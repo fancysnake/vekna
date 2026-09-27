@@ -13,6 +13,7 @@ from vekna.lexicon._mills.engine import (
     _rite,
     cast_context,
     run_cast,
+    steps_scope,
 )
 from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
 
@@ -54,6 +55,7 @@ class Trial:
         self._active = False
 
     def __enter__(self) -> Self:
+        self._installed.enter_context(steps_scope())
         self._installed.enter_context(CODING_FOCUS.scope(self.coding))
         self._installed.enter_context(SHELL_FOCUS.scope(self.shell))
         self._active = True
@@ -109,16 +111,14 @@ class Trial:
         )
         return self.result
 
-    def walk(self, step: Step, payload: BaseModel | None = None) -> Transition:
+    def walk(self, step: Step, payload: BaseModel) -> Transition:
         return _driven(self.walk_async(step, payload))
 
     # Not a throwaway ritual around `run_cast`, which answers with the cast's
     # result and swallows every transition on the way: the transition is the
     # whole question a one-step test asks. The ground a cast stands on is the
     # same `cast_context`, so what `run_cast` grows the walk grows with it.
-    async def walk_async(
-        self, step: Step, payload: BaseModel | None = None
-    ) -> Transition:
+    async def walk_async(self, step: Step, payload: BaseModel) -> Transition:
         self._entered()
         with cast_context(grimoire=self._grimoire(), channel=self.decide):
             async with _rite(name=step.name, category="step"):

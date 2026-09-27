@@ -10,8 +10,8 @@ pytest_plugins = ["pytester"]
 _A_RITUAL_TEST = """
 from pydantic import BaseModel
 
-from vekna.folio.shell import shell
-from vekna.lexicon import Transition, done, step
+from vekna.folio.shell import ShellResult, shell
+from vekna.lexicon import Done, step
 from vekna.trial import Trial
 
 
@@ -20,8 +20,8 @@ class State(BaseModel):
 
 
 @step
-async def check(_state: State) -> Transition:
-    return done(await shell("mise run test:py"))
+async def check(_state: State) -> Done[ShellResult]:
+    return Done(await shell("mise run test:py"))
 
 
 def test_the_fixture_is_installed_and_scripted(trial: Trial) -> None:

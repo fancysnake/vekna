@@ -2,11 +2,12 @@ from rituals.cover_diff import (
     CoverDiff,
     CoverReport,
     Uncovered,
+    WriteTests,
     cover_diff,
     measure,
     write_tests,
 )
-from vekna.lexicon import done, goto
+from vekna.lexicon import Done
 from vekna.trial import Trial
 
 _GATE = "mise run test:py:cov:diff -- --fail-under 100"
@@ -23,7 +24,7 @@ class TestMeasure:
 
         transition = trial.walk(measure, Uncovered(budget=3))
 
-        assert transition == done(CoverReport(covered=True, remaining=3))
+        assert transition == Done(CoverReport(covered=True, remaining=3))
         assert trial.shell.commands == [_GATE]
 
     @staticmethod
@@ -32,7 +33,7 @@ class TestMeasure:
 
         transition = trial.walk(measure, Uncovered(budget=2))
 
-        assert transition == goto(write_tests, Uncovered(budget=2, report=_UNCOVERED))
+        assert transition == WriteTests(budget=2, report=_UNCOVERED)
 
     @staticmethod
     def test_a_spent_budget_ends_red_rather_than_asking_again(trial: Trial) -> None:
@@ -42,7 +43,7 @@ class TestMeasure:
 
         # The report rides out with the failure: a cast that gave up still says
         # which lines it gave up on.
-        assert transition == done(
+        assert transition == Done(
             CoverReport(covered=False, remaining=0, report=_UNCOVERED)
         )
 
@@ -54,9 +55,9 @@ class TestWriteTests:
     ) -> None:
         trial.coding.replies("wrote a test")
 
-        transition = trial.walk(write_tests, Uncovered(budget=2, report=_UNCOVERED))
+        transition = trial.walk(write_tests, WriteTests(budget=2, report=_UNCOVERED))
 
-        assert transition == goto(measure, Uncovered(budget=1))
+        assert transition == Uncovered(budget=1)
         assert _UNCOVERED in trial.coding.prompts[0]
         assert "diff-cover reports lines this branch changed" in trial.coding.prompts[0]
 
@@ -69,7 +70,7 @@ class TestWriteTests:
         trial.coding.replies("ran the suite", uses=["Bash"])
         trial.decide.answers(answer=False, when="*allow tool*")
 
-        trial.walk(write_tests, Uncovered(budget=1, report=""))
+        trial.walk(write_tests, WriteTests(budget=1, report=""))
 
         assert trial.coding.gated == [("Bash", False)]
         assert trial.decide.prompts == ["allow tool 'Bash'?"]

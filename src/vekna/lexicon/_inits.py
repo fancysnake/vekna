@@ -21,6 +21,7 @@ from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, ru
 from ._mills.graph import step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
+    Done,
     FocusMissingError,
     NoComponents,
     RiteEvent,
@@ -28,8 +29,7 @@ from ._pacts import (
     RitualDefinitionError,
     RitualError,
     RitualSource,
-    Transition,
-    done,
+    StringOutput,
 )
 
 _USAGE = (
@@ -149,8 +149,6 @@ def _register(*, compendium: Compendium, found: list[RitualSource]) -> None:
     for module in found:
         for the_ritual in module.rituals:
             compendium.register(the_ritual, origin=module.origin)
-        for the_step in module.steps:
-            compendium.register_step(the_step, origin=module.origin)
 
 
 class _Library(NamedTuple):
@@ -202,6 +200,11 @@ def _build_library(cwd: Path) -> _Library:
     # A near miss is only ever found when discovery came back empty, so
     # anything seen here was named by a config — and a config that loaded is
     # the answer to where the rituals were meant to come from.
+    # Every exit resolved before anything is cast: an annotation naming a class
+    # no step takes is well-typed, so this walk is the only thing that catches
+    # it, and here it catches it on `list` and `show` as well as `cast`.
+    for name in compendium.names():
+        step_graph(compendium.ritual(name))
     loaded = bool(seen_files or seen_modules)
     return _Library(compendium, _no_rituals(None if loaded else discovered.near_miss))
 
@@ -263,8 +266,8 @@ def _component_lines(the_ritual: Ritual) -> list[str]:
     ]
 
 
-def _show_text(compendium: Compendium, the_ritual: Ritual) -> str:
-    graph = step_graph(compendium, the_ritual)
+def _show_text(the_ritual: Ritual) -> str:
+    graph = step_graph(the_ritual)
     lines = [
         the_ritual.name,
         f"max steps: {the_ritual.max_steps}",
@@ -284,7 +287,7 @@ def _show(compendium: Compendium, name: str) -> int:
     except RitualDefinitionError as error:
         sys.stderr.write(f"{error}\n")
         return 2
-    sys.stdout.write(_show_text(compendium, the_ritual))
+    sys.stdout.write(_show_text(the_ritual))
     return 0
 
 
@@ -312,10 +315,17 @@ def rituals_show(name: str) -> int:
 def _prompt_ritual(prompt: str) -> Ritual:
     run_prompt = prompt_runner(_PROMPT_MEDIUM)
 
-    async def ask(_: BaseModel) -> Transition:
-        return done(await run_prompt(prompt))
+    async def ask(_: BaseModel) -> Done[StringOutput]:
+        return Done(await run_prompt(prompt))
 
-    return Ritual(name=_PROMPT_NAME, components=NoComponents, run=ask, max_steps=1)
+    return Ritual(
+        name=_PROMPT_NAME,
+        components=NoComponents,
+        run=ask,
+        max_steps=1,
+        exits=(),
+        ends=True,
+    )
 
 
 def _prompt_text(argv: list[str]) -> str | None:

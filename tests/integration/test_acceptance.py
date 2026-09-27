@@ -10,7 +10,7 @@ _RITUALS = textwrap.dedent("""
 
     from vekna.folio.flow import decide
     from vekna.folio.shell import shell
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class FixDemo(BaseModel):
@@ -21,36 +21,40 @@ _RITUALS = textwrap.dedent("""
         budget: int
 
 
+    class Fixing(BaseModel):
+        budget: int
+
+
     class Report(BaseModel):
         fixed: bool
         remaining: int
 
 
     @ritual("fix_demo")
-    async def fix_demo(components: FixDemo) -> Transition:
-        return goto(check, Attempt(budget=components.bound))
+    async def fix_demo(components: FixDemo) -> Attempt:
+        return Attempt(budget=components.bound)
 
 
     @step
-    async def check(attempt: Attempt) -> Transition:
+    async def check(attempt: Attempt) -> Attempt | Done[Report]:
         result = await shell("test -f .fixed")
         if result.exit_code == 0:
-            return done(Report(fixed=True, remaining=attempt.budget))
+            return Done(Report(fixed=True, remaining=attempt.budget))
         if attempt.budget == 0:
-            return done(Report(fixed=False, remaining=0))
+            return Done(Report(fixed=False, remaining=0))
         choice = await decide(
             f"not fixed yet ({attempt.budget} attempts left) — apply a fix?",
             options=["fix", "stop"],
         )
         if choice == "stop":
-            return done(Report(fixed=False, remaining=attempt.budget))
-        return goto(apply_fix, attempt)
+            return Done(Report(fixed=False, remaining=attempt.budget))
+        return Fixing(budget=attempt.budget)
 
 
     @step
-    async def apply_fix(attempt: Attempt) -> Transition:
+    async def apply_fix(attempt: Fixing) -> Attempt:
         await shell("touch .fixed")
-        return goto(check, Attempt(budget=attempt.budget - 1))
+        return Attempt(budget=attempt.budget - 1)
     """)
 
 
@@ -66,4 +70,6 @@ class TestAcceptance:
         assert not exit_code
         output = capsys.readouterr().out
         assert "check" in output
+        # The result is the model `check` declared in its `Done[Report]`.
+        assert 'result: {"fixed":true,"remaining":2}' in output
         assert (tmp_path / ".fixed").is_file()

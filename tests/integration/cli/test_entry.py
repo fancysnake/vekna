@@ -14,7 +14,7 @@ _USAGE_EXIT = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class Tick(BaseModel):
@@ -26,15 +26,15 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def tick(state: Tick) -> Transition:
+    async def tick(state: Tick) -> Tick | Done[Tick]:
         if not state.left:
-            return done(state)
-        return goto(tick, Tick(left=state.left - 1))
+            return Done(state)
+        return Tick(left=state.left - 1)
 
 
     @ritual("countdown")
-    async def countdown(components: Countdown) -> Transition:
-        return goto(tick, Tick(left=components.start))
+    async def countdown(components: Countdown) -> Tick:
+        return Tick(left=components.start)
     """)
 
 

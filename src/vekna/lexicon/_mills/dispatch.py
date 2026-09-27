@@ -1,5 +1,4 @@
 import inspect
-import textwrap
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import ParamSpec, Protocol, TypeVar, cast
 
@@ -15,8 +14,8 @@ from vekna.lexicon._pacts import (
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 
-from ._annotations import _component_flags, _components_model, _Erased, _payload_type
-from .engine import medium_rite
+from ._annotations import _component_flags, _components_model, _exits, _payloads
+from .engine import medium_rite, register_step
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
@@ -107,13 +106,6 @@ def medium(
     return wrapped
 
 
-def source_text(func: _Erased) -> str | None:
-    try:
-        return textwrap.dedent(inspect.getsource(func))
-    except (OSError, TypeError):
-        return None
-
-
 # The one shape both wrappers end on. The question is whether what came back
 # still needs awaiting, so that is what gets asked — the alternative, an
 # isinstance against `Goto | Done`, answers it by enumerating the transitions
@@ -128,17 +120,22 @@ async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
 def step(func: _Written[_PayloadT]) -> Step:
     name = func.__name__
     erased = cast("_Called", func)
-    payload_type = _payload_type(erased)
+    payloads = _payloads(erased)
+    exits, ends = _exits(erased, decorator="step")
 
-    async def run(payload: BaseModel | None) -> Transition:
+    async def run(payload: BaseModel) -> Transition:
         # The cast above is discharged here: what the annotation declared is
-        # checked against what arrived, and only then is the step called.
-        if not isinstance(payload, payload_type):
-            msg = f"step {name!r} expected {payload_type}, got {type(payload).__name__}"
+        # checked against what arrived, and only then is the step called. The
+        # engine routes by class and cannot miss; the trial's `walk` can.
+        if not isinstance(payload, payloads):
+            expected = " | ".join(model.__name__ for model in payloads)
+            msg = f"step {name!r} expected {expected}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
         return await _settled(erased(payload))
 
-    return Step(name=name, run=run, input_type=payload_type, source=source_text(erased))
+    the_step = Step(name=name, run=run, payloads=payloads, exits=exits, ends=ends)
+    register_step(the_step)
+    return the_step
 
 
 # A structural callback, so `wrap` below cannot declare it as a base. Its point
@@ -153,6 +150,7 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator
     def wrap(func: _Written[_ComponentsT]) -> Ritual:
         erased = cast("_Called", func)
         model = _components_model(erased)
+        exits, ends = _exits(erased, decorator="ritual")
 
         # The cast's entry boundary, and the counterpart to the step's: nothing
         # ties the instance the CLI validated to the model this ritual
@@ -171,7 +169,8 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator
             components=model,
             run=run,
             max_steps=max_steps,
-            source=source_text(erased),
+            exits=exits,
+            ends=ends,
         )
 
     return wrap

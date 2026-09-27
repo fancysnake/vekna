@@ -7,7 +7,7 @@ from pydantic import BaseModel, JsonValue
 
 from tests.conftest import entry, journalled
 from vekna.folio.flow import decide
-from vekna.lexicon import MediumBoundaryError, RitualError, Transition, done, step
+from vekna.lexicon import Done, MediumBoundaryError, RitualError, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import Ritual
@@ -17,7 +17,7 @@ def _fixed_clock() -> datetime:
     return datetime(2026, 1, 1, tzinfo=UTC)
 
 
-class State(BaseModel):
+class Gathering(BaseModel):
     pass
 
 
@@ -28,14 +28,14 @@ class Survey(BaseModel):
 
 
 @step
-async def gather(_state: State) -> Transition:
+async def gather(_state: Gathering) -> Done[Survey]:
     choice = await decide("pick", options=["x", "y"])
     approved = await decide("ok?")
     note = await decide("note?", free=True)
-    return done(Survey(choice=choice, approved=approved, note=note))
+    return Done(Survey(choice=choice, approved=approved, note=note))
 
 
-survey = entry(name="survey", target=gather, payload=State())
+survey = entry(name="survey", payload=Gathering())
 
 
 class TestDecideMedium:
@@ -62,45 +62,61 @@ class Choice(BaseModel):
     picked: str
 
 
+class Choosing(BaseModel):
+    pass
+
+
 @step
-async def choose(_state: State) -> Transition:
-    return done(Choice(picked=await decide("pick", options=["fix", "file"])))
+async def choose(_state: Choosing) -> Done[Choice]:
+    return Done(Choice(picked=await decide("pick", options=["fix", "file"])))
 
 
-picker = entry(name="picker", target=choose, payload=State())
+picker = entry(name="picker", payload=Choosing())
 
 
 class Verdict(BaseModel):
     agreed: bool
 
 
-@step
-async def confirm(_state: State) -> Transition:
-    return done(Verdict(agreed=await decide("ok?")))
-
-
-confirmer = entry(name="confirmer", target=confirm, payload=State())
+class Confirming(BaseModel):
+    pass
 
 
 @step
-async def choose_nothing(_state: State) -> Transition:
+async def confirm(_state: Confirming) -> Done[Verdict]:
+    return Done(Verdict(agreed=await decide("ok?")))
+
+
+confirmer = entry(name="confirmer", payload=Confirming())
+
+
+class Emptying(BaseModel):
+    pass
+
+
+@step
+async def choose_nothing(_state: Emptying) -> Done[Choice]:
     nothing: list[str] = []
-    return done(Choice(picked=await decide("pick", options=nothing)))
+    return Done(Choice(picked=await decide("pick", options=nothing)))
 
 
-emptier = entry(name="emptier", target=choose_nothing, payload=State())
+emptier = entry(name="emptier", payload=Emptying())
 
 
 class Note(BaseModel):
     text: str
 
 
+class Jotting(BaseModel):
+    pass
+
+
 @step
-async def jot(_state: State) -> Transition:
-    return done(Note(text=await decide("note?", free=True)))
+async def jot(_state: Jotting) -> Done[Note]:
+    return Done(Note(text=await decide("note?", free=True)))
 
 
-jotter = entry(name="jotter", target=jot, payload=State())
+jotter = entry(name="jotter", payload=Jotting())
 
 
 def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
