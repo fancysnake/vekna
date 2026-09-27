@@ -188,3 +188,36 @@ class TestStepGraph:
 
         with pytest.raises(RitualDefinitionError, match="lead may return Stray"):
             step_graph(_hand_built_ritual(exits=(Lead,)))
+
+    # Dedupe is by Step, not by name: two distinct steps sharing a name are
+    # two edges out of the row, as they are two rows further down.
+    @staticmethod
+    def test_two_steps_of_one_name_are_two_edges():
+        class Left(BaseModel):
+            pass
+
+        class Right(BaseModel):
+            pass
+
+        def _taking_left() -> Step:
+            @step
+            def measure(_: Left) -> Done[None]:
+                return Done(None)
+
+            return measure
+
+        def _taking_right() -> Step:
+            @step
+            def measure(_: Right) -> Done[None]:
+                return Done(None)
+
+            return measure
+
+        _taking_left()
+        _taking_right()
+
+        assert step_graph(_hand_built_ritual(exits=(Left, Right))) == [
+            (START, ["measure", "measure"]),
+            ("measure", [ENDS]),
+            ("measure", [ENDS]),
+        ]

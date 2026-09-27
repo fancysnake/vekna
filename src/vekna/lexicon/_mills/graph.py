@@ -48,8 +48,9 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
             for exit_type in exits
         ]
         # A union exit names one step several times; the graph draws it once,
-        # in the order the annotation put them — which a dict keyed by name is.
-        names = list({target.name: None for target in targets})
+        # in the order the annotation put them. Deduped by Step like `seen` is,
+        # so two distinct steps of one name stay two edges.
+        names = list({target: target.name for target in targets}.values())
         graph.append((label, [*names, ENDS] if ends else names))
         for target in targets:
             if target in seen:
