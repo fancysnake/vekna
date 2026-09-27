@@ -161,7 +161,15 @@ def _continue(cast_id: str) -> int:
     # back in the sentence as the operator typed it.
     named = found[0] if found else cast_id
     if (record := journal.read(named)) is None:
-        message = f"no cast {cast_id!r} in the journal — `vekna log` has the ids"
+        # A resolved prefix whose record will not read is the damaged row
+        # `vekna log` is printing, and telling the operator the journal never
+        # saw it is telling them about a line they are looking at.
+        message = (
+            f"cast {cast_id!r} is damaged — its record cannot be read, so there"
+            " is nothing to resume it from"
+            if found
+            else f"no cast {cast_id!r} in the journal — `vekna log` has the ids"
+        )
         raise click.ClickException(message)
     # The directory is the record's, not this shell's, and a project that has
     # been moved or deleted since is the likeliest thing to have gone wrong

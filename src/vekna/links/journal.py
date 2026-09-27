@@ -2,8 +2,11 @@ import contextlib
 import os
 import shutil
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from stat import S_ISDIR
 
+from vekna.pacts.casts import DamagedRun, Run
 from vekna.wire import (
     CastGoodbye,
     CastHello,
@@ -136,32 +139,34 @@ class Journal:
 
     # Newest first, by when the cast started rather than by when its directory
     # was written: a resumed cast and the one it resumed sit next to each other
-    # in the order they were run.
-    def recent(self, *, limit: int) -> list[RunRecord]:
+    # in the order they were run. A damaged run has only its directory's time,
+    # which puts the crash an operator came to look for near the top rather
+    # than behind every healthy row.
+    def recent(self, *, limit: int) -> list[Run]:
         return self._newest_first()[:limit]
 
     # Nothing else ever removes a cast, so without this the runs root grows for
     # as long as the machine lives and every `vekna log` pays for all of it.
-    # A cast still running is left alone whatever its age, and so is a record
-    # this cannot read: deleting what it could not read back is not its call.
+    # A cast still running is left alone whatever its age. A directory whose
+    # record cannot be read is collected like a finished cast: nothing resumes
+    # it, and left alone it was the one thing here that never went away. It is
+    # not a hello mid-write, because this runs before the daemon serves.
     # A directory that will not go is named and passed over rather than
     # raised: housekeeping must not stop a daemon from starting, and the next
     # directory may well go — but the caller has to hear which did not, or the
     # runs root grows past `keep` for good with nothing saying why.
     # A first failure aborts `rmtree`, so the sweep that follows it takes what
-    # else can go: a cast whose `run.json` went first reads back as nothing,
-    # drops out of `_newest_first`, and is never pruned again. Only what the
-    # sweep also left behind is reported, and with the error that stopped the
-    # first pass rather than whatever the sweep swallowed: a directory that is
-    # gone — swept, or taken by another daemon between the two calls — is no
-    # longer the operator's problem, and only a directory confirmed gone counts
-    # as that. Wording is the surface's.
+    # else can go. Only what the sweep also left behind is reported, and with
+    # the error that stopped the first pass rather than whatever the sweep
+    # swallowed: a directory that is gone — swept, or taken by another daemon
+    # between the two calls — is no longer the operator's problem, and only a
+    # directory confirmed gone counts as that. Wording is the surface's.
     def prune(self, *, keep: int) -> list[str]:
         failed: list[str] = []
-        for record in self._newest_first()[keep:]:
-            if record.status == "running":
+        for run in self._newest_first()[keep:]:
+            if not isinstance(run, DamagedRun) and run.status == "running":
                 continue
-            directory = run_file(self._root, record.hello.cast_id).parent
+            directory = run_file(self._root, _cast_id(run)).parent
             try:
                 shutil.rmtree(directory)
             except OSError as error:
@@ -170,17 +175,32 @@ class Journal:
                     failed.append(f"{directory}: {error}")
         return failed
 
-    def _newest_first(self) -> list[RunRecord]:
-        found = [record for record in self._all() if record is not None]
-        found.sort(key=lambda record: record.hello.started_at, reverse=True)
+    def _newest_first(self) -> list[Run]:
+        found = list(self._all())
+        found.sort(key=_started, reverse=True)
         return found
 
-    def _all(self) -> Iterator[RunRecord | None]:
+    def _all(self) -> Iterator[Run]:
         if not self._root.is_dir():
             return
         for directory in self._root.iterdir():
-            if directory.is_dir():
-                yield self.read(directory.name)
+            # One stat answers both questions asked here — whether this is a run
+            # directory at all, and the only time a damaged one has. A directory
+            # a prune or an operator's `rm` took between the listing and this is
+            # gone, and a run that is gone is not a row: neither `vekna log` nor
+            # the daemon start behind `prune` may end in the traceback the read
+            # below already keeps them out of.
+            try:
+                found = directory.stat()
+            except OSError:
+                continue
+            if not S_ISDIR(found.st_mode):
+                continue
+            if (record := self.read(directory.name)) is not None:
+                yield record
+                continue
+            seen_at = datetime.fromtimestamp(found.st_mtime, UTC)
+            yield DamagedRun(cast_id=directory.name, seen_at=seen_at)
 
     # Written beside itself and moved into place, because a plain write
     # truncates first: a daemon killed between the two leaves half a record
@@ -203,6 +223,23 @@ class Journal:
         record.status = goodbye.status
         record.detail = goodbye.detail
         self._write(record)
+
+
+def _cast_id(run: Run) -> str:
+    return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
+
+
+# A damaged run's time always carries a zone, and a record's `started_at` need
+# not: the field is a plain `datetime`, so a `run.json` written by hand or by
+# something that is not this daemon can land without one, and sorting the two
+# against each other raises. Read as UTC, which is the zone this daemon's own
+# writer records in — the alternative, calling such a record damaged, has
+# `prune` deleting a run that resumes perfectly well.
+def _started(run: Run) -> datetime:
+    if isinstance(run, DamagedRun):
+        return run.seen_at
+    started = run.hello.started_at
+    return started if started.tzinfo is not None else started.replace(tzinfo=UTC)
 
 
 # Absence is established, not read off a falsy answer: `Path.exists` raises on

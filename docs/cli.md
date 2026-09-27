@@ -183,6 +183,7 @@ vekna log
 7c01ffab  ▶  triage            2026-08-21 13:58  /home/you/ludamus
 3f9a2b11  ✓  merge_ready       2026-08-21 13:40  /home/you/vekna  ↳ 91bb0c4d
 6f1c2a9e  ✗  cover_diff        2026-08-21 13:12  /home/you/vekna  ◌ gap
+a1b2c3d4  ?  damaged           2026-08-21 12:50
 ```
 
 The id is cut to eight characters, the timestamp is in your own zone, and a
@@ -193,10 +194,16 @@ none.
 `◌ gap` is a run whose log the daemon could not finish writing. It is still
 resumable; what it lost is the tail.
 
+`damaged` is a run whose `run.json` is missing or cannot be read — a daemon
+killed inside a write, a disk that lost the file. The id is the directory's
+name and the time is the directory's; nothing else is known, and
+`vekna cast --continue` refuses it — saying the run is damaged, not that the
+journal never saw it.
+
 The journal itself is `~/.local/state/vekna/runs/<cast_id>/` — `run.json` for
 what the cast was and how it ended, `events.jsonl` for the wire verbatim. The
-root is trimmed to the newest 200 casts at startup, and whatever is still
-running is spared.
+root is trimmed to the newest 200 casts at startup; whatever is still running
+is spared, and a damaged run is collected like a finished one.
 
 ### `vekna cast --continue`
 
