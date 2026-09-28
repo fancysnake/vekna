@@ -7,16 +7,14 @@ from typing_extensions import override
 
 from vekna.folio.coding import CodingOpts, CodingOutputError, Session, coding
 from vekna.folio.flow import decide
-from vekna.folio.shell import shell
+from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import (
     SHELL_FOCUS,
+    Done,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     StepBoundaryError,
-    Transition,
-    done,
-    goto,
     ritual,
     step,
 )
@@ -44,48 +42,62 @@ class Judgement(BaseModel):
     verdict: str
 
 
+# One payload class per step, so the three one-step probes below each take
+# their own.
+class Once(BaseModel):
+    pass
+
+
+class Review(BaseModel):
+    pass
+
+
+class Gated(BaseModel):
+    pass
+
+
 @step
-async def gates(state: Attempt) -> Transition:
+async def gates(state: Attempt) -> Failure | Done[Report]:
     async with asyncio.TaskGroup() as group:
         linting = group.create_task(shell("mise run lint:py"))
         suite = group.create_task(shell("mise run test:py"))
     lint, tests = linting.result(), suite.result()
     if not lint.exit_code and not tests.exit_code:
-        return done(Report(green=True, remaining=state.budget))
+        return Done(Report(green=True, remaining=state.budget))
     if state.budget <= 0:
-        return done(Report(green=False, remaining=0))
+        return Done(Report(green=False, remaining=0))
     if not await decide("red — hand it to the agent?"):
-        return done(Report(green=False, remaining=state.budget))
-    return goto(repair, Failure(budget=state.budget, said=lint.stdout + tests.stdout))
+        return Done(Report(green=False, remaining=state.budget))
+    return Failure(budget=state.budget, said=lint.stdout + tests.stdout)
 
 
 @step
-async def repair(failure: Failure) -> Transition:
+async def repair(failure: Failure) -> Attempt:
     await coding(
         f"make it green: {failure.said}", session=Session.CONTINUE, key="repair"
     )
-    return goto(gates, Attempt(budget=failure.budget - 1))
+    return Attempt(budget=failure.budget - 1)
 
 
 @step
-async def one_gate(_state: Attempt) -> Transition:
-    return done(await shell("mise run test:py"))
+async def one_gate(_state: Once) -> Done[ShellResult]:
+    return Done(await shell("mise run test:py"))
 
 
 @step
-async def judge(_state: Attempt) -> Transition:
-    return done(await coding("review the diff", output=Judgement))
+async def judge(_state: Review) -> Done[Judgement]:
+    return Done(await coding("review the diff", output=Judgement))
 
 
 @step
-async def gated_work(_state: Attempt) -> Transition:
+async def gated_work(_state: Gated) -> Done[None]:
     await coding("write the tests", opts=CodingOpts(gate_tools=["Bash"]))
-    return done()
+    return Done(None)
 
 
 @ritual("babysit", max_steps=32)
-def babysit(components: Attempt) -> Transition:
-    return goto(gates, components)
+def babysit(components: Attempt) -> Attempt:
+    return components
 
 
 class TestCast:
@@ -185,7 +197,7 @@ class TestWalk:
 
         transition = trial.walk(gates, Attempt(budget=3))
 
-        assert transition == done(Report(green=True, remaining=3))
+        assert transition == Done(Report(green=True, remaining=3))
         assert trial.shell.commands == ["mise run lint:py", "mise run test:py"]
 
     @staticmethod
@@ -211,9 +223,9 @@ class TestScriptedOutput:
     def test_a_scripted_model_comes_back_validated_by_the_medium(trial: Trial) -> None:
         trial.coding.replies(Judgement(verdict="ship"))
 
-        transition = trial.walk(judge, Attempt(budget=0))
+        transition = trial.walk(judge, Review())
 
-        assert transition == done(Judgement(verdict="ship"))
+        assert transition == Done(Judgement(verdict="ship"))
 
     @staticmethod
     def test_a_reply_that_does_not_validate_raises_the_medium_s_own_error(
@@ -222,7 +234,7 @@ class TestScriptedOutput:
         trial.coding.replies("not json at all")
 
         with pytest.raises(CodingOutputError, match="does not validate"):
-            trial.walk(judge, Attempt(budget=0))
+            trial.walk(judge, Review())
 
 
 class TestGatedTools:
@@ -231,7 +243,7 @@ class TestGatedTools:
         trial.coding.replies("ran the suite", uses=["Bash"])
         trial.decide.answers(answer=True, when="*allow tool*")
 
-        trial.walk(gated_work, Attempt(budget=0))
+        trial.walk(gated_work, Gated())
 
         assert trial.coding.gated == [("Bash", True)]
         assert trial.decide.prompts == ["allow tool 'Bash'?"]
@@ -241,7 +253,7 @@ class TestGatedTools:
         trial.coding.replies("asked and was told no", uses=["Bash"])
         trial.decide.answers(answer=False, when="*allow tool*")
 
-        trial.walk(gated_work, Attempt(budget=0))
+        trial.walk(gated_work, Gated())
 
         assert trial.coding.gated == [("Bash", False)]
 
@@ -250,7 +262,7 @@ class TestNothingDefaults:
     @staticmethod
     def test_an_unscripted_command_stops_the_step_naming_itself(trial: Trial) -> None:
         with pytest.raises(TrialScriptError, match="'mise run test:py'"):
-            trial.walk(one_gate, Attempt(budget=0))
+            trial.walk(one_gate, Once())
 
     # Inside a TaskGroup it arrives wrapped, the way any error raised in one
     # does. That is Python's, not the trial's — and worth a test, because it is
@@ -322,7 +334,7 @@ class TestOnlyInsideTheBlock:
         outside.shell.replies(when="*", exit_code=0)
 
         with pytest.raises(TrialError, match="only inside its `with` block"):
-            outside.walk(one_gate, Attempt(budget=0))
+            outside.walk(one_gate, Once())
 
         assert not outside.shell.commands
 
@@ -330,7 +342,7 @@ class TestOnlyInsideTheBlock:
     def test_a_closed_trial_stops_answering() -> None:
         with Trial() as closed:
             closed.shell.replies(when="*", exit_code=0, always=True)
-            closed.walk(one_gate, Attempt(budget=0))
+            closed.walk(one_gate, Once())
 
         with pytest.raises(TrialError, match="only inside its `with` block"):
             closed.cast(babysit, Attempt(budget=0))

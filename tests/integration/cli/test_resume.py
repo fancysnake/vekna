@@ -30,7 +30,7 @@ _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
     from vekna.folio.shell import shell
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class State(BaseModel):
@@ -42,18 +42,18 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def work(state: State) -> Transition:
+    async def work(state: State) -> State | Done[Report]:
         result = await shell("echo ran-" + str(state.left))
         with Path("ran.log").open("a") as log:
             log.write(result.stdout)
         if state.left == 0:
-            return done(Report(said=result.stdout.strip()))
-        return goto(work, State(left=state.left - 1))
+            return Done(Report(said=result.stdout.strip()))
+        return State(left=state.left - 1)
 
 
     @ritual("job")
-    async def job(components: State) -> Transition:
-        return goto(work, State(left=components.left))
+    async def job(components: State) -> State:
+        return State(left=components.left)
     """)
 
 

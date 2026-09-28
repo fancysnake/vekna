@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from vekna.folio.coding import Session, coding
 from vekna.folio.flow import decide
 from vekna.folio.shell import ShellResult, shell
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import Done, ritual, step
 
 from .shared import Bound, said
 
@@ -88,12 +88,12 @@ def _complaint(failure: Red) -> str:
 # max_steps is the backstop, not the control — the bound is. It sits well above
 # a plausible bound, so tripping it means a ritual that will not settle.
 @ritual("merge_ready", max_steps=32)
-def merge_ready(components: MergeReady) -> Transition:
-    return goto(quality_gates, Attempt(budget=components.bound))
+def merge_ready(components: MergeReady) -> Attempt:
+    return Attempt(budget=components.bound)
 
 
 @step
-async def quality_gates(state: Attempt) -> Transition:
+async def quality_gates(state: Attempt) -> Red | Done[MergeReport]:
     # Both gates take minutes, and neither reads the other's output. Running
     # them at once is not only faster: one cast then tells you everything that
     # is red, rather than the first thing that is red.
@@ -102,9 +102,9 @@ async def quality_gates(state: Attempt) -> Transition:
         suite = group.create_task(shell("mise run test:py"))
     lint, tests = linting.result(), suite.result()
     if not lint.exit_code and not tests.exit_code:
-        return done(MergeReport(green=True, remaining=state.budget))
+        return Done(MergeReport(green=True, remaining=state.budget))
     if state.budget <= 0:
-        return done(MergeReport(green=False, remaining=0))
+        return Done(MergeReport(green=False, remaining=0))
     failure = _red(budget=state.budget, lint=lint, suite=tests)
     # The agent's time is yours to spend, so the decision to spend it is a step
     # boundary, not something the agent decides for itself.
@@ -114,8 +114,8 @@ async def quality_gates(state: Attempt) -> Transition:
         " — hand it to the agent?"
     )
     if not spend:
-        return done(MergeReport(green=False, remaining=state.budget))
-    return goto(repair, failure)
+        return Done(MergeReport(green=False, remaining=state.budget))
+    return failure
 
 
 # Three payload shapes, one step: whichever gate went red, this is where it is
@@ -126,6 +126,6 @@ async def quality_gates(state: Attempt) -> Transition:
 # they are the same thing in a ritual whose only agent call this is, and they
 # stop being the same the moment a second one is added.
 @step
-async def repair(failure: Red) -> Transition:
+async def repair(failure: Red) -> Attempt:
     await coding(_REPAIR + _complaint(failure), session=Session.CONTINUE, key="repair")
-    return goto(quality_gates, Attempt(budget=failure.budget - 1))
+    return Attempt(budget=failure.budget - 1)

@@ -28,15 +28,16 @@ Three organs, and only three.
 
 ```python
 @ritual("cover_diff")
-def cover_diff(components: CoverDiff) -> Transition:
-    return goto(measure, Uncovered(budget=components.bound))
+def cover_diff(components: CoverDiff) -> Uncovered:
+    return Uncovered(budget=components.bound)
 ```
 
 - **Exactly one** parameter, annotated with a pydantic model. That model *is*
   the CLI interface.
 - `def`, not `async def`, when nothing is awaited. `async` to satisfy a
   signature is a lie the linter is right to call.
-- Returns the opening `Transition`. **Not a step**, **never a `goto` target**.
+- Returns the first step's payload, and its annotation says which. **Not a
+  step** — no payload class names it.
 - `max_steps` is the trampoline's backstop, keyword-only, default **1000**. Set
   it well above any business bound — tripping it means a ritual that will not
   settle.
@@ -45,13 +46,13 @@ def cover_diff(components: CoverDiff) -> Transition:
 
 ```python
 @step
-async def measure(state: Uncovered) -> Transition:
+async def measure(state: Uncovered) -> WriteTests | Done[CoverReport]:
     result = await shell("mise run test:py:cov:diff -- --fail-under 100")
     if result.exit_code == 0:
-        return done(CoverReport(covered=True, remaining=state.budget))
+        return Done(CoverReport(covered=True, remaining=state.budget))
     if state.budget <= 0:
-        return done(CoverReport(covered=False, remaining=0))
-    return goto(write_tests, Uncovered(budget=state.budget, report=result.stdout))
+        return Done(CoverReport(covered=False, remaining=0))
+    return WriteTests(budget=state.budget, report=result.stdout)
 ```
 
 - A **bare decorator**. Not `@step()`, not `@step(max_visits=3)`.
@@ -62,29 +63,38 @@ async def measure(state: Uncovered) -> Transition:
   Red = LintFailure | SuiteFailure | BothRed
 
   @step
-  async def repair(failure: Red) -> Transition: ...
+  async def repair(failure: Red) -> Attempt: ...
   ```
 
-- Returns `-> Transition`. The engine checks the arriving payload against that
-  annotation **on entry** (`StepBoundaryError` on mismatch), so every value is
-  validated by its receiving step.
+- **The payload class is the step's identity.** One class, one step — two steps
+  taking the same class is `RitualDefinitionError` naming both. Two steps in
+  two rituals may share a *name*; a name routes nothing.
+- **The return annotation is the graph.** It names every payload class the
+  body may return, and `Done[T]` if it may finish: `-> WriteTests |
+  Done[CoverReport]`. mypy checks each `return` against it, so a mis-wire fails
+  `mise run lint:mypy` rather than a cast. A step with no return annotation, or
+  one naming something that is neither a model nor `Done[...]`, is refused at
+  decoration.
+- The engine checks the arriving payload against the parameter annotation **on
+  entry** (`StepBoundaryError` on mismatch).
 - Mediums are called in the body. Only there.
 
 ### Transitions — routing lives in the value
 
 ```python
-goto(next_step, payload)   # continue; target named by direct function reference
-done(result)               # finish
-done()                     # result optional
+return WriteTests(budget=1, report=report)   # continue: the step taking a WriteTests runs next
+return Done(CoverReport(covered=True))       # finish with a result
+return Done(None)                            # finish with nothing — annotate `-> Done[None]`
 ```
 
-Both take a pydantic model or nothing, checked as the transition is built
-(`RitualBoundaryError` otherwise). The engine trampolines step→step until a step
-returns `done`; the result goes to stdout as `result: {...}`.
+A payload is a pydantic model, and `Done` takes a model or `None`
+(`RitualBoundaryError` otherwise, checked as the value is built). The engine
+looks the returned value's class up and runs the step that takes it, until a
+step returns `Done`; the result goes to stdout as `result: {...}`.
 
-**Bare `goto(next_step)` sends `None`**, which fails the target's check unless it
-annotates `Model | None`. Don't reach for it to mean "no state" — give the step
-an empty model, so the graph still says what flows.
+There is no `goto`. **A step that needs no state still needs a class of its
+own** — an empty model — because the class is what names it. Do not reuse
+another step's payload class to reach it; that is a collision, not a shortcut.
 
 ### The gotcha that bites first
 
@@ -93,10 +103,11 @@ an empty model, so the graph still says what flows.
 
 ```python
 await measure(state)          # ✗ TypeError — `measure` is a Step, not callable
-return goto(measure, state)   # ✓ the only way a step is reached
+return Uncovered(budget=2)    # ✓ the only way a step is reached: return its payload
 ```
 
-A step cannot call a step. That is the property, not an inconvenience.
+A step cannot call a step. That is the property, not an inconvenience — a
+payload value is inert data, and constructing one runs nothing.
 
 ---
 
@@ -224,7 +235,7 @@ await coding(prompt, session=Session.CONTINUE, key="repair")
 from vekna.folio.flow import decide
 
 if not await decide("hand it to the agent?"):           # -> bool
-    return done(report)
+    return Done(report)
 
 took = await decide(headline, options=_TOOK)            # -> the literal member
 note = await decide("why?", free=True)                  # -> str
@@ -336,7 +347,7 @@ way.)
 
 ```python
 if state.budget <= 0:
-    return done(CoverReport(covered=False, remaining=0))
+    return Done(CoverReport(covered=False, remaining=0))
 ```
 
 `<=`, not `== 0`: components already reject a negative bound, and this stays
@@ -391,7 +402,8 @@ from a script. **The medium's own body still runs**: session threading, `resume`
 resolution, output-schema validation and exit-code handling are exercised, so a
 ritual that mis-declares `session=Session.CONTINUE` fails its test.
 
-**`walk` runs one step and answers with its `Transition`** — no ritual needed,
+**`walk` runs one step and answers with its transition** — the next payload,
+or `Done(...)` — no ritual needed,
 which is what makes a long step testable. **`cast` runs the whole thing and
 answers with the result model.**
 
@@ -401,7 +413,7 @@ def test_measure_reports_covered(trial: Trial) -> None:
 
     transition = trial.walk(measure, Uncovered(budget=3))
 
-    assert transition == done(CoverReport(covered=True, remaining=3))
+    assert transition == Done(CoverReport(covered=True, remaining=3))
     assert trial.shell.commands == ["mise run test:py:cov:diff -- --fail-under 100"]
 ```
 
@@ -467,7 +479,7 @@ all.
    braces.
 2. **Prompts are module-level constants**, `_UPPER_SNAKE`, `"""\` blocks. Steps
    stay readable; prompts stay diffable.
-3. **Spend nothing you don't have to.** An empty diff is an answer — `done`
+3. **Spend nothing you don't have to.** An empty diff is an answer — `Done`
    rather than paying an agent to read nothing.
 4. **Spending the agent's time is a step boundary.** Before a loop burns another
    attempt, `decide`. That call is the human's.
@@ -499,9 +511,9 @@ all.
 
 | Error | Means |
 |---|---|
-| `RitualDefinitionError` | `@ritual`/`@step` signature wrong: not exactly one parameter, or the annotation is not a pydantic model (or a union of them). Also a bad `.vekna.toml`, or two sources claiming one ritual name. |
-| `StepBoundaryError` | a step received a payload of the wrong type — the `goto` and the target's annotation disagree |
-| `RitualBoundaryError` | `goto`/`done` handed a non-model, or components that are not the declared model |
+| `RitualDefinitionError` | `@ritual`/`@step` signature wrong: not exactly one parameter, the annotation is not a pydantic model (or a union of them), or the return annotation does not name the exits. Also two steps taking one payload class, an exit no step takes, a bad `.vekna.toml`, or two sources claiming one ritual name. |
+| `StepBoundaryError` | a step received a payload of the wrong type (`trial.walk` with the wrong model), or a step returned a value no step takes |
+| `RitualBoundaryError` | `Done` handed a non-model, or components that are not the declared model |
 | `MediumBoundaryError` | a medium called with an argument it does not take — including `decide(options=[])`, an empty option list |
 | `StepBudgetExceededError` | `max_steps` exhausted — the ritual is not settling |
 | `FocusMissingError` | no backend registered (`pip install claude-agent-sdk` for `coding`) |
@@ -521,7 +533,7 @@ Do not work from a snippet — **read the rituals in `src/rituals/`** (the sourc
 run fullcheck` keeps them correct. Four rituals, four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
-  a business budget counted down until it routes to `done`.
+  a business budget counted down until it returns `Done`.
 - **`branch_review`** — `output=` on a model the agent fills, which the ritual widens
   with provenance the agent was never asked to invent.
 - **`merge_ready`** — a union payload routing three failure shapes into one
@@ -538,11 +550,13 @@ document, they are right — say so.
 
 ## Before you call it written
 
-- [ ] `@ritual("name")` takes one components model, fires the opening `goto`,
-      and is never a `goto` target.
-- [ ] Every `@step` takes one pydantic model (or a union) and returns
-      `-> Transition`.
-- [ ] No step calls a step. Every hop is a `goto`.
+- [ ] `@ritual("name")` takes one components model and returns the first
+      step's payload; no payload class names the ritual itself.
+- [ ] Every `@step` takes one pydantic model (or a union) and its return
+      annotation names every exit — each payload class it may return, and
+      `Done[T]` if it may finish.
+- [ ] Every payload class belongs to exactly one step.
+- [ ] No step calls a step. Every hop is a returned payload.
 - [ ] Every loop has a business bound in its payload **and** a `max_steps` above
       it.
 - [ ] Every non-zero `exit_code` on a path you care about routes or raises
@@ -572,12 +586,13 @@ Designed, **not built**. Do not write against any of it.
 
 - **`@step(max_visits=N)`** — `@step` is a bare decorator; the only engine bound
   is `max_steps`.
-- **`@step(goes_to=[...])`** and declared edges — rejected in favour of
-  steps-as-DTOs (issue #103), itself unbuilt.
+- **`@step(goes_to=[...])`** and declared edges — rejected: the return
+  annotation already is the declaration (issue #103).
+- **`goto`/`done`** — deprecated, importable for one release so installed
+  tomes keep casting. A step annotated `-> Transition` is drawn as `?` and
+  checked by nothing. Never write new code against it.
 - **Locks** — nothing lock-shaped is importable.
-- **Annotation-gated dispatch** — `goto(payload)` with no named target. Name the
-  target.
 - **Parallel steps** — not happening. Concurrency stays inside a step body.
 
-`rituals show` reads the graph off each step's **source text**, matching `goto`
-calls whose first argument is a bare name. A computed target is invisible to it.
+`rituals show` reads the graph off each step's **return annotation**, and the
+library refuses to load when an exit names a class no step takes.

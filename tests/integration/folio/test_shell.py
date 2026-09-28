@@ -12,11 +12,10 @@ from tests.conftest import entry, journalled
 from vekna.folio.shell import ShellOutputError, ShellResult, shell
 from vekna.lexicon import (
     SHELL_FOCUS,
+    Done,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
-    Transition,
-    done,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -32,64 +31,92 @@ _LONG_LINE = 2_000_000
 _RITE_LINES = 2
 
 
-class State(BaseModel):
+class Echo(BaseModel):
+    pass
+
+
+class Fail(BaseModel):
+    pass
+
+
+class Quiet(BaseModel):
+    pass
+
+
+class QuietPartial(BaseModel):
+    pass
+
+
+class ReadsStdin(BaseModel):
+    pass
+
+
+class LongLine(BaseModel):
+    pass
+
+
+class PartialLine(BaseModel):
+    pass
+
+
+class Multibyte(BaseModel):
     pass
 
 
 @step
-async def run_echo(_state: State) -> Transition:
-    return done(await shell("echo hello && exit 0"))
+async def run_echo(_state: Echo) -> Done[ShellResult]:
+    return Done(await shell("echo hello && exit 0"))
 
 
 @step
-async def run_fail(_state: State) -> Transition:
-    return done(await shell("echo oops >&2; exit 3"))
+async def run_fail(_state: Fail) -> Done[ShellResult]:
+    return Done(await shell("echo oops >&2; exit 3"))
 
 
 @step
-async def run_quiet(_state: State) -> Transition:
-    return done(await shell("echo hush", stream=False))
+async def run_quiet(_state: Quiet) -> Done[ShellResult]:
+    return Done(await shell("echo hush", stream=False))
 
 
 @step
-async def run_quiet_partial(_state: State) -> Transition:
+async def run_quiet_partial(_state: QuietPartial) -> Done[ShellResult]:
     # Silent *and* without a trailing newline: the tail of the last chunk has
     # no `on_line` to reach, which is the one path the two apart never take.
-    return done(await shell("printf 'hushed'", stream=False))
+    return Done(await shell("printf 'hushed'", stream=False))
 
 
 @step
-async def run_reads_stdin(_state: State) -> Transition:
-    return done(await shell('read -r line && echo "got $line"'))
+async def run_reads_stdin(_state: ReadsStdin) -> Done[ShellResult]:
+    return Done(await shell('read -r line && echo "got $line"'))
 
 
 @step
-async def run_long_line(_state: State) -> Transition:
-    return done(
+async def run_long_line(_state: LongLine) -> Done[ShellResult]:
+    return Done(
         await shell(f"python3 -c \"print('x' * {_LONG_LINE}); print('after')\"")
     )
 
 
 @step
-async def run_partial_line(_state: State) -> Transition:
-    return done(await shell("printf 'no newline'"))
+async def run_partial_line(_state: PartialLine) -> Done[ShellResult]:
+    return Done(await shell("printf 'no newline'"))
 
 
 @step
-async def run_multibyte(_state: State) -> Transition:
+async def run_multibyte(_state: Multibyte) -> Done[ShellResult]:
     # Split across chunk boundaries, so an incremental decoder is the only way
     # these survive intact.
-    return done(await shell(f"python3 -c \"print('☃' * {_LONG_LINE})\""))
+    return Done(await shell(f"python3 -c \"print('☃' * {_LONG_LINE})\""))
 
 
-echoer = entry(name="echoer", target=run_echo, payload=State())
-failing = entry(name="failing", target=run_fail, payload=State())
-quiet = entry(name="quiet", target=run_quiet, payload=State())
-quiet_partial = entry(name="quiet_partial", target=run_quiet_partial, payload=State())
-long_line = entry(name="long_line", target=run_long_line, payload=State())
-partial_line = entry(name="partial_line", target=run_partial_line, payload=State())
-multibyte = entry(name="multibyte", target=run_multibyte, payload=State())
-reads_stdin = entry(name="reads_stdin", target=run_reads_stdin, payload=State())
+echoer = entry(name="echoer", payload=Echo())
+failing = entry(name="failing", payload=Fail())
+quiet = entry(name="quiet", payload=Quiet())
+quiet_partial = entry(name="quiet_partial", payload=QuietPartial())
+long_line = entry(name="long_line", payload=LongLine())
+partial_line = entry(name="partial_line", payload=PartialLine())
+multibyte = entry(name="multibyte", payload=Multibyte())
+reads_stdin = entry(name="reads_stdin", payload=ReadsStdin())
 
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:

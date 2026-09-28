@@ -1,4 +1,6 @@
+import asyncio
 import io
+from collections.abc import Awaitable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -6,9 +8,11 @@ from typing import Literal
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon import NoComponents, Transition, goto, ritual
+from vekna.lexicon import NoComponents, Transition
+from vekna.lexicon._mills.engine import steps_scope
 from vekna.lexicon._mills.ledger import Ledger
-from vekna.lexicon._pacts import Resumption, Ritual, Step
+from vekna.lexicon._pacts import Resumption, Ritual
+from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
@@ -41,17 +45,36 @@ class Tty(io.StringIO):
         return True
 
 
-# Most tests need a ritual only to reach the step they are actually about — an
-# entrypoint that names one target and hands it a payload, which written out is
-# the same three lines every time. `name` stays a parameter because it reaches
-# the rendered rite tree, so a test asserting on output still gets to say what
-# the ritual is called.
-def entry(*, name: str = "r", target: Step, payload: BaseModel) -> Ritual:
-    @ritual(name)
-    def _enter(_: NoComponents) -> Transition:
-        return goto(target, payload)
+# A payload class is one step's identity for the whole process, and a test that
+# declares a throwaway step per case would hand the same class to the next
+# case's step. Steps declared inside a test are forgotten with it; the ones a
+# module declares at import stay.
+@pytest.fixture(autouse=True)
+def _own_steps() -> Iterator[None]:
+    with steps_scope():
+        yield
 
-    return _enter
+
+# Most tests need a ritual only to reach the step they are actually about — an
+# entrypoint that hands the step its payload, which written out is the same
+# lines every time. `name` stays a parameter because it reaches the rendered
+# rite tree, so a test asserting on output still gets to say what the ritual is
+# called.
+def entry(*, name: str = "r", payload: BaseModel) -> Ritual:
+    # A `def` handing back the sleep, rather than an `async def` awaiting one:
+    # the body has nothing of its own to await, and the yield to the scheduler
+    # is what a hand-built `run` owes its caller.
+    def _enter(_: BaseModel) -> Awaitable[Transition]:
+        return asyncio.sleep(0, result=payload)
+
+    return Ritual(
+        name=name,
+        components=NoComponents,
+        run=_enter,
+        max_steps=DEFAULT_MAX_STEPS,
+        exits=(type(payload),),
+        ends=False,
+    )
 
 
 # One recorded medium rite, as the daemon would have journalled it — which is

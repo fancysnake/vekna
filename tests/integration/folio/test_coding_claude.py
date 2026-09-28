@@ -23,8 +23,8 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
     return textwrap.dedent(f"""
         from pydantic import BaseModel
 
-        from vekna.folio.coding import coding{imports}
-        from vekna.lexicon import Transition, done, goto, ritual, step
+        from vekna.folio.coding import CodingResult, coding{imports}
+        from vekna.lexicon import Done, ritual, step
 
 
         class Task(BaseModel):
@@ -32,13 +32,13 @@ def _ritual_source(*, name: str, call: str, imports: str = "") -> str:
 
 
         @step
-        async def work(task: Task) -> Transition:
-            return done(await {call})
+        async def work(task: Task) -> Done[CodingResult]:
+            return Done(await {call})
 
 
         @ritual("{name}")
-        async def {name}(components: Task) -> Transition:
-            return goto(work, Task(text=components.text))
+        async def {name}(components: Task) -> Task:
+            return Task(text=components.text)
         """)
 
 
@@ -55,7 +55,7 @@ _TYPED_RITUALS = textwrap.dedent("""
 
     from vekna.folio.coding import CodingOpts, coding
     from vekna.folio.coding_claude import ClaudeOptions
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class Task(BaseModel):
@@ -67,7 +67,7 @@ _TYPED_RITUALS = textwrap.dedent("""
 
 
     @step
-    async def work(task: Task) -> Transition:
+    async def work(task: Task) -> Done[Plan]:
         plan = await coding(
             task.text,
             output=Plan,
@@ -80,12 +80,12 @@ _TYPED_RITUALS = textwrap.dedent("""
                 )
             ),
         )
-        return done(plan)
+        return Done(plan)
 
 
     @ritual("planned")
-    async def planned(components: Task) -> Transition:
-        return goto(work, Task(text=components.text))
+    async def planned(components: Task) -> Task:
+        return Task(text=components.text)
     """)
 
 
@@ -93,7 +93,7 @@ _THREADED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
     from vekna.folio.coding import Session, coding
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class Task(BaseModel):
@@ -101,15 +101,15 @@ _THREADED_RITUALS = textwrap.dedent("""
 
 
     @step
-    async def work(task: Task) -> Transition:
+    async def work(task: Task) -> Done[None]:
         await coding(task.text)
         await coding(task.text, session=Session.CONTINUE)
-        return done(None)
+        return Done(None)
 
 
     @ritual("threaded")
-    async def threaded(components: Task) -> Transition:
-        return goto(work, Task(text=components.text))
+    async def threaded(components: Task) -> Task:
+        return Task(text=components.text)
     """)
 
 

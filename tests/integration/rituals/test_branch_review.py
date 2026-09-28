@@ -14,7 +14,7 @@ from rituals.branch_review import (
     collect,
     judge,
 )
-from vekna.lexicon import RitualError, done, goto
+from vekna.lexicon import Done, RitualError
 from vekna.trial import Trial
 
 _DIFF = "diff --git a/x.py b/x.py\n+broken()\n"
@@ -36,8 +36,8 @@ class TestCollect:
 
         transition = trial.walk(collect, ReviewRequest(base="main"))
 
-        assert transition == goto(
-            judge, Diff(base="main", text=_DIFF, focus="", pinned=_pinned(_DIFF))
+        assert transition == Diff(
+            base="main", text=_DIFF, focus="", pinned=_pinned(_DIFF)
         )
 
     @staticmethod
@@ -74,7 +74,7 @@ class TestCollect:
 
         transition = trial.walk(collect, ReviewRequest(base="main"))
 
-        assert transition == done(Review(base="main", verdict="ship", findings=[]))
+        assert transition == Done(Review(base="main", verdict="ship", findings=[]))
         assert not trial.coding.calls
 
     @staticmethod
@@ -100,7 +100,7 @@ class TestJudge:
 
         transition = trial.walk(judge, Diff(base="main", text=_DIFF, pinned="abc123"))
 
-        assert transition == done(
+        assert transition == Done(
             Review(base="main", verdict="fix", findings=[_FINDING], pinned="abc123")
         )
 

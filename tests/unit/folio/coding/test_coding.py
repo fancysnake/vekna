@@ -18,11 +18,10 @@ from vekna.folio.coding import (
 )
 from vekna.lexicon import (
     CODING_FOCUS,
+    Done,
     FocusMissingError,
     FocusReply,
     MediumBoundaryError,
-    Transition,
-    done,
     step,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
@@ -106,11 +105,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[CodingResult]:
             opts = CodingOpts(model="opus", cwd="/tmp/x")
-            return done(await coding("fix it", opts=opts))
+            return Done(await coding("fix it", opts=opts))
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         result, grimoire = _cast(r)
 
@@ -133,11 +132,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(FakeFocus())
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("fix it")
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _, grimoire = _cast(r)
 
@@ -158,10 +157,10 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("start server", output=Answer))
+        async def work(_: Answer) -> Done[Answer]:
+            return Done(await coding("start server", output=Answer))
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         result, _ = _cast(r)
 
@@ -173,10 +172,10 @@ class TestCodingMedium:
         CODING_FOCUS.register(FakeFocus(text="not json"))
 
         @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("start server", output=Answer))
+        async def work(_: Answer) -> Done[Answer]:
+            return Done(await coding("start server", output=Answer))
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         with pytest.raises(CodingOutputError):
             _cast(r)
@@ -187,11 +186,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r, stdin="n\n")
 
@@ -206,11 +205,11 @@ class TestCodingMedium:
         knobs = Answer(port=8080)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("fix it", opts=CodingOpts(focus_options=knobs))
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r)
 
@@ -234,11 +233,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("write the test")
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r, stdin="2\n")
 
@@ -252,11 +251,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("write the test")
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r, stdin="both, in that order\n")
 
@@ -268,11 +267,11 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("write the test")
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r, stdin="the tmp_path one\n")
 
@@ -293,11 +292,11 @@ class TestCodingMedium:
         register()
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("fix it")
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
@@ -305,11 +304,11 @@ class TestCodingMedium:
 
 def _one_call_ritual(**declaration):
     @step
-    async def work(_: Answer) -> Transition:
+    async def work(_: Answer) -> Done[None]:
         await coding("fix it", **declaration)
-        return done(None)
+        return Done(None)
 
-    return entry(target=work, payload=Answer(port=1))
+    return entry(payload=Answer(port=1))
 
 
 class TestSessionDeclaration:
@@ -321,12 +320,12 @@ class TestSessionDeclaration:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             for index, (session, key) in enumerate(declarations):
                 await coding(f"call {index}", session=session, key=key)
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _cast(r)
         return [call.resume for call in focus.calls]
@@ -385,12 +384,12 @@ class TestSessionDeclaration:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[None]:
             await coding("fix it", session=Session.CONTINUE, key="repair")
             await coding("fix it again", session=Session.CONTINUE)
-            return done(None)
+            return Done(None)
 
-        r = entry(target=work, payload=Answer(port=1))
+        r = entry(payload=Answer(port=1))
 
         _, grimoire = _cast(r)
 
@@ -530,12 +529,11 @@ class TestResumedRites:
         }
 
         @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("fix it"))
+        async def work(_: Answer) -> Done[CodingResult]:
+            return Done(await coding("fix it"))
 
         result, _ = _cast(
-            entry(target=work, payload=Answer(port=1)),
-            ledger=journalled(recorded, name="coding"),
+            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
         )
 
         assert not focus.calls
@@ -551,16 +549,13 @@ class TestResumedRites:
         CODING_FOCUS.register(focus)
 
         @step
-        async def work(_: Answer) -> Transition:
+        async def work(_: Answer) -> Done[CodingResult]:
             await coding("first")
-            return done(await coding("second", session=Session.CONTINUE))
+            return Done(await coding("second", session=Session.CONTINUE))
 
         recorded = {"session": "new", "key": None, "session_id": "s9", "text": "done"}
 
-        _cast(
-            entry(target=work, payload=Answer(port=1)),
-            ledger=journalled(recorded, name="coding"),
-        )
+        _cast(entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding"))
 
         assert [call.resume for call in focus.calls] == ["s9"]
 
@@ -569,14 +564,13 @@ class TestResumedRites:
         CODING_FOCUS.register(FakeFocus())
 
         @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("port?", output=Answer))
+        async def work(_: Answer) -> Done[Answer]:
+            return Done(await coding("port?", output=Answer))
 
         recorded = {"session": "new", "text": '{"port": 8080}'}
 
         result, _ = _cast(
-            entry(target=work, payload=Answer(port=1)),
-            ledger=journalled(recorded, name="coding"),
+            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
         )
 
         assert result == Answer(port=8080)
@@ -626,12 +620,11 @@ class TestResumedRites:
         recorded = {"session": "new", "text": "what it said last time"}
 
         @step
-        async def work(_: Answer) -> Transition:
-            return done(await coding("fix it"))
+        async def work(_: Answer) -> Done[CodingResult]:
+            return Done(await coding("fix it"))
 
         result, _ = _cast(
-            entry(target=work, payload=Answer(port=1)),
-            ledger=journalled(recorded, name="coding"),
+            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
         )
 
         assert result == CodingResult(text="what it said last time")

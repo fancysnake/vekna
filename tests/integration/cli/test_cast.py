@@ -14,7 +14,7 @@ _CASTS = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, ritual, step
 
 
     class Tick(BaseModel):
@@ -26,22 +26,22 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def tick(state: Tick) -> Transition:
+    async def tick(state: Tick) -> Tick | Done[Tick]:
         if not state.left:
-            return done(state)
-        return goto(tick, Tick(left=state.left - 1))
+            return Done(state)
+        return Tick(left=state.left - 1)
 
 
     @ritual("countdown")
-    async def countdown(components: Countdown) -> Transition:
-        return goto(tick, Tick(left=components.start))
+    async def countdown(components: Countdown) -> Tick:
+        return Tick(left=components.start)
     """)
 
 
 _EXTRA = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import NoComponents, Transition, done, ritual
+    from vekna.lexicon import Done, NoComponents, ritual
 
 
     class Pong(BaseModel):
@@ -49,8 +49,8 @@ _EXTRA = textwrap.dedent("""
 
 
     @ritual("ping")
-    async def ping(_: NoComponents) -> Transition:
-        return done(Pong(said="pong"))
+    async def ping(_: NoComponents) -> Done[Pong]:
+        return Done(Pong(said="pong"))
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"
@@ -58,7 +58,7 @@ _BROKEN = "import a_module_that_does_not_exist\n"
 _DASHED = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Transition, done, ritual
+    from vekna.lexicon import Done, ritual
 
 
     class Echo(BaseModel):
@@ -66,14 +66,14 @@ _DASHED = textwrap.dedent("""
 
 
     @ritual("echo")
-    async def echo(components: Echo) -> Transition:
-        return done(components)
+    async def echo(components: Echo) -> Done[Echo]:
+        return Done(components)
     """)
 
 _BUDGET = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import NoComponents, Transition, goto, ritual, step
+    from vekna.lexicon import NoComponents, ritual, step
 
 
     class Spin(BaseModel):
@@ -81,13 +81,13 @@ _BUDGET = textwrap.dedent("""
 
 
     @step
-    async def spin(state: Spin) -> Transition:
-        return goto(spin, state)
+    async def spin(state: Spin) -> Spin:
+        return state
 
 
     @ritual("spinner", max_steps=2)
-    async def spinner(_: NoComponents) -> Transition:
-        return goto(spin, Spin())
+    async def spinner(_: NoComponents) -> Spin:
+        return Spin()
     """)
 
 # The ordinary way a rituals.py under development dies: not a RitualError, and
@@ -95,7 +95,7 @@ _BUDGET = textwrap.dedent("""
 _BOOM = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import NoComponents, Transition, goto, ritual, step
+    from vekna.lexicon import Done, NoComponents, ritual, step
 
 
     class Bang(BaseModel):
@@ -103,13 +103,13 @@ _BOOM = textwrap.dedent("""
 
 
     @step
-    async def blow(state: Bang) -> Transition:
+    async def blow(state: Bang) -> Done[None]:
         raise ValueError("the ritual body itself raised")
 
 
     @ritual("boom")
-    async def boom(_: NoComponents) -> Transition:
-        return goto(blow, Bang())
+    async def boom(_: NoComponents) -> Bang:
+        return Bang()
     """)
 
 

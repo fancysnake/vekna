@@ -45,7 +45,7 @@ import the lexicon could not reach it anywhere else.
 ### The lexicon's one door
 
 `vekna.lexicon` is the whole public surface: `ritual`, `step`, `medium`,
-`goto`/`done`, the component types, the errors, and the medium/focus boundary
+`Done`, the component types, the errors, and the medium/focus boundary
 types. There is no second door, and the cast runtime is private.
 
 ## Layers within a package

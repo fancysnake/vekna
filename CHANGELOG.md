@@ -11,6 +11,28 @@ when.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-28
+
+### Changed
+
+- **A step returns the next step's payload, and its return annotation is the
+  graph.** A step `return`s the payload of the step to run next, or
+  `Done(result)`, and annotates its exits: `-> WriteTests | Done[CoverReport]`.
+  The engine routes by the payload's class, so two steps taking one class is an
+  error naming both. mypy checks every `return` against the annotation, so a
+  mis-wire fails the type check rather than a cast. A step without a return
+  annotation, or annotated with a bare `Done`, is refused at decoration; write
+  `Done[None]` for no result. `rituals show` draws the graph off the
+  annotations, and an exit no step takes stops `list`, `show` and `cast` before
+  anything runs. `trial.walk` requires a payload.
+  ([#103](https://github.com/fancysnake/vekna/issues/103))
+
+### Deprecated
+
+- **`goto`, `Goto` and `done`** keep working this release, so an installed tome
+  casts while it migrates. A step annotated `-> Transition` is reached only by
+  `goto`, and `rituals show` draws it as `?`. The next release removes them.
+
 ## [0.9.2] - 2026-09-27
 
 ### Fixed
@@ -691,7 +713,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.9.2...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/fancysnake/vekna/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/fancysnake/vekna/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/fancysnake/vekna/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/fancysnake/vekna/compare/v0.8.0...v0.9.0

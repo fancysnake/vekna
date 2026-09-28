@@ -15,11 +15,9 @@ class _Entry:
 
 
 # What an interrupted cast already did, keyed by the rite that did it. Only
-# medium rites are in here. A step returns a `Transition`, whose target is
-# a function reference no journal can hold, so a resumed cast re-runs its steps
-# — cheap, and the same walk it took before — while every agent call, shell
-# command and prompt inside them comes back off the record instead of happening
-# twice.
+# medium rites are in here: a resumed cast re-runs its steps — cheap, and the
+# same walk it took before — while every agent call, shell command and prompt
+# inside them comes back off the record instead of happening twice.
 # ponytail: the match is `rite_id` and name, and the first miss spends the whole
 # ledger. Rite ids are a counter, so they line up only while the resumed cast
 # walks the path the recorded one walked; a ritual that branches differently

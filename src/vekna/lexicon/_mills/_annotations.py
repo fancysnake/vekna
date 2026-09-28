@@ -1,11 +1,11 @@
 import inspect
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType, UnionType
-from typing import Annotated, Any, TypeGuard, get_args, get_type_hints
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import RitualDefinitionError
+from vekna.lexicon._pacts import Done, Goto, RitualDefinitionError
 
 _NAMELESS = "value"
 
@@ -52,14 +52,19 @@ def _components_model(func: _Erased) -> type[BaseModel]:
     raise RitualDefinitionError(msg)
 
 
-def _is_model_union(annotation: type[Any] | UnionType | None) -> TypeGuard[UnionType]:
+def _model_members(
+    annotation: type[Any] | UnionType | None, *, allow_none: bool = False
+) -> tuple[type[BaseModel], ...] | None:
     if not isinstance(annotation, UnionType):
-        return False
-
-    return all(
-        _as_model(member) is not None or member is NoneType
-        for member in get_args(annotation)
-    )
+        return None
+    members: list[type[BaseModel]] = []
+    for arg in get_args(annotation):
+        if allow_none and arg is NoneType:
+            continue
+        if (model := _as_model(arg)) is None:
+            return None
+        members.append(model)
+    return tuple(members)
 
 
 def _is_union(annotation: type[Any] | UnionType | None) -> bool:
@@ -71,18 +76,27 @@ def _is_union(annotation: type[Any] | UnionType | None) -> bool:
 
 # A step may admit more than one payload shape — `Lint | Coverage` for a step
 # two others transition into — so a union is legal here where a ritual's
-# components, being one CLI interface, are not.
-def _payload_type(func: _Erased) -> type[BaseModel] | UnionType:
+# components, being one CLI interface, are not. A payload is the next step, so
+# `None` is not one — except on the legacy path, where `Work | None` was what a
+# bare `goto(target)` fed.
+def _payloads(func: _Erased, *, legacy: bool = False) -> tuple[type[BaseModel], ...]:
     annotation = _sole_annotation(func, decorator="step", noun="payload")
     if (model := _as_model(annotation)) is not None:
-        return model
-    if _is_model_union(annotation):
-        return annotation
+        return (model,)
+    if (members := _model_members(annotation, allow_none=legacy)) is not None:
+        return members
     msg = (
         f"@step {func.__name__!r} needs a pydantic model, or a union of them, "
         "as its payload type"
     )
     raise RitualDefinitionError(msg)
+
+
+# ponytail: whether a legacy step declared `Work | None`, so the payload a bare
+# `goto(target)` leaves absent still reaches it. Delete with the shim.
+def _optional_payload(func: _Erased) -> bool:
+    annotation = _sole_annotation(func, decorator="step", noun="payload")
+    return _is_union(annotation) and NoneType in get_args(annotation)
 
 
 # Naming an annotation means reading an attribute off whatever the author wrote.
@@ -119,3 +133,47 @@ def _type_name(annotation: type[Any] | UnionType | None) -> str:
         wrapped = get_args(annotation)
         return _type_name(wrapped[0])
     return _plain_name(annotation)
+
+
+# The exits a body declares: the payload classes it may return, and whether it
+# may return `Done`. `Done[T]` is only ever a return, so its `T` goes unread
+# here — mypy is the one that checks it. None for the legacy `-> Transition`,
+# recognisable by `Goto` among its members: it declares nothing, and `goto`
+# names its targets at runtime. `BaseModel` is not that marker — a body
+# annotated `-> BaseModel` declares an exit no step takes, which `check_exits`
+# says so about.
+def _exits(
+    func: _Erased, *, decorator: str
+) -> tuple[tuple[type[BaseModel], ...] | None, bool]:
+    annotation = get_type_hints(func).get("return")
+    # A body may be `def` handing back an awaitable, so the transition is under
+    # one wrapper at most.
+    if get_origin(annotation) in {Awaitable, Coroutine}:
+        annotation = get_args(annotation)[-1]
+    members = get_args(annotation) if _is_union(annotation) else (annotation,)
+    if Goto in members:
+        return None, True
+    exits: list[type[BaseModel]] = []
+    ends = False
+    for member in members:
+        if get_origin(member) is Done:
+            ends = True
+        elif (model := _as_model(member)) is not None:
+            exits.append(model)
+        elif member is Done:
+            # The first thing a migrating author writes, and the generic is the
+            # whole point: a ritual's result type is stated rather than erased.
+            msg = (
+                f"@{decorator} {func.__name__!r} returns a bare Done: name what it "
+                "carries — Done[None] for a body that ends with no result"
+            )
+            raise RitualDefinitionError(msg)
+        else:
+            # A body with no return annotation has no member to name.
+            named = "" if member is None else f", not {_type_name(member)}"
+            msg = (
+                f"@{decorator} {func.__name__!r} must declare its exits: "
+                f"a return annotation naming step payloads and Done[...]{named}"
+            )
+            raise RitualDefinitionError(msg)
+    return tuple(exits), ends

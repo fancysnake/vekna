@@ -11,13 +11,7 @@ from types import ModuleType
 
 from pydantic import ValidationError
 
-from vekna.lexicon._pacts import (
-    Config,
-    Ritual,
-    RitualDefinitionError,
-    RitualSource,
-    Step,
-)
+from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -26,9 +20,7 @@ from vekna.lexicon._pacts import (
 def _found(*, origin: str, module: ModuleType) -> RitualSource:
     namespace: dict[str, object] = vars(module)
     return RitualSource(
-        origin=origin,
-        rituals=[v for v in namespace.values() if isinstance(v, Ritual)],
-        steps=[v for v in namespace.values() if isinstance(v, Step)],
+        origin=origin, rituals=[v for v in namespace.values() if isinstance(v, Ritual)]
     )
 
 
@@ -61,10 +53,8 @@ def _blamed(origin: str) -> Iterator[None]:
 
 
 # Every module, not just the package's own namespace: `__init__.py` stays empty,
-# so a step it does not re-export would otherwise be invisible to the compendium
-# — and an unregistered step is drawn as a leaf, which truncates the graph
-# `rituals show` prints without saying so. The root is the first thing yielded
-# rather than a case of its own.
+# so a ritual it does not re-export would otherwise be invisible to the
+# compendium. The root is the first thing yielded rather than a case of its own.
 # Imported one at a time rather than through `pkgutil.walk_packages`, which
 # swallows a submodule's ImportError unless handed an `onerror`: a ritual
 # package that does not import must fail the cast as loudly as a rituals.py that

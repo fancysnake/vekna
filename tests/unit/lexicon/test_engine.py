@@ -5,18 +5,17 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import BaseModel
 
+from tests.conftest import entry
 from vekna.lexicon import (
+    Done,
     FocusMissingError,
-    Goto,
     NoComponents,
     RitualBoundaryError,
     RitualDefinitionError,
     RitualError,
+    StepBoundaryError,
     StepBudgetExceededError,
-    Transition,
     current_rite,
-    done,
-    goto,
     medium,
     ritual,
     step,
@@ -49,39 +48,63 @@ class Start(BaseModel):
     start: int
 
 
+class Spun(BaseModel):
+    left: int
+
+
+class Last(BaseModel):
+    left: int
+
+
+class Fuse(BaseModel):
+    pass
+
+
+class Charge(BaseModel):
+    pass
+
+
+class Noted(BaseModel):
+    left: int
+
+
+class Lost(BaseModel):
+    pass
+
+
 @step
-def tick(state: Tick) -> Transition:
+def tick(state: Tick) -> Tick | Done[Tick]:
     if not state.left:
-        return done(state)
-    return goto(tick, Tick(left=state.left - 1))
+        return Done(state)
+    return Tick(left=state.left - 1)
 
 
 @ritual("countdown")
-def countdown(components: Start) -> Transition:
-    return goto(tick, Tick(left=components.start))
+def countdown(components: Start) -> Tick:
+    return Tick(left=components.start)
 
 
 @step
-def spin(state: Tick) -> Transition:
-    return goto(spin, state)
+def spin(state: Spun) -> Spun:
+    return state
 
 
 @ritual("spinner", max_steps=5)
-def spinner(components: Start) -> Transition:
-    return goto(spin, Tick(left=components.start))
+def spinner(components: Start) -> Spun:
+    return Spun(left=components.start)
 
 
 @step
-def finish(state: Tick) -> Transition:
-    return done(state)
+def finish(state: Last) -> Done[Last]:
+    return Done(state)
 
 
 _SPRINT_START = 7
 
 
 @ritual("sprint", max_steps=1)
-def sprint(components: Start) -> Transition:
-    return goto(finish, Tick(left=components.start))
+def sprint(components: Start) -> Last:
+    return Last(left=components.start)
 
 
 class BoomError(RuntimeError):
@@ -89,13 +112,13 @@ class BoomError(RuntimeError):
 
 
 @step
-def explode(_state: Tick) -> Transition:
+def explode(_state: Charge) -> Done[None]:
     raise BoomError
 
 
 @ritual("detonate")
-def detonate(_: NoComponents) -> Transition:
-    return goto(explode, Tick(left=0))
+def detonate(_: NoComponents) -> Charge:
+    return Charge()
 
 
 @medium
@@ -105,14 +128,14 @@ async def combust() -> None:
 
 
 @step
-async def light_fuse(_state: Tick) -> Transition:
+async def light_fuse(_state: Fuse) -> Done[None]:
     await combust()
-    return done(None)
+    return Done(None)
 
 
 @ritual("smoulder")
-def smoulder(_: NoComponents) -> Transition:
-    return goto(light_fuse, Tick(left=0))
+def smoulder(_: NoComponents) -> Fuse:
+    return Fuse()
 
 
 class TestRitual:
@@ -124,8 +147,8 @@ class TestRitual:
     def test_fires_opening_transition_to_first_step():
         opening = asyncio.run(countdown.run(countdown.components(start=2)))
 
-        assert isinstance(opening, Goto)
-        assert opening.target is tick
+        assert opening == Tick(left=2)
+        assert (countdown.exits, countdown.ends) == ((Tick,), False)
 
     @staticmethod
     def test_components_of_another_ritual_do_not_pass_the_boundary():
@@ -139,24 +162,24 @@ class TestRitualDefinition:
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("bare")
-            def bare() -> Transition:
-                return done()
+            def bare() -> Done[None]:
+                return Done(None)
 
     @staticmethod
     def test_a_ritual_with_two_parameters_is_rejected():
         with pytest.raises(RitualDefinitionError, match="exactly one"):
 
             @ritual("pair")
-            def pair(components: Start, extra: Tick) -> Transition:
-                return done(components.start + extra.left)
+            def pair(components: Start, extra: Tick) -> Done[Start]:
+                return Done(Start(start=components.start + extra.left))
 
     @staticmethod
     def test_components_must_be_a_pydantic_model():
         with pytest.raises(RitualDefinitionError, match="pydantic model"):
 
             @ritual("loose")
-            def loose(bound: int) -> Transition:
-                return done(bound)
+            def loose(bound: int) -> Done[Start]:
+                return Done(Start(start=bound))
 
 
 class TestRunCast:
@@ -192,7 +215,26 @@ class TestRunCast:
             )
         )
 
-        assert result == Tick(left=_SPRINT_START)
+        assert result == Last(left=_SPRINT_START)
+
+    # Routed by the class of the value, not by anything the step said about
+    # itself: a payload nothing takes stops the cast at the boundary. Built by
+    # hand, because a decorated ritual could not declare it without lying to
+    # mypy.
+    @staticmethod
+    def test_a_transition_no_step_takes_is_a_boundary_error():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        wandering = entry(payload=Lost())
+
+        with pytest.raises(StepBoundaryError, match="no step takes Lost"):
+            asyncio.run(
+                run_cast(
+                    ritual=wandering,
+                    components=wandering.components(),
+                    grimoire=grimoire,
+                    channel=_channel(),
+                )
+            )
 
     @staticmethod
     def test_budget_exceeded_raises():
@@ -442,17 +484,17 @@ class TestSessionBook:
         seen = []
 
         @step
-        def note(state: Tick) -> Transition:
+        def note(state: Noted) -> Noted | Done[Noted]:
             book = current_rite().sessions
             seen.append((book, book.named("thread")))
             book.record(f"s{state.left}", name="thread")
             if not state.left:
-                return done(state)
-            return goto(note, Tick(left=state.left - 1))
+                return Done(state)
+            return Noted(left=state.left - 1)
 
         @ritual("noting")
-        def noting(components: Start) -> Transition:
-            return goto(note, Tick(left=components.start))
+        def noting(components: Start) -> Noted:
+            return Noted(left=components.start)
 
         for _ in range(2):
             asyncio.run(

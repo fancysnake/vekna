@@ -9,17 +9,7 @@ from pydantic import BaseModel
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.coding_claude import ClaudeOptions
 from vekna.folio.shell import shell
-from vekna.lexicon import (
-    File,
-    GitRef,
-    RitualError,
-    Text,
-    Transition,
-    done,
-    goto,
-    ritual,
-    step,
-)
+from vekna.lexicon import Done, File, GitRef, RitualError, Text, ritual, step
 
 _REVIEW_SYSTEM = """\
 You are reviewing a diff on this repository, and only what the diff changes.
@@ -74,14 +64,14 @@ class Review(BaseModel):
 
 
 @ritual("branch_review")
-def branch_review(components: ReviewRequest) -> Transition:
+def branch_review(components: ReviewRequest) -> ReviewRequest:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.
-    return goto(collect, components)
+    return components
 
 
 @step
-async def collect(request: ReviewRequest) -> Transition:
+async def collect(request: ReviewRequest) -> Diff | Done[Review]:
     scope = f" -- {shlex.quote(str(request.only))}" if request.only is not None else ""
     # bash -c makes every component shell syntax and git reads a leading dash as
     # an option, so `base` could inject a command or slip a `--output=` past the
@@ -98,23 +88,20 @@ async def collect(request: ReviewRequest) -> Transition:
         raise RitualError(msg)
     # Nothing changed is an answer, and not one worth paying an agent for.
     if not result.stdout.strip():
-        return done(Review(base=request.base, verdict="ship", findings=[]))
-    return goto(
-        judge,
-        Diff(
-            base=request.base,
-            text=result.stdout,
-            focus=request.focus,
-            # The diff, not the file on disk: `git diff base...HEAD` reads
-            # committed content, so hashing the working tree would pin bytes
-            # the agent never saw whenever the checkout is dirty.
-            pinned=hashlib.sha256(result.stdout.encode()).hexdigest(),
-        ),
+        return Done(Review(base=request.base, verdict="ship", findings=[]))
+    return Diff(
+        base=request.base,
+        text=result.stdout,
+        focus=request.focus,
+        # The diff, not the file on disk: `git diff base...HEAD` reads
+        # committed content, so hashing the working tree would pin bytes
+        # the agent never saw whenever the checkout is dirty.
+        pinned=hashlib.sha256(result.stdout.encode()).hexdigest(),
     )
 
 
 @step
-async def judge(diff: Diff) -> Transition:
+async def judge(diff: Diff) -> Done[Review]:
     focus = f"Pay particular attention to: {diff.focus}\n\n" if diff.focus else ""
     judgement = await coding(
         f"{_REVIEW}{focus}base: {diff.base}\n\n{diff.text}",
@@ -131,7 +118,7 @@ async def judge(diff: Diff) -> Transition:
             ),
         ),
     )
-    return done(
+    return Done(
         Review(
             base=diff.base,
             verdict=judgement.verdict,

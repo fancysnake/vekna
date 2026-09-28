@@ -13,6 +13,7 @@ from vekna.lexicon._pacts import (
     CodingFocusProtocol,
     Done,
     FocusMissingError,
+    Goto,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -22,6 +23,7 @@ from vekna.lexicon._pacts import (
     RitualError,
     ShellFocusProtocol,
     Step,
+    StepBoundaryError,
     StepBudgetExceededError,
     StringOutput,
 )
@@ -96,66 +98,27 @@ class Grimoire:
         return list(self._events)
 
 
-_DeclaredT = TypeVar("_DeclaredT", Ritual, Step)
-
-
-# Rituals and steps are registered the same way: by name, remembering which
-# module declared each, so a genuine collision says which two rather than
-# leaving the author to guess. The *same* object arriving twice is not one — a
-# package is swept module by module, and a submodule that reaches a sibling's
-# ritual or step imports it, handing the sweep that object once per module that
-# names it.
-class _Declarations(Generic[_DeclaredT]):
-    def __init__(self, kind: str) -> None:
-        self._kind = kind
-        self._known: dict[str, _DeclaredT] = {}
-        self._origins: dict[str, str] = {}
-
-    # `name` is not a parameter: `_DeclaredT` is a Ritual or a Step, and both
-    # carry the name the caller would otherwise be handing back.
-    def add(self, declared: _DeclaredT, *, origin: str | None) -> None:
-        if (first := self._known.get(declared.name)) is not None:
-            if first is declared:
-                return
-            raise RitualDefinitionError(self._collision(declared.name, origin))
-        self._known[declared.name] = declared
-        if origin is not None:
-            self._origins[declared.name] = origin
-
-    def get(self, name: str) -> _DeclaredT | None:
-        return self._known.get(name)
-
-    def names(self) -> list[str]:
-        return sorted(self._known)
-
-    def _collision(self, name: str, origin: str | None) -> str:
-        msg = f"{self._kind} {name!r} is already registered"
-        first = self._origins.get(name)
-        if first is None or origin is None:
-            return msg
-        return f"{msg} — declared in both {first} and {origin}"
-
-
+# Rituals are registered by name, remembering which module declared each, so a
+# genuine collision says which two rather than leaving the author to guess. The
+# *same* object arriving twice is not one — a package is swept module by module,
+# and a submodule that reaches a sibling's ritual imports it, handing the sweep
+# that object once per module that names it.
 class Compendium:
     def __init__(self) -> None:
-        self._rituals: _Declarations[Ritual] = _Declarations("ritual")
-        self._steps: _Declarations[Step] = _Declarations("step")
+        self._known: dict[str, Ritual] = {}
+        self._origins: dict[str, str] = {}
 
     def register(self, ritual: Ritual, *, origin: str | None = None) -> None:
-        self._rituals.add(ritual, origin=origin)
-
-    # Once a name collision was worth no more than the first definition winning
-    # — every step was in one file, where a duplicate is a visible mistake.
-    # Across the submodules of a package `measure` is a natural name twice, and
-    # the loser vanishing means `rituals show` drawing the other ritual's step.
-    def register_step(self, the_step: Step, *, origin: str | None = None) -> None:
-        self._steps.add(the_step, origin=origin)
-
-    def step(self, name: str) -> Step | None:
-        return self._steps.get(name)
+        if (first := self._known.get(ritual.name)) is not None:
+            if first is ritual:
+                return
+            raise RitualDefinitionError(self._collision(ritual.name, origin))
+        self._known[ritual.name] = ritual
+        if origin is not None:
+            self._origins[ritual.name] = origin
 
     def ritual(self, name: str) -> Ritual:
-        if (found := self._rituals.get(name)) is None:
+        if (found := self._known.get(name)) is None:
             msg = f"no ritual named {name!r}"
             # A typo and an empty library are the same message otherwise, and
             # they want opposite things done about them.
@@ -165,7 +128,63 @@ class Compendium:
         return found
 
     def names(self) -> list[str]:
-        return self._rituals.names()
+        return sorted(self._known)
+
+    def _collision(self, name: str, origin: str | None) -> str:
+        msg = f"ritual {name!r} is already registered"
+        first = self._origins.get(name)
+        if first is None or origin is None:
+            return msg
+        return f"{msg} — declared in both {first} and {origin}"
+
+
+# A payload class is a step's identity, so this is the routing table: what a
+# step returns is looked up here to find what runs next. Process-level and
+# filled at decoration, like a `FocusSlot`, because the trial drives a ritual
+# with no compendium in hand. A step's name routes nothing, so two rituals may
+# each have a `measure`; two steps taking one class is the collision.
+_steps: dict[type[BaseModel], Step] = {}
+
+
+# Every payload checked before any is written: a step admitting `Lint | Coverage`
+# whose second class collides would otherwise leave the first registered to a
+# step this refused, and the sweep swallows the error and carries on.
+def register_step(the_step: Step) -> None:
+    for payload in the_step.payloads:
+        if (first := _steps.get(payload)) is not None and first is not the_step:
+            msg = (
+                f"{payload.__name__} is the payload of both step {first.name!r} "
+                f"and step {the_step.name!r} — one payload class, one step"
+            )
+            raise RitualDefinitionError(msg)
+    _steps.update(dict.fromkeys(the_step.payloads, the_step))
+
+
+def step_taking(payload: type[BaseModel]) -> Step | None:
+    return _steps.get(payload)
+
+
+# Steps decorated inside the block are forgotten at its end. A test that
+# declares a throwaway step per case would otherwise hand the same payload
+# class to a second step on the next case, which is the collision above — and
+# steps declared at module level, before the block, are kept.
+@contextlib.contextmanager
+def steps_scope() -> Iterator[None]:
+    kept = dict(_steps)
+    try:
+        yield
+    finally:
+        _steps.clear()
+        _steps.update(kept)
+
+
+# Exact class, not isinstance: a subclass is not an edge the graph can draw, so
+# it is not one the engine takes.
+def step_for(transition: BaseModel) -> Step:
+    if (found := _steps.get(type(transition))) is None:
+        msg = f"no step takes {type(transition).__name__}"
+        raise StepBoundaryError(msg)
+    return found
 
 
 # What a medium package offers the lexicon, which may not import it: the Focus
@@ -425,8 +444,13 @@ async def run_cast(
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
                 break
-            async with _rite(name=transition.target.name, category="step"):
-                transition = await transition.target.run(transition.payload)
+            # ponytail: the legacy branch, named by the deletion note on `Goto`.
+            if isinstance(transition, Goto):
+                the_step, payload = transition.target, transition.payload
+            else:
+                the_step, payload = step_for(transition), transition
+            async with _rite(name=the_step.name, category="step"):
+                transition = await the_step.run(payload)
     if isinstance(transition, Done):
         return transition.result
     # Leaving the loop still mid-flight means the budget ran out, not that the

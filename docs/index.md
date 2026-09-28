@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 
 from vekna.folio.coding import coding
 from vekna.folio.shell import shell
-from vekna.lexicon import Transition, done, goto, ritual, step
+from vekna.lexicon import Done, ritual, step
 
 
 class FixTests(BaseModel):
@@ -51,22 +51,25 @@ class Verdict(BaseModel):
     outcome: str
 
 
+# The return annotation is the step's exits: back to `fix`, or finished with a
+# `Verdict`. mypy checks every return against it, so a mis-wire fails the type
+# check rather than a cast.
 @step
-async def fix(state: Attempt) -> Transition:
+async def fix(state: Attempt) -> Attempt | Done[Verdict]:
     result = await shell("pytest")
     if result.exit_code == 0:
-        return done(Verdict(outcome="green"))
+        return Done(Verdict(outcome="green"))
     if state.left <= 0:
-        return done(Verdict(outcome="gave up"))
+        return Done(Verdict(outcome="gave up"))
     await coding(f"The test suite fails:\n{result.stdout}\nFix it.")
-    return goto(fix, Attempt(left=state.left - 1))
+    return Attempt(left=state.left - 1)
 
 
 # `def`, not `async def`: naming the first step has nothing to await. A step or
 # entrypoint is written whichever way its body needs.
 @ritual("fix_tests")
-def fix_tests(components: FixTests) -> Transition:
-    return goto(fix, Attempt(left=components.bound))
+def fix_tests(components: FixTests) -> Attempt:
+    return Attempt(left=components.bound)
 ```
 
 Then cast it:

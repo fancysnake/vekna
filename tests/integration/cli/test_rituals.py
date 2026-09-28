@@ -10,7 +10,7 @@ _USAGE_EXIT = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, NoComponents, ritual, step
 
 
     class Tick(BaseModel):
@@ -28,20 +28,20 @@ _RITUALS = textwrap.dedent("""
 
 
     @step
-    async def tick(state: Tick) -> Transition:
+    async def tick(state: Tick) -> Tick | Done[Tick]:
         if not state.left:
-            return done(state)
-        return goto(tick, Tick(left=state.left - 1))
+            return Done(state)
+        return Tick(left=state.left - 1)
 
 
     @ritual("countdown")
-    async def countdown(components: Countdown) -> Transition:
-        return goto(tick, Tick(left=components.start))
+    async def countdown(components: Countdown) -> Tick:
+        return Tick(left=components.start)
 
 
     @ritual("ping")
-    async def ping(_: NoComponents) -> Transition:
-        return done(Pong(said="pong"))
+    async def ping(_: NoComponents) -> Done[Pong]:
+        return Done(Pong(said="pong"))
     """)
 
 _BROKEN = "import a_module_that_does_not_exist\n"
@@ -63,15 +63,104 @@ _COMPONENTS = textwrap.dedent("""
 
     class Pong(BaseModel):
         said: str
+
+
+    class Dig(BaseModel):
+        left: int
     """)
 
 _PROMPTS = 'GREETING = "pong"\n'
 
 _STEPS = textwrap.dedent("""
-    from vekna.lexicon import NoComponents, Transition, done, goto, ritual, step
+    from vekna.lexicon import Done, NoComponents, ritual, step
 
     from .components import Countdown, Pong, Tick
     from .prompts import GREETING
+
+
+    @step
+    async def tick(state: Tick) -> Tick | Done[Tick]:
+        if not state.left:
+            return Done(state)
+        return Tick(left=state.left - 1)
+
+
+    @ritual("countdown")
+    async def countdown(components: Countdown) -> Tick:
+        return Tick(left=components.start)
+
+
+    @ritual("ping")
+    async def ping(_: NoComponents) -> Done[Pong]:
+        return Done(Pong(said=GREETING))
+    """)
+
+# A level down, reaching two levels up for what it needs.
+_DEEP_STEPS = textwrap.dedent("""
+    from vekna.lexicon import Done, ritual, step
+
+    from ..components import Countdown, Dig, Tick
+    from ..prompts import GREETING
+
+
+    @step
+    async def deeper(state: Dig) -> Done[Tick]:
+        return Done(Tick(left=state.left + len(GREETING)))
+
+
+    @ritual("dig")
+    async def dig(components: Countdown) -> Dig:
+        return Dig(left=components.start)
+    """)
+
+# A second step on a class `steps.py` already takes: the collision the sweep
+# has to name, whichever module it imports first.
+_AGAIN = textwrap.dedent("""
+    from vekna.lexicon import Done, step
+
+    from .components import Tick
+
+
+    @step
+    async def tock(state: Tick) -> Done[Tick]:
+        return Done(state)
+    """)
+
+# A step whose annotation names an exit nothing was decorated with. Well-typed,
+# so only the load-time walk can say so.
+_UNWIRED = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, ritual, step
+
+
+    class Tick(BaseModel):
+        left: int
+
+
+    class Lost(BaseModel):
+        pass
+
+
+    @step
+    async def tick(state: Tick) -> Lost | Done[Tick]:
+        return Done(state)
+
+
+    @ritual("countdown")
+    async def countdown(components: Tick) -> Tick:
+        return components
+    """)
+
+# The pre-#103 spelling, which an installed tome may still use.
+_LEGACY = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Transition, done, goto, ritual, step
+
+
+    class Tick(BaseModel):
+        left: int
 
 
     @step
@@ -82,31 +171,8 @@ _STEPS = textwrap.dedent("""
 
 
     @ritual("countdown")
-    async def countdown(components: Countdown) -> Transition:
-        return goto(tick, Tick(left=components.start))
-
-
-    @ritual("ping")
-    async def ping(_: NoComponents) -> Transition:
-        return done(Pong(said=GREETING))
-    """)
-
-# A level down, reaching two levels up for what it needs.
-_DEEP_STEPS = textwrap.dedent("""
-    from vekna.lexicon import Transition, done, goto, ritual, step
-
-    from ..components import Countdown, Tick
-    from ..prompts import GREETING
-
-
-    @step
-    async def deeper(state: Tick) -> Transition:
-        return done(Tick(left=state.left + len(GREETING)))
-
-
-    @ritual("dig")
-    async def dig(components: Countdown) -> Transition:
-        return goto(deeper, Tick(left=components.start))
+    async def countdown(components: Tick) -> Transition:
+        return goto(tick, components)
     """)
 
 _PACKAGE = {
@@ -207,6 +273,19 @@ class TestRitualsShow:
         assert exit_code == 0
         assert "components:\n  (none)\n" in out
         assert "  (start) → (done)\n" in out
+
+    @staticmethod
+    def test_a_legacy_ritual_still_shows_with_an_unknown_graph(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_LEGACY)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "  (start) → ?\n" in out
 
     @staticmethod
     def test_unknown_ritual_is_a_usage_error(tmp_path, monkeypatch, capsys):
@@ -352,27 +431,35 @@ class TestRitualPackages:
         assert exit_code == _USAGE_EXIT
         assert str(below / "rituals.py") in capsys.readouterr().err
 
-    # What per-module origins exist for: two files collide by path, two
-    # submodules of one package collide by dotted name.
+    # A payload class is one step's identity, and a second step on it in a
+    # sibling module is the mistake the sweep has to name — both steps, and the
+    # module whose import tripped over it.
     @staticmethod
-    def test_two_submodules_claiming_one_step_name_collide(
+    def test_two_submodules_claiming_one_payload_class_collide(
         tmp_path, monkeypatch, capsys
     ):
-        _write(
-            tmp_path / "rituals",
-            # Only the step name is shared: the rituals are renamed so it is
-            # `tick` that collides and not whichever ritual is swept first.
-            {**_PACKAGE, "again.py": _STEPS.replace('@ritual("', '@ritual("re_')},
-        )
+        _write(tmp_path / "rituals", {**_PACKAGE, "again.py": _AGAIN})
         monkeypatch.chdir(tmp_path)
 
         exit_code = rituals_list()
 
         err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
-        assert "step 'tick' is already registered" in err
-        assert "rituals.again" in err
-        assert "rituals.steps" in err
+        assert "failed to import: RitualDefinitionError: Tick is the payload" in err
+        assert "step 'tick'" in err
+        assert "step 'tock'" in err
+        assert "one payload class, one step" in err
+
+    @staticmethod
+    def test_an_exit_no_step_takes_is_a_usage_error(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_UNWIRED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "tick may return Lost, which no step takes" in err
 
     # `import_module` answers from sys.modules before sys.path, so a package of
     # this name loaded from anywhere else would be swept in its place.

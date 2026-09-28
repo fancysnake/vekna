@@ -78,7 +78,8 @@ vekna rituals list          # every ritual and the options it takes
 vekna rituals show <name>   # one ritual's components and its step graph
 ```
 
-`show` draws the graph from the `goto` calls in each step's body:
+`show` draws the graph from each step's return annotation — the exits mypy
+checked:
 
 ```text
 countdown
@@ -93,9 +94,11 @@ steps:
   tick → tick, (done)
 ```
 
-A `?` in place of a target means a `goto` naming a step the graph could not
-find — usually a submodule that was never swept because it is missing an
-`__init__.py`.
+An exit no step takes is refused as the library loads, so `list`, `show` and
+`cast` all stop with `<step> may return <Class>, which no step takes` — usually
+a submodule that was never swept because it is missing an `__init__.py`. A `?`
+is a step still written with the deprecated `goto`: it declares nothing, so
+nothing can be drawn.
 
 ## Notifications
 
