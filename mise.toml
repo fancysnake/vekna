@@ -8,10 +8,10 @@ jobs = 8
 # linter is npm-backed and its shim needs one on PATH. `jq` is what
 # `release:bump` edits the plugin manifest with.
 jq = "1.8.2"
-markdownlint-cli2 = "0.23.2"
+markdownlint-cli2 = "0.23.3"
 node = "26"
-pipx = "1.17.4"
-"pipx:poetry" = "2.4.3"
+pipx = "1.17.5"
+"pipx:poetry" = "2.5.1"
 python = "3.11"
 
 [hooks]
