@@ -600,8 +600,43 @@ class TestRitualSources:
 
         err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
-        assert "declared in both" in err
+        assert err.startswith("2 name collisions:\n")
+        assert "  ritual 'countdown' — declared in both" in err
+        assert "  ritual 'ping' — declared in both" in err
         assert "extra.py" in err
+
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_a_tome_beside_the_projects_own_keeps_its_names_apart(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text(f'[rituals]\nmodules = ["{_SHARED}"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert [line.split()[0] for line in out.splitlines()] == [
+            "countdown",
+            "ping",
+            f"{_SHARED}:countdown",
+            f"{_SHARED}:ping",
+        ]
+
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_a_table_names_the_tome(tmp_path, monkeypatch, capsys):
+        (tmp_path / ".vekna.toml").write_text(
+            f'[rituals]\nmodules = {{ lib = "{_SHARED}" }}\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("lib:ping")
+
+        assert exit_code == 0
+        assert capsys.readouterr().out.startswith("lib:ping\n")
 
 
 @pytest.mark.usefixtures("_home")

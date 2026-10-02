@@ -12,7 +12,7 @@ import pytest
 from vekna.lexicon._inits import rituals_list, rituals_show
 
 _ROOT = Path(__file__).resolve().parents[3]
-_EXPECTED = ("branch_review", "cover_diff", "merge_ready", "triage")
+_EXPECTED = ("review", "cover_diff", "merge_ready", "triage")
 
 
 @pytest.fixture
@@ -35,12 +35,11 @@ class TestProjectRituals:
             assert f"{name}" in out
         # The flag rendering that broke on 3.11: an optional Annotated component
         # names the type it validates, not `Optional` or `Annotated`.
-        # A whole line: `review` is a suffix of `branch_review`, so a substring
-        # check passes on a listing that has lost the rename.
-        assert (
-            "branch_review  [--base <str>] [--only <Path>] [--focus <str>]"
-            in out.splitlines()
-        )
+        # A whole line: `review` is a suffix of `cabinet:review`, which
+        # `.vekna.toml` loads beside it under its own namespace.
+        lines = out.splitlines()
+        assert "review  [--base <str>] [--only <Path>] [--focus <str>]" in lines
+        assert any(line.startswith("cabinet:review  ") for line in lines)
         assert "triage  --link <AnyUrl>\n" in out
 
     @staticmethod

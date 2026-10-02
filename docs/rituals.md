@@ -125,8 +125,8 @@ These are additive: naming the file that would have been found anyway is how
 you are explicit about it, and loading it twice is not an error. Two
 *different* sources claiming one ritual name still is, and so are two steps
 taking one payload class — both errors name the pair rather than letting
-whichever loaded first win. Two steps merely *named* alike are fine: a name
-routes nothing.
+whichever loaded first win, and every ritual collision is reported in one go.
+Two steps merely *named* alike are fine: a name routes nothing.
 
 ## Tomes: rituals you install
 
@@ -145,6 +145,26 @@ modules = ["mycompany.rites"]
 pip install mycompany-rites
 vekna cast housekeeping --depth 2
 ```
+
+**A tome's rituals carry its name.** The project's own stay bare; a tome's are
+`<tome>:<name>`, so a tome and your project may both have a `review`:
+
+```bash
+vekna cast review            # the project's own
+vekna cast mycompany:review  # the tome's
+```
+
+The tome is its top-level package unless you name it — a table instead of a
+list, which is also how two tomes that would derive one name are told apart:
+
+```toml
+[rituals]
+modules = { rites = "mycompany.rites" }
+```
+
+A bare name finds the project's own ritual first, then the one tome that
+offers it; offered by two tomes, it is an error naming both. `rituals list`
+prints the project's rituals first, then each tome's, qualified.
 
 The project directory then needs nothing but that `.vekna.toml`. The package is
 swept exactly as a local `rituals/` is — every submodule, all the way down — so

@@ -66,23 +66,53 @@ class TestCompendium:
     def test_two_rituals_of_one_name_collide_naming_both_sources():
         compendium = Compendium()
         compendium.register(alpha, origin="rituals.first")
+        compendium.register(same_name_as_alpha, origin="rituals.second")
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.register(same_name_as_alpha, origin="rituals.second")
+            compendium.check()
 
-        assert "rituals.first" in str(raised.value)
-        assert "rituals.second" in str(raised.value)
+        assert str(raised.value) == (
+            "ritual 'alpha' is already registered"
+            " — declared in both rituals.first and rituals.second"
+        )
 
     # A source is what a collision names, not what makes it one.
     @staticmethod
     def test_two_rituals_of_one_name_collide_without_a_source():
         compendium = Compendium()
         compendium.register(alpha)
+        compendium.register(same_name_as_alpha)
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.register(same_name_as_alpha)
+            compendium.check()
 
         assert "'alpha' is already registered" in str(raised.value)
+
+    @staticmethod
+    def test_every_collision_is_reported_at_once():
+        compendium = Compendium()
+        compendium.register(alpha, origin="local")
+        compendium.register(beta, origin="local")
+        compendium.register(same_name_as_alpha, origin="other")
+        compendium.register(replace(beta, name="beta"), origin="other")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.check()
+
+        assert str(raised.value) == (
+            "2 name collisions:\n"
+            "  ritual 'alpha' — declared in both local and other\n"
+            "  ritual 'beta' — declared in both local and other"
+        )
+
+    @staticmethod
+    def test_no_collision_checks_clean():
+        compendium = Compendium()
+        compendium.register(alpha)
+
+        compendium.check()
+
+        assert compendium.names() == ["alpha"]
 
     # A submodule that reaches a sibling's ritual imports it, so the sweep of a
     # package hands the same object over once per module that names it.
@@ -100,6 +130,76 @@ class TestCompendium:
 
         with pytest.raises(RitualDefinitionError):
             compendium.ritual("nope")
+
+
+class TestNamespaces:
+    @staticmethod
+    def test_one_name_in_two_namespaces_does_not_collide():
+        compendium = Compendium()
+        compendium.register(alpha)
+        compendium.register(same_name_as_alpha, namespace="tome")
+
+        compendium.check()
+
+        assert compendium.names() == ["alpha", "tome:alpha"]
+
+    @staticmethod
+    def test_a_qualified_name_resolves_and_carries_its_namespace():
+        compendium = Compendium()
+        compendium.register(alpha)
+        compendium.register(same_name_as_alpha, namespace="tome")
+
+        found = compendium.ritual("tome:alpha")
+
+        assert found.name == "tome:alpha"
+        assert found.run is same_name_as_alpha.run
+
+    @staticmethod
+    def test_a_bare_name_prefers_the_projects_own():
+        compendium = Compendium()
+        compendium.register(same_name_as_alpha, namespace="tome")
+        compendium.register(alpha)
+
+        assert compendium.ritual("alpha") is alpha
+
+    @staticmethod
+    def test_a_bare_name_offered_by_one_tome_resolves_to_it():
+        compendium = Compendium()
+        compendium.register(beta)
+        compendium.register(alpha, namespace="tome")
+
+        assert compendium.ritual("alpha").name == "tome:alpha"
+
+    @staticmethod
+    def test_a_bare_name_offered_by_two_tomes_names_both():
+        compendium = Compendium()
+        compendium.register(alpha, namespace="acme")
+        compendium.register(same_name_as_alpha, namespace="cabinet")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.ritual("alpha")
+
+        assert str(raised.value) == (
+            "ritual 'alpha' is ambiguous: acme:alpha, cabinet:alpha"
+        )
+
+    @staticmethod
+    def test_a_collision_within_a_tome_is_named_qualified():
+        compendium = Compendium()
+        compendium.register(alpha, namespace="tome", origin="tome.a")
+        compendium.register(same_name_as_alpha, namespace="tome", origin="tome.b")
+
+        with pytest.raises(RitualDefinitionError, match="'tome:alpha'"):
+            compendium.check()
+
+    @staticmethod
+    def test_the_projects_own_list_first_then_each_tome():
+        compendium = Compendium()
+        compendium.register(alpha, namespace="zeta")
+        compendium.register(beta, namespace="acme")
+        compendium.register(same_name_as_alpha)
+
+        assert compendium.names() == ["alpha", "acme:beta", "zeta:alpha"]
 
 
 # A payload class is a step's identity, so the table is keyed by class and a

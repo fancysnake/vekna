@@ -326,7 +326,9 @@ class RitualsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     files: list[str] = []
-    modules: list[str] = []
+    # A table spells each tome's namespace out (`{ cab = "cabinet.rituals" }`);
+    # a list leaves it to the module's top-level package.
+    modules: list[str] | dict[str, str] = []
 
 
 class Config(BaseModel):

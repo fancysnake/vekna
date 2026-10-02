@@ -63,7 +63,7 @@ class Review(BaseModel):
     pinned: str | None = None
 
 
-@ritual("branch_review")
+@ritual("review")
 def branch_review(components: ReviewRequest) -> ReviewRequest:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.

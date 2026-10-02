@@ -4,7 +4,7 @@ This project casts them on itself.
 
 ```bash
 vekna cast cover_diff [--bound N]
-vekna cast branch_review [--base <ref>] [--only <file>] [--focus <text>]
+vekna cast review [--base <ref>] [--only <file>] [--focus <text>]
 vekna cast merge_ready [--bound N]
 vekna cast triage --link <url>
 ```
@@ -12,11 +12,10 @@ vekna cast triage --link <url>
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
   branch: measure with `mise run test:py:cov:diff`, hand the uncovered lines to
   an agent, measure again.
-- [`branch_review`](branch_review.py) reads the diff this branch adds and
+- [`review`](branch_review.py) reads the diff this branch adds and
   returns findings under a schema. Its agent is read-only, enforced by the
-  allowlist rather than asked for in the prompt. The name is long because
-  cabinet's rituals share one name space with this repo's, and `review` is
-  taken there — so it stays unambiguous whichever facades `.vekna.toml` names.
+  allowlist rather than asked for in the prompt. Cabinet's own is
+  `cabinet:review`.
 - [`merge_ready`](merge_ready.py) runs both gates at once and babysits them to
   green. Whichever went red picks the payload shape the repair step receives.
 - [`triage`](triage.py) reads a GitHub issue or PR with `gh`, has an agent

@@ -41,6 +41,8 @@ def cover_diff(components: CoverDiff) -> Uncovered:
 - `max_steps` is the trampoline's backstop, keyword-only, default **1000**. Set
   it well above any business bound — tripping it means a ritual that will not
   settle.
+- The name is bare. A tome's rituals are cast as `<tome>:<name>`, a prefix the
+  loader adds, so a tome need not dodge names its users already have.
 
 ### `@step` — a task
 
