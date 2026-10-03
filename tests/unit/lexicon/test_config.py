@@ -70,6 +70,14 @@ class TestReadConfig:
             read_config(config)
 
     @staticmethod
+    def test_modules_that_are_neither_a_list_nor_a_table_are_an_error(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text('[rituals]\nmodules = "pkg.rites"\n')
+
+        with pytest.raises(RitualDefinitionError, match="modules"):
+            read_config(config)
+
+    @staticmethod
     def test_a_misspelt_key_is_an_error(tmp_path):
         config = tmp_path / ".vekna.toml"
         config.write_text('[rituals]\nmodule = ["pkg.rites"]\n')
