@@ -304,6 +304,7 @@ from vekna.folio.coding_claude import ClaudeOptions
 ClaudeOptions(
     permission_mode=None,  # "default"|"acceptEdits"|"plan"|"dontAsk"|"bypassPermissions"|"auto"
     allowed_tools=None,    # list[str]
+    disallowed_tools=[],   # list[str], beats allowed_tools
     max_turns=None,        # int
     effort=None,           # "low"|"medium"|"high"|"xhigh"|"max"
 )
@@ -325,6 +326,11 @@ opts=CodingOpts(
 
 `"plan"` is **not** the read-only mode — it executes no tools at all, so a
 reviewer under it could not read `CLAUDE.md`.
+
+**`disallowed_tools` removes tools** and beats `allowed_tools` for a tool on
+both. Use it when a sandbox already fences the process and the step only needs
+to lose a few tools. An unknown field raises `ClaudeOptionsError` at
+construction.
 
 **An allowlist bounds *which* tools, never *where* they reach.** `Read` on the
 list is `Read` on any path the process can open; `cwd` is a working directory,

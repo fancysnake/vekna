@@ -90,6 +90,11 @@ outside the list is denied without stopping to ask you. Not
 `permission_mode="plan"`, which executes no tools at all — an agent in plan
 mode cannot read the files you gave it `Read` for.
 
+`disallowed_tools` removes the listed tools, and a tool on both lists stays
+denied. Use it when a sandbox already does the fencing and the ritual only needs
+to take a few tools away. A field `ClaudeOptions` does not have raises
+`ClaudeOptionsError`.
+
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
 tool; the cast blocks until you answer, exactly as `decide` does. Any options it
 offers are suggestions — pick one by number or by name, or answer in your own

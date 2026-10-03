@@ -11,6 +11,19 @@ when.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-03
+
+### Added
+
+- **`ClaudeOptions(disallowed_tools=[...])`** removes the listed tools. A tool
+  on both lists stays denied.
+
+### Changed
+
+- **`ClaudeOptions` refuses unknown fields and invalid values** with
+  `ClaudeOptionsError` instead of pydantic's `ValidationError`, so a misspelled
+  `disallowed_tools` cannot leave the agent every tool.
+
 ## [0.10.0] - 2026-09-28
 
 ### Changed
@@ -713,7 +726,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.10.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/fancysnake/vekna/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fancysnake/vekna/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/fancysnake/vekna/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/fancysnake/vekna/compare/v0.9.0...v0.9.1

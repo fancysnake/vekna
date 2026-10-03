@@ -89,6 +89,36 @@ _TYPED_RITUALS = textwrap.dedent("""
     """)
 
 
+_DENYLIST_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.coding import CodingOpts, CodingResult, coding
+    from vekna.folio.coding_claude import ClaudeOptions
+    from vekna.lexicon import Done, ritual, step
+
+
+    class Task(BaseModel):
+        text: str
+
+
+    @step
+    async def work(task: Task) -> Done[CodingResult]:
+        return Done(
+            await coding(
+                task.text,
+                opts=CodingOpts(
+                    focus_options=ClaudeOptions(disallowed_tools=["WebFetch"])
+                ),
+            )
+        )
+
+
+    @ritual("fenced")
+    async def fenced(components: Task) -> Task:
+        return Task(text=components.text)
+    """)
+
+
 _THREADED_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
@@ -502,6 +532,21 @@ class TestFocusOptions:
         assert options.effort == "high"
         assert options.output_format["type"] == "json_schema"
         assert options.output_format["schema"]["properties"]["steps"]
+        assert options.disallowed_tools == []
+
+    @staticmethod
+    def test_denylist_reaches_the_sdk(tmp_path, monkeypatch):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_DENYLIST_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["fenced", "--text", "survey the code"])
+
+        assert exit_code == 0
+        options = captured["options"]
+        assert options.disallowed_tools == ["WebFetch"]
+        assert options.allowed_tools == ["mcp__vekna__ask_human"]
 
     @staticmethod
     def test_unparsable_structured_reply_fails_the_cast(tmp_path, monkeypatch, capsys):

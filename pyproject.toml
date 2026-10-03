@@ -1,6 +1,6 @@
 [project]
 name = "vekna"
-version = "0.10.0"
+version = "0.11.0"
 description = "Run coding agents as rituals: ordinary Python programs whose steps you control"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
@@ -563,11 +563,11 @@ disallow_any_expr = false
 disallow_any_explicit = false
 
 # Pydantic's own error report is a list of TypedDicts whose values are `Any`.
-# Reading it is how `CodingOpts` turns a refusal into a sentence, and a `pacts`
-# module may import no internal layer, so the boundary lives here rather than
-# in an adapter beside it.
+# Reading it is how `CodingOpts` and `ClaudeOptions` turn a refusal into a
+# sentence, and a `pacts` module may import no internal layer, so the boundary
+# lives here rather than in an adapter beside it.
 [[tool.mypy.overrides]]
-module = "vekna.folio.coding._pacts"
+module = ["vekna.folio.coding._pacts", "vekna.folio.coding_claude._pacts"]
 disallow_any_expr = false
 
 # `@pytest.fixture` is an overloaded, Any-typed decorator from a framework we do
