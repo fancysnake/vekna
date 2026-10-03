@@ -13,9 +13,10 @@ when.
 
 ### Added
 
-- **`ClaudeOptions(disallowed_tools=[...])`** removes the listed tools and
-  keeps every other tool. `allowed_tools` adds only the tools it names. Pass one
-  list or the other: setting both raises `ClaudeOptionsError`.
+- **`ClaudeOptions(disallowed_tools=[...])`** removes the listed tools. A tool
+  on both lists stays denied.
+- **`ClaudeOptions` refuses unknown fields** with `ClaudeOptionsError`, so a
+  misspelled `disallowed_tools` cannot leave the agent every tool.
 
 ## [0.10.0] - 2026-09-28
 
