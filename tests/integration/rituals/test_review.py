@@ -138,3 +138,5 @@ class TestReviewWhole:
             base="main", verdict="fix", findings=[_FINDING], pinned=_pinned(_DIFF)
         )
         assert trial.steps == ["collect", "judge"]
+        assert trial.shell.commands == ["git diff --end-of-options main...HEAD"]
+        assert _DIFF in trial.coding.prompts[0]
