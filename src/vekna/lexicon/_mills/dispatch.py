@@ -9,6 +9,7 @@ from vekna.lexicon._pacts import (
     MediumBoundaryError,
     Ritual,
     RitualBoundaryError,
+    RitualDefinitionError,
     Step,
     StepBoundaryError,
     Transition,
@@ -22,7 +23,7 @@ from ._annotations import (
     _optional_payload,
     _payloads,
 )
-from .engine import medium_rite, register_step
+from .engine import NAMESPACE_SEPARATOR, medium_rite, register_step
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
@@ -164,6 +165,13 @@ class _RitualDecorator(Protocol):
 
 
 def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator:
+    if NAMESPACE_SEPARATOR in name:
+        msg = (
+            f"ritual {name!r}: {NAMESPACE_SEPARATOR!r} is reserved for a tome's "
+            "namespace"
+        )
+        raise RitualDefinitionError(msg)
+
     def wrap(func: _Written[_ComponentsT]) -> Ritual:
         erased = cast("_Called", func)
         model = _components_model(erased)

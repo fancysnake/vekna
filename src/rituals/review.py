@@ -1,4 +1,4 @@
-# branch_review — read the diff this branch adds, and say what is wrong with it.
+# review — read the diff this branch adds, and say what is wrong with it.
 
 import hashlib
 import shlex
@@ -63,8 +63,8 @@ class Review(BaseModel):
     pinned: str | None = None
 
 
-@ritual("branch_review")
-def branch_review(components: ReviewRequest) -> ReviewRequest:
+@ritual("review")
+def review(components: ReviewRequest) -> ReviewRequest:
     # The components are already the first step's payload — there is nothing to
     # map, so nothing is mapped.
     return components

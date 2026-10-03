@@ -41,6 +41,8 @@ def cover_diff(components: CoverDiff) -> Uncovered:
 - `max_steps` is the trampoline's backstop, keyword-only, default **1000**. Set
   it well above any business bound — tripping it means a ritual that will not
   settle.
+- The name is bare. A tome's rituals are cast as `<tome>:<name>`, a prefix the
+  loader adds, so a tome need not dodge names its users already have.
 
 ### `@step` — a task
 
@@ -540,7 +542,7 @@ run fullcheck` keeps them correct. Four rituals, four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
   a business budget counted down until it returns `Done`.
-- **`branch_review`** — `output=` on a model the agent fills, which the ritual widens
+- **`review`** — `output=` on a model the agent fills, which the ritual widens
   with provenance the agent was never asked to invent.
 - **`merge_ready`** — a union payload routing three failure shapes into one
   repair step, a `TaskGroup` running both gates at once, a keyed session.

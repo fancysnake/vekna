@@ -181,6 +181,11 @@ class TestRitualDefinition:
             def loose(bound: int) -> Done[Start]:
                 return Done(Start(start=bound))
 
+    @staticmethod
+    def test_a_name_holding_the_namespace_separator_is_rejected():
+        with pytest.raises(RitualDefinitionError, match="'cabinet:review'"):
+            ritual("cabinet:review")
+
 
 class TestRunCast:
     @staticmethod

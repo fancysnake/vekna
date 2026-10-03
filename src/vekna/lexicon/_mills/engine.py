@@ -1,8 +1,9 @@
 import contextlib
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from itertools import starmap
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
@@ -21,6 +22,7 @@ from vekna.lexicon._pacts import (
     Ritual,
     RitualDefinitionError,
     RitualError,
+    RitualSource,
     ShellFocusProtocol,
     Step,
     StepBoundaryError,
@@ -98,44 +100,74 @@ class Grimoire:
         return list(self._events)
 
 
-# Rituals are registered by name, remembering which module declared each, so a
-# genuine collision says which two rather than leaving the author to guess. The
-# *same* object arriving twice is not one — a package is swept module by module,
-# and a submodule that reaches a sibling's ritual imports it, handing the sweep
-# that object once per module that names it.
-class Compendium:
-    def __init__(self) -> None:
-        self._known: dict[str, Ritual] = {}
-        self._origins: dict[str, str] = {}
+NAMESPACE_SEPARATOR = ":"
 
-    def register(self, ritual: Ritual, *, origin: str | None = None) -> None:
-        if (first := self._known.get(ritual.name)) is not None:
-            if first is ritual:
-                return
-            raise RitualDefinitionError(self._collision(ritual.name, origin))
-        self._known[ritual.name] = ritual
-        if origin is not None:
-            self._origins[ritual.name] = origin
+
+def _qualified(namespace: str, name: str) -> str:
+    return f"{namespace}{NAMESPACE_SEPARATOR}{name}" if namespace else name
+
+
+# Keyed by (namespace, name): "" for the project's own, the tome's for a
+# tome's, so two libraries whose authors never agreed on names need not have.
+# A collision is only ever within one namespace, and every one is raised
+# together: a library overlapping on two names would otherwise cost a cast per
+# name. The same ritual arriving twice is not one — a package is swept module
+# by module, and a submodule that reaches a sibling's ritual imports it,
+# handing the sweep that ritual once per module that names it.
+class Compendium:
+    def __init__(self, shelves: Iterable[tuple[str, RitualSource]]) -> None:
+        self._known: dict[tuple[str, str], Ritual] = {}
+        origins: dict[tuple[str, str], str] = {}
+        # Once per rival, which is swept again by every sibling that imports it.
+        collisions: dict[tuple[str, str, int], str] = {}
+        for namespace, source in shelves:
+            for found in source.rituals:
+                key = (namespace, found.name)
+                if (first := self._known.get(key)) is None:
+                    # Qualified once, so the hello, the max_steps refusal and
+                    # the graph's diagnostics all say which `review` ran.
+                    name = _qualified(*key)
+                    self._known[key] = (
+                        found if found.name == name else replace(found, name=name)
+                    )
+                    origins[key] = source.origin
+                elif first.run is not found.run:
+                    collisions.setdefault(
+                        (*key, id(found.run)),
+                        f"  ritual {_qualified(*key)!r} — declared in both "
+                        f"{origins[key]} and {source.origin}",
+                    )
+        if collisions:
+            lines = ["name collisions:", *collisions.values()]
+            raise RitualDefinitionError("\n".join(lines))
 
     def ritual(self, name: str) -> Ritual:
-        if (found := self._known.get(name)) is None:
-            msg = f"no ritual named {name!r}"
-            # A typo and an empty library are the same message otherwise, and
-            # they want opposite things done about them.
-            if known := self.names():
-                msg = f"{msg} — known rituals: {', '.join(known)}"
-            raise RitualDefinitionError(msg)
-        return found
+        return self._known[self._resolve(name)]
 
+    # The project's own first, then tome by tome.
     def names(self) -> list[str]:
-        return sorted(self._known)
+        return list(starmap(_qualified, sorted(self._known)))
 
-    def _collision(self, name: str, origin: str | None) -> str:
-        msg = f"ritual {name!r} is already registered"
-        first = self._origins.get(name)
-        if first is None or origin is None:
-            return msg
-        return f"{msg} — declared in both {first} and {origin}"
+    # A qualified name resolves exactly. A bare one is the project's own if
+    # there is one, else the one tome's that offers it: the prefix is for
+    # telling two apart, not ceremony.
+    def _resolve(self, name: str) -> tuple[str, str]:
+        namespace, _, bare = name.rpartition(NAMESPACE_SEPARATOR)
+        if (key := (namespace, bare)) in self._known:
+            return key
+        offered = [key for key in sorted(self._known) if key[0] and key[1] == name]
+        if len(offered) == 1:
+            return offered[0]
+        if offered:
+            candidates = ", ".join(starmap(_qualified, offered))
+            msg = f"ritual {name!r} is ambiguous: {candidates}"
+            raise RitualDefinitionError(msg)
+        msg = f"no ritual named {name!r}"
+        # A typo and an empty library are the same message otherwise, and
+        # they want opposite things done about them.
+        if known := self.names():
+            msg = f"{msg} — known rituals: {', '.join(known)}"
+        raise RitualDefinitionError(msg)
 
 
 # A payload class is a step's identity, so this is the routing table: what a
