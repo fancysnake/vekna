@@ -536,7 +536,7 @@ run fullcheck` keeps them correct. Four rituals, four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
   a business budget counted down until it returns `Done`.
-- **`branch_review`** — `output=` on a model the agent fills, which the ritual widens
+- **`review`** — `output=` on a model the agent fills, which the ritual widens
   with provenance the agent was never asked to invent.
 - **`merge_ready`** — a union payload routing three failure shapes into one
   repair step, a `TaskGroup` running both gates at once, a keyed session.

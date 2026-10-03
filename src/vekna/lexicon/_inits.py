@@ -30,6 +30,7 @@ from ._pacts import (
     RitualError,
     RitualSource,
     StringOutput,
+    Tome,
 )
 
 _USAGE = (
@@ -139,29 +140,6 @@ def _config_files(cwd: Path) -> list[Path]:
     return found
 
 
-# `files` is additive, not a replacement for the source found by walking up:
-# naming that same file is how an author is explicit about it, so a source
-# already loaded is skipped rather than colliding with itself. Two *different*
-# sources claiming one ritual name is still an error.
-# The loader reaches the filesystem and so may not touch the compendium in
-# _mills: it hands back what it found, and binding the two is this layer's job.
-def _register(
-    *, compendium: Compendium, found: list[RitualSource], namespace: str | None = None
-) -> None:
-    for module in found:
-        for the_ritual in module.rituals:
-            compendium.register(the_ritual, origin=module.origin, namespace=namespace)
-
-
-# What a tome is called is the operator's to say, since the tome cannot know
-# what else is installed beside it; unsaid, it is the top-level package, which
-# names every facade of `cabinet.rituals.*` alike.
-def _tomes(modules: list[str] | dict[str, str]) -> list[tuple[str, str]]:
-    if isinstance(modules, dict):
-        return list(modules.items())
-    return [(module.partition(".")[0], module) for module in modules]
-
-
 class _Library(NamedTuple):
     compendium: Compendium
     # What an empty compendium should say. The walk that discovered nothing is
@@ -170,10 +148,16 @@ class _Library(NamedTuple):
     when_empty: str
 
 
+# `files` is additive, not a replacement for the source found by walking up:
+# naming that same file is how an author is explicit about it, so a source
+# already loaded is skipped rather than colliding with itself. Two *different*
+# sources claiming one ritual name is still an error.
+# The loader reaches the filesystem and so may not touch the compendium in
+# _mills: it hands back what it found, and binding the two is this layer's job.
 def _build_library(cwd: Path) -> _Library:
-    compendium = Compendium()
+    shelves: list[tuple[str, RitualSource]] = []
     seen_files: set[Path] = set()
-    seen_modules: set[str] = set()
+    seen_modules: set[Tome] = set()
 
     def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
@@ -182,7 +166,7 @@ def _build_library(cwd: Path) -> _Library:
         if (resolved := path.resolve()) in seen_files:
             return
         seen_files.add(resolved)
-        _register(compendium=compendium, found=load_rituals_source(resolved))
+        shelves.extend(("", found) for found in load_rituals_source(resolved))
 
     discovered = _find_rituals_source(cwd)
     if discovered.source is not None:
@@ -202,18 +186,20 @@ def _build_library(cwd: Path) -> _Library:
                 msg = f"{config}: [rituals] names {named}, which does not exist"
                 raise RitualDefinitionError(msg)
             load_source(named)
-        for namespace, module in _tomes(rituals.modules):
-            if module not in seen_modules:
-                seen_modules.add(module)
-                _register(
-                    compendium=compendium,
-                    found=load_rituals_module(module, root=cwd),
-                    namespace=namespace,
+        # Per name as well as module: a module the global config lists and a
+        # project renames is reachable under both.
+        for tome in rituals.modules:
+            if tome not in seen_modules:
+                seen_modules.add(tome)
+                namespace, module = tome
+                shelves.extend(
+                    (namespace, found)
+                    for found in load_rituals_module(module, root=cwd)
                 )
-    # Every source registered before any collision is reported, so one cast
-    # names them all. An import failure has already stopped the sweep: against
-    # a half-loaded library a collision count would be invented.
-    compendium.check()
+    # Every source loaded before any collision is reported, so one cast names
+    # them all. An import failure has already stopped the sweep: against a
+    # half-loaded library the collisions would be invented.
+    compendium = Compendium(shelves)
     # Every exit resolved before anything is cast: an annotation naming a class
     # no step takes is well-typed, so this check is the only thing that catches
     # it, and here it catches it on `list` and `show` as well as `cast`.

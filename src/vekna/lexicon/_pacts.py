@@ -3,9 +3,16 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Generic, Literal, Protocol, TypeVar
+from typing import Annotated, Generic, Literal, NamedTuple, Protocol, TypeVar
 
-from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, JsonValue
+from pydantic import (
+    AfterValidator,
+    AnyUrl,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    JsonValue,
+)
 
 from vekna.wire import RunRecord, WireMessage
 
@@ -319,6 +326,34 @@ class Ritual:
     ends: bool
 
 
+def _identifier(value: str) -> str:
+    if not value.isidentifier():
+        msg = f"tome namespace {value!r} is not a Python identifier"
+        raise ValueError(msg)
+    return value
+
+
+class Tome(NamedTuple):
+    namespace: Annotated[str, AfterValidator(_identifier)]
+    module: str
+
+
+# What a tome is called is the operator's to say, since the tome cannot know
+# what else is installed beside it: a table spells it out (`{ cab =
+# "cabinet.rituals" }`). A list leaves it to the top-level package, which names
+# every facade of `cabinet.rituals.*` alike. Anything else passes through for
+# `Tome` to refuse.
+def _spelt_tomes(modules: JsonValue) -> JsonValue:
+    if isinstance(modules, dict):
+        return [[namespace, module] for namespace, module in modules.items()]
+    if isinstance(modules, list):
+        return [
+            [module.partition(".")[0], module] if isinstance(module, str) else module
+            for module in modules
+        ]
+    return modules
+
+
 # Unknown keys are an error: a misspelt `module = [...]` would otherwise load
 # nothing and leave the next cast to fail with "no ritual named ...". The
 # top-level table stays open — `[locks]` lands with issue #102.
@@ -326,9 +361,7 @@ class RitualsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     files: list[str] = []
-    # A table spells each tome's namespace out (`{ cab = "cabinet.rituals" }`);
-    # a list leaves it to the module's top-level package.
-    modules: list[str] | dict[str, str] = []
+    modules: Annotated[list[Tome], BeforeValidator(_spelt_tomes)] = []
 
 
 class Config(BaseModel):

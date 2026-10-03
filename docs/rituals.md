@@ -162,6 +162,9 @@ list, which is also how two tomes that would derive one name are told apart:
 modules = { rites = "mycompany.rites" }
 ```
 
+A tome's name must be a Python identifier. `:` belongs to the namespace, so
+`@ritual` refuses a name that contains one.
+
 A bare name finds the project's own ritual first, then the one tome that
 offers it; offered by two tomes, it is an error naming both. `rituals list`
 prints the project's rituals first, then each tome's, qualified.

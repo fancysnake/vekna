@@ -12,7 +12,7 @@ vekna cast triage --link <url>
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
   branch: measure with `mise run test:py:cov:diff`, hand the uncovered lines to
   an agent, measure again.
-- [`review`](branch_review.py) reads the diff this branch adds and
+- [`review`](review.py) reads the diff this branch adds and
   returns findings under a schema. Its agent is read-only, enforced by the
   allowlist rather than asked for in the prompt. Cabinet's own is
   `cabinet:review`.

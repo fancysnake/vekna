@@ -12,6 +12,7 @@ from vekna.lexicon._mills.engine import (
     step_taking,
     steps_scope,
 )
+from vekna.lexicon._pacts import Ritual, RitualSource
 
 
 class State(BaseModel):
@@ -52,81 +53,94 @@ async def same_name_as_alpha(components: State) -> Done[State]:
     return Done(State(x=components.x))
 
 
+@ritual("beta")
+async def same_name_as_beta(components: State) -> Done[State]:
+    await asyncio.sleep(0)
+    return Done(State(x=components.x))
+
+
+def _shelf(
+    *rituals: Ritual, namespace: str = "", origin: str = "rituals"
+) -> tuple[str, RitualSource]:
+    return namespace, RitualSource(origin=origin, rituals=list(rituals))
+
+
 class TestCompendium:
     @staticmethod
-    def test_register_and_lookup():
-        compendium = Compendium()
-        compendium.register(alpha)
-        compendium.register(beta)
+    def test_lookup():
+        compendium = Compendium([_shelf(alpha, beta)])
 
         assert compendium.ritual("alpha") is alpha
         assert compendium.names() == ["alpha", "beta"]
 
     @staticmethod
     def test_two_rituals_of_one_name_collide_naming_both_sources():
-        compendium = Compendium()
-        compendium.register(alpha, origin="rituals.first")
-        compendium.register(same_name_as_alpha, origin="rituals.second")
+        shelves = [
+            _shelf(alpha, origin="rituals.first"),
+            _shelf(same_name_as_alpha, origin="rituals.second"),
+        ]
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.check()
+            Compendium(shelves)
 
         assert str(raised.value) == (
-            "ritual 'alpha' is already registered"
-            " — declared in both rituals.first and rituals.second"
+            "name collisions:\n"
+            "  ritual 'alpha' — declared in both rituals.first and rituals.second"
         )
-
-    # A source is what a collision names, not what makes it one.
-    @staticmethod
-    def test_two_rituals_of_one_name_collide_without_a_source():
-        compendium = Compendium()
-        compendium.register(alpha)
-        compendium.register(same_name_as_alpha)
-
-        with pytest.raises(RitualDefinitionError) as raised:
-            compendium.check()
-
-        assert "'alpha' is already registered" in str(raised.value)
 
     @staticmethod
     def test_every_collision_is_reported_at_once():
-        compendium = Compendium()
-        compendium.register(alpha, origin="local")
-        compendium.register(beta, origin="local")
-        compendium.register(same_name_as_alpha, origin="other")
-        compendium.register(replace(beta, name="beta"), origin="other")
+        shelves = [
+            _shelf(alpha, beta, origin="local"),
+            _shelf(same_name_as_alpha, same_name_as_beta, origin="other"),
+        ]
 
         with pytest.raises(RitualDefinitionError) as raised:
-            compendium.check()
+            Compendium(shelves)
 
         assert str(raised.value) == (
-            "2 name collisions:\n"
+            "name collisions:\n"
             "  ritual 'alpha' — declared in both local and other\n"
             "  ritual 'beta' — declared in both local and other"
         )
 
     @staticmethod
-    def test_no_collision_checks_clean():
-        compendium = Compendium()
-        compendium.register(alpha)
+    def test_a_rival_reached_twice_is_one_collision():
+        shelves = [
+            _shelf(alpha, origin="local"),
+            _shelf(same_name_as_alpha, origin="other.a"),
+            _shelf(same_name_as_alpha, origin="other.b"),
+        ]
 
-        compendium.check()
+        with pytest.raises(RitualDefinitionError) as raised:
+            Compendium(shelves)
 
-        assert compendium.names() == ["alpha"]
+        assert str(raised.value) == (
+            "name collisions:\n  ritual 'alpha' — declared in both local and other.a"
+        )
 
     # A submodule that reaches a sibling's ritual imports it, so the sweep of a
     # package hands the same object over once per module that names it.
     @staticmethod
     def test_the_same_ritual_reached_twice_registers_once():
-        compendium = Compendium()
-        compendium.register(alpha, origin="rituals.first")
-        compendium.register(alpha, origin="rituals.second")
+        compendium = Compendium(
+            [
+                _shelf(alpha, origin="rituals.first"),
+                _shelf(alpha, origin="rituals.second"),
+            ]
+        )
 
         assert compendium.names() == ["alpha"]
 
     @staticmethod
+    def test_a_copy_of_one_ritual_is_the_same_ritual():
+        compendium = Compendium([_shelf(alpha), _shelf(replace(alpha, max_steps=1))])
+
+        assert compendium.ritual("alpha") is alpha
+
+    @staticmethod
     def test_missing_ritual_raises():
-        compendium = Compendium()
+        compendium = Compendium([])
 
         with pytest.raises(RitualDefinitionError):
             compendium.ritual("nope")
@@ -135,19 +149,17 @@ class TestCompendium:
 class TestNamespaces:
     @staticmethod
     def test_one_name_in_two_namespaces_does_not_collide():
-        compendium = Compendium()
-        compendium.register(alpha)
-        compendium.register(same_name_as_alpha, namespace="tome")
-
-        compendium.check()
+        compendium = Compendium(
+            [_shelf(alpha), _shelf(same_name_as_alpha, namespace="tome")]
+        )
 
         assert compendium.names() == ["alpha", "tome:alpha"]
 
     @staticmethod
     def test_a_qualified_name_resolves_and_carries_its_namespace():
-        compendium = Compendium()
-        compendium.register(alpha)
-        compendium.register(same_name_as_alpha, namespace="tome")
+        compendium = Compendium(
+            [_shelf(alpha), _shelf(same_name_as_alpha, namespace="tome")]
+        )
 
         found = compendium.ritual("tome:alpha")
 
@@ -156,25 +168,26 @@ class TestNamespaces:
 
     @staticmethod
     def test_a_bare_name_prefers_the_projects_own():
-        compendium = Compendium()
-        compendium.register(same_name_as_alpha, namespace="tome")
-        compendium.register(alpha)
+        compendium = Compendium(
+            [_shelf(same_name_as_alpha, namespace="tome"), _shelf(alpha)]
+        )
 
         assert compendium.ritual("alpha") is alpha
 
     @staticmethod
     def test_a_bare_name_offered_by_one_tome_resolves_to_it():
-        compendium = Compendium()
-        compendium.register(beta)
-        compendium.register(alpha, namespace="tome")
+        compendium = Compendium([_shelf(beta), _shelf(alpha, namespace="tome")])
 
         assert compendium.ritual("alpha").name == "tome:alpha"
 
     @staticmethod
     def test_a_bare_name_offered_by_two_tomes_names_both():
-        compendium = Compendium()
-        compendium.register(alpha, namespace="acme")
-        compendium.register(same_name_as_alpha, namespace="cabinet")
+        compendium = Compendium(
+            [
+                _shelf(alpha, namespace="acme"),
+                _shelf(same_name_as_alpha, namespace="cabinet"),
+            ]
+        )
 
         with pytest.raises(RitualDefinitionError) as raised:
             compendium.ritual("alpha")
@@ -185,19 +198,23 @@ class TestNamespaces:
 
     @staticmethod
     def test_a_collision_within_a_tome_is_named_qualified():
-        compendium = Compendium()
-        compendium.register(alpha, namespace="tome", origin="tome.a")
-        compendium.register(same_name_as_alpha, namespace="tome", origin="tome.b")
+        shelves = [
+            _shelf(alpha, namespace="tome", origin="tome.a"),
+            _shelf(same_name_as_alpha, namespace="tome", origin="tome.b"),
+        ]
 
         with pytest.raises(RitualDefinitionError, match="'tome:alpha'"):
-            compendium.check()
+            Compendium(shelves)
 
     @staticmethod
     def test_the_projects_own_list_first_then_each_tome():
-        compendium = Compendium()
-        compendium.register(alpha, namespace="zeta")
-        compendium.register(beta, namespace="acme")
-        compendium.register(same_name_as_alpha)
+        compendium = Compendium(
+            [
+                _shelf(alpha, namespace="zeta"),
+                _shelf(beta, namespace="acme"),
+                _shelf(same_name_as_alpha),
+            ]
+        )
 
         assert compendium.names() == ["alpha", "acme:beta", "zeta:alpha"]
 

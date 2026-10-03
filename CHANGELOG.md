@@ -16,10 +16,11 @@ when.
 - **A tome's rituals carry its name.** Rituals loaded through `modules` are
   `<tome>:<name>`, the tome being the module's top-level package or the key
   of a table (`modules = { cab = "cabinet.rituals" }`); the project's own stay
-  bare. A bare name resolves to the project's own ritual, else to the one tome
-  offering it, else fails naming every candidate. `rituals list` prints the
-  project's first, then each tome's, and the cast's hello carries the
-  qualified name. This repo's `branch_review` is `review` again.
+  bare. A tome's name must be an identifier, and `@ritual` refuses a name
+  containing `:`. A bare name resolves to the project's own ritual, else to
+  the one tome offering it, else fails naming every candidate. `rituals list`
+  prints the project's first, then each tome's, and the cast's hello carries
+  the qualified name. This repo's `branch_review` is `review` again.
   ([#128](https://github.com/fancysnake/vekna/issues/128))
 - **Every ritual collision in one message.** The loader registers every source
   before reporting, so a library overlapping on two names fails one cast with
