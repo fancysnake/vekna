@@ -11,6 +11,12 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`ClaudeOptions(disallowed_tools=[...])`** removes the listed tools and
+  keeps every other tool. `allowed_tools` adds only the tools it names. Pass one
+  list or the other: setting both raises `ClaudeOptionsError`.
+
 ## [0.10.0] - 2026-09-28
 
 ### Changed

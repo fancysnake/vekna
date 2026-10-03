@@ -191,6 +191,7 @@ def _agent_options(
         permission_mode=permission_mode,
         can_use_tool=_permission_handler(gate) if gate is not None else None,
         allowed_tools=allowed,
+        disallowed_tools=knobs.disallowed_tools or [],
         mcp_servers=servers,
         max_turns=knobs.max_turns,
         effort=knobs.effort,
