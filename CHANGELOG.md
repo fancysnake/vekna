@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-03
+
 ### Changed
 
 - **A tome's rituals carry its name.** Rituals loaded through `modules` are
@@ -22,9 +24,8 @@ when.
   prints the project's first, then each tome's, and the cast's hello carries
   the qualified name. This repo's `branch_review` is `review` again.
   ([#128](https://github.com/fancysnake/vekna/issues/128))
-- **Every ritual collision in one message.** The loader registers every source
-  before reporting, so a library overlapping on two names fails one cast with
-  both named. ([#129](https://github.com/fancysnake/vekna/issues/129))
+- **Every ritual collision in one message.** A library overlapping on two names
+  fails one cast with both named. ([#129](https://github.com/fancysnake/vekna/issues/129))
 
 ## [0.11.0] - 2026-10-03
 
@@ -741,7 +742,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.11.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/fancysnake/vekna/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fancysnake/vekna/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fancysnake/vekna/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/fancysnake/vekna/compare/v0.9.1...v0.9.2
