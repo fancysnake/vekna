@@ -209,6 +209,31 @@ class TestTheList:
         assert "aborted" in row
         assert "vekna cast --continue fix_demo" in row
 
+    @staticmethod
+    def test_a_cast_past_a_failed_step_is_recovering_and_says_why():
+        view = _running("fix_demo", ago=60)
+        _step(view, "attempt", ago=50, status="error")
+        view.rites["attempt"].error = "3 tests still red"
+        _step(view, "triage", ago=40)
+
+        painted = paint(casts=[view], focus=None, now=_WHEN)
+        drilled = paint(casts=[view], focus="fix_demo", now=_WHEN)
+
+        assert "recovering" in _row(painted, "fix_demo")
+        assert "1 recovering" in painted
+        assert "✗ attempt  — 3 tests still red" in drilled
+
+    # A failure the cast did not route is a failed cast, not a recovering one.
+    @staticmethod
+    def test_a_cast_whose_last_step_ended_well_is_running():
+        view = _running("fix_demo", ago=60)
+        _step(view, "attempt", ago=50, status="error")
+        _step(view, "triage", ago=40, status="ok")
+
+        row = _row(paint(casts=[view], focus=None, now=_WHEN), "fix_demo")
+
+        assert "running" in row
+
     # The clock is the cast's, not the reader's: a cast that ended an hour ago
     # ended after however long it took, and counts no further.
     @staticmethod

@@ -11,6 +11,20 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **Failure as a transition.** A step that raises goes to the step taking
+  `Failure[P]`, `P` being the payload that entered it, carrying that payload,
+  the error, the rite and an `attempt` count. With no such step the cast ends
+  as before. `rituals show` draws the edge as `<step> (on failure)`.
+  ([#113](https://github.com/fancysnake/vekna/issues/113))
+- **`@step(max_visits=N)`** caps how often one cast enters a step.
+- **`vekna cast --unattended`** makes every `decide` raise
+  `UnattendedPromptError` naming the question, which a ritual can route.
+- **A failed rite says why.** The rite's end event carries the error; the
+  terminal prints it beside the step, and `vekna` lists a cast that recovered
+  from one as `recovering`.
+
 ## [0.12.0] - 2026-10-03
 
 ### Changed

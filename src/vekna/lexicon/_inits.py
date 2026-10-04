@@ -15,7 +15,7 @@ from vekna.wire import CastHello, WireMessage, default_socket_path
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
-from ._links.standalone import StandaloneRenderer
+from ._links.standalone import StandaloneRenderer, UnattendedChannel
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import check_exits, step_graph
@@ -37,8 +37,10 @@ _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
     "       vekna cast --continue <cast_id>\n"
+    "       vekna cast --unattended <ritual> ...  (refuse every decide)\n"
 )
 _RESUME_FLAG = "--resume"
+_UNATTENDED_FLAG = "--unattended"
 _CONFIG_ENV = "XDG_CONFIG_HOME"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
@@ -375,6 +377,7 @@ class _Plan(NamedTuple):
     # for a cast that is starting rather than carrying one on.
     ledger: Ledger | None = None
     resumed_from: str | None = None
+    unattended: bool = False
 
 
 # The record holds the components as the CLI already validated them once, so
@@ -454,7 +457,7 @@ async def _cast(
             ritual=plan.ritual,
             components=plan.components,
             grimoire=grimoire,
-            channel=channel,
+            channel=UnattendedChannel() if plan.unattended else channel,
             ledger=plan.ledger,
         )
     except FocusMissingError as error:
@@ -521,6 +524,10 @@ async def _run(plan: _Plan) -> int:
 
 
 async def _drive(argv: list[str]) -> int:
+    # Leading only, as the outer command hands it: past the ritual's name a
+    # flag is a component's.
+    if unattended := argv[:1] == [_UNATTENDED_FLAG]:
+        argv = argv[1:]
     if argv and argv[0] in _HELP_FLAGS:
         sys.stdout.write(_help_text(Path.cwd()))
         return 0
@@ -529,7 +536,7 @@ async def _drive(argv: list[str]) -> int:
         return 2
     _load_folios()
     try:
-        plan = _resolve_cast(argv)
+        plan = _resolve_cast(argv)._replace(unattended=unattended)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2

@@ -113,6 +113,29 @@ _BOOM = textwrap.dedent("""
     """)
 
 
+_ASKER = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.flow import decide
+    from vekna.lexicon import Done, NoComponents, ritual, step
+
+
+    class Ask(BaseModel):
+        pass
+
+
+    @step
+    async def ask(_: Ask) -> Done[None]:
+        await decide("merge #74 now?")
+        return Done(None)
+
+
+    @ritual("asker")
+    async def asker(_: NoComponents) -> Ask:
+        return Ask()
+    """)
+
+
 class TestCast:
     @staticmethod
     def test_runs_ritual_end_to_end(tmp_path, monkeypatch, capsys):
@@ -414,3 +437,25 @@ class TestCastNotify:
         main(["countdown", "--start", "1"])
 
         assert "\x1b]777" not in capsys.readouterr().out
+
+
+class TestUnattended:
+    @staticmethod
+    def test_a_decide_fails_at_the_boundary_naming_its_prompt(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_ASKER)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["--unattended", "asker"])
+
+        assert exit_code == _CAST_FAILED_EXIT
+        err = capsys.readouterr().err
+        assert "cast failed: unattended cast refused to ask: merge #74 now?" in err
+
+    @staticmethod
+    def test_the_flag_alone_is_a_usage_error(capsys):
+        exit_code = main(["--unattended"])
+
+        assert exit_code == _USAGE_EXIT
+        assert "vekna cast --unattended" in capsys.readouterr().err

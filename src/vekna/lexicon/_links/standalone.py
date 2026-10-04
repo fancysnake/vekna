@@ -5,12 +5,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, TextIO
 
+from typing_extensions import override
+
 from vekna.lexicon._pacts import (
+    Channel,
     RiteBegan,
     RiteEnded,
     RiteEvent,
     RiteStreamed,
     StandalonePromptError,
+    UnattendedPromptError,
 )
 
 _PROBE_TIMEOUT_SECONDS = 0.5
@@ -79,6 +83,7 @@ class _Rite:
     depth: int
     parent_id: str | None
     summary: str | None = None
+    step: bool = False
     # Where this rite's lines go: None to print live, otherwise the rite whose
     # buffer collects them until it ends.
     sink: str | None = None
@@ -157,6 +162,7 @@ class StandaloneRenderer:
             depth=self._depth(event.parent_id),
             parent_id=event.parent_id,
             summary=event.summary,
+            step=event.category == "step",
         )
         self._rites[event.rite_id] = rite
         self._open.add(event.rite_id)
@@ -186,6 +192,11 @@ class StandaloneRenderer:
             self._say(f"{mark} {event.rite_id}\n")
             return
         line = self._headline(mark, rite)
+        # On the step alone: a medium that raised brings its step down with the
+        # same message, and a cast that recovers prints no `cast failed:` line,
+        # so the step is where it is said, once.
+        if rite.step and event.error is not None:
+            line = f"{line}  — {event.error}"
         if rite.sink != event.rite_id:
             self._emit(rite.sink, line)
             return
@@ -250,3 +261,16 @@ class StandaloneRenderer:
     async def _free_text(self, prompt: str) -> str:
         self._say(prompt + "\n")
         return await self._readline()
+
+
+# What stands in for the terminal when nobody is at it: every question is
+# refused where it is asked, naming it, rather than dying at the third empty
+# line of a stdin nobody writes to.
+class UnattendedChannel(Channel):
+    @override
+    async def decide(
+        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+    ) -> str:
+        del options, free
+        msg = f"unattended cast refused to ask: {prompt}"
+        raise UnattendedPromptError(msg)

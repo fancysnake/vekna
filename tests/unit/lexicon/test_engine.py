@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from tests.conftest import entry
 from vekna.lexicon import (
     Done,
+    Failure,
     FocusMissingError,
     NoComponents,
     RitualBoundaryError,
@@ -15,12 +16,13 @@ from vekna.lexicon import (
     RitualError,
     StepBoundaryError,
     StepBudgetExceededError,
+    UnattendedPromptError,
     current_rite,
     medium,
     ritual,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, UnattendedChannel
 from vekna.lexicon._mills.engine import (
     FocusSlot,
     Grimoire,
@@ -279,7 +281,9 @@ class TestFailedRiteIsJournaled:
     def test_a_step_that_raises_still_closes_its_rite(cls):
         finished = cls._finished(cls._cast(detonate))
 
-        assert [(e.rite_id, e.status) for e in finished] == [("r1", "error")]
+        assert [(e.rite_id, e.status, e.error) for e in finished] == [
+            ("r1", "error", "BoomError")
+        ]
 
     @classmethod
     def test_a_medium_that_raises_is_not_journaled_as_success(cls):
@@ -306,7 +310,197 @@ class TestFailedRiteIsJournaled:
                 )
             )
 
-        assert "✗ explode" in out.getvalue()
+        assert "✗ explode  — BoomError" in out.getvalue()
+
+
+class Attempt(BaseModel):
+    left: int
+
+
+class Report(BaseModel):
+    attempts: int
+    message: str
+
+
+@step
+def attempt(state: Attempt) -> Done[Attempt]:
+    if state.left:
+        msg = f"{state.left} left"
+        raise BoomError(msg)
+    return Done(state)
+
+
+_GIVE_UP = 3
+
+
+@step
+def triage(failure: Failure[Attempt]) -> Attempt | Done[Report]:
+    if failure.attempt >= _GIVE_UP:
+        return Done(Report(attempts=failure.attempt, message=failure.error.message))
+    return Attempt(left=failure.payload.left - 1)
+
+
+@ritual("retry")
+def retry(components: Attempt) -> Attempt:
+    return components
+
+
+class Probe(BaseModel):
+    tag: str
+
+
+@step
+def probe(_: Probe) -> Done[None]:
+    msg = "probe broke"
+    raise BoomError(msg)
+
+
+@step
+def caught(failure: Failure[Probe]) -> Done[Failure[Probe]]:
+    return Done(failure)
+
+
+class Fragile(BaseModel):
+    pass
+
+
+@step
+def fragile(_: Fragile) -> Done[None]:
+    msg = "first"
+    raise BoomError(msg)
+
+
+@step
+def mend(_: Failure[Fragile]) -> Done[None]:
+    msg = "second"
+    raise BoomError(msg)
+
+
+class Stubborn(BaseModel):
+    pass
+
+
+_STUBBORN_VISITS = 3
+
+
+@step(max_visits=_STUBBORN_VISITS)
+def stubborn(_: Stubborn) -> Done[None]:
+    raise BoomError
+
+
+@step
+def again(failure: Failure[Stubborn]) -> Stubborn:
+    return failure.payload
+
+
+class Ask(BaseModel):
+    pass
+
+
+@step
+async def ask(_: Ask) -> Done[None]:
+    await current_rite().channel.decide(prompt="merge #74 now?")
+    return Done(None)
+
+
+@step
+def unasked(failure: Failure[Ask]) -> Done[Report]:
+    return Done(Report(attempts=failure.attempt, message=failure.error.message))
+
+
+def _cast(the_step_payload: BaseModel, *, channel=None) -> tuple[object, Grimoire]:
+    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    the_ritual = entry(payload=the_step_payload)
+    result = asyncio.run(
+        run_cast(
+            ritual=the_ritual,
+            components=the_ritual.components(),
+            grimoire=grimoire,
+            channel=channel or _channel(),
+        )
+    )
+    return result, grimoire
+
+
+class TestFailureRouting:
+    @staticmethod
+    def test_a_raise_routes_to_the_step_taking_its_failure():
+        result, _ = _cast(Probe(tag="x"))
+
+        assert isinstance(result, Failure)
+        assert result.payload == Probe(tag="x")
+        assert (result.rite.rite_id, result.rite.step) == ("r1", "probe")
+        assert (result.error.type, result.error.message) == ("BoomError", "probe broke")
+        assert "probe broke" in result.error.traceback
+        assert result.attempt == 1
+
+    @staticmethod
+    def test_a_narrowed_retry_runs_the_step_again_until_it_holds():
+        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+
+        result = asyncio.run(
+            run_cast(
+                ritual=retry,
+                components=Attempt(left=2),
+                grimoire=grimoire,
+                channel=_channel(),
+            )
+        )
+
+        assert result == Attempt(left=0)
+        ended = [e for e in grimoire.events if isinstance(e, RiteEnded)]
+        assert [(e.status, e.error) for e in ended] == [
+            ("error", "2 left"),
+            ("ok", None),
+            ("error", "1 left"),
+            ("ok", None),
+            ("ok", None),
+        ]
+
+    @staticmethod
+    def test_attempt_counts_every_failure_of_the_step_in_the_cast():
+        result = asyncio.run(
+            run_cast(
+                ritual=retry,
+                components=Attempt(left=9),
+                grimoire=Grimoire(cast_id="c1", clock=_fixed_clock),
+                channel=_channel(),
+            )
+        )
+
+        assert result == Report(attempts=_GIVE_UP, message="7 left")
+
+    # What entered `mend` was a `Failure[Fragile]`, which nothing takes the
+    # failure of, so its raise is the cast's.
+    @staticmethod
+    def test_a_recovery_step_that_raises_is_not_caught_by_itself():
+        with pytest.raises(BoomError, match="second"):
+            _cast(Fragile())
+
+    @staticmethod
+    def test_a_retry_that_never_converges_stops_on_max_visits():
+        with pytest.raises(
+            StepBudgetExceededError, match="'stubborn' exceeded max_visits=3"
+        ):
+            _cast(Stubborn())
+
+    @staticmethod
+    def test_a_refused_prompt_routes_like_any_failure():
+        result, _ = _cast(Ask(), channel=UnattendedChannel())
+
+        assert result == Report(
+            attempts=1, message="unattended cast refused to ask: merge #74 now?"
+        )
+
+    @staticmethod
+    def test_the_unattended_channel_names_the_prompt_it_refused():
+        with pytest.raises(UnattendedPromptError, match="merge #74 now\\?"):
+            asyncio.run(UnattendedChannel().decide(prompt="merge #74 now?"))
+
+    @staticmethod
+    def test_max_visits_below_one_is_refused():
+        with pytest.raises(RitualDefinitionError, match="at least 1, got 0"):
+            step(max_visits=0)
 
 
 class TestFocusSlot:

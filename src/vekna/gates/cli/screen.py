@@ -30,14 +30,15 @@ _WORD = {
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = ("running", "waiting", "done", "failed", "aborted")
+_TALLY = ("running", "waiting", "recovering", "done", "failed", "aborted")
+_STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
 _PROJECT = 10
 _NOW = 44
 _HEAD = (
     f"  #  {'cast':<{_ID}}  {'ritual':<{_RITUAL}}  {'project':<{_PROJECT}}"
-    f"  {'status':<7}  {'elapsed':>7}  steps  now"
+    f"  {'status':<{_STATUS}}  {'elapsed':>7}  steps  now"
 )
 _MINUTE = 60
 _HOUR = 3600
@@ -63,9 +64,24 @@ def _project(view: CastView) -> str:
 
 
 def _word(view: CastView) -> str:
-    if view.waiting and view.status == "running":
-        return "waiting"
+    if view.status == "running":
+        if view.waiting:
+            return "waiting"
+        if _recovering(view):
+            return "recovering"
     return _WORD[view.status]
+
+
+# Still running though its last finished step raised: a step took the failure
+# and the cast went on. Not a status of its own on the wire — the rites already
+# say it.
+def _recovering(view: CastView) -> bool:
+    finished = [
+        rite
+        for rite in view.rites.values()
+        if rite.started.category == "step" and rite.status != "running"
+    ]
+    return bool(finished) and finished[-1].status == "error"
 
 
 # Text a ritual wrote reaches a column — a prompt, a step's name — so every one
@@ -142,7 +158,7 @@ def _line(index: int, view: CastView, now: datetime) -> str:
     return (
         f" {index:>2}  {view.hello.cast_id[:_ID]:<{_ID}}"
         f"  {_fit(view.hello.ritual, _RITUAL)}  {_fit(_project(view), _PROJECT)}"
-        f"  {_word(view):<7}  {_elapsed(view, now):>7}"
+        f"  {_word(view):<{_STATUS}}  {_elapsed(view, now):>7}"
         f"  {_steps_done(view):>5}  {_fit(_now(view, now), _NOW)}".rstrip()
     )
 
@@ -196,7 +212,12 @@ def _rite_lines(view: CastView) -> list[str]:
         mark = (
             _MEDIUM if rite.started.category == "medium" else _RITE_GLYPH[rite.status]
         )
-        lines.append(f" {pad}{mark} {rite.started.name}")
+        said = (
+            f"  — {rite.error}"
+            if rite.error is not None and rite.started.category == "step"
+            else ""
+        )
+        lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":
             lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
     return lines

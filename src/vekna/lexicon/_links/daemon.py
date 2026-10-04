@@ -42,6 +42,7 @@ def to_wire(event: RiteEvent, *, cast_id: str) -> WireMessage:
         status=event.status,
         result=event.result,
         finished_at=event.finished_at,
+        error=event.error,
     )
 
 

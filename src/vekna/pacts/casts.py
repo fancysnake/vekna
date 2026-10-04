@@ -36,6 +36,7 @@ class RiteView:
     started: RiteStarted
     status: RiteStatus = "running"
     finished_at: datetime | None = None
+    error: str | None = None
     deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
 
 

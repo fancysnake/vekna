@@ -69,6 +69,15 @@ class TestEntry:
 
         assert not result.exit_code
 
+    # A ritual that asks nothing casts the same unattended.
+    @staticmethod
+    def test_an_unattended_cast_reaches_the_runtime():
+        result = CliRunner().invoke(
+            init_command(), ["cast", "--unattended", "countdown", "--start", "1"]
+        )
+
+        assert not result.exit_code
+
     @staticmethod
     def test_casting_a_ritual_that_does_not_exist_is_a_usage_error():
         result = CliRunner().invoke(init_command(), ["cast", "invented"])

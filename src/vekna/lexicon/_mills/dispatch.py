@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType
-from typing import ParamSpec, Protocol, TypeVar, cast
+from typing import ParamSpec, Protocol, TypeVar, cast, overload
 
 from pydantic import BaseModel
 
@@ -29,6 +29,8 @@ _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
 _PayloadT = TypeVar("_PayloadT", bound=BaseModel)
 _ComponentsT = TypeVar("_ComponentsT", bound=BaseModel)
+# The payload of a step `@step(...)` is applied to later, scoped to that call.
+_LaterT = TypeVar("_LaterT", bound=BaseModel)
 
 
 # What the author wrote, before the payload type is erased. Their own model as
@@ -126,7 +128,33 @@ async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
     return await outcome if isinstance(outcome, Awaitable) else outcome
 
 
-def step(func: _Written[_PayloadT]) -> Step:
+class _StepDecorator(Protocol):
+    def __call__(self, func: _Written[_PayloadT], /) -> Step: ...
+
+
+# Bare `@step`, or `@step(max_visits=N)` to cap how often one cast re-enters it
+# — a recovery loop that never converges ends there rather than on the
+# ritual's whole `max_steps`.
+@overload
+def step(func: _Written[_PayloadT], /) -> Step: ...
+@overload
+def step(*, max_visits: int) -> _StepDecorator: ...
+def step(
+    func: _Written[_PayloadT] | None = None, /, *, max_visits: int | None = None
+) -> Step | _StepDecorator:
+    if func is None:
+        if max_visits is not None and max_visits < 1:
+            msg = f"@step max_visits must be at least 1, got {max_visits}"
+            raise RitualDefinitionError(msg)
+
+        def wrap(written: _Written[_LaterT]) -> Step:
+            return _step(written, max_visits=max_visits)
+
+        return wrap
+    return _step(func, max_visits=None)
+
+
+def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
     name = func.__name__
     erased = cast("_Called", func)
     exits, ends = _exits(erased, decorator="step")
@@ -148,7 +176,14 @@ def step(func: _Written[_PayloadT]) -> Step:
             raise StepBoundaryError(msg)
         return await _settled(erased(payload))
 
-    the_step = Step(name=name, run=run, payloads=payloads, exits=exits, ends=ends)
+    the_step = Step(
+        name=name,
+        run=run,
+        payloads=payloads,
+        exits=exits,
+        ends=ends,
+        max_visits=max_visits,
+    )
     # A legacy step is reached by `goto`, never by class, and its payload class
     # may be shared — cabinet feeds one `Work` to fifteen steps.
     if not legacy:
