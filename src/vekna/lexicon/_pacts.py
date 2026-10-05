@@ -89,6 +89,10 @@ class RiteEnded:
     status: Literal["ok", "error"]
     result: JsonValue | None
     finished_at: datetime
+    # What a step raised. A cast that recovers carries on past it, so this is
+    # the one place the message is kept. A medium's is left to the step it
+    # brings down, which would only say it again.
+    error: str | None = None
 
 
 RiteEvent = RiteBegan | RiteStreamed | RiteEnded
@@ -239,6 +243,13 @@ class StandalonePromptError(RitualError):
     pass
 
 
+# A `decide` reached by a cast that promised to ask nothing. Raised inside the
+# step, so a ritual that would rather degrade than die routes it like any other
+# failure.
+class UnattendedPromptError(RitualError):
+    pass
+
+
 class FocusMissingError(RitualError):
     pass
 
@@ -279,6 +290,33 @@ class Step:
     payloads: tuple[type[BaseModel], ...]
     exits: tuple[type[BaseModel], ...] | None
     ends: bool
+    max_visits: int | None = None
+
+
+class ErrorInfo(BaseModel):
+    type: str
+    message: str
+    traceback: str
+
+
+class RiteRef(BaseModel):
+    rite_id: str
+    step: str
+
+
+_PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+
+
+# What a recovery step is handed. pydantic parametrises a generic into a class
+# of its own — `Failure[Attempt]` is one class however often it is spelt — so a
+# step taking it registers and routes like any payload, and the edge from the
+# step taking `Attempt` needs no name.
+class Failure(BaseModel, Generic[_PayloadT]):
+    error: ErrorInfo
+    rite: RiteRef
+    payload: _PayloadT
+    # How many times the failed step has failed in this cast, from 1.
+    attempt: int
 
 
 # ponytail: the pre-#103 transition, kept so cabinet 0.3.0 still casts. Delete

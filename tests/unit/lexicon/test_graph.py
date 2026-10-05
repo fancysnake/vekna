@@ -3,8 +3,15 @@ import asyncio
 import pytest
 from pydantic import BaseModel
 
-from vekna.lexicon import Done, NoComponents, RitualDefinitionError, ritual, step
-from vekna.lexicon._mills.graph import ENDS, START, step_graph
+from vekna.lexicon import (
+    Done,
+    Failure,
+    NoComponents,
+    RitualDefinitionError,
+    ritual,
+    step,
+)
+from vekna.lexicon._mills.graph import ENDS, ON_FAILURE, START, step_graph
 from vekna.lexicon._pacts import Ritual, Step, Transition
 
 
@@ -220,4 +227,25 @@ class TestStepGraph:
             (START, ["measure", "measure"]),
             ("measure", [ENDS]),
             ("measure", [ENDS]),
+        ]
+
+    # `triage` is named by no exit: the raise in `attempt` is its only way in,
+    # and a recovery path missing from the graph is one nobody reviews.
+    @staticmethod
+    def test_a_failure_edge_is_drawn_and_its_step_walked():
+        class Attempt(BaseModel):
+            pass
+
+        @step
+        def attempt(_: Attempt) -> Done[None]:
+            return Done(None)
+
+        @step
+        def triage(_: Failure[Attempt]) -> Attempt | Done[None]:
+            return Done(None)
+
+        assert step_graph(_hand_built_ritual(exits=(Attempt,))) == [
+            (START, ["attempt"]),
+            ("attempt", [ENDS, f"triage{ON_FAILURE}"]),
+            ("triage", ["attempt", ENDS]),
         ]

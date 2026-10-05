@@ -371,6 +371,31 @@ if result.exit_code:
 
 A step that shrugs off a red exit code is a bug.
 
+**A raise can be routed.** A step taking `Failure[P]` receives what raised in
+the step whose payload is `P` — `payload` (what entered), `error` (`type`,
+`message`, `traceback`), `rite`, `attempt` (failures of that step this cast,
+from 1). It is an ordinary step: it declares exits, retries by returning the
+narrowed payload, gives up with `Done`. No step takes it → the cast ends as
+before. Cap a retry loop with `@step(max_visits=N)`:
+
+```python
+@step(max_visits=4)
+async def fix(attempt: Attempt) -> Tests: ...
+
+
+@step
+def triage(failure: Failure[Attempt]) -> Attempt | Done[Report]:
+    if failure.attempt >= 3:
+        return Done(Report(fixed=False, reason=failure.error.message))
+    return failure.payload.narrowed()
+```
+
+Raise for a real failure and route it; never `try/except` inside a step to pick
+the next one. A ritual that fails partway still owes its report: route every
+ending into one final step that `emit_delta`s the summary. Under
+`vekna cast --unattended` a `decide` raises `UnattendedPromptError` — route it
+if the ritual can do without the answer.
+
 **Concurrency lives inside a step**, as plain `asyncio`. Steps never run
 concurrently.
 
@@ -523,12 +548,13 @@ all.
 | `StepBoundaryError` | a step received a payload of the wrong type (`trial.walk` with the wrong model), or a step returned a value no step takes |
 | `RitualBoundaryError` | `Done` handed a non-model, or components that are not the declared model |
 | `MediumBoundaryError` | a medium called with an argument it does not take — including `decide(options=[])`, an empty option list |
-| `StepBudgetExceededError` | `max_steps` exhausted — the ritual is not settling |
+| `StepBudgetExceededError` | `max_steps` or a step's `max_visits` exhausted — the ritual is not settling |
 | `FocusMissingError` | no backend registered (`pip install claude-agent-sdk` for `coding`) |
 | `CodingOptsError` | `CodingOpts` given an unknown field — did you mean `session`/`key` on `coding()`? |
 | `CodingSessionError` | `session` is not `Session.NEW`/`Session.CONTINUE`, or `key` is empty |
 | `CodingOutputError` | the agent's reply did not validate against `output=` |
 | `StandalonePromptError` | three invalid answers to a `decide` prompt, or stdin closed before one was given |
+| `UnattendedPromptError` | a `decide` reached in a cast run with `--unattended` |
 
 All descend from `RitualError`.
 
@@ -592,8 +618,6 @@ Then `mise run fullcheck`, green.
 
 Designed, **not built**. Do not write against any of it.
 
-- **`@step(max_visits=N)`** — `@step` is a bare decorator; the only engine bound
-  is `max_steps`.
 - **`@step(goes_to=[...])`** and declared edges — rejected: the return
   annotation already is the declaration (issue #103).
 - **`goto`/`done`** — deprecated, importable for one release so installed

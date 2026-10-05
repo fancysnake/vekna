@@ -186,6 +186,8 @@ class StandaloneRenderer:
             self._say(f"{mark} {event.rite_id}\n")
             return
         line = self._headline(mark, rite)
+        if event.error is not None:
+            line = f"{line}  — {event.error}"
         if rite.sink != event.rite_id:
             self._emit(rite.sink, line)
             return

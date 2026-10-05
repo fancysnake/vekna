@@ -53,6 +53,54 @@ both.
 
 `max_steps` bounds the trampoline. A ritual that loops forever stops with
 `StepBudgetExceededError` rather than running until you notice.
+`@step(max_visits=N)` caps how often one cast enters one step, which ends a
+retry loop sooner than the whole budget would.
+
+## When a step fails
+
+A step that raises ends the cast — unless some step takes `Failure[P]`, `P`
+being the class of the payload that entered the failed step. Then the cast
+goes there instead:
+
+```python
+@step(max_visits=4)
+async def fix(attempt: Attempt) -> Tests:
+    await coding(f"fix:\n{attempt.failures}")
+    return Tests(budget=attempt.budget)
+
+
+@step
+def triage(failure: Failure[Attempt]) -> Attempt | Done[Report]:
+    if failure.attempt >= 3:
+        return Done(Report(fixed=False, reason=failure.error.message))
+    return failure.payload.narrowed()
+```
+
+`Failure` carries the `payload` that entered, the `error` (type, message,
+traceback), the `rite` that raised, and `attempt` — how many times this step
+has failed in this cast. Recovery is an ordinary step: it declares its exits,
+counts against `max_steps`, and a raise inside it goes to whichever step takes
+`Failure[Failure[Attempt]]`, or ends the cast. A step never catches its own
+failure.
+
+`rituals show` draws the edge as `triage (on failure)`. A step whose payload is
+a union fails into `Failure[A]` or `Failure[B]`, whichever entered.
+
+**A failed cast still owes its report.** Route every ending, the fatal ones
+included, through one final step that writes the summary with `emit_delta` and
+then returns `Done` or raises. Four items fixed before the agent died is a
+result; a bare `cast failed:` line throws it away.
+
+```python
+@step
+def report(failure: Failure[Item]) -> Done[Summary]:
+    emit_delta(f"stopped at {failure.payload.name}: {failure.error.message}")
+    return Done(Summary(fixed=failure.payload.done_so_far))
+```
+
+`vekna cast --unattended` turns every `decide` into an
+`UnattendedPromptError` raised inside the step, so a ritual meant for cron can
+route it like any other failure.
 
 ## Components become flags
 
@@ -127,6 +175,11 @@ you are explicit about it, and loading it twice is not an error. Two
 taking one payload class — both errors name the pair rather than letting
 whichever loaded first win, and every ritual collision is reported in one go.
 Two steps merely *named* alike are fine: a name routes nothing.
+
+A `modules` entry that fails to import is skipped with a warning on stderr; the
+rest still load. Asking for a ritual that is not there repeats why each skipped
+module failed, and `rituals list` exits 1 while any is skipped. A broken file,
+or a broken discovered `rituals.py`/`rituals/`, still stops the command.
 
 ## Tomes: rituals you install
 

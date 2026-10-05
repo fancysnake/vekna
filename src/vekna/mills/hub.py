@@ -193,6 +193,7 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
     else:
         rite.status = message.status
         rite.finished_at = message.finished_at
+        rite.error = message.error
     return None
 
 
@@ -211,6 +212,7 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
                 rite_id=rite.started.rite_id,
                 status=status,
                 finished_at=rite.finished_at,
+                error=rite.error,
             )
 
 

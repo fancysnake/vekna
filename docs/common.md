@@ -113,6 +113,10 @@ optionally caps re-entry of one step. Exceeding either raises
 safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
 a step decides for itself.
 
+**Failure is a transition.** A step that raises goes to the step taking
+`Failure[P]`, `P` the payload that entered it, or ends the cast if none does.
+The edge is read off the annotations like any other.
+
 **Inferable graph.** Because each step declares its input type and its exits,
 the workflow graph is read off the annotations: an edge `A → B` exists where
 `A`'s return annotation names `B`'s payload class, and `Done[...]` is a

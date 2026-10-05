@@ -64,6 +64,18 @@ vekna cast -p "explain what this module does"
 A one-shot cast on the `coding` medium, with no `rituals.py` needed. The
 shortest way to check the agent is reachable at all.
 
+### `vekna cast --unattended`
+
+```bash
+vekna cast --unattended nightly_triage
+```
+
+For a cast nobody watches. Every `decide` fails where it is asked with
+`UnattendedPromptError`, naming the question, instead of waiting on a terminal
+nobody reads. The error raises inside the step, so a ritual can route it to a
+recovery step (see [Rituals](rituals.md#when-a-step-fails)). Without the flag
+nothing changes.
+
 ### `vekna cast --help`
 
 Lists the rituals it can find from here, each with its options. If the source
@@ -149,11 +161,11 @@ cast to go and look at:
 ```text
 vekna — 1 running · 1 waiting · 1 done · 1 aborted
 
-  #  cast      ritual           project     status   elapsed  steps  now
-  1  7c01ffab  triage           ludamus     waiting    1m03s      1  merge #74 now, or wait?
-  2  3f9a2b11  merge_ready      vekna       running    4m12s      3  land · coding  1m02s
-  3  dd44ee55  ping             deep        done          7s      1
-  4  91bb0c4d  fix_demo         vekna       aborted   10m09s      7  vekna cast --continue 91bb0c4d
+  #  cast      ritual           project     status      elapsed  steps  now
+  1  7c01ffab  triage           ludamus     waiting       1m03s      1  merge #74 now, or wait?
+  2  3f9a2b11  merge_ready      vekna       running       4m12s      3  land · coding  1m02s
+  3  dd44ee55  ping             deep        done             7s      1
+  4  91bb0c4d  fix_demo         vekna       aborted      10m09s      7  vekna cast --continue 91bb0c4d
 ```
 
 `elapsed` is how long the cast has been going, `steps` how many it has
@@ -162,9 +174,11 @@ inside it, and how long that step has been running. A step that has not moved
 in ten minutes is the thing this view exists to show. Casts waiting on an
 answer sort to the top, then the ones still running, then the ones that ended.
 
-The status word is `running`, `waiting`, `done`, `failed` or `aborted` —
-aborted being a cast whose socket closed without a goodbye, which is the one
-worth carrying on with, so its row prints the command that does it.
+The status word is `running`, `waiting`, `recovering`, `done`, `failed` or
+`aborted`. Recovering is a running cast whose last step raised and went to a
+recovery step; drilling in shows the error beside the step. Aborted is a cast
+whose socket closed without a goodbye, which is the one worth carrying on
+with, so its row prints the command that does it.
 
 A number drills into a cast, `b` comes back, `q` quits. Drilling in is where
 the rite tree, the live output and the error a failed cast ended on are. A cast

@@ -11,6 +11,24 @@ when.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-05
+
+### Added
+
+- **Failure as a transition.** A step that raises goes to the step taking
+  `Failure[P]`, `P` being the payload that entered it, carrying that payload,
+  the error, the rite and an `attempt` count. With no such step the cast ends
+  as before. `rituals show` draws the edge as `<step> (on failure)`.
+  ([#113](https://github.com/fancysnake/vekna/issues/113))
+- **`@step(max_visits=N)`** caps how often one cast enters a step.
+- **`vekna cast --unattended`** makes every `decide` raise
+  `UnattendedPromptError` naming the question, which a ritual can route.
+- **A failed rite says why.** The rite's end event carries the error; the
+  terminal prints it beside the step, and `vekna` lists a cast that recovered
+  from one as `recovering`.
+- **`ritual-scribe`** teaches `Failure[P]` routing, `max_visits` and
+  `--unattended`.
+
 ### Fixed
 
 - **A module that does not import no longer takes every ritual down.** A
@@ -751,7 +769,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.12.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/fancysnake/vekna/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fancysnake/vekna/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fancysnake/vekna/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fancysnake/vekna/compare/v0.9.2...v0.10.0

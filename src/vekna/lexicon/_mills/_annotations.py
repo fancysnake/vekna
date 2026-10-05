@@ -5,7 +5,7 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import Done, Goto, RitualDefinitionError
+from vekna.lexicon._pacts import Done, Failure, Goto, RitualDefinitionError
 
 _NAMELESS = "value"
 
@@ -177,3 +177,12 @@ def _exits(
             )
             raise RitualDefinitionError(msg)
     return tuple(exits), ends
+
+
+# `Failure[...]` over a class read at runtime, which a subscript cannot spell:
+# the type checker wants a type there, not a value. pydantic hands back one
+# cached class per payload, so routing by it is exact.
+def _failure_of(payload: type[BaseModel]) -> type[Failure[BaseModel]]:
+    erased: Any = Failure
+    made: type[Failure[BaseModel]] = erased[payload]
+    return made

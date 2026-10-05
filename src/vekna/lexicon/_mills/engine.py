@@ -1,4 +1,6 @@
 import contextlib
+import traceback
+from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
@@ -8,16 +10,19 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
+from vekna.lexicon._mills._annotations import _failure_of
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
     Channel,
     CodingFocusProtocol,
     Done,
+    ErrorInfo,
     FocusMissingError,
     Goto,
     RiteBegan,
     RiteEnded,
     RiteEvent,
+    RiteRef,
     RiteStreamed,
     Ritual,
     RitualDefinitionError,
@@ -28,6 +33,7 @@ from vekna.lexicon._pacts import (
     StepBoundaryError,
     StepBudgetExceededError,
     StringOutput,
+    Transition,
 )
 
 _FocusT = TypeVar("_FocusT")
@@ -88,10 +94,15 @@ class Grimoire:
         *,
         status: Literal["ok", "error"] = "ok",
         result: JsonValue | None = None,
+        error: str | None = None,
     ) -> None:
         self._append(
             RiteEnded(
-                rite_id=rite_id, status=status, result=result, finished_at=self._clock()
+                rite_id=rite_id,
+                status=status,
+                result=result,
+                finished_at=self._clock(),
+                error=error,
             )
         )
 
@@ -400,13 +411,21 @@ def emit_delta(text: str) -> None:
     rite.grimoire.rite_delta(_current_rite_id(rite), text)
 
 
+# What a rite leaves its opener: the id it was journaled under, and what its
+# body raised, if it did.
+@dataclass
+class OpenedRite:
+    rite_id: str
+    error: ErrorInfo | None = None
+
+
 # The one place a rite is opened and closed. A rite whose body raises is
 # journaled with status="error" — steps and mediums alike, which is the whole
 # reason both call sites share this.
 @contextlib.asynccontextmanager
 async def _rite(
     *, name: str, category: Literal["step", "medium"], summary: str | None = None
-) -> AsyncIterator[None]:
+) -> AsyncIterator[OpenedRite]:
     parent = current_rite()
     rite_id = parent.grimoire.rite_started(
         name=name, parent_id=parent.parent_id, category=category, summary=summary
@@ -428,20 +447,43 @@ async def _rite(
     # work?" is the question a resumed cast is watched for.
     if replay is not None:
         parent.grimoire.rite_delta(rite_id, _REPLAYED)
+    opened = OpenedRite(rite_id)
     finished = False
     try:
-        yield
+        yield opened
         finished = True
+    except Exception as raised:
+        opened.error = ErrorInfo(
+            type=type(raised).__name__,
+            message=_said(raised),
+            traceback="".join(traceback.format_exception(raised)),
+        )
+        raise
     finally:
         _current_rite.reset(token)
+        # On the step alone: a medium that raised brings its step down with
+        # the same message, and a cast that recovers prints no `cast failed:`
+        # line, so the step is where it is said, once.
         parent.grimoire.rite_finished(
-            rite_id, status="ok" if finished else "error", result=outcome.result
+            rite_id,
+            status="ok" if finished else "error",
+            result=outcome.result,
+            error=(
+                opened.error.message
+                if opened.error is not None and category == "step"
+                else None
+            ),
         )
+
+
+# A bare `raise BoomError` has no message, and an empty error says nothing.
+def _said(error: BaseException) -> str:
+    return str(error) or type(error).__name__
 
 
 def medium_rite(
     name: str, *, summary: str | None = None
-) -> contextlib.AbstractAsyncContextManager[None]:
+) -> contextlib.AbstractAsyncContextManager[OpenedRite]:
     return _rite(name=name, category="medium", summary=summary)
 
 
@@ -463,6 +505,40 @@ def cast_context(
         _current_rite.reset(token)
 
 
+def recovery_for(payload: type[BaseModel]) -> Step | None:
+    return _steps.get(_failure_of(payload))
+
+
+# One step, run in its rite. A raise becomes the next transition when some step
+# takes `Failure[<what entered>]`, and leaves unchanged when none does — which
+# is what keeps a recovery step from catching its own raise: what entered it
+# was a `Failure`. Not `BaseException`: cancellation and Ctrl-C are not a step
+# failing. Only what the body raised is routed: a rite that never opened is
+# vekna's failure, not the step's.
+async def _taken(
+    the_step: Step, payload: BaseModel | None, *, failures: Counter[Step]
+) -> Transition:
+    opened: OpenedRite | None = None
+    try:
+        async with _rite(name=the_step.name, category="step") as opened:
+            return await the_step.run(payload)
+    except Exception:
+        if (
+            opened is not None
+            and opened.error is not None
+            and payload is not None
+            and recovery_for(type(payload)) is not None
+        ):
+            failures[the_step] += 1
+            return _failure_of(type(payload))(
+                error=opened.error,
+                rite=RiteRef(rite_id=opened.rite_id, step=the_step.name),
+                payload=payload,
+                attempt=failures[the_step],
+            )
+        raise
+
+
 async def run_cast(
     *,
     ritual: Ritual,
@@ -471,6 +547,8 @@ async def run_cast(
     channel: Channel,
     ledger: Ledger | None = None,
 ) -> BaseModel | None:
+    visits: Counter[Step] = Counter()
+    failures: Counter[Step] = Counter()
     with cast_context(grimoire=grimoire, channel=channel, ledger=ledger):
         transition = await ritual.run(components)
         for _ in range(ritual.max_steps):
@@ -481,8 +559,15 @@ async def run_cast(
                 the_step, payload = transition.target, transition.payload
             else:
                 the_step, payload = step_for(transition), transition
-            async with _rite(name=the_step.name, category="step"):
-                transition = await the_step.run(payload)
+            visits[the_step] += 1
+            if the_step.max_visits is not None and (
+                visits[the_step] > the_step.max_visits
+            ):
+                msg = (
+                    f"step {the_step.name!r} exceeded max_visits={the_step.max_visits}"
+                )
+                raise StepBudgetExceededError(msg)
+            transition = await _taken(the_step, payload, failures=failures)
     if isinstance(transition, Done):
         return transition.result
     # Leaving the loop still mid-flight means the budget ran out, not that the

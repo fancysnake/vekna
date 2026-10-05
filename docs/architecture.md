@@ -122,6 +122,7 @@ lexicon/
     ledger.py    # what an interrupted cast already did, for `--resume`
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
+    unattended.py  # UnattendedChannel, which refuses every decide
     daemon.py      # the wire client, the grimoire→wire projection, the
                    # channel that tees a prompt onto it
     resume.py      # reading a journal back for `--resume`

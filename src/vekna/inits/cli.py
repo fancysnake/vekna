@@ -43,6 +43,7 @@ _RUNTIME = "vekna.lexicon._inits"
 # the same binary.
 _CLI_MODULE = "vekna.inits.cli"
 _RESUME = "--resume"
+_UNATTENDED = "--unattended"
 _RECENT = 20
 # What the daemon keeps on disk, trimmed once at startup rather than on every
 # write: a cast is a directory of a few kilobytes, and this is about a machine
@@ -83,11 +84,22 @@ def _runtime() -> _Runtime:
     metavar="CAST_ID",
     help="Carry an interrupted cast on from where it stopped.",
 )
+@click.option(
+    "--unattended",
+    is_flag=True,
+    help="Refuse every decide: the cast is not watched, so a question is a hang.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
-def _cast(ritual_args: tuple[str, ...], continued: str | None = None) -> None:
+def _cast(
+    *,
+    ritual_args: tuple[str, ...],
+    continued: str | None = None,
+    unattended: bool = False,
+) -> None:
     if continued is not None:
-        raise SystemExit(_continue(continued))
-    raise SystemExit(_runtime().main(list(ritual_args)))
+        raise SystemExit(_continue(continued, unattended=unattended))
+    flags = [_UNATTENDED] if unattended else []
+    raise SystemExit(_runtime().main([*flags, *ritual_args]))
 
 
 @click.command("list", help="List rituals and the options each one takes.")
@@ -126,9 +138,10 @@ def _rituals() -> None:
     pass
 
 
-async def _spawn_cast(cast_id: str, *, cwd: str) -> int:
+async def _spawn_cast(cast_id: str, *, cwd: str, unattended: bool) -> int:
+    flags = [_UNATTENDED] if unattended else []
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", _CLI_MODULE, "cast", _RESUME, cast_id, cwd=cwd
+        sys.executable, "-m", _CLI_MODULE, "cast", *flags, _RESUME, cast_id, cwd=cwd
     )
     return await process.wait()
 
@@ -149,7 +162,7 @@ def _log() -> None:
 # that needs what is in it.
 # The child is handed `_RESUME`, which is the runtime's own flag and skips this
 # layer: reaching `--continue` again is how it would spawn itself forever.
-def _continue(cast_id: str) -> int:
+def _continue(cast_id: str, *, unattended: bool) -> int:
     journal = Journal(default_runs_root())
     # What `vekna log` and the aborted row print is the id cut short, so what
     # comes back here is a prefix rather than the directory's own name.
@@ -181,7 +194,9 @@ def _continue(cast_id: str) -> int:
         raise click.ClickException(message)
     # The child is handed the whole id: it reads the journal by directory name,
     # and a prefix is this layer's convenience, not the runtime's.
-    return asyncio.run(_spawn_cast(record.hello.cast_id, cwd=root))
+    return asyncio.run(
+        _spawn_cast(record.hello.cast_id, cwd=root, unattended=unattended)
+    )
 
 
 _rituals.add_command(_rituals_list)

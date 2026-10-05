@@ -73,6 +73,7 @@ class RiteFinished(BaseModel):
     status: Literal["ok", "error"]
     result: JsonValue | None = None
     finished_at: datetime
+    error: str | None = None
 
 
 # --- prompts ---

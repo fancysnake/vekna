@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 from vekna.lexicon._pacts import Ritual, RitualDefinitionError, Step
 
-from .engine import step_taking
+from .engine import recovery_for, step_taking
 
 # Labels for the two nodes that are not steps: where a cast enters, and where
 # it leaves.
@@ -11,6 +11,8 @@ ENDS = "(done)"
 # A legacy `-> Transition` step declares no exits; the graph says so rather
 # than guessing.
 UNKNOWN = "?"
+# Marks the step a raise routes to — the one taking `Failure[<what entered>]`.
+ON_FAILURE = " (on failure)"
 
 
 # An exit no step takes is the one mis-wire mypy cannot see — the annotation
@@ -38,27 +40,41 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
     seen: set[Step] = set()
 
     def walk(
-        *, label: str, exits: tuple[type[BaseModel], ...] | None, ends: bool
+        *,
+        label: str,
+        exits: tuple[type[BaseModel], ...] | None,
+        ends: bool,
+        payloads: tuple[type[BaseModel], ...],
     ) -> None:
-        if exits is None:
-            graph.append((label, [UNKNOWN]))
-            return
-        targets = [
+        forward = [
             _target(ritual=the_ritual.name, label=label, exit_type=exit_type)
-            for exit_type in exits
+            for exit_type in exits or ()
         ]
         # A union exit names one step several times; the graph draws it once,
         # in the order the annotation put them. Deduped by Step like `seen` is,
         # so two distinct steps of one name stay two edges.
-        names = list({target: target.name for target in targets}.values())
-        graph.append((label, [*names, ENDS] if ends else names))
-        for target in targets:
+        names = list({target: target.name for target in forward}.values())
+        if exits is None:
+            names.append(UNKNOWN)
+        elif ends:
+            names.append(ENDS)
+        # Failure edges are read off what enters, not what leaves, so a legacy
+        # step that declares no exits still has them.
+        recoveries = [found for payload in payloads if (found := recovery_for(payload))]
+        names += {found: f"{found.name}{ON_FAILURE}" for found in recoveries}.values()
+        graph.append((label, names))
+        for target in (*forward, *recoveries):
             if target in seen:
                 continue
             seen.add(target)
-            walk(label=target.name, exits=target.exits, ends=target.ends)
+            walk(
+                label=target.name,
+                exits=target.exits,
+                ends=target.ends,
+                payloads=target.payloads,
+            )
 
-    walk(label=START, exits=the_ritual.exits, ends=the_ritual.ends)
+    walk(label=START, exits=the_ritual.exits, ends=the_ritual.ends, payloads=())
     return graph
 
 
