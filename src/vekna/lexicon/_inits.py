@@ -3,6 +3,7 @@ import contextlib
 import importlib
 import os
 import sys
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
@@ -146,6 +147,40 @@ class _Library(NamedTuple):
     # the only place that knows whether there was a near miss, and it has been
     # left behind by the time anyone asks.
     when_empty: str
+    # Why each configured module that did not import is missing. A ritual it
+    # would have offered is unknown, and "no ritual named" alone hides why.
+    skipped: tuple[str, ...] = ()
+
+    def ritual(self, name: str) -> Ritual:
+        try:
+            return self.compendium.ritual(name)
+        except RitualDefinitionError as error:
+            if not self.skipped:
+                raise
+            msg = "\n".join(
+                [str(error), "not loaded:", *(f"  {why}" for why in self.skipped)]
+            )
+            raise RitualDefinitionError(msg) from error
+
+
+# A module is somebody else's package: one that is not installed here must not
+# take the project's own rituals down with it. Its sweep is all or nothing, so
+# skipping it leaves nothing half-shelved.
+def _load_tomes(
+    tomes: Iterable[Tome], *, root: Path
+) -> tuple[list[tuple[str, RitualSource]], list[str]]:
+    shelves: list[tuple[str, RitualSource]] = []
+    skipped: list[str] = []
+    for namespace, module in tomes:
+        try:
+            found = load_rituals_module(module, root=root)
+        except RitualDefinitionError as error:
+            skipped.append(str(error))
+            continue
+        shelves.extend((namespace, source) for source in found)
+    for message in skipped:
+        sys.stderr.write(f"warning: {message} — its rituals are skipped\n")
+    return shelves, skipped
 
 
 # `files` is additive, not a replacement for the source found by walking up:
@@ -157,7 +192,9 @@ class _Library(NamedTuple):
 def _build_library(cwd: Path) -> _Library:
     shelves: list[tuple[str, RitualSource]] = []
     seen_files: set[Path] = set()
-    seen_modules: set[Tome] = set()
+    # Ordered as well as unique: a tome's namespace is its own, so loading them
+    # after every file reorders nothing that can collide.
+    tomes: dict[Tome, None] = {}
 
     def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
@@ -188,17 +225,12 @@ def _build_library(cwd: Path) -> _Library:
             load_source(named)
         # Per name as well as module: a module the global config lists and a
         # project renames is reachable under both.
-        for tome in rituals.modules:
-            if tome not in seen_modules:
-                seen_modules.add(tome)
-                namespace, module = tome
-                shelves.extend(
-                    (namespace, found)
-                    for found in load_rituals_module(module, root=cwd)
-                )
+        tomes.update((tome, None) for tome in rituals.modules)
+    from_tomes, skipped = _load_tomes(tomes, root=cwd)
+    shelves.extend(from_tomes)
     # Every source loaded before any collision is reported, so one cast names
-    # them all. An import failure has already stopped the sweep: against a
-    # half-loaded library the collisions would be invented.
+    # them all. A file that fails to import has already stopped the sweep:
+    # against a half-loaded library the collisions would be invented.
     compendium = Compendium(shelves)
     # Every exit resolved before anything is cast: an annotation naming a class
     # no step takes is well-typed, so this check is the only thing that catches
@@ -208,8 +240,12 @@ def _build_library(cwd: Path) -> _Library:
     # A near miss is only ever found when discovery came back empty, so
     # anything seen here was named by a config — and a config that loaded is
     # the answer to where the rituals were meant to come from.
-    loaded = bool(seen_files or seen_modules)
-    return _Library(compendium, _no_rituals(None if loaded else discovered.near_miss))
+    loaded = bool(seen_files) or len(skipped) < len(tomes)
+    return _Library(
+        compendium,
+        _no_rituals(None if loaded else discovered.near_miss),
+        tuple(skipped),
+    )
 
 
 def _component_options(ritual: Ritual) -> str:
@@ -284,9 +320,9 @@ def _show_text(the_ritual: Ritual) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _show(compendium: Compendium, name: str) -> int:
+def _show(library: _Library, name: str) -> int:
     try:
-        the_ritual = compendium.ritual(name)
+        the_ritual = library.ritual(name)
     except RitualDefinitionError as error:
         sys.stderr.write(f"{error}\n")
         return 2
@@ -306,13 +342,15 @@ def rituals_list() -> int:
     if (library := _library_or_usage()) is None:
         return 2
     sys.stdout.write(_list_text(library))
-    return 0
+    # The listing is all a check in CI has to go on, and a skipped module has
+    # made it shorter without saying so on stdout.
+    return 1 if library.skipped else 0
 
 
 def rituals_show(name: str) -> int:
     if (library := _library_or_usage()) is None:
         return 2
-    return _show(library.compendium, name)
+    return _show(library, name)
 
 
 def _prompt_ritual(prompt: str) -> Ritual:
@@ -383,7 +421,7 @@ class _Plan(NamedTuple):
 def _resume(cast_id: str) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
-    the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
+    the_ritual = _build_library(Path.cwd()).ritual(hello.ritual)
     return _Plan(
         ritual=the_ritual,
         components=the_ritual.components.model_validate(hello.components),
@@ -405,7 +443,7 @@ def _resolve_cast(argv: list[str]) -> _Plan:
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
         return _resume(wanted[0])
-    the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
+    the_ritual = _build_library(Path.cwd()).ritual(name)
     return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
 
 

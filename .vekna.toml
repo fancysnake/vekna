@@ -9,9 +9,8 @@ files = ["src/rituals"]
 # The cabinet facades this repo casts, named one by one rather than as the whole
 # package, which also carries a `review` whose ritual name and `gates` step
 # collide with this repo's own. Importing a facade imports the package
-# `__init__`, so cabinet's services are still bound. A module named here and not
-# installed takes every ritual down with it, this repo's included — vekna's bug,
-# not this file's.
+# `__init__`, so cabinet's services are still bound. One not installed is skipped
+# with a warning; this repo's own rituals still load.
 modules = [
     "cabinet.rituals.cover",
     "cabinet.rituals.labels",

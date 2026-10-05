@@ -660,6 +660,39 @@ class TestRitualSources:
         assert exit_code == 0
         assert capsys.readouterr().out.startswith("lib:ping\n")
 
+    @staticmethod
+    def test_a_module_that_does_not_import_is_skipped(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["nope.rituals"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "countdown" in captured.out
+        assert "ping\n" in captured.out
+        assert captured.err == (
+            "warning: nope.rituals failed to import: ModuleNotFoundError:"
+            " No module named 'nope' — its rituals are skipped\n"
+        )
+
+    @staticmethod
+    def test_a_ritual_from_a_skipped_module_says_why(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["nope.rituals"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("nope:review")
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "no ritual named 'nope:review'" in err
+        assert (
+            "not loaded:\n  nope.rituals failed to import: ModuleNotFoundError:"
+            " No module named 'nope'\n"
+        ) in err
+
 
 @pytest.mark.usefixtures("_home")
 class TestRitualsUsage:
