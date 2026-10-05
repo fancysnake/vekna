@@ -176,6 +176,11 @@ taking one payload class — both errors name the pair rather than letting
 whichever loaded first win, and every ritual collision is reported in one go.
 Two steps merely *named* alike are fine: a name routes nothing.
 
+A `modules` entry that fails to import is skipped with a warning on stderr; the
+rest still load. Asking for a ritual that is not there repeats why each skipped
+module failed, and `rituals list` exits 1 while any is skipped. A broken file,
+or a broken discovered `rituals.py`/`rituals/`, still stops the command.
+
 ## Tomes: rituals you install
 
 A **tome** is a ritual library published as a package. `modules` names something
