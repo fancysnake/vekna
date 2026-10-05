@@ -47,7 +47,9 @@ def _package_directory(module: ModuleType) -> Path | None:
 def _blamed(origin: str) -> Iterator[None]:
     try:
         yield
-    except Exception as error:
+    # A module-level argparse exits on import; that is a source that does not
+    # import, not a request to end the command.
+    except (Exception, SystemExit) as error:
         msg = f"{origin} failed to import: {error.__class__.__name__}: {error}"
         raise RitualDefinitionError(msg) from error
 
