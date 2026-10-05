@@ -660,6 +660,78 @@ class TestRitualSources:
         assert exit_code == 0
         assert capsys.readouterr().out.startswith("lib:ping\n")
 
+    @staticmethod
+    def test_a_module_that_does_not_import_is_skipped(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["nope.rituals"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "countdown" in captured.out
+        assert "ping\n" in captured.out
+        assert captured.err == (
+            "warning: nope.rituals failed to import: ModuleNotFoundError:"
+            " No module named 'nope' — its rituals are skipped\n"
+        )
+
+    @staticmethod
+    def test_a_ritual_from_a_skipped_module_says_why(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["nope.rituals"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("nope:review")
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            "warning: nope.rituals failed to import: ModuleNotFoundError:"
+            " No module named 'nope' — its rituals are skipped\n"
+            "no ritual named 'nope:review' — known rituals: countdown, ping\n"
+        )
+
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_a_skipped_module_leaves_its_sibling_loaded(tmp_path, monkeypatch, capsys):
+        (tmp_path / ".vekna.toml").write_text(
+            f'[rituals]\nmodules = ["nope.rituals", "{_SHARED}"]\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        list_code = rituals_list()
+        listed = capsys.readouterr().out
+        show_code = rituals_show(f"{_SHARED}:ping")
+
+        assert list_code == 1
+        assert [line.split()[0] for line in listed.splitlines()] == [
+            f"{_SHARED}:countdown",
+            f"{_SHARED}:ping",
+        ]
+        assert show_code == 0
+        assert capsys.readouterr().out.startswith(f"{_SHARED}:ping\n")
+
+    @staticmethod
+    def test_a_module_that_exits_on_import_is_skipped(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / "exits_on_import.py").write_text("raise SystemExit(2)\n")
+        (tmp_path / ".vekna.toml").write_text(
+            '[rituals]\nmodules = ["exits_on_import"]\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "ping\n" in captured.out
+        assert captured.err == (
+            "warning: exits_on_import failed to import: SystemExit: 2"
+            " — its rituals are skipped\n"
+        )
+
 
 @pytest.mark.usefixtures("_home")
 class TestRitualsUsage:

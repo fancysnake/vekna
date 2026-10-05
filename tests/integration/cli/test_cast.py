@@ -352,6 +352,20 @@ class TestCastConfig:
         assert main(["ping"]) == 0
 
     @staticmethod
+    def test_a_module_that_does_not_import_does_not_stop_the_cast(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nmodules = ["nope.rituals"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["countdown", "--start", "1"])
+
+        assert exit_code == 0
+        assert "warning: nope.rituals failed to import" in capsys.readouterr().err
+
+    @staticmethod
     def test_a_rituals_key_that_is_not_a_table_stops_the_cast(
         tmp_path, monkeypatch, capsys
     ):

@@ -25,6 +25,15 @@ when.
   terminal prints it beside the step, and `vekna` lists a cast that recovered
   from one as `recovering`.
 
+### Fixed
+
+- **A module that does not import no longer takes every ritual down.** A
+  `[rituals] modules` entry that fails to import is skipped with a warning on
+  stderr, and the rest of the library loads. Asking for a ritual that is not
+  there repeats why each skipped module failed, and `rituals list` exits 1
+  while any module is skipped. Files and the discovered source still stop the
+  command. ([#131](https://github.com/fancysnake/vekna/issues/131))
+
 ## [0.12.0] - 2026-10-03
 
 ### Changed

@@ -15,12 +15,27 @@ _ROOT = Path(__file__).resolve().parents[3]
 _EXPECTED = ("review", "cover_diff", "merge_ready", "triage")
 
 
-@pytest.fixture
-def _at_root(monkeypatch) -> None:
+def _stand_at_root(monkeypatch: pytest.MonkeyPatch) -> None:
     # HOME too: _config_files reads ~/.config/vekna/config.toml, and a real one
     # would add rituals this test did not put there.
     monkeypatch.setenv("HOME", str(_ROOT / "does-not-exist"))
     monkeypatch.chdir(_ROOT)
+
+
+# A test's step scope keeps only the steps registered before it opened, and the
+# project's modules import once per process: imported inside the first test,
+# their steps are forgotten with it and never declared again. Module scope sets
+# up before any test's scope opens, as a suite importing them at collection does.
+@pytest.fixture(scope="module", autouse=True)
+def _rituals_imported() -> None:
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        _stand_at_root(monkeypatch)
+        rituals_list()
+
+
+@pytest.fixture
+def _at_root(monkeypatch) -> None:
+    _stand_at_root(monkeypatch)
 
 
 @pytest.mark.usefixtures("_at_root")
