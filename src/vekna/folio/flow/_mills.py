@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+import asyncio
+from collections.abc import Awaitable, Sequence
 from typing import Literal, TypeVar, overload
 
 from pydantic import JsonValue
@@ -77,3 +78,38 @@ async def decide(
     if options is None and not free:
         return answer == "yes"
     return answer
+
+
+_WonT = TypeVar("_WonT")
+
+
+# First to return wins; the rest are cancelled and awaited, so each loser's
+# medium has reaped what it started — and its rite reads cancelled — before
+# this returns. An entrant that raises is out of the race, not the end of it.
+async def race(*work: Awaitable[_WonT]) -> _WonT:
+    if not work:
+        msg = "race needs at least one entrant"
+        raise MediumBoundaryError(msg)
+    running: set[asyncio.Future[_WonT]] = {asyncio.ensure_future(w) for w in work}
+    failed: list[str] = []
+    try:
+        # Each round ends at least one entrant, so there are at most this many.
+        for _ in work:
+            if not running:
+                break
+            finished, running = await asyncio.wait(
+                running, return_when=asyncio.FIRST_COMPLETED
+            )
+            for entrant in finished:
+                if entrant.cancelled():
+                    failed.append("cancelled")
+                elif (error := entrant.exception()) is not None:
+                    failed.append(f"{type(error).__name__}: {error}")
+                else:
+                    return entrant.result()
+    finally:
+        for entrant in running:
+            entrant.cancel()
+        await asyncio.gather(*running, return_exceptions=True)
+    msg = f"every entrant in the race failed — {'; '.join(failed)}"
+    raise RitualError(msg)

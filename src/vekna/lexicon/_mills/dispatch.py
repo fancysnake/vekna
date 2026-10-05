@@ -23,7 +23,7 @@ from ._annotations import (
     _optional_payload,
     _payloads,
 )
-from .engine import NAMESPACE_SEPARATOR, medium_rite, register_step
+from .engine import NAMESPACE_SEPARATOR, bounded, medium_rite, register_step
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
@@ -134,27 +134,38 @@ class _StepDecorator(Protocol):
 
 # Bare `@step`, or `@step(max_visits=N)` to cap how often one cast re-enters it
 # — a recovery loop that never converges ends there rather than on the
-# ritual's whole `max_steps`.
+# ritual's whole `max_steps` — and `timeout=` seconds to bound one visit.
 @overload
 def step(func: _Written[_PayloadT], /) -> Step: ...
 @overload
-def step(*, max_visits: int) -> _StepDecorator: ...
 def step(
-    func: _Written[_PayloadT] | None = None, /, *, max_visits: int | None = None
+    *, max_visits: int | None = None, timeout: float | None = None
+) -> _StepDecorator: ...
+def step(
+    func: _Written[_PayloadT] | None = None,
+    /,
+    *,
+    max_visits: int | None = None,
+    timeout: float | None = None,
 ) -> Step | _StepDecorator:
     if func is None:
         if max_visits is not None and max_visits < 1:
             msg = f"@step max_visits must be at least 1, got {max_visits}"
             raise RitualDefinitionError(msg)
+        if timeout is not None and timeout <= 0:
+            msg = f"@step timeout must be positive, got {timeout}"
+            raise RitualDefinitionError(msg)
 
         def wrap(written: _Written[_LaterT]) -> Step:
-            return _step(written, max_visits=max_visits)
+            return _step(written, max_visits=max_visits, timeout=timeout)
 
         return wrap
-    return _step(func, max_visits=None)
+    return _step(func, max_visits=None, timeout=None)
 
 
-def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
+def _step(
+    func: _Written[_PayloadT], *, max_visits: int | None, timeout: float | None
+) -> Step:
     name = func.__name__
     erased = cast("_Called", func)
     exits, ends = _exits(erased, decorator="step")
@@ -174,7 +185,11 @@ def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
             expected = " | ".join(model.__name__ for model in payloads)
             msg = f"step {name!r} expected {expected}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
-        return await _settled(erased(payload))
+        if timeout is None:
+            return await _settled(erased(payload))
+        return await bounded(
+            _settled(erased(payload)), seconds=timeout, named=f"step {name!r}"
+        )
 
     the_step = Step(
         name=name,

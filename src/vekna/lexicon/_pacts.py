@@ -86,7 +86,7 @@ class RiteStreamed:
 @dataclass(frozen=True, kw_only=True)
 class RiteEnded:
     rite_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error", "cancelled"]
     result: JsonValue | None
     finished_at: datetime
     # What a step raised. A cast that recovers carries on past it, so this is
@@ -173,7 +173,12 @@ class FocusReply(BaseModel):
     cost_usd: float | None = None
 
 
+# `interruptible` is what a focus says about cancellation: one that cannot be
+# cut sets it False, and the medium says so at the call instead of the focus
+# taking the cancellation and carrying on regardless.
 class CodingFocusProtocol(Protocol):
+    interruptible: bool = True
+
     async def run(
         self,
         call: CodingCall,
@@ -204,6 +209,8 @@ class ShellReply(BaseModel):
 
 
 class ShellFocusProtocol(Protocol):
+    interruptible: bool = True
+
     async def run(
         self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply: ...
@@ -251,6 +258,12 @@ class UnattendedPromptError(RitualError):
 
 
 class FocusMissingError(RitualError):
+    pass
+
+
+# A `RitualError` raised inside the step, so a timeout is a `Failure` like any
+# other: routed where a step takes it, the cast's end where none does.
+class RiteTimeoutError(RitualError):
     pass
 
 

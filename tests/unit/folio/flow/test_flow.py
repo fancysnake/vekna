@@ -6,11 +6,11 @@ import pytest
 from pydantic import BaseModel, JsonValue
 
 from tests.conftest import entry, journalled
-from vekna.folio.flow import decide
-from vekna.lexicon import Done, MediumBoundaryError, RitualError, step
+from vekna.folio.flow import decide, race
+from vekna.lexicon import Done, MediumBoundaryError, RitualError, medium, step
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
-from vekna.lexicon._pacts import Ritual
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, Ritual
 
 
 def _fixed_clock() -> datetime:
@@ -188,3 +188,144 @@ class TestEmptyOptions:
                     channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
                 )
             )
+
+
+@medium
+async def runner(label: str, *, seconds: float, fails: bool = False) -> str:
+    await asyncio.sleep(seconds)
+    if fails:
+        msg = f"{label} fell"
+        raise RitualError(msg)
+    return label
+
+
+class Racing(BaseModel):
+    pass
+
+
+class Stumbling(BaseModel):
+    pass
+
+
+class Unentered(BaseModel):
+    pass
+
+
+class Falling(BaseModel):
+    pass
+
+
+@step
+async def racing(_: Racing) -> Done[Note]:
+    return Done(
+        Note(text=await race(runner("slow", seconds=60), runner("fast", seconds=0)))
+    )
+
+
+@step
+async def stumbling(_: Stumbling) -> Done[Note]:
+    return Done(
+        Note(
+            text=await race(
+                runner("early", seconds=0, fails=True), runner("late", seconds=0.01)
+            )
+        )
+    )
+
+
+@step
+async def falling(_: Falling) -> Done[Note]:
+    return Done(
+        Note(
+            text=await race(
+                runner("one", seconds=0, fails=True),
+                runner("two", seconds=0, fails=True),
+            )
+        )
+    )
+
+
+@step
+async def empty_race(_: Unentered) -> Done[Note]:
+    return Done(Note(text=await race()))
+
+
+def _raced(payload: BaseModel) -> tuple[BaseModel | None, Grimoire]:
+    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    the_ritual = entry(payload=payload)
+    result = asyncio.run(
+        run_cast(
+            ritual=the_ritual,
+            components=the_ritual.components(),
+            grimoire=grimoire,
+            channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+        )
+    )
+    return result, grimoire
+
+
+def _ended(grimoire: Grimoire) -> dict[str, str]:
+    summaries = {
+        event.rite_id: event.summary
+        for event in grimoire.events
+        if isinstance(event, RiteBegan) and event.category == "medium"
+    }
+    return {
+        str(summaries[event.rite_id]): event.status
+        for event in grimoire.events
+        if isinstance(event, RiteEnded) and event.rite_id in summaries
+    }
+
+
+class TestRace:
+    @staticmethod
+    def test_the_first_to_finish_wins_and_the_rest_are_cancelled():
+        result, grimoire = _raced(Racing())
+
+        assert result == Note(text="fast")
+        assert _ended(grimoire) == {"fast": "ok", "slow": "cancelled"}
+
+    @staticmethod
+    def test_an_entrant_that_raises_first_does_not_lose_the_race():
+        result, grimoire = _raced(Stumbling())
+
+        assert result == Note(text="late")
+        assert _ended(grimoire) == {"early": "error", "late": "ok"}
+
+    @staticmethod
+    def test_when_every_entrant_raises_the_race_fails_naming_each():
+        with pytest.raises(
+            RitualError,
+            match=(
+                r"every entrant in the race failed — "
+                r"RitualError: (one|two) fell; RitualError: (one|two) fell"
+            ),
+        ):
+            _raced(Falling())
+
+    @staticmethod
+    def test_a_race_with_no_entrants_is_refused():
+        with pytest.raises(MediumBoundaryError, match="at least one entrant"):
+            _raced(Unentered())
+
+
+async def _gives_up() -> str:
+    await asyncio.sleep(0)
+    raise asyncio.CancelledError
+
+
+class Abandoning(BaseModel):
+    pass
+
+
+@step
+async def abandoning(_: Abandoning) -> Done[Note]:
+    return Done(Note(text=await race(_gives_up(), runner("stayed", seconds=0.01))))
+
+
+class TestRaceAbandoned:
+    @staticmethod
+    def test_an_entrant_cancelled_on_its_own_drops_out():
+        result, _ = _raced(Abandoning())
+
+        assert result == Note(text="stayed")

@@ -16,6 +16,7 @@ from vekna.lexicon import (
     current_rite,
     emit_delta,
     medium,
+    note_interruptible,
     record_result,
     replayed,
 )
@@ -228,17 +229,17 @@ async def coding(
     # The focus is resolved on that branch and not before it, or a cast being
     # resumed on a machine with no agent SDK would be refused for work it had
     # already done.
-    prior = replayed()
-    reply = (
-        _recorded(prior)
-        if prior is not None
-        else await CODING_FOCUS.resolve().run(
+    if (prior := replayed()) is not None:
+        reply = _recorded(prior)
+    else:
+        focus = CODING_FOCUS.resolve()
+        note_interruptible(interruptible=focus.interruptible)
+        reply = await focus.run(
             call,
             on_delta=emit_delta,
             gate=_make_gate(context.channel, resolved.gate_tools),
             ask=_make_ask(context.channel),
         )
-    )
     _record(context=context, thread=thread, session_id=reply.session_id)
     # The declaration, not just the id: whether the author meant this rite to
     # carry context is the thing the journal cannot read off `session_id`.

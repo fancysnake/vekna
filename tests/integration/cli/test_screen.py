@@ -223,6 +223,15 @@ class TestTheList:
         assert "1 recovering" in painted
         assert "✗ attempt  — 3 tests still red" in drilled
 
+    @staticmethod
+    def test_a_cut_step_is_drawn_cancelled_not_failed():
+        view = _running("fix_demo", ago=60)
+        _step(view, "attempt", ago=50, status="cancelled")
+
+        drilled = paint(casts=[view], focus="fix_demo", now=_WHEN)
+
+        assert "⊘ attempt" in drilled
+
     # A failure the cast did not route is a failed cast, not a recovering one.
     @staticmethod
     def test_a_cast_whose_last_step_ended_well_is_running():

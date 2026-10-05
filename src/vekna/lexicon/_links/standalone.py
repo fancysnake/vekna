@@ -16,6 +16,7 @@ from vekna.lexicon._pacts import (
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
+_MARK = {"ok": "✓", "error": "✗", "cancelled": "⊘"}
 
 # What this renderer raises a desktop notification for. `decide` is any question
 # that stops for a human — the flow medium's own, coding's tool gate, the
@@ -99,6 +100,7 @@ class StandaloneRenderer:
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
+        self._abandoned: asyncio.Future[str] | None = None
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -116,8 +118,20 @@ class StandaloneRenderer:
     # there, an empty line being "\n". Raising here rather than in each prompt
     # keeps confirm, choose and free text from each inventing their own reading
     # of exhausted input.
+    # A thread cannot be cancelled, so a withdrawn question leaves its readline
+    # behind. Left alone it would swallow the answer to the next question; it
+    # is kept and awaited by that question instead. A line it already read
+    # answered nothing that is still open, and is dropped.
     async def _readline(self) -> str:
-        if not (line := await asyncio.to_thread(self._inp.readline)):
+        reading, self._abandoned = self._abandoned, None
+        if reading is None or reading.done():
+            reading = asyncio.ensure_future(asyncio.to_thread(self._inp.readline))
+        try:
+            line = await asyncio.shield(reading)
+        except asyncio.CancelledError:
+            self._abandoned = reading
+            raise
+        if not line:
             msg = "input ended before the question was answered"
             raise StandalonePromptError(msg)
         return line.strip()
@@ -181,7 +195,7 @@ class StandaloneRenderer:
 
     def _ended(self, event: RiteEnded) -> None:
         self._open.discard(event.rite_id)
-        mark = "✓" if event.status == "ok" else "✗"
+        mark = _MARK[event.status]
         if (rite := self._rites.get(event.rite_id)) is None:
             self._say(f"{mark} {event.rite_id}\n")
             return
@@ -210,6 +224,15 @@ class StandaloneRenderer:
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
         self.notify("decide", prompt)
+        try:
+            return await self._asked(prompt=prompt, options=options, free=free)
+        except asyncio.CancelledError:
+            self._say(f"\nwithdrawn: {prompt}\n")
+            raise
+
+    async def _asked(
+        self, *, prompt: str, options: Sequence[str] | None, free: bool
+    ) -> str:
         if options:
             if free:
                 return await self._suggest(prompt, options)

@@ -1,5 +1,7 @@
 import asyncio
 import codecs
+import os
+import signal
 from collections.abc import Callable
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -12,6 +14,7 @@ from vekna.lexicon import (
     ShellReply,
     emit_delta,
     medium,
+    note_interruptible,
     record_result,
     replayed,
 )
@@ -19,6 +22,9 @@ from vekna.lexicon import (
 from ._pacts import ShellOutputError, ShellResult
 
 _CHUNK = 1 << 16
+# How long a cancelled command gets to go on SIGTERM before SIGKILL.
+_TICK_SECONDS = 0.05
+_GRACE_TICKS = 100
 # Read through the model and written through it too, so a field added to
 # `ShellResult` cannot land on one side of the round trip only. `model_dump()`
 # hands back `dict[str, Any]`; this is what says the journal holds JSON.
@@ -87,16 +93,39 @@ async def run_bash(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
+        start_new_session=True,
     )
     out: list[str] = []
     err: list[str] = []
-    # Both pipes are drained concurrently, so `on_line` sees them in arrival
-    # order and neither can fill and block the other.
-    await asyncio.gather(
-        _pump(stream=process.stdout, sink=out, on_line=on_line),
-        _pump(stream=process.stderr, sink=err, on_line=on_line),
-    )
-    return "".join(out), "".join(err), await process.wait()
+    try:
+        # Both pipes are drained concurrently, so `on_line` sees them in
+        # arrival order and neither can fill and block the other.
+        await asyncio.gather(
+            _pump(stream=process.stdout, sink=out, on_line=on_line),
+            _pump(stream=process.stderr, sink=err, on_line=on_line),
+        )
+        return "".join(out), "".join(err), await process.wait()
+    except asyncio.CancelledError:
+        await _reap(process.pid)
+        await process.wait()
+        raise
+
+
+# The whole group, its own session from the start: `bash -c "a & b"` leaves
+# children a kill of bash alone would orphan. Gone means gone from the process
+# table, so the rite does not close while its work is still running.
+async def _reap(group: int) -> None:
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(group, sig)
+        except ProcessLookupError:
+            return
+        for _ in range(_GRACE_TICKS):
+            await asyncio.sleep(_TICK_SECONDS)
+            try:
+                os.killpg(group, 0)
+            except ProcessLookupError:
+                return
 
 
 # The Focus bash answers through, and the default every unregistered `shell()`
@@ -138,6 +167,7 @@ async def shell(
         result = _recorded(prior)
     else:
         focus = SHELL_FOCUS.resolve(default=_BASH)
+        note_interruptible(interruptible=focus.interruptible)
         reply = await focus.run(
             ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
         )

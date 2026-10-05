@@ -3,6 +3,7 @@ import io
 import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -13,14 +14,16 @@ from vekna.folio.shell import ShellOutputError, ShellResult, shell
 from vekna.lexicon import (
     SHELL_FOCUS,
     Done,
+    RiteTimeoutError,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     step,
+    timeout,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
-from vekna.lexicon._pacts import RiteStreamed, Ritual
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, Ritual
 
 _FAILURE_EXIT = 3
 # `read` meeting EOF straight away.
@@ -29,6 +32,8 @@ _EOF_EXIT = 1
 _LONG_LINE = 2_000_000
 # The ↳ that opens a rite and the ✓ that closes it, both quoting the command.
 _RITE_LINES = 2
+# The bash a cancelled `shell` ran, and the child it left in the background.
+_SPAWNED = 2
 
 
 class Echo(BaseModel):
@@ -315,3 +320,102 @@ class TestShellFocus:
             pass
 
         assert _cast(echoer).stdout.strip() == "hello"
+
+
+class _UninterruptibleFocus(_RecordingFocus):
+    interruptible = False
+
+
+class TestUninterruptibleFocus:
+    @staticmethod
+    def test_a_focus_that_cannot_be_cut_says_so_at_the_call():
+        with SHELL_FOCUS.scope(_UninterruptibleFocus()):
+            _, grimoire, _ = _run(echoer)
+
+        assert _deltas(grimoire) == [
+            "this focus cannot be interrupted: a timeout or race will not stop it",
+            "intercepted",
+        ]
+
+
+class Spawning(BaseModel):
+    pids: str
+
+
+# Writes its own pid and a background child's, then waits on the child — the
+# shape a cancelled `bash -c` used to leave running.
+@step
+async def spawning(state: Spawning) -> Done[ShellResult]:
+    command = f"sleep 300 & echo $$ $! > {state.pids}; wait"
+    return Done(await timeout(shell(command), seconds=0.5))
+
+
+# A zombie is still in `/proc`, and is not running anything.
+def _running(pid: str) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+class TestCancelledShell:
+    @staticmethod
+    def test_a_timed_out_command_leaves_no_process_behind(tmp_path):
+        pids = tmp_path / "pids"
+        the_ritual = entry(name="spawning", payload=Spawning(pids=str(pids)))
+        grimoire = Grimoire(cast_id="c1")
+
+        with pytest.raises(RiteTimeoutError, match=r"^shell timed out after 0\.5s$"):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=grimoire,
+                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                )
+            )
+
+        started = pids.read_text(encoding="utf-8").split()
+        assert len(started) == _SPAWNED
+        assert not [pid for pid in started if _running(pid)]
+        names = {
+            event.rite_id: event.name
+            for event in grimoire.events
+            if isinstance(event, RiteBegan)
+        }
+        assert [
+            (names[event.rite_id], event.status)
+            for event in grimoire.events
+            if isinstance(event, RiteEnded)
+        ] == [("shell", "cancelled"), ("spawning", "error")]
+
+
+class Stubborn(BaseModel):
+    pids: str
+
+
+# Ignores SIGTERM, so only the escalation ends it.
+@step
+async def stubborn(state: Stubborn) -> Done[ShellResult]:
+    command = f"trap '' TERM; echo $$ > {state.pids}; sleep 300 & wait"
+    return Done(await timeout(shell(command), seconds=0.5))
+
+
+class TestStubbornShell:
+    @staticmethod
+    def test_a_command_ignoring_sigterm_is_killed(tmp_path):
+        pids = tmp_path / "pids"
+        the_ritual = entry(name="stubborn", payload=Stubborn(pids=str(pids)))
+
+        with pytest.raises(RiteTimeoutError):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=Grimoire(cast_id="c1"),
+                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                )
+            )
+
+        assert not _running(pids.read_text(encoding="utf-8").strip())

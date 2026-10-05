@@ -1,3 +1,5 @@
-from ._mills import decide
+from vekna.lexicon import RiteTimeoutError, timeout
 
-__all__ = ["decide"]
+from ._mills import decide, race
+
+__all__ = ["RiteTimeoutError", "decide", "race", "timeout"]

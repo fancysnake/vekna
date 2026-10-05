@@ -13,6 +13,7 @@ from vekna.wire import (
     CastMessage,
     DecideRequested,
     DecideResolved,
+    DecideWithdrawn,
     GrimoireBegin,
     GrimoireEnd,
     LockGranted,
@@ -147,6 +148,17 @@ class TestPrompts:
         hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
 
         assert held["q1"].prompt == "ok?"
+        assert hub.casts["c1"].waiting == {}
+
+    @staticmethod
+    def test_a_withdrawn_request_is_no_longer_held():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(_asked())
+
+        hub.apply(DecideWithdrawn(cast_id="c1", request_id="q1"))
+
         assert hub.casts["c1"].waiting == {}
 
 

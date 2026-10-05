@@ -111,7 +111,10 @@ total transitions in a cast (default in `_specs.py`); `@step(…, max_visits=N)`
 optionally caps re-entry of one step. Exceeding either raises
 `StepBudgetExceededError` — a naive cycle aborts loudly instead of hanging. This
 safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
-a step decides for itself.
+a step decides for itself. Time is bounded per rite, not by the trampoline:
+`timeout(…, seconds=N)` and `race(…)` in `folio/flow`, and `@step(timeout=N)`
+over a whole step, cancel the work — its processes included — and a timeout
+arrives as a `Failure`. A cut rite ends `cancelled`, beside `ok` and `error`.
 
 **Failure is a transition.** A step that raises goes to the step taking
 `Failure[P]`, `P` the payload that entered it, or ends the cast if none does.

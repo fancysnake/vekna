@@ -5,7 +5,7 @@ from typing import Literal, Protocol
 
 from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted, RunRecord
 
-RiteStatus = Literal["running", "ok", "error"]
+RiteStatus = Literal["running", "ok", "error", "cancelled"]
 
 
 # A run directory whose record cannot be read back — torn, cut mid-character,

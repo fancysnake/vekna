@@ -70,7 +70,7 @@ class RiteFinished(BaseModel):
     kind: Literal["rite_finished"] = "rite_finished"
     cast_id: str
     rite_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error", "cancelled"]
     result: JsonValue | None = None
     finished_at: datetime
     error: str | None = None
@@ -97,6 +97,14 @@ class DecideResolved(BaseModel):
     cast_id: str
     request_id: str
     answer: str
+
+
+# The question stopped being asked without an answer: its rite was cancelled,
+# or the channel raised. A surface still showing it would be waiting on nobody.
+class DecideWithdrawn(BaseModel):
+    kind: Literal["decide_withdrawn"] = "decide_withdrawn"
+    cast_id: str
+    request_id: str
 
 
 # --- locks ---
@@ -149,6 +157,7 @@ CastUpdate = (
     | RiteFinished
     | DecideRequested
     | DecideResolved
+    | DecideWithdrawn
     | LockAcquireRequested
     | LockGranted
     | LockDenied

@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 from datetime import UTC, datetime
 
 import pytest
@@ -364,3 +365,34 @@ class TestNotify:
         renderer.notify("done", "x" * 500)
 
         assert out.getvalue() == f"\x1b]777;notify;vekna finished;{'x' * 120}\x07"
+
+
+class TestWithdrawnPrompt:
+    # A readline thread cannot be cancelled. Left behind by the withdrawn
+    # question, it would take the next answer and the next question would wait
+    # on a line already gone.
+    @staticmethod
+    def test_the_next_question_gets_the_line_typed_after_a_withdrawal():
+        read_fd, write_fd = os.pipe()
+        out = io.StringIO()
+
+        async def ask_twice() -> str:
+            with os.fdopen(read_fd, encoding="utf-8") as inp:
+                renderer = StandaloneRenderer(out=out, inp=inp)
+                first = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+                await asyncio.sleep(0.05)
+                first.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await first
+                second = asyncio.create_task(
+                    renderer.decide(prompt="second?", free=True)
+                )
+                await asyncio.sleep(0.05)
+                os.write(write_fd, b"answer\n")
+                try:
+                    return await second
+                finally:
+                    os.close(write_fd)
+
+        assert asyncio.run(ask_twice()) == "answer"
+        assert out.getvalue() == "first?\n\nwithdrawn: first?\nsecond?\n"

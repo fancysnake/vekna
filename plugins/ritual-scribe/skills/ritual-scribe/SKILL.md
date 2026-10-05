@@ -396,6 +396,12 @@ ending into one final step that `emit_delta`s the summary. Under
 `vekna cast --unattended` a `decide` raises `UnattendedPromptError` — route it
 if the ritual can do without the answer.
 
+**Bound time per call, not per step loop.** `await timeout(coding(...),
+seconds=600)` and `await race(a, b)` from `vekna.folio.flow`; `@step(timeout=600)`
+bounds a whole visit. An overrun cancels the work — shell process group killed,
+agent session closed — and raises `RiteTimeoutError`, a `Failure` like any
+other.
+
 **Concurrency lives inside a step**, as plain `asyncio`. Steps never run
 concurrently.
 
@@ -555,6 +561,7 @@ all.
 | `CodingOutputError` | the agent's reply did not validate against `output=` |
 | `StandalonePromptError` | three invalid answers to a `decide` prompt, or stdin closed before one was given |
 | `UnattendedPromptError` | a `decide` reached in a cast run with `--unattended` |
+| `RiteTimeoutError` | a `timeout(...)` or `@step(timeout=...)` ran out; the cut rite reads `cancelled` |
 
 All descend from `RitualError`.
 

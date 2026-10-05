@@ -6,7 +6,7 @@ from vekna.pacts.casts import CastView, DamagedRun, RiteView, Run
 from vekna.wire import CastHello, RunRecord
 
 _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
-_RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
+_RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "cancelled": "⊘"}
 _WAITING = "⏸"
 _MEDIUM = "↳"
 _GAP = "◌"
