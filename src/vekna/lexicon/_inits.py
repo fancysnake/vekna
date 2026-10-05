@@ -147,20 +147,9 @@ class _Library(NamedTuple):
     # the only place that knows whether there was a near miss, and it has been
     # left behind by the time anyone asks.
     when_empty: str
-    # Why each configured module that did not import is missing. A ritual it
-    # would have offered is unknown, and "no ritual named" alone hides why.
-    skipped: tuple[str, ...] = ()
-
-    def ritual(self, name: str) -> Ritual:
-        try:
-            return self.compendium.ritual(name)
-        except RitualDefinitionError as error:
-            if not self.skipped:
-                raise
-            msg = "\n".join(
-                [str(error), "not loaded:", *(f"  {why}" for why in self.skipped)]
-            )
-            raise RitualDefinitionError(msg) from error
+    # Each configured module that did not import. Its warning is already on
+    # stderr; what `list` still owes it is the exit code.
+    skipped: tuple[str, ...]
 
 
 # A module is somebody else's package: one that is not installed here must not
@@ -240,7 +229,7 @@ def _build_library(cwd: Path) -> _Library:
     # A near miss is only ever found when discovery came back empty, so
     # anything seen here was named by a config — and a config that loaded is
     # the answer to where the rituals were meant to come from.
-    loaded = bool(seen_files) or len(skipped) < len(tomes)
+    loaded = bool(seen_files or from_tomes)
     return _Library(
         compendium,
         _no_rituals(None if loaded else discovered.near_miss),
@@ -322,7 +311,7 @@ def _show_text(the_ritual: Ritual) -> str:
 
 def _show(library: _Library, name: str) -> int:
     try:
-        the_ritual = library.ritual(name)
+        the_ritual = library.compendium.ritual(name)
     except RitualDefinitionError as error:
         sys.stderr.write(f"{error}\n")
         return 2
@@ -421,7 +410,7 @@ class _Plan(NamedTuple):
 def _resume(cast_id: str) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
-    the_ritual = _build_library(Path.cwd()).ritual(hello.ritual)
+    the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
     return _Plan(
         ritual=the_ritual,
         components=the_ritual.components.model_validate(hello.components),
@@ -443,7 +432,7 @@ def _resolve_cast(argv: list[str]) -> _Plan:
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
         return _resume(wanted[0])
-    the_ritual = _build_library(Path.cwd()).ritual(name)
+    the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
     return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
 
 

@@ -687,11 +687,50 @@ class TestRitualSources:
 
         err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
-        assert "no ritual named 'nope:review'" in err
-        assert (
-            "not loaded:\n  nope.rituals failed to import: ModuleNotFoundError:"
-            " No module named 'nope'\n"
-        ) in err
+        assert err == (
+            "warning: nope.rituals failed to import: ModuleNotFoundError:"
+            " No module named 'nope' — its rituals are skipped\n"
+            "no ritual named 'nope:review' — known rituals: countdown, ping\n"
+        )
+
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_a_skipped_module_leaves_its_sibling_loaded(tmp_path, monkeypatch, capsys):
+        (tmp_path / ".vekna.toml").write_text(
+            f'[rituals]\nmodules = ["nope.rituals", "{_SHARED}"]\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        list_code = rituals_list()
+        listed = capsys.readouterr().out
+        show_code = rituals_show(f"{_SHARED}:ping")
+
+        assert list_code == 1
+        assert [line.split()[0] for line in listed.splitlines()] == [
+            f"{_SHARED}:countdown",
+            f"{_SHARED}:ping",
+        ]
+        assert show_code == 0
+        assert capsys.readouterr().out.startswith(f"{_SHARED}:ping\n")
+
+    @staticmethod
+    def test_a_module_that_exits_on_import_is_skipped(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / "exits_on_import.py").write_text("raise SystemExit(2)\n")
+        (tmp_path / ".vekna.toml").write_text(
+            '[rituals]\nmodules = ["exits_on_import"]\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "ping\n" in captured.out
+        assert captured.err == (
+            "warning: exits_on_import failed to import: SystemExit: 2"
+            " — its rituals are skipped\n"
+        )
 
 
 @pytest.mark.usefixtures("_home")
