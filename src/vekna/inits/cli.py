@@ -96,10 +96,10 @@ def _cast(
     continued: str | None = None,
     unattended: bool = False,
 ) -> None:
-    prefix = [_UNATTENDED] if unattended else []
     if continued is not None:
-        raise SystemExit(_continue(continued, prefix=prefix))
-    raise SystemExit(_runtime().main([*prefix, *ritual_args]))
+        raise SystemExit(_continue(continued, unattended=unattended))
+    flags = [_UNATTENDED] if unattended else []
+    raise SystemExit(_runtime().main([*flags, *ritual_args]))
 
 
 @click.command("list", help="List rituals and the options each one takes.")
@@ -138,9 +138,10 @@ def _rituals() -> None:
     pass
 
 
-async def _spawn_cast(cast_id: str, *, cwd: str, prefix: list[str]) -> int:
+async def _spawn_cast(cast_id: str, *, cwd: str, unattended: bool) -> int:
+    flags = [_UNATTENDED] if unattended else []
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", _CLI_MODULE, "cast", *prefix, _RESUME, cast_id, cwd=cwd
+        sys.executable, "-m", _CLI_MODULE, "cast", *flags, _RESUME, cast_id, cwd=cwd
     )
     return await process.wait()
 
@@ -161,7 +162,7 @@ def _log() -> None:
 # that needs what is in it.
 # The child is handed `_RESUME`, which is the runtime's own flag and skips this
 # layer: reaching `--continue` again is how it would spawn itself forever.
-def _continue(cast_id: str, *, prefix: list[str]) -> int:
+def _continue(cast_id: str, *, unattended: bool) -> int:
     journal = Journal(default_runs_root())
     # What `vekna log` and the aborted row print is the id cut short, so what
     # comes back here is a prefix rather than the directory's own name.
@@ -193,7 +194,9 @@ def _continue(cast_id: str, *, prefix: list[str]) -> int:
         raise click.ClickException(message)
     # The child is handed the whole id: it reads the journal by directory name,
     # and a prefix is this layer's convenience, not the runtime's.
-    return asyncio.run(_spawn_cast(record.hello.cast_id, cwd=root, prefix=prefix))
+    return asyncio.run(
+        _spawn_cast(record.hello.cast_id, cwd=root, unattended=unattended)
+    )
 
 
 _rituals.add_command(_rituals_list)

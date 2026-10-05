@@ -15,12 +15,14 @@ from vekna.wire import CastHello, WireMessage, default_socket_path
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
-from ._links.standalone import StandaloneRenderer, UnattendedChannel
+from ._links.standalone import StandaloneRenderer
+from ._links.unattended import UnattendedChannel
 from ._mills.dispatch import component_flags
 from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
 from ._mills.graph import check_exits, step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
+    Channel,
     Done,
     FocusMissingError,
     NoComponents,
@@ -373,31 +375,32 @@ def _parse_flags(flags: list[str]) -> dict[str, str]:
 class _Plan(NamedTuple):
     ritual: Ritual
     components: BaseModel
+    unattended: bool
     # What the interrupted cast already did, and which cast that was. Both None
     # for a cast that is starting rather than carrying one on.
     ledger: Ledger | None = None
     resumed_from: str | None = None
-    unattended: bool = False
 
 
 # The record holds the components as the CLI already validated them once, so
 # they are validated again against the same model rather than re-derived into
 # flags and parsed back out.
-def _resume(cast_id: str) -> _Plan:
+def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
     the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
     return _Plan(
         ritual=the_ritual,
         components=the_ritual.components.model_validate(hello.components),
+        unattended=unattended,
         ledger=Ledger.from_resumption(resumption),
         resumed_from=cast_id,
     )
 
 
-def _resolve_cast(argv: list[str]) -> _Plan:
+def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
     if (prompt := _prompt_text(argv)) is not None:
-        return _Plan(_prompt_ritual(prompt), NoComponents())
+        return _Plan(_prompt_ritual(prompt), NoComponents(), unattended)
     name, *flags = argv
     # Both spellings, because `--prompt` takes both: `--resume=c1` otherwise
     # reached the compendium and came back as "no ritual named '--resume=c1'",
@@ -407,9 +410,13 @@ def _resolve_cast(argv: list[str]) -> _Plan:
         wanted = [inline] if separator else flags
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
-        return _resume(wanted[0])
+        return _resume(wanted[0], unattended=unattended)
     the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
-    return _Plan(the_ritual, the_ritual.components.model_validate(_parse_flags(flags)))
+    return _Plan(
+        the_ritual,
+        the_ritual.components.model_validate(_parse_flags(flags)),
+        unattended,
+    )
 
 
 # A cast returns a model or nothing, so its result renders as JSON rather than
@@ -448,7 +455,7 @@ async def _cast(
     *,
     plan: _Plan,
     grimoire: Grimoire,
-    channel: TeeChannel,
+    channel: Channel,
     link: DaemonLink,
     renderer: StandaloneRenderer,
 ) -> int:
@@ -457,7 +464,7 @@ async def _cast(
             ritual=plan.ritual,
             components=plan.components,
             grimoire=grimoire,
-            channel=UnattendedChannel() if plan.unattended else channel,
+            channel=channel,
             ledger=plan.ledger,
         )
     except FocusMissingError as error:
@@ -492,12 +499,13 @@ async def _run(plan: _Plan) -> int:
     link = DaemonLink(
         socket_path=default_socket_path(), hello=_hello(cast_id=cast_id, plan=plan)
     )
-    channel = TeeChannel(
+    tee = TeeChannel(
         inner=renderer,
         link=link,
         cast_id=cast_id,
         rite_id=lambda: current_rite().parent_id,
     )
+    channel: Channel = UnattendedChannel() if plan.unattended else tee
 
     def emit(event: RiteEvent) -> None:
         renderer.render(event)
@@ -509,7 +517,7 @@ async def _run(plan: _Plan) -> int:
     # turns up later gets whatever has happened by then. One path, so the
     # mid-cast attach is not a road only a rare timing takes.
     def backlog() -> list[WireMessage]:
-        return _backlog(cast_id=cast_id, grimoire=grimoire, channel=channel)
+        return _backlog(cast_id=cast_id, grimoire=grimoire, channel=tee)
 
     await link.attach(backlog=backlog())
     watcher = asyncio.create_task(link.keep_attached(backlog))
@@ -536,7 +544,7 @@ async def _drive(argv: list[str]) -> int:
         return 2
     _load_folios()
     try:
-        plan = _resolve_cast(argv)._replace(unattended=unattended)
+        plan = _resolve_cast(argv, unattended=unattended)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2

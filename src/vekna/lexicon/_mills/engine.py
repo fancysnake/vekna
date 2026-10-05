@@ -411,13 +411,21 @@ def emit_delta(text: str) -> None:
     rite.grimoire.rite_delta(_current_rite_id(rite), text)
 
 
+# What a rite leaves its opener: the id it was journaled under, and what its
+# body raised, if it did.
+@dataclass
+class OpenedRite:
+    rite_id: str
+    error: ErrorInfo | None = None
+
+
 # The one place a rite is opened and closed. A rite whose body raises is
 # journaled with status="error" — steps and mediums alike, which is the whole
 # reason both call sites share this.
 @contextlib.asynccontextmanager
 async def _rite(
     *, name: str, category: Literal["step", "medium"], summary: str | None = None
-) -> AsyncIterator[str]:
+) -> AsyncIterator[OpenedRite]:
     parent = current_rite()
     rite_id = parent.grimoire.rite_started(
         name=name, parent_id=parent.parent_id, category=category, summary=summary
@@ -439,21 +447,32 @@ async def _rite(
     # work?" is the question a resumed cast is watched for.
     if replay is not None:
         parent.grimoire.rite_delta(rite_id, _REPLAYED)
+    opened = OpenedRite(rite_id)
     finished = False
-    error: str | None = None
     try:
-        yield rite_id
+        yield opened
         finished = True
     except Exception as raised:
-        error = _said(raised)
+        opened.error = ErrorInfo(
+            type=type(raised).__name__,
+            message=_said(raised),
+            traceback="".join(traceback.format_exception(raised)),
+        )
         raise
     finally:
         _current_rite.reset(token)
+        # On the step alone: a medium that raised brings its step down with
+        # the same message, and a cast that recovers prints no `cast failed:`
+        # line, so the step is where it is said, once.
         parent.grimoire.rite_finished(
             rite_id,
             status="ok" if finished else "error",
             result=outcome.result,
-            error=error,
+            error=(
+                opened.error.message
+                if opened.error is not None and category == "step"
+                else None
+            ),
         )
 
 
@@ -464,7 +483,7 @@ def _said(error: BaseException) -> str:
 
 def medium_rite(
     name: str, *, summary: str | None = None
-) -> contextlib.AbstractAsyncContextManager[str]:
+) -> contextlib.AbstractAsyncContextManager[OpenedRite]:
     return _rite(name=name, category="medium", summary=summary)
 
 
@@ -494,29 +513,30 @@ def recovery_for(payload: type[BaseModel]) -> Step | None:
 # takes `Failure[<what entered>]`, and leaves unchanged when none does — which
 # is what keeps a recovery step from catching its own raise: what entered it
 # was a `Failure`. Not `BaseException`: cancellation and Ctrl-C are not a step
-# failing.
+# failing. Only what the body raised is routed: a rite that never opened is
+# vekna's failure, not the step's.
 async def _taken(
     the_step: Step, payload: BaseModel | None, *, failures: Counter[Step]
 ) -> Transition:
-    rite_id = ""
+    opened: OpenedRite | None = None
     try:
-        async with _rite(name=the_step.name, category="step") as rite_id:
+        async with _rite(name=the_step.name, category="step") as opened:
             return await the_step.run(payload)
-    # Any raise, by design: routing it is what a recovery step is for.
-    except Exception as error:  # pylint: disable=broad-exception-caught
-        if payload is None or recovery_for(type(payload)) is None:
-            raise
-        failures[the_step] += 1
-        return _failure_of(type(payload))(
-            error=ErrorInfo(
-                type=type(error).__name__,
-                message=_said(error),
-                traceback="".join(traceback.format_exception(error)),
-            ),
-            rite=RiteRef(rite_id=rite_id, step=the_step.name),
-            payload=payload,
-            attempt=failures[the_step],
-        )
+    except Exception:
+        if (
+            opened is not None
+            and opened.error is not None
+            and payload is not None
+            and recovery_for(type(payload)) is not None
+        ):
+            failures[the_step] += 1
+            return _failure_of(type(payload))(
+                error=opened.error,
+                rite=RiteRef(rite_id=opened.rite_id, step=the_step.name),
+                payload=payload,
+                attempt=failures[the_step],
+            )
+        raise
 
 
 async def run_cast(

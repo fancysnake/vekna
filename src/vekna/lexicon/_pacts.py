@@ -89,8 +89,9 @@ class RiteEnded:
     status: Literal["ok", "error"]
     result: JsonValue | None
     finished_at: datetime
-    # What the rite raised. A cast that recovers carries on past it, so this is
-    # the one place the message is kept.
+    # What a step raised. A cast that recovers carries on past it, so this is
+    # the one place the message is kept. A medium's is left to the step it
+    # brings down, which would only say it again.
     error: str | None = None
 
 

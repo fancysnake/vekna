@@ -22,7 +22,8 @@ from vekna.lexicon import (
     ritual,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer, UnattendedChannel
+from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.unattended import UnattendedChannel
 from vekna.lexicon._mills.engine import (
     FocusSlot,
     Grimoire,
@@ -289,10 +290,11 @@ class TestFailedRiteIsJournaled:
     def test_a_medium_that_raises_is_not_journaled_as_success(cls):
         finished = cls._finished(cls._cast(smoulder))
 
-        # The medium closes first, then the step it brought down with it.
-        assert [(e.rite_id, e.status) for e in finished] == [
-            ("r2", "error"),
-            ("r1", "error"),
+        # The medium closes first, then the step it brought down with it, which
+        # alone says what was raised.
+        assert [(e.rite_id, e.status, e.error) for e in finished] == [
+            ("r2", "error", None),
+            ("r1", "error", "BoomError"),
         ]
 
     @classmethod
@@ -469,6 +471,27 @@ class TestFailureRouting:
         )
 
         assert result == Report(attempts=_GIVE_UP, message="7 left")
+
+    @staticmethod
+    def test_a_rite_that_never_opened_is_not_the_steps_failure():
+        def refuse(event):
+            if isinstance(event, RiteBegan):
+                msg = "journal full"
+                raise OSError(msg)
+
+        the_ritual = entry(payload=Probe(tag="x"))
+
+        with pytest.raises(OSError, match="journal full"):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=Grimoire(
+                        cast_id="c1", clock=_fixed_clock, on_event=refuse
+                    ),
+                    channel=_channel(),
+                )
+            )
 
     # What entered `mend` was a `Failure[Fragile]`, which nothing takes the
     # failure of, so its raise is the cast's.

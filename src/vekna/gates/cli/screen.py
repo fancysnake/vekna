@@ -212,11 +212,7 @@ def _rite_lines(view: CastView) -> list[str]:
         mark = (
             _MEDIUM if rite.started.category == "medium" else _RITE_GLYPH[rite.status]
         )
-        said = (
-            f"  — {rite.error}"
-            if rite.error is not None and rite.started.category == "step"
-            else ""
-        )
+        said = "" if rite.error is None else f"  — {rite.error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":
             lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]

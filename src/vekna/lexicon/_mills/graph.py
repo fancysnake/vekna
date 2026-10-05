@@ -44,29 +44,26 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
         label: str,
         exits: tuple[type[BaseModel], ...] | None,
         ends: bool,
-        payloads: tuple[type[BaseModel], ...] = (),
+        payloads: tuple[type[BaseModel], ...],
     ) -> None:
+        forward = [
+            _target(ritual=the_ritual.name, label=label, exit_type=exit_type)
+            for exit_type in exits or ()
+        ]
+        # A union exit names one step several times; the graph draws it once,
+        # in the order the annotation put them. Deduped by Step like `seen` is,
+        # so two distinct steps of one name stay two edges.
+        names = list({target: target.name for target in forward}.values())
+        if exits is None:
+            names.append(UNKNOWN)
+        elif ends:
+            names.append(ENDS)
         # Failure edges are read off what enters, not what leaves, so a legacy
         # step that declares no exits still has them.
         recoveries = [found for payload in payloads if (found := recovery_for(payload))]
-        failing = list(
-            {found: f"{found.name}{ON_FAILURE}" for found in recoveries}.values()
-        )
-        if exits is None:
-            graph.append((label, [UNKNOWN, *failing]))
-            targets = recoveries
-        else:
-            targets = [
-                _target(ritual=the_ritual.name, label=label, exit_type=exit_type)
-                for exit_type in exits
-            ]
-            # A union exit names one step several times; the graph draws it
-            # once, in the order the annotation put them. Deduped by Step like
-            # `seen` is, so two distinct steps of one name stay two edges.
-            names = list({target: target.name for target in targets}.values())
-            graph.append((label, [*names, *([ENDS] if ends else []), *failing]))
-            targets = [*targets, *recoveries]
-        for target in targets:
+        names += {found: f"{found.name}{ON_FAILURE}" for found in recoveries}.values()
+        graph.append((label, names))
+        for target in (*forward, *recoveries):
             if target in seen:
                 continue
             seen.add(target)
@@ -77,7 +74,7 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
                 payloads=target.payloads,
             )
 
-    walk(label=START, exits=the_ritual.exits, ends=the_ritual.ends)
+    walk(label=START, exits=the_ritual.exits, ends=the_ritual.ends, payloads=())
     return graph
 
 
