@@ -28,9 +28,6 @@ when.
 - **Cancelling a rite cancels its work.** `shell` kills the command's process
   group and waits for it; `coding` closes the agent session. A `decide` cut
   mid-prompt no longer leaves a reader behind to swallow the next answer.
-- **A Focus declares `interruptible`**, `True` by default on the protocol. A
-  Focus that duck-types the protocol rather than subclassing it must now define
-  it; one that sets it `False` is named at the call.
 
 ## [0.13.0] - 2026-10-05
 

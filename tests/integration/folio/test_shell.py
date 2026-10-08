@@ -11,6 +11,7 @@ from typing_extensions import override
 
 from tests.conftest import entry, journalled
 from vekna.folio.shell import ShellOutputError, ShellResult, shell
+from vekna.folio.shell._links import run_bash
 from vekna.lexicon import (
     SHELL_FOCUS,
     Done,
@@ -322,22 +323,6 @@ class TestShellFocus:
         assert _cast(echoer).stdout.strip() == "hello"
 
 
-class _UninterruptibleFocus(_RecordingFocus):
-    interruptible = False
-
-
-class TestUninterruptibleFocus:
-    @staticmethod
-    def test_a_focus_that_cannot_be_cut_says_so_at_the_call():
-        with SHELL_FOCUS.scope(_UninterruptibleFocus()):
-            _, grimoire, _ = _run(echoer)
-
-        assert _deltas(grimoire) == [
-            "this focus cannot be interrupted: a timeout or race will not stop it",
-            "intercepted",
-        ]
-
-
 class Spawning(BaseModel):
     pids: str
 
@@ -419,3 +404,23 @@ class TestStubbornShell:
             )
 
         assert not _running(pids.read_text(encoding="utf-8").strip())
+
+    @staticmethod
+    def test_a_second_cancel_in_the_grace_window_still_kills_the_group(tmp_path):
+        pids = tmp_path / "pids"
+        command = f"trap '' TERM; sleep 300 & echo $$ $! > {pids}; wait"
+
+        async def cancel_twice() -> None:
+            running = asyncio.create_task(run_bash(command))
+            await asyncio.sleep(0.5)
+            running.cancel()
+            await asyncio.sleep(0.2)
+            running.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await running
+
+        asyncio.run(cancel_twice())
+
+        started = pids.read_text(encoding="utf-8").split()
+        assert len(started) == _SPAWNED
+        assert not [pid for pid in started if _running(pid)]

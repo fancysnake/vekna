@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -389,10 +390,31 @@ class TestWithdrawnPrompt:
                 )
                 await asyncio.sleep(0.05)
                 os.write(write_fd, b"answer\n")
-                try:
-                    return await second
-                finally:
-                    os.close(write_fd)
+                os.close(write_fd)
+                return await asyncio.wait_for(second, timeout=5)
 
         assert asyncio.run(ask_twice()) == "answer"
         assert out.getvalue() == "first?\n\nwithdrawn: first?\nsecond?\n"
+
+    @staticmethod
+    def test_a_withdrawn_read_nobody_claims_does_not_hold_up_the_exit():
+        read_fd, write_fd = os.pipe()
+        inp = os.fdopen(read_fd, encoding="utf-8")
+
+        async def ask_and_withdraw() -> None:
+            renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+            asked = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+            await asyncio.sleep(0.05)
+            asked.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asked
+
+        cast = threading.Thread(target=asyncio.run, args=(ask_and_withdraw(),))
+        cast.start()
+        cast.join(timeout=5)
+        finished = not cast.is_alive()
+        os.close(write_fd)
+        cast.join()
+        inp.close()
+
+        assert finished

@@ -23,7 +23,8 @@ from ._annotations import (
     _optional_payload,
     _payloads,
 )
-from .engine import NAMESPACE_SEPARATOR, bounded, medium_rite, register_step
+from .bounds import bounded
+from .engine import NAMESPACE_SEPARATOR, medium_rite, register_step
 
 _P = ParamSpec("_P")
 _MediumT = TypeVar("_MediumT")
@@ -185,8 +186,6 @@ def _step(
             expected = " | ".join(model.__name__ for model in payloads)
             msg = f"step {name!r} expected {expected}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
-        if timeout is None:
-            return await _settled(erased(payload))
         return await bounded(
             _settled(erased(payload)), seconds=timeout, named=f"step {name!r}"
         )

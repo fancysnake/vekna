@@ -2,11 +2,16 @@ from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from vekna.pacts.casts import CastView, DamagedRun, RiteView, Run
+from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
 from vekna.wire import CastHello, RunRecord
 
 _CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
-_RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "cancelled": "⊘"}
+_RITE_GLYPH: dict[RiteStatus, str] = {
+    "running": "▶",
+    "ok": "✓",
+    "error": "✗",
+    "cancelled": "⊘",
+}
 _WAITING = "⏸"
 _MEDIUM = "↳"
 _GAP = "◌"
@@ -209,9 +214,8 @@ def _rite_lines(view: CastView) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
-        mark = (
-            _MEDIUM if rite.started.category == "medium" else _RITE_GLYPH[rite.status]
-        )
+        medium = rite.started.category == "medium" and rite.status != "cancelled"
+        mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
         said = "" if rite.error is None else f"  — {rite.error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":

@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import traceback
-import types
 from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from contextvars import ContextVar
@@ -26,7 +25,6 @@ from vekna.lexicon._pacts import (
     RiteEvent,
     RiteRef,
     RiteStreamed,
-    RiteTimeoutError,
     Ritual,
     RitualDefinitionError,
     RitualError,
@@ -38,9 +36,9 @@ from vekna.lexicon._pacts import (
     StringOutput,
     Transition,
 )
+from vekna.wire import RiteEndStatus
 
 _FocusT = TypeVar("_FocusT")
-_ResultT = TypeVar("_ResultT")
 _REPLAYED = "(from the journal — this rite already ran)"
 
 
@@ -96,7 +94,7 @@ class Grimoire:
         self,
         rite_id: str,
         *,
-        status: Literal["ok", "error", "cancelled"] = "ok",
+        status: RiteEndStatus = "ok",
         result: JsonValue | None = None,
         error: str | None = None,
     ) -> None:
@@ -415,13 +413,6 @@ def emit_delta(text: str) -> None:
     rite.grimoire.rite_delta(_current_rite_id(rite), text)
 
 
-def note_interruptible(*, interruptible: bool) -> None:
-    if not interruptible:
-        emit_delta(
-            "this focus cannot be interrupted: a timeout or race will not stop it"
-        )
-
-
 # What a rite leaves its opener: the id it was journaled under, and what its
 # body raised, if it did.
 @dataclass
@@ -459,7 +450,7 @@ async def _rite(
     if replay is not None:
         parent.grimoire.rite_delta(rite_id, _REPLAYED)
     opened = OpenedRite(rite_id)
-    status: Literal["ok", "error", "cancelled"] = "error"
+    status: RiteEndStatus = "error"
     try:
         yield opened
         status = "ok"
@@ -495,34 +486,6 @@ async def _rite(
 # A bare `raise BoomError` has no message, and an empty error says nothing.
 def _said(error: BaseException) -> str:
     return str(error) or type(error).__name__
-
-
-async def bounded(work: Awaitable[_ResultT], *, seconds: float, named: str) -> _ResultT:
-    deadline = asyncio.timeout(seconds)
-    try:
-        async with deadline:
-            return await work
-    # Only the deadline's own: a `TimeoutError` the work raised for itself is
-    # the work failing, and passes through as it came.
-    except TimeoutError as error:
-        if not deadline.expired():
-            raise
-        msg = f"{named} timed out after {seconds:g}s"
-        raise RiteTimeoutError(msg) from error
-
-
-# The work is cancelled, not abandoned: each medium under it reaps what it
-# started before this raises. A medium's coroutine carries the medium's name.
-async def timeout(work: Awaitable[_ResultT], *, seconds: float) -> _ResultT:
-    coroutine = work if isinstance(work, types.CoroutineType) else None
-    if seconds <= 0:
-        # Closed, or the refused work is a coroutine never awaited.
-        if coroutine is not None:
-            coroutine.close()
-        msg = f"timeout takes a positive number of seconds, got {seconds}"
-        raise RitualError(msg)
-    named = "the work" if coroutine is None else coroutine.__name__
-    return await bounded(work, seconds=seconds, named=named)
 
 
 def medium_rite(

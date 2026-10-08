@@ -5,6 +5,7 @@ reaches for, and nothing else. The CLI lives in the root project; the cast
 runtime is reached through `vekna.lexicon._inits`.
 """
 
+from ._mills.bounds import race, timeout
 from ._mills.dispatch import medium, ritual, step
 from ._mills.engine import (
     CODING_FOCUS,
@@ -13,11 +14,9 @@ from ._mills.engine import (
     RiteContext,
     current_rite,
     emit_delta,
-    note_interruptible,
     offer_prompt,
     record_result,
     replayed,
-    timeout,
 )
 from ._pacts import (
     AskFn,
@@ -103,8 +102,8 @@ __all__ = [
     "emit_delta",
     "goto",
     "medium",
-    "note_interruptible",
     "offer_prompt",
+    "race",
     "record_result",
     "replayed",
     "ritual",

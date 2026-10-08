@@ -66,11 +66,14 @@ class RiteDelta(BaseModel):
     delta: str
 
 
+RiteEndStatus = Literal["ok", "error", "cancelled"]
+
+
 class RiteFinished(BaseModel):
     kind: Literal["rite_finished"] = "rite_finished"
     cast_id: str
     rite_id: str
-    status: Literal["ok", "error", "cancelled"]
+    status: RiteEndStatus
     result: JsonValue | None = None
     finished_at: datetime
     error: str | None = None

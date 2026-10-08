@@ -3,9 +3,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-from vekna.wire import CastHello, CastStatus, DecideRequested, RiteStarted, RunRecord
+from vekna.wire import (
+    CastHello,
+    CastStatus,
+    DecideRequested,
+    RiteEndStatus,
+    RiteStarted,
+    RunRecord,
+)
 
-RiteStatus = Literal["running", "ok", "error", "cancelled"]
+RiteStatus = Literal["running"] | RiteEndStatus
 
 
 # A run directory whose record cannot be read back — torn, cut mid-character,

@@ -1,6 +1,8 @@
 import asyncio
+import concurrent.futures
 import socket
 import sys
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, TextIO
@@ -12,11 +14,12 @@ from vekna.lexicon._pacts import (
     RiteStreamed,
     StandalonePromptError,
 )
+from vekna.wire import RiteEndStatus
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
-_MARK = {"ok": "✓", "error": "✗", "cancelled": "⊘"}
+_MARK: dict[RiteEndStatus, str] = {"ok": "✓", "error": "✗", "cancelled": "⊘"}
 
 # What this renderer raises a desktop notification for. `decide` is any question
 # that stops for a human — the flow medium's own, coding's tool gate, the
@@ -74,6 +77,22 @@ async def probe_daemon(
     return await asyncio.to_thread(_socket_alive, socket_path, connect_timeout)
 
 
+# A daemon thread, not `to_thread`: a readline that no question is left to
+# claim would hold up `asyncio.run` and the interpreter's exit until Enter. A
+# text stream's readline raises OSError, or ValueError when closed or undecodable.
+def _read_line(inp: TextIO) -> asyncio.Future[str]:
+    line: concurrent.futures.Future[str] = concurrent.futures.Future()
+
+    def read() -> None:
+        try:
+            line.set_result(inp.readline())
+        except (OSError, ValueError) as error:
+            line.set_exception(error)
+
+    threading.Thread(target=read, name="vekna-readline", daemon=True).start()
+    return asyncio.wrap_future(line)
+
+
 @dataclass
 class _Rite:
     name: str
@@ -125,7 +144,7 @@ class StandaloneRenderer:
     async def _readline(self) -> str:
         reading, self._abandoned = self._abandoned, None
         if reading is None or reading.done():
-            reading = asyncio.ensure_future(asyncio.to_thread(self._inp.readline))
+            reading = _read_line(self._inp)
         try:
             line = await asyncio.shield(reading)
         except asyncio.CancelledError:

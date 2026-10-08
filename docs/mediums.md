@@ -162,6 +162,3 @@ killed with its whole process group, and a `coding` call closes its agent
 session, before the rite closes. A cut rite is drawn `⊘` and recorded as
 `cancelled`, with the output it had produced by then. A `decide` that is cut
 is withdrawn: the terminal says so and the daemon stops showing it.
-
-A Focus that cannot be interrupted declares `interruptible = False`, and the
-call says so in its output; a timeout or race will not stop it.

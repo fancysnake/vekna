@@ -251,27 +251,23 @@ def _sdk_stub(
     return stub
 
 
+def _raised(error):
+    raise error
+
+
 # The SDK reaches its subprocess on the first `anext`, not on the call, so a
-# failure to reach it at all has to surface from the iteration. An iterator
-# spelled out beats an `async def` that raises before its `yield`: that shape
-# needs an unreachable statement to stay a generator, and the pragma to go with
-# it.
-class _FailingStream:
-    def __init__(self, error):
-        self._error = error
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        raise self._error
+# failure to reach it at all has to surface from the iteration. Raised inside
+# the `yield` expression, so the generator has no unreachable statement.
+async def _failing_stream(error):
+    await asyncio.sleep(0)
+    yield _raised(error)
 
 
 def _sdk_stub_failing_with(error):
     stub = _sdk_stub({})
 
     def query(**_kwargs):
-        return _FailingStream(error)
+        return _failing_stream(error)
 
     stub.query = query
     return stub
@@ -336,6 +332,25 @@ class TestAgentUnreachable:
         assert exit_code == _CAST_FAILED_EXIT
         assert "cast failed: the agent failed" in err
         assert "ClaudeSDKError: the transport went away" in err
+
+    # A stream that is not a generator cannot be closed, and an unclosed stream
+    # is a CLI left working the repo after its rite is cut.
+    @staticmethod
+    def test_a_stream_that_cannot_be_closed_is_refused(tmp_path, monkeypatch, capsys):
+        stub = _sdk_stub({})
+        stub.query = lambda **_kwargs: []
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        assert (
+            "claude_agent_sdk.query returned list, not an async generator vekna "
+            "can close" in err
+        )
 
 
 class TestCastWithClaudeFocus:

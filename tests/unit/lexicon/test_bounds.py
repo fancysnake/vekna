@@ -9,9 +9,9 @@ from tests.conftest import entry
 from vekna.lexicon import (
     Done,
     Failure,
+    MediumBoundaryError,
     RiteTimeoutError,
     RitualDefinitionError,
-    RitualError,
     medium,
     step,
     timeout,
@@ -145,7 +145,9 @@ class TestTimeout:
         async def bad() -> str:
             return await timeout(asyncio.sleep(0, result="x"), seconds=0)
 
-        with pytest.raises(RitualError, match="positive number of seconds, got 0"):
+        with pytest.raises(
+            MediumBoundaryError, match="positive number of seconds, got 0"
+        ):
             asyncio.run(bad())
 
 

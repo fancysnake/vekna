@@ -16,7 +16,6 @@ from vekna.lexicon import (
     current_rite,
     emit_delta,
     medium,
-    note_interruptible,
     record_result,
     replayed,
 )
@@ -233,7 +232,6 @@ async def coding(
         reply = _recorded(prior)
     else:
         focus = CODING_FOCUS.resolve()
-        note_interruptible(interruptible=focus.interruptible)
         reply = await focus.run(
             call,
             on_delta=emit_delta,

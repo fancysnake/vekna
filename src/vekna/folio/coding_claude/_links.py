@@ -1,3 +1,4 @@
+import contextlib
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -210,9 +211,16 @@ async def _streamed(
     # `async for` leaves a generator open when its body is cut (PEP 533), and
     # an open `query` is a CLI still working the repo. Closed here, a cancelled
     # rite takes the session down before it closes. Typed an `AsyncIterator`,
-    # which has no `aclose`, so the generator it is at runtime is asked for.
+    # which has no `aclose`, so the generator it is at runtime is asked for —
+    # and anything else refused, since it could not be closed.
     messages = query(prompt=prompt, options=options)
-    try:
+    if not isinstance(messages, AsyncGenerator):
+        msg = (
+            "claude_agent_sdk.query returned "
+            f"{type(messages).__name__}, not an async generator vekna can close"
+        )
+        raise RitualError(msg)
+    async with contextlib.aclosing(messages):
         async for message in messages:
             if isinstance(message, _AssistantLike):
                 for text in _texts(message.content):
@@ -223,9 +231,6 @@ async def _streamed(
                 num_turns = message.num_turns
                 cost_usd = message.total_cost_usd
                 result_text = message.result
-    finally:
-        if isinstance(messages, AsyncGenerator):
-            await messages.aclose()
     return FocusReply(
         text=result_text if result_text is not None else "".join(parts),
         session_id=session_id,
