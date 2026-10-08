@@ -17,6 +17,10 @@ class CastHello(BaseModel):
     components: dict[str, JsonValue]
     started_at: datetime
     resumed_from: str | None = None
+    # The repository the cast belongs to, as its git common dir: every worktree
+    # of one repository shares it, while `project_root` is the tree it runs in.
+    # None on a record written before casts said it.
+    project: str | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -34,6 +38,12 @@ class CastGoodbye(BaseModel):
 # fields: a surface is not addressed, only fanned out to.
 class SurfaceHello(BaseModel):
     kind: Literal["surface_hello"] = "surface_hello"
+
+
+# The daemon outlives every window on it, so ending it is a request of its own:
+# `vekna stop` opens a connection with this and nothing else.
+class StopRequested(BaseModel):
+    kind: Literal["stop_requested"] = "stop_requested"
 
 
 class GrimoireBegin(BaseModel):
@@ -157,7 +167,7 @@ CastUpdate = (
 
 CastMessage = CastHello | CastUpdate
 
-WireMessage = CastMessage | SurfaceHello
+WireMessage = CastMessage | SurfaceHello | StopRequested
 
 
 # --- the record on disk ---
@@ -166,7 +176,8 @@ WireMessage = CastMessage | SurfaceHello
 # own types because it is shared exactly the way a message is: the daemon writes
 # it, and a resumed cast process — which may not import the daemon's layers —
 # reads it back to learn what it is carrying on.
-CastStatus = Literal["running", "ok", "error", "disconnected"]
+# `queued` is a cast waiting for a slot: known, not yet started.
+CastStatus = Literal["queued", "running", "ok", "error", "disconnected"]
 
 
 # `gapped` is what the event log cannot say for itself: an append the daemon

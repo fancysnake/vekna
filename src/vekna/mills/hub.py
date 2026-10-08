@@ -220,5 +220,5 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
 # ended — `vekna log` lists recent casts, and the daemon has not forgotten
 # this one yet.
 def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
-    if (status := view.status) != "running":
+    if (status := view.status) != "running" and status != "queued":
         yield CastGoodbye(cast_id=view.hello.cast_id, status=status, detail=view.detail)

@@ -1,12 +1,14 @@
 import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from vekna.pacts.routing import SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
     CastMessage,
+    StopRequested,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -102,21 +104,19 @@ async def serve(
     on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
+    on_stop: Callable[[], None],
 ) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
+    routes = _Routes(
+        on_message=on_message, on_attach=on_attach, on_detach=on_detach, on_stop=on_stop
+    )
 
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         writers.add(writer)
         try:
-            await _handle(
-                reader,
-                writer,
-                on_message=on_message,
-                on_attach=on_attach,
-                on_detach=on_detach,
-            )
+            await _handle(reader, writer, routes=routes)
         finally:
             writers.discard(writer)
 
@@ -128,6 +128,15 @@ async def serve(
     return Serving(server, writers)
 
 
+# Where each kind of connection is sent, carried as one rather than four.
+@dataclass(frozen=True)
+class _Routes:
+    on_message: Callable[[CastMessage], None]
+    on_attach: Callable[[Surface], None]
+    on_detach: Callable[[Surface], None]
+    on_stop: Callable[[], None]
+
+
 # A dead socket file is cleared away by `create_unix_server` itself. Anything
 # else at that path is somebody's file, and is not vekna's to delete.
 def _occupied(path: Path) -> bool:
@@ -135,24 +144,23 @@ def _occupied(path: Path) -> bool:
 
 
 # What a connection opens with is what it is, and that is settled once: a
-# surface is fanned out to, anything else is a cast and is routed. The first
-# frame is the only place the two can be told apart, so it is the only place
-# that asks.
+# surface is fanned out to, a stop ends the daemon, anything else is a cast and
+# is routed. The first frame is the only place they can be told apart, so it
+# is the only place that asks.
 async def _handle(
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-    *,
-    on_message: Callable[[CastMessage], None],
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, *, routes: _Routes
 ) -> None:
     frames = aiter(read_frames(reader))
     try:
         opened = await _opening(frames)
         if isinstance(opened, SurfaceHello):
-            await _as_surface(frames, writer, on_attach=on_attach, on_detach=on_detach)
+            await _as_surface(
+                frames, writer, on_attach=routes.on_attach, on_detach=routes.on_detach
+            )
+        elif isinstance(opened, StopRequested):
+            routes.on_stop()
         elif opened is not None:
-            await _as_cast(opened, frames, on_message=on_message)
+            await _as_cast(opened, frames, on_message=routes.on_message)
     finally:
         writer.close()
         with contextlib.suppress(OSError):
@@ -237,7 +245,7 @@ async def _reading(
     on_message: Callable[[CastMessage], None],
 ) -> str:
     async for message in frames:
-        if isinstance(message, SurfaceHello):
+        if isinstance(message, (SurfaceHello, StopRequested)):
             continue
         if message.cast_id != opened.cast_id:
             return f"{_NOT_ITS_OWN} {message.cast_id!r}"

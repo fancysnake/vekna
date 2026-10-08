@@ -13,6 +13,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     RiteDelta,
+    StopRequested,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -50,6 +51,7 @@ class _Daemon:
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
+        self.stopped = asyncio.Event()
 
     async def start(self, path: Path) -> Serving:
         return await serve(
@@ -57,6 +59,7 @@ class _Daemon:
             on_message=self.messages.append,
             on_attach=self.attached.append,
             on_detach=self.detached.append,
+            on_stop=self.stopped.set,
         )
 
 
@@ -102,6 +105,20 @@ class TestServing:
             "cast_hello",
             "rite_delta",
         ]
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_is_heard_and_is_not_a_cast(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(daemon.stopped.wait(), timeout=2)
+
+        assert not daemon.messages
+        writer.close()
         await server.close()
 
     # A shell medium's result is everything the command printed, so a `git diff`
@@ -250,6 +267,7 @@ class TestUncleanExits:
             on_message=unwritable,
             on_attach=daemon.attached.append,
             on_detach=daemon.detached.append,
+            on_stop=daemon.stopped.set,
         )
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))

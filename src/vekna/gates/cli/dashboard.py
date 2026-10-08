@@ -2,11 +2,12 @@ import asyncio
 import contextlib
 import itertools
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from vekna.pacts.casts import Casts
 from vekna.pacts.screen import Screen
 
-from .screen import ordered, paint
+from .screen import ordered, paint, scoped
 
 # Long enough that a streaming rite does not repaint per line, short enough that
 # the view reads as live.
@@ -16,17 +17,34 @@ _COALESCE_SECONDS = 0.1
 _TICK_SECONDS = 1.0
 _QUIT = frozenset({"q", "quit"})
 _BACK = frozenset({"b", "back"})
-_KEYS = "a number, b, or q"
+_EVERY = frozenset({"g", "global"})
+_HOME = frozenset({"p", "project"})
+_KEYS = "a number, b, g, p, or q"
 _BROKE = "the view stopped"
+
+
+# The project this view opened in, and whether it is showing every project
+# instead. Without one there is nothing to keep to.
+@dataclass
+class _Scope:
+    home: str | None
+    every: bool = False
+
+    @property
+    def project(self) -> str | None:
+        return None if self.every else self.home
 
 
 # What the operator does with the view, and nothing about where the events came
 # from: the daemon that owns the socket and a peer surface attached to it drive
 # the same one, over the same two protocols.
 class Dashboard:
-    def __init__(self, *, casts: Casts, screen: Screen) -> None:
+    def __init__(
+        self, *, casts: Casts, screen: Screen, project: str | None = None
+    ) -> None:
         self._casts = casts
         self._screen = screen
+        self._scope = _Scope(home=project)
         self._focus: str | None = None
         self._note = ""
         self._changed = asyncio.Event()
@@ -120,6 +138,10 @@ class Dashboard:
             self.stop()
         elif lowered in _BACK:
             self._focus = None
+        elif lowered in _EVERY:
+            self._scope.every, self._focus = True, None
+        elif lowered in _HOME and self._scope.home is not None:
+            self._scope.every, self._focus = False, None
         elif lowered.isdecimal():
             self._focus = self._nth(int(lowered))
         elif lowered:
@@ -128,7 +150,7 @@ class Dashboard:
     # The same order the listing paints, or the number typed picks the cast
     # above the one it is next to.
     def _nth(self, index: int) -> str | None:
-        found = ordered(list(self._casts.casts.values()))
+        found = ordered(scoped(list(self._casts.casts.values()), self._scope.project))
         if 1 <= index <= len(found):
             return found[index - 1].hello.cast_id
         self._note = f"there is no cast {index}"
@@ -141,6 +163,7 @@ class Dashboard:
                 casts=list(self._casts.casts.values()),
                 focus=self._focus,
                 note=self._note,
+                project=self._scope.project,
             )
         )
         self._note = ""

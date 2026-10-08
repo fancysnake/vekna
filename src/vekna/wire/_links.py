@@ -12,6 +12,9 @@ _RUNS_ENV = "VEKNA_RUNS"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
+_GIT = ".git"
+_GITDIR = "gitdir: "
+_COMMONDIR = "commondir"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 
@@ -60,6 +63,36 @@ def default_socket_path() -> Path:
     if (runtime := os.environ.get(_RUNTIME_ENV)) is not None:
         return Path(runtime) / "vekna.sock"
     return _owned(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}") / "vekna.sock"
+
+
+# What a cast groups under and what a surface filters by, so both ends resolve
+# it here. Git's common dir is one per repository whatever tree asks, and is
+# read off the disk rather than asked of git: a directory in no repository is
+# its own project.
+def project_of(directory: Path) -> str:
+    here = directory.resolve()
+    for folder in (here, *here.parents):
+        marker = folder / _GIT
+        if marker.is_dir():
+            return str(marker)
+        if marker.is_file():
+            return str(_common(folder, marker))
+    return str(here)
+
+
+# A worktree's `.git` is a file naming its own git dir, whose `commondir` names
+# the repository's, relative to it. A submodule's git dir has none: it is a
+# repository of its own. One that will not read is its own project too.
+def _common(folder: Path, marker: Path) -> Path:
+    try:
+        gitdir = folder / marker.read_text(encoding="utf-8").strip().removeprefix(
+            _GITDIR
+        )
+        if (common := gitdir / _COMMONDIR).is_file():
+            return (gitdir / common.read_text(encoding="utf-8").strip()).resolve()
+    except OSError:
+        return marker
+    return gitdir.resolve()
 
 
 def _owned(directory: Path) -> Path:

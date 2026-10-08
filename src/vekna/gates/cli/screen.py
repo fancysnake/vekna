@@ -1,18 +1,28 @@
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import PurePath
 
 from vekna.pacts.casts import CastView, DamagedRun, RiteView, Run
 from vekna.wire import CastHello, RunRecord
 
-_CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
+_CAST_GLYPH = {
+    "queued": "◷",
+    "running": "▶",
+    "ok": "✓",
+    "error": "✗",
+    "disconnected": "⚠",
+}
 _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
 _WAITING = "⏸"
 _MEDIUM = "↳"
 _GAP = "◌"
 _DAMAGED = "?"
 _HOME = "\x1b[H\x1b[2J"
-_LIST_KEYS = "number to drill in · q to quit"
+_LIST_KEYS = "number to drill in · {scope} · q to quit"
+_TO_GLOBAL = "g every project"
+_TO_PROJECT = "p this project"
+_EVERY = "all projects"
 _CAST_KEYS = "b back · q quit"
 _ANSWER_HERE = "answer it where the cast was started"
 _DELTA_TAIL = 12
@@ -25,12 +35,13 @@ _SHOWN = 12
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
 _WORD = {
+    "queued": "queued",
     "running": "running",
     "ok": "done",
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = ("running", "waiting", "recovering", "done", "failed", "aborted")
+_TALLY = ("running", "waiting", "recovering", "queued", "done", "failed", "aborted")
 _STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
@@ -51,10 +62,30 @@ _HOUR = 3600
 # an operator types is a position in this order.
 def ordered(casts: Sequence[CastView]) -> list[CastView]:
     live = [view for view in casts if view.status == "running"]
-    done = [view for view in casts if view.status != "running"]
+    queued = [view for view in casts if view.status == "queued"]
+    done = [view for view in casts if view.status not in {"running", "queued"}]
     asking = [view for view in live if view.waiting]
     working = [view for view in live if not view.waiting]
-    return [*asking, *working, *reversed(done)]
+    return [*asking, *working, *queued, *reversed(done)]
+
+
+# The casts of one project, or of all of them when there is none to keep to.
+# A record from before casts named their project groups by where it ran.
+def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
+    if project is None:
+        return list(casts)
+    return [
+        view
+        for view in casts
+        if (view.hello.project or view.hello.project_root) == project
+    ]
+
+
+# A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
+# repository's name is what an operator calls it either way.
+def _named(project: str) -> str:
+    where = PurePath(project)
+    return where.parent.name if where.name == ".git" else where.name
 
 
 def _project(view: CastView) -> str:
@@ -309,15 +340,18 @@ def paint(
     focus: str | None,
     note: str = "",
     now: datetime | None = None,
+    project: str | None = None,
 ) -> str:
     at = now if now is not None else datetime.now(UTC)
-    found = [view for view in casts if view.hello.cast_id == focus]
+    shown = scoped(casts, project)
+    found = [view for view in shown if view.hello.cast_id == focus]
     if focus is not None and found:
         body = _drilled(found[0], at)
         keys = _CAST_KEYS
     else:
-        ranked = ordered(casts)
-        body = [f"vekna — {_counted(ranked)}", *_listing(ranked, at)]
-        keys = _LIST_KEYS
+        ranked = ordered(shown)
+        where = _EVERY if project is None else _named(project)
+        body = [f"vekna — {_counted(ranked)}  ({where})", *_listing(ranked, at)]
+        keys = _LIST_KEYS.format(scope=_TO_PROJECT if project is None else _TO_GLOBAL)
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"

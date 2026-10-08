@@ -75,6 +75,7 @@ class _Daemon:
     def __init__(self) -> None:
         self.hub = Hub()
         self.server: Serving | None = None
+        self.stopped = asyncio.Event()
 
     async def start(self, path: Path) -> None:
         self.server = await serve(
@@ -82,6 +83,7 @@ class _Daemon:
             on_message=self.hub.apply,
             on_attach=self.hub.attach_surface,
             on_detach=self.hub.detach_surface,
+            on_stop=self.stopped.set,
         )
 
     async def stop(self) -> None:

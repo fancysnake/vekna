@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.wire import default_runs_root, default_socket_path
+from vekna.wire import default_runs_root, default_socket_path, project_of
 
 _PERMISSION_BITS = 0o777
 _PRIVATE = 0o700
@@ -83,3 +83,44 @@ class TestSocketPath:
 
         with pytest.raises(PermissionError, match="not this user's alone"):
             default_socket_path()
+
+
+# The layout git writes, by hand: a checkout's `.git` is the common dir, and a
+# worktree's `.git` is a file naming a git dir whose `commondir` leads back.
+class TestProject:
+    @staticmethod
+    def test_a_checkout_and_its_worktree_are_one_project(tmp_path: Path):
+        common = tmp_path / "repo" / ".git"
+        tree_dir = common / "worktrees" / "wt"
+        tree_dir.mkdir(parents=True)
+        (tree_dir / "commondir").write_text("../..\n")
+        tree = tmp_path / "wt"
+        (tree / "src").mkdir(parents=True)
+        (tree / ".git").write_text(f"gitdir: {tree_dir}\n")
+
+        assert project_of(tmp_path / "repo") == str(common)
+        assert project_of(tree / "src") == str(common)
+
+    # A submodule's git dir has no `commondir`: it is a repository of its own.
+    @staticmethod
+    def test_a_git_dir_without_a_common_dir_is_its_own(tmp_path: Path):
+        modules = tmp_path / "repo" / ".git" / "modules" / "sub"
+        modules.mkdir(parents=True)
+        sub = tmp_path / "repo" / "sub"
+        sub.mkdir()
+        (sub / ".git").write_text("gitdir: ../.git/modules/sub\n")
+
+        assert project_of(sub) == str(modules)
+
+    @staticmethod
+    def test_a_directory_in_no_repository_is_its_own(tmp_path: Path):
+        assert project_of(tmp_path) == str(tmp_path.resolve())
+
+    @staticmethod
+    def test_a_git_file_that_will_not_read_is_its_own(tmp_path: Path):
+        marker = tmp_path / "wt" / ".git"
+        marker.parent.mkdir()
+        marker.write_text("gitdir: /nowhere\n", encoding="utf-8")
+        marker.chmod(0)
+
+        assert project_of(marker.parent) == str(marker)

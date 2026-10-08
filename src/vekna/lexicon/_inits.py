@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from vekna.wire import CastHello, WireMessage, default_socket_path
+from vekna.wire import CastHello, WireMessage, default_socket_path, project_of
 
 from ._links.daemon import DaemonLink, TeeChannel, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
@@ -456,6 +456,7 @@ def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root=str(Path.cwd()),
+        project=project_of(Path.cwd()),
         ritual=plan.ritual.name,
         components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
         started_at=datetime.now(tz=UTC),
