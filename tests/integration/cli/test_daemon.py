@@ -1,10 +1,12 @@
 import asyncio
 import contextlib
+import os
 import shutil
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -18,6 +20,7 @@ from vekna.wire import (
     DecideRequested,
     RiteFinished,
     RiteStarted,
+    StopRequested,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -397,6 +400,57 @@ class TestServing:
 
         assert await stop_daemon() == "no daemon running"
 
+    # The stub takes the stop and goes on listening, which is what a daemon
+    # wedged on its way out looks like from here.
+    @staticmethod
+    async def test_stop_says_so_when_the_daemon_keeps_answering(
+        socket_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("vekna.inits.cli._POLLS", 3)
+        heard: list[WireMessage] = []
+
+        async def ignores(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            with contextlib.suppress(OSError):
+                heard.extend([frame async for frame in read_frames(reader)])
+            writer.close()
+
+        server = await asyncio.start_unix_server(ignores, path=str(socket_path))
+        try:
+            with pytest.raises(click.ClickException) as raised:
+                await stop_daemon()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert raised.value.message == (
+            f"asked the daemon to stop, and {socket_path} is still answering"
+        )
+        assert heard == [StopRequested()]
+
+    # In-process, as the forked child: run off the loop's thread, since the
+    # command starts a loop of its own.
+    @staticmethod
+    async def test_serve_as_the_child_detaches_and_logs_where_debug_goes(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        sessions: list[None] = []
+        monkeypatch.setattr(os, "fork", lambda: 0)
+        monkeypatch.setattr(os, "setsid", lambda: sessions.append(None))
+        served = asyncio.create_task(
+            asyncio.to_thread(CliRunner().invoke, init_command(), ["serve", "--debug"])
+        )
+        await _eventually(socket_path.exists)
+
+        assert await stop_daemon() == "stopped the daemon"
+        result = await served
+
+        log = tmp_path / "state" / "vekna" / "debug.log"
+        assert result.exit_code == 0
+        assert f"logging every event to {log}" in result.stderr
+        assert sessions == [None]
+
 
 @pytest.mark.asyncio
 class TestDebug:
@@ -515,6 +569,21 @@ class TestTheBareCommand:
         assert result.exit_code == 1
         assert f"the daemon would not start (1) — {log} says why" in result.output
         assert "No module named vekna.no_such_module" in log.read_text(encoding="utf-8")
+        assert not socket_path.exists()
+
+    @staticmethod
+    def test_serve_as_the_parent_returns_at_once(
+        socket_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        sessions: list[None] = []
+        monkeypatch.setattr(os, "fork", lambda: 4242)
+        monkeypatch.setattr(os, "setsid", lambda: sessions.append(None))
+
+        result = CliRunner().invoke(init_command(), ["serve"])
+
+        assert result.exit_code == 0
+        assert not result.output
+        assert not sessions
         assert not socket_path.exists()
 
 
