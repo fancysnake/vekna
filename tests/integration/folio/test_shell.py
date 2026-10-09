@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import signal
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -424,3 +425,39 @@ class TestStubbornShell:
         started = pids.read_text(encoding="utf-8").split()
         assert len(started) == _SPAWNED
         assert not [pid for pid in started if _running(pid)]
+
+
+class TestEmptiedGroup:
+    # bash has exited and its one child moved to a session of its own, still
+    # holding stdout open: the cast keeps reading, yet no group is left to signal.
+    @staticmethod
+    def test_cancelling_a_command_whose_group_is_gone_still_cancels():
+        command = (
+            "python3 -c 'import os, time; os.setsid(); "
+            "print(os.getpid(), flush=True); time.sleep(300)' &"
+        )
+
+        async def cancel_once_bash_left() -> None:
+            pids: list[str] = []
+            moved_out = asyncio.Event()
+
+            def on_line(line: str) -> None:
+                pids.append(line)
+                moved_out.set()
+
+            running = asyncio.create_task(run_bash(command, on_line=on_line))
+            async with asyncio.timeout(5):
+                await moved_out.wait()
+            # Time for the child watcher to reap bash, emptying the group.
+            await asyncio.sleep(0.2)
+            running.cancel()
+            try:
+                with pytest.raises(asyncio.CancelledError):
+                    async with asyncio.timeout(5):
+                        await running
+            finally:
+                # Inside the loop, so the pipe it held closes while one runs.
+                os.kill(int(pids[0]), signal.SIGKILL)
+                await asyncio.sleep(0.2)
+
+        asyncio.run(cancel_once_bash_left())

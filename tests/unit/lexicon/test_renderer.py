@@ -290,6 +290,17 @@ class TestPromptEndOfInput:
         with pytest.raises(StandalonePromptError, match="input ended"):
             asyncio.run(renderer.decide(prompt="name?", free=True))
 
+    # The reading thread hands its failure to the question rather than dying
+    # with it and leaving the question waiting forever.
+    @staticmethod
+    def test_a_closed_input_raises_out_of_the_question():
+        inp = io.StringIO("y\n")
+        inp.close()
+        renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+
+        with pytest.raises(ValueError, match="closed file"):
+            asyncio.run(asyncio.wait_for(renderer.decide(prompt="ok?"), timeout=5))
+
 
 class TestDecideConfirm:
     @staticmethod
