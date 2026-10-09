@@ -21,6 +21,7 @@ def _hello() -> CastHello:
     return CastHello(
         cast_id="c1abcdef99",
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={},
         started_at=_WHEN,
@@ -45,6 +46,7 @@ def _running(ritual: str, *, ago: int) -> CastView:
         hello=CastHello(
             cast_id=ritual,
             project_root="/proj",
+            project="/proj/.git",
             ritual=ritual,
             components={},
             started_at=_WHEN - timedelta(seconds=ago),
@@ -195,24 +197,6 @@ class TestTheList:
         assert "waiting" in listed[0]
         assert "merge #74 now?" in listed[0]
         assert "merge_ready" in listed[1]
-
-    # Waiting for a slot is not work in flight, and not over either.
-    @staticmethod
-    def test_a_queued_cast_sorts_between_the_running_and_the_finished():
-        done = _running("finished", ago=90)
-        done.status = "ok"
-        queued = _running("later", ago=60)
-        queued.status = "queued"
-        busy = _running("now", ago=30)
-
-        painted = paint(casts=[done, queued, busy], focus=None, now=_WHEN)
-        listed = _rows(painted)
-
-        assert "now" in listed[0]
-        assert "later" in listed[1]
-        assert "queued" in listed[1]
-        assert "finished" in listed[2]
-        assert "1 running · 1 queued · 1 done" in painted
 
     # An aborted cast is the one worth carrying on with, and the id is what
     # carries it on — so the row is the command, not a status to go look up.

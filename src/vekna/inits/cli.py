@@ -1,12 +1,13 @@
 import asyncio
 import contextlib
+import fcntl
 import importlib
 import os
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import IO, Protocol, cast
 
 import click
 from click import Group
@@ -24,6 +25,7 @@ from vekna.pacts.screen import Screen
 from vekna.wire import (
     StopRequested,
     SurfaceHello,
+    cast_frames,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -55,13 +57,14 @@ _KEPT = 200
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
 _DAEMON_LOG = "daemon.log"
+_DAEMON_LOCK = "daemon.lock"
 _STARTED = "started the daemon — q leaves it running, `vekna stop` ends it"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
 _NO_DAEMON = "no daemon running"
 _STOPPED = "stopped the daemon"
 # How long a daemon gets to start listening, and to stop.
 _POLL_SECONDS = 0.05
-_RISING_POLLS = 100
+_POLLS = 100
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -236,23 +239,30 @@ def _logged(note: str) -> None:
     )
 
 
-# Every `vekna` is a surface on the daemon: it is replayed every live cast and
-# paints the project it was opened in. It journals nothing — the daemon that
-# owns the socket owns the record — and `q` leaves the daemon running.
-async def _as_peer(*, path: Path, screen: Screen, project: str, note: str) -> int:
+# Every `vekna` is a window on the daemon, summoning it when none is listening:
+# it is replayed every live cast and paints the project it was opened in. It
+# journals nothing — the daemon that owns the socket owns the record — and `q`
+# leaves the daemon running.
+async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
+    path = default_socket_path()
+    hub = Hub()
+    dashboard = Dashboard(
+        casts=hub,
+        screen=screen if screen is not None else Terminal(),
+        project=await project_of(Path.cwd()),
+    )
+    if not await alive(path):
+        await _summon(path=path, debug=debug)
+        dashboard.say(_STARTED)
+    elif debug:
+        dashboard.say(_DEBUG_LATE)
     reader, writer = await attach(path)
     writer.write(encode_frame(SurfaceHello()))
-    hub = Hub()
-    dashboard = Dashboard(casts=hub, screen=screen, project=project)
-    if note:
-        dashboard.say(note)
 
-    # What a daemon sends a surface is what it heard from its casts, so the
-    # handshake this end wrote is the only frame kind that cannot come back.
+    # What a daemon sends a surface is what it heard from its casts, and nothing
+    # that opens a connection is one of those.
     async def listen() -> None:
-        async for message in read_frames(reader):
-            if isinstance(message, (SurfaceHello, StopRequested)):
-                continue
+        async for message in cast_frames(read_frames(reader)):
             hub.apply(message)
             dashboard.changed()
         dashboard.stop(note=_DAEMON_ENDED)
@@ -265,13 +275,33 @@ async def _as_peer(*, path: Path, screen: Screen, project: str, note: str) -> in
 
 
 # The daemon itself, with no view: it binds, journals, fans out, and runs until
-# `vekna stop` asks it not to. Refuses rather than binds when one is already
-# listening, since a bind would take the socket from under it.
+# `vekna stop` asks it not to. Refuses rather than binds when another one holds
+# the lock or is listening, since a bind would take the socket from under it.
+# The lock is what settles two windows summoning at once; the kernel lets go of
+# it however the holder ends, so there is never a stale one to clear.
 async def serve_daemon(*, debug: Path | None = None) -> int:
     path = default_socket_path()
-    if await alive(path):
-        _logged(f"a daemon is already listening on {path}")
-        return 1
+    lock = default_state_root() / _DAEMON_LOCK
+    await asyncio.to_thread(lock.parent.mkdir, parents=True, exist_ok=True)
+    with lock.open("a") as held:
+        if not _locked(held):
+            _logged(f"another daemon holds {lock}")
+            return 1
+        if await alive(path):
+            _logged(f"a daemon is already listening on {path}")
+            return 1
+        return await _serving(path=path, debug=debug)
+
+
+def _locked(held: IO[str]) -> bool:
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
+
+
+async def _serving(*, path: Path, debug: Path | None) -> int:
     journal = Journal(default_runs_root())
     hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
     if debug is not None:
@@ -279,17 +309,15 @@ async def serve_daemon(*, debug: Path | None = None) -> int:
     # Before the socket binds, so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
-    stopping = asyncio.Event()
     server = await serve(
         path=path,
         on_message=hub.apply,
         on_attach=hub.attach_surface,
         on_detach=hub.detach_surface,
-        on_stop=stopping.set,
     )
     _logged(f"listening on {path}")
     try:
-        await stopping.wait()
+        await server.stopped()
     finally:
         await server.close()
     _logged("stopped")
@@ -317,24 +345,19 @@ async def _summon(*, path: Path, debug: bool) -> None:
     if code != 0:
         message = f"the daemon would not start ({code}) — {log} says why"
         raise click.ClickException(message)
-    for _ in range(_RISING_POLLS):
-        if await alive(path):
-            return
+    if not await _until(path, listening=True):
+        message = f"the daemon is not listening on {path} — {log} says why"
+        raise click.ClickException(message)
+
+
+# Whether the socket came to answer, or stopped answering, in the time a daemon
+# gets to start or to stop.
+async def _until(path: Path, *, listening: bool) -> bool:
+    for _ in range(_POLLS):
+        if await alive(path) is listening:
+            return True
         await asyncio.sleep(_POLL_SECONDS)
-    message = f"the daemon is not listening on {path} — {log} says why"
-    raise click.ClickException(message)
-
-
-async def daemon(*, debug: bool = False, screen: Screen | None = None) -> int:
-    where: Screen = screen if screen is not None else Terminal()
-    path = default_socket_path()
-    if await alive(path):
-        note = _DEBUG_LATE if debug else ""
-    else:
-        await _summon(path=path, debug=debug)
-        note = _STARTED
-    project = await asyncio.to_thread(project_of, Path.cwd())
-    return await _as_peer(path=path, screen=where, project=project, note=note)
+    return False
 
 
 # Waits for the socket to stop answering, so `vekna stop && vekna` starts a
@@ -351,12 +374,10 @@ async def stop_daemon() -> str:
     writer.close()
     with contextlib.suppress(OSError):
         await writer.wait_closed()
-    for _ in range(_RISING_POLLS):
-        if not await alive(path):
-            return _STOPPED
-        await asyncio.sleep(_POLL_SECONDS)
-    message = f"asked the daemon to stop, and {path} is still answering"
-    raise click.ClickException(message)
+    if not await _until(path, listening=False):
+        message = f"asked the daemon to stop, and {path} is still answering"
+        raise click.ClickException(message)
+    return _STOPPED
 
 
 # Forked off and given a session of its own before the loop exists: the
@@ -393,7 +414,7 @@ def init_command() -> Group:
     def vekna(*, debug: bool = False) -> None:
         ctx = click.get_current_context()
         if ctx.invoked_subcommand is None:
-            raise SystemExit(asyncio.run(daemon(debug=debug)))
+            raise SystemExit(asyncio.run(window(debug=debug)))
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)

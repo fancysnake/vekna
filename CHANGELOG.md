@@ -25,8 +25,6 @@ when.
 
 - **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
   one.
-- **`queued`** cast status, drawn between running and finished casts. Nothing
-  sets it yet.
 
 ## [0.13.0] - 2026-10-05
 

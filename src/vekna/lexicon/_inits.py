@@ -452,11 +452,11 @@ def _rendered(result: BaseModel | None) -> str:
     return "null" if result is None else result.model_dump_json()
 
 
-def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
+async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root=str(Path.cwd()),
-        project=project_of(Path.cwd()),
+        project=await project_of(Path.cwd()),
         ritual=plan.ritual.name,
         components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
         started_at=datetime.now(tz=UTC),
@@ -525,7 +525,8 @@ async def _run(plan: _Plan) -> int:
     cast_id = uuid4().hex
     renderer = StandaloneRenderer()
     link = DaemonLink(
-        socket_path=default_socket_path(), hello=_hello(cast_id=cast_id, plan=plan)
+        socket_path=default_socket_path(),
+        hello=await _hello(cast_id=cast_id, plan=plan),
     )
     tee = TeeChannel(
         inner=renderer,

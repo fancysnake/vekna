@@ -4,7 +4,7 @@ import tempfile
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
-from ._pacts import RunRecord, WireMessage, decode_frame
+from ._pacts import CastMessage, Opening, RunRecord, WireMessage, decode_frame
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -12,9 +12,6 @@ _RUNS_ENV = "VEKNA_RUNS"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
-_GIT = ".git"
-_GITDIR = "gitdir: "
-_COMMONDIR = "commondir"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 
@@ -23,6 +20,15 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
     async for raw in reader:
         if stripped := raw.strip():
             yield decode_frame(stripped)
+
+
+# What a connection carries once its first frame has said what it is. An opening
+# frame this late opens nothing, so it is dropped here once rather than by every
+# reader in turn.
+async def cast_frames(frames: AsyncIterator[WireMessage]) -> AsyncIterator[CastMessage]:
+    async for message in frames:
+        if not isinstance(message, Opening):
+            yield message
 
 
 # Where the socket and the journal are, and how to read back what the daemon
@@ -66,33 +72,25 @@ def default_socket_path() -> Path:
 
 
 # What a cast groups under and what a surface filters by, so both ends resolve
-# it here. Git's common dir is one per repository whatever tree asks, and is
-# read off the disk rather than asked of git: a directory in no repository is
+# it here. Git's common dir is one per repository whatever tree asks. A
+# directory git will not place in a repository — or a machine without git — is
 # its own project.
-def project_of(directory: Path) -> str:
-    here = directory.resolve()
-    for folder in (here, *here.parents):
-        marker = folder / _GIT
-        if marker.is_dir():
-            return str(marker)
-        if marker.is_file():
-            return str(_common(folder, marker))
-    return str(here)
-
-
-# A worktree's `.git` is a file naming its own git dir, whose `commondir` names
-# the repository's, relative to it. A submodule's git dir has none: it is a
-# repository of its own. One that will not read is its own project too.
-def _common(folder: Path, marker: Path) -> Path:
+async def project_of(directory: Path) -> str:
+    here = await asyncio.to_thread(directory.resolve)
     try:
-        gitdir = folder / marker.read_text(encoding="utf-8").strip().removeprefix(
-            _GITDIR
+        git = await asyncio.create_subprocess_exec(
+            "git",
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            cwd=here,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        if (common := gitdir / _COMMONDIR).is_file():
-            return (gitdir / common.read_text(encoding="utf-8").strip()).resolve()
-    except OSError:
-        return marker
-    return gitdir.resolve()
+    except FileNotFoundError:
+        return str(here)
+    answer, _ = await git.communicate()
+    return answer.decode().strip() if git.returncode == 0 else str(here)
 
 
 def _owned(directory: Path) -> Path:

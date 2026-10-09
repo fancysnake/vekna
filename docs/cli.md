@@ -179,15 +179,13 @@ vekna — 1 running · 1 waiting · 1 done · 1 aborted  (all projects)
 finished, and `now` what it is doing this second — the running step, the medium
 inside it, and how long that step has been running. A step that has not moved
 in ten minutes is the thing this view exists to show. Casts waiting on an
-answer sort to the top, then the ones still running, then the queued ones,
-then the ones that ended.
+answer sort to the top, then the ones still running, then the ones that ended.
 
-The status word is `running`, `waiting`, `recovering`, `queued`, `done`,
-`failed` or `aborted`. Queued is a cast waiting for a slot. Recovering is a
-running cast whose last step raised and went to a recovery step; drilling in
-shows the error beside the step. Aborted is a cast whose socket closed without
-a goodbye, which is the one worth carrying on with, so its row prints the
-command that does it.
+The status word is `running`, `waiting`, `recovering`, `done`, `failed` or
+`aborted`. Recovering is a running cast whose last step raised and went to a
+recovery step; drilling in shows the error beside the step. Aborted is a cast
+whose socket closed without a goodbye, which is the one worth carrying on
+with, so its row prints the command that does it.
 
 A number drills into a cast, `b` comes back, `g` and `p` switch between every
 project and this one, `q` closes the window. Drilling in is where

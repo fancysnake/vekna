@@ -110,7 +110,6 @@ class _DaemonThread:
             on_message=self.hub.apply,
             on_attach=self.hub.attach_surface,
             on_detach=self.hub.detach_surface,
-            on_stop=self._stop.set,
         )
         assert server is not None
         self._ready.set()
@@ -174,6 +173,7 @@ class TestAttachedCast:
             CastHello(
                 cast_id="first",
                 project_root=str(tmp_path),
+                project=str(tmp_path),
                 ritual="countdown",
                 components={"start": 1},
                 started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),

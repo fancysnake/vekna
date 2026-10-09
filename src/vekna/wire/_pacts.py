@@ -13,14 +13,13 @@ class CastHello(BaseModel):
     kind: Literal["cast_hello"] = "cast_hello"
     cast_id: str
     project_root: str
+    # The repository the cast belongs to, as its git common dir: every worktree
+    # of one repository shares it, while `project_root` is the tree it runs in.
+    project: str
     ritual: str
     components: dict[str, JsonValue]
     started_at: datetime
     resumed_from: str | None = None
-    # The repository the cast belongs to, as its git common dir: every worktree
-    # of one repository shares it, while `project_root` is the tree it runs in.
-    # None on a record written before casts said it.
-    project: str | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -167,7 +166,11 @@ CastUpdate = (
 
 CastMessage = CastHello | CastUpdate
 
-WireMessage = CastMessage | SurfaceHello | StopRequested
+# What a connection that is not a cast opens with, and only opens with: past the
+# first frame there is nothing left for one of these to say.
+Opening = SurfaceHello | StopRequested
+
+WireMessage = CastMessage | Opening
 
 
 # --- the record on disk ---
@@ -176,8 +179,7 @@ WireMessage = CastMessage | SurfaceHello | StopRequested
 # own types because it is shared exactly the way a message is: the daemon writes
 # it, and a resumed cast process — which may not import the daemon's layers —
 # reads it back to learn what it is carrying on.
-# `queued` is a cast waiting for a slot: known, not yet started.
-CastStatus = Literal["queued", "running", "ok", "error", "disconnected"]
+CastStatus = Literal["running", "ok", "error", "disconnected"]
 
 
 # `gapped` is what the event log cannot say for itself: an append the daemon

@@ -1,4 +1,6 @@
+import asyncio
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -85,42 +87,44 @@ class TestSocketPath:
             default_socket_path()
 
 
-# The layout git writes, by hand: a checkout's `.git` is the common dir, and a
-# worktree's `.git` is a file naming a git dir whose `commondir` leads back.
+def _git(*args: str, cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+# Git itself, in a directory nothing above can claim: what the cast and the
+# window agree on is whatever it answers.
+@pytest.fixture(name="_no_repository_above")
+def _ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+
+
+@pytest.mark.usefixtures("_no_repository_above")
 class TestProject:
     @staticmethod
     def test_a_checkout_and_its_worktree_are_one_project(tmp_path: Path):
-        common = tmp_path / "repo" / ".git"
-        tree_dir = common / "worktrees" / "wt"
-        tree_dir.mkdir(parents=True)
-        (tree_dir / "commondir").write_text("../..\n")
-        tree = tmp_path / "wt"
-        (tree / "src").mkdir(parents=True)
-        (tree / ".git").write_text(f"gitdir: {tree_dir}\n")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git("init", "-q", cwd=repo)
+        _git(
+            "-c",
+            "user.name=vekna",
+            "-c",
+            "user.email=vekna@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "root",
+            cwd=repo,
+        )
+        _git("worktree", "add", "-q", str(tmp_path / "wt"), cwd=repo)
+        common = str((repo / ".git").resolve())
 
-        assert project_of(tmp_path / "repo") == str(common)
-        assert project_of(tree / "src") == str(common)
-
-    # A submodule's git dir has no `commondir`: it is a repository of its own.
-    @staticmethod
-    def test_a_git_dir_without_a_common_dir_is_its_own(tmp_path: Path):
-        modules = tmp_path / "repo" / ".git" / "modules" / "sub"
-        modules.mkdir(parents=True)
-        sub = tmp_path / "repo" / "sub"
-        sub.mkdir()
-        (sub / ".git").write_text("gitdir: ../.git/modules/sub\n")
-
-        assert project_of(sub) == str(modules)
+        assert asyncio.run(project_of(repo)) == common
+        assert asyncio.run(project_of(tmp_path / "wt")) == common
 
     @staticmethod
     def test_a_directory_in_no_repository_is_its_own(tmp_path: Path):
-        assert project_of(tmp_path) == str(tmp_path.resolve())
-
-    @staticmethod
-    def test_a_git_file_that_will_not_read_is_its_own(tmp_path: Path):
-        marker = tmp_path / "wt" / ".git"
-        marker.parent.mkdir()
-        marker.write_text("gitdir: /nowhere\n", encoding="utf-8")
-        marker.chmod(0)
-
-        assert project_of(marker.parent) == str(marker)
+        assert asyncio.run(project_of(tmp_path)) == str(tmp_path.resolve())

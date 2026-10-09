@@ -24,10 +24,10 @@ _BROKE = "the view stopped"
 
 
 # The project this view opened in, and whether it is showing every project
-# instead. Without one there is nothing to keep to.
+# instead. One attribute on the view rather than two.
 @dataclass
 class _Scope:
-    home: str | None
+    home: str
     every: bool = False
 
     @property
@@ -36,12 +36,9 @@ class _Scope:
 
 
 # What the operator does with the view, and nothing about where the events came
-# from: the daemon that owns the socket and a peer surface attached to it drive
-# the same one, over the same two protocols.
+# from: it reads casts and paints a screen, each through a protocol.
 class Dashboard:
-    def __init__(
-        self, *, casts: Casts, screen: Screen, project: str | None = None
-    ) -> None:
+    def __init__(self, *, casts: Casts, screen: Screen, project: str) -> None:
         self._casts = casts
         self._screen = screen
         self._scope = _Scope(home=project)
@@ -140,7 +137,7 @@ class Dashboard:
             self._focus = None
         elif lowered in _EVERY:
             self._scope.every, self._focus = True, None
-        elif lowered in _HOME and self._scope.home is not None:
+        elif lowered in _HOME:
             self._scope.every, self._focus = False, None
         elif lowered.isdecimal():
             self._focus = self._nth(int(lowered))

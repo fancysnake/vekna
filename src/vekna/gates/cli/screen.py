@@ -6,13 +6,7 @@ from pathlib import PurePath
 from vekna.pacts.casts import CastView, DamagedRun, RiteView, Run
 from vekna.wire import CastHello, RunRecord
 
-_CAST_GLYPH = {
-    "queued": "◷",
-    "running": "▶",
-    "ok": "✓",
-    "error": "✗",
-    "disconnected": "⚠",
-}
+_CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
 _RITE_GLYPH = {"running": "▶", "ok": "✓", "error": "✗"}
 _WAITING = "⏸"
 _MEDIUM = "↳"
@@ -35,13 +29,12 @@ _SHOWN = 12
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
 _WORD = {
-    "queued": "queued",
     "running": "running",
     "ok": "done",
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = ("running", "waiting", "recovering", "queued", "done", "failed", "aborted")
+_TALLY = ("running", "waiting", "recovering", "done", "failed", "aborted")
 _STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
@@ -62,23 +55,17 @@ _HOUR = 3600
 # an operator types is a position in this order.
 def ordered(casts: Sequence[CastView]) -> list[CastView]:
     live = [view for view in casts if view.status == "running"]
-    queued = [view for view in casts if view.status == "queued"]
-    done = [view for view in casts if view.status not in {"running", "queued"}]
+    done = [view for view in casts if view.status != "running"]
     asking = [view for view in live if view.waiting]
     working = [view for view in live if not view.waiting]
-    return [*asking, *working, *queued, *reversed(done)]
+    return [*asking, *working, *reversed(done)]
 
 
 # The casts of one project, or of all of them when there is none to keep to.
-# A record from before casts named their project groups by where it ran.
 def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
     if project is None:
         return list(casts)
-    return [
-        view
-        for view in casts
-        if (view.hello.project or view.hello.project_root) == project
-    ]
+    return [view for view in casts if view.hello.project == project]
 
 
 # A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the

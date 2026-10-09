@@ -21,6 +21,7 @@ def _hello() -> CastHello:
     return CastHello(
         cast_id=_CAST,
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={"bound": 3},
         started_at=_WHEN,
@@ -75,7 +76,6 @@ class _Daemon:
     def __init__(self) -> None:
         self.hub = Hub()
         self.server: Serving | None = None
-        self.stopped = asyncio.Event()
 
     async def start(self, path: Path) -> None:
         self.server = await serve(
@@ -83,7 +83,6 @@ class _Daemon:
             on_message=self.hub.apply,
             on_attach=self.hub.attach_surface,
             on_detach=self.hub.detach_surface,
-            on_stop=self.stopped.set,
         )
 
     async def stop(self) -> None:

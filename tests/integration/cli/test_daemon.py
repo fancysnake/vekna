@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from vekna.inits.cli import daemon, init_command, serve_daemon, stop_daemon
+from vekna.inits.cli import init_command, serve_daemon, stop_daemon, window
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.pacts.screen import Screen
@@ -21,7 +21,6 @@ from vekna.wire import (
     SurfaceHello,
     WireMessage,
     encode_frame,
-    project_of,
     read_frames,
 )
 
@@ -31,7 +30,8 @@ _TICK = 0.01
 
 
 # Of the project the test is standing in unless told otherwise, which is the
-# one a bare `vekna` there opens on.
+# one a bare `vekna` there opens on: the fixture stands it in no repository, so
+# that is the directory itself.
 def _hello(
     cast_id: str = "c1",
     ritual: str = "fix_demo",
@@ -44,7 +44,7 @@ def _hello(
         ritual=ritual,
         components={},
         started_at=started_at,
-        project=project if project is not None else project_of(Path.cwd()),
+        project=project if project is not None else str(Path.cwd().resolve()),
     )
 
 
@@ -122,6 +122,7 @@ def _socket_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("VEKNA_SOCKET", str(tmp_path / "vekna.sock"))
     monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
     monkeypatch.chdir(tmp_path)
     return tmp_path / "vekna.sock"
 
@@ -133,7 +134,7 @@ class TestTheView:
         keys = _Keys()
         async with _served(socket_path) as host:
             writer = await _say(socket_path, _hello(), _started())
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("fix_demo"))
 
             keys.press("q")
@@ -165,7 +166,7 @@ class TestTheView:
                     cast_id="c1", rite_id="r2", status="ok", finished_at=_WHEN
                 ),
             )
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("fix_demo"))
 
             keys.press("1")
@@ -193,7 +194,7 @@ class TestTheView:
                     cast_id="c1", rite_id="r1", request_id="q1", prompt="allow Bash?"
                 ),
             )
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("waiting"))
             await _eventually(lambda: keys.painted("allow Bash?"))
             keys.press("1")
@@ -209,7 +210,7 @@ class TestTheView:
     async def test_a_key_that_means_nothing_says_so(socket_path: Path):
         keys = _Keys()
         async with _served(socket_path):
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
 
             keys.press("zz")
             await _eventually(lambda: keys.painted("is not a cast"))
@@ -223,7 +224,7 @@ class TestTheView:
     async def test_an_empty_daemon_says_it_is_empty(socket_path: Path):
         keys = _Keys()
         async with _served(socket_path):
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("no casts"))
 
             keys.press("q")
@@ -242,7 +243,7 @@ class TestProjects:
         async with _served(socket_path):
             here = await _say(socket_path, _hello("c1", "mine"))
             there = await _say(socket_path, _hello("c2", "theirs", project=elsewhere))
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("mine"))
             assert not keys.painted("theirs")
             assert keys.showing(f"({tmp_path.name})")
@@ -269,7 +270,7 @@ class TestProjects:
         async with _served(socket_path):
             there = await _say(socket_path, _hello("c2", "theirs", project=elsewhere))
             here = await _say(socket_path, _hello("c1", "mine"))
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("mine"))
 
             keys.press("1")
@@ -288,8 +289,8 @@ class TestPeers:
         first, second = _Keys(), _Keys()
         async with _served(socket_path):
             writer = await _say(socket_path, _hello(), _started())
-            one = asyncio.create_task(daemon(screen=first))
-            two = asyncio.create_task(daemon(screen=second))
+            one = asyncio.create_task(window(screen=first))
+            two = asyncio.create_task(window(screen=second))
             await _eventually(lambda: first.painted("fix_demo"))
             await _eventually(lambda: second.painted("fix_demo"))
 
@@ -304,7 +305,7 @@ class TestPeers:
     async def test_a_window_is_told_when_the_daemon_ends(socket_path: Path):
         keys = _Keys()
         async with _served(socket_path) as host:
-            peer = asyncio.create_task(daemon(screen=keys))
+            peer = asyncio.create_task(window(screen=keys))
             await _eventually(lambda: keys.painted("no casts"))
 
         await _eventually(lambda: keys.painted("the daemon ended"))
@@ -317,7 +318,7 @@ class TestPeers:
     ):
         keys = _Keys()
         async with _served(socket_path):
-            peer = asyncio.create_task(daemon(debug=True, screen=keys))
+            peer = asyncio.create_task(window(debug=True, screen=keys))
             await _eventually(lambda: keys.painted("--debug ignored"))
 
             keys.press("q")
@@ -346,7 +347,7 @@ class TestPeers:
 
         server = await asyncio.start_unix_server(echoes, path=str(socket_path))
         peer_keys = _Keys()
-        peer = asyncio.create_task(daemon(screen=peer_keys))
+        peer = asyncio.create_task(window(screen=peer_keys))
         await _eventually(lambda: peer_keys.painted("fix_demo"))
 
         peer_keys.press("q")
@@ -359,11 +360,30 @@ class TestPeers:
 
 @pytest.mark.asyncio
 class TestServing:
+    # Two windows summoning at once: the lock is taken before either binds, so
+    # the loser refuses even where the winner is not listening yet.
     @staticmethod
-    async def test_a_second_daemon_refuses_rather_than_takes_the_socket(
-        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    async def test_a_second_daemon_refuses_while_the_first_holds_the_lock(
+        socket_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ):
         async with _served(socket_path):
+            assert await serve_daemon() == 1
+
+            assert await alive(socket_path)
+        lock = tmp_path / "state" / "vekna" / "daemon.lock"
+        assert f"another daemon holds {lock}" in capsys.readouterr().err
+
+    # A daemon keeping its state elsewhere holds a lock this one cannot see,
+    # and a bind would still take its socket.
+    @staticmethod
+    async def test_a_second_daemon_refuses_rather_than_takes_the_socket(
+        socket_path: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        async with _served(socket_path):
+            monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "elsewhere"))
             assert await serve_daemon() == 1
 
             assert await alive(socket_path)
@@ -472,7 +492,7 @@ class TestTheBareCommand:
     def test_a_daemon_that_cannot_bind_is_said_with_its_log(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("vekna.inits.cli._RISING_POLLS", 10)
+        monkeypatch.setattr("vekna.inits.cli._POLLS", 10)
         socket_path.write_text("somebody's file", encoding="utf-8")
 
         result = CliRunner().invoke(init_command(), [], input="q\n")

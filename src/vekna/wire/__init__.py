@@ -1,4 +1,5 @@
 from ._links import (
+    cast_frames,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -55,6 +56,7 @@ __all__ = [
     "StopRequested",
     "SurfaceHello",
     "WireMessage",
+    "cast_frames",
     "decode_frame",
     "default_runs_root",
     "default_socket_path",
