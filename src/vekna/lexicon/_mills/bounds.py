@@ -46,7 +46,8 @@ async def race(*work: Awaitable[_ResultT]) -> _ResultT:
     if not work:
         msg = "race needs at least one entrant"
         raise MediumBoundaryError(msg)
-    running: set[asyncio.Future[_ResultT]] = {asyncio.ensure_future(w) for w in work}
+    entrants = [asyncio.ensure_future(w) for w in work]
+    running: set[asyncio.Future[_ResultT]] = set(entrants)
     failed: list[str] = []
     try:
         # Each round ends at least one entrant, so there are at most this many.
@@ -56,7 +57,9 @@ async def race(*work: Awaitable[_ResultT]) -> _ResultT:
             finished, running = await asyncio.wait(
                 running, return_when=asyncio.FIRST_COMPLETED
             )
-            for entrant in finished:
+            # Those that ended in one round are tied, and a tie goes to the one
+            # passed first: a set's order would settle it differently each run.
+            for entrant in (each for each in entrants if each in finished):
                 if entrant.cancelled():
                     failed.append("cancelled")
                 elif (error := entrant.exception()) is not None:
@@ -64,8 +67,8 @@ async def race(*work: Awaitable[_ResultT]) -> _ResultT:
                 else:
                     return entrant.result()
     finally:
-        for entrant in running:
-            entrant.cancel()
+        for loser in running:
+            loser.cancel()
         await asyncio.gather(*running, return_exceptions=True)
     msg = f"every entrant in the race failed — {'; '.join(failed)}"
     raise RitualError(msg)

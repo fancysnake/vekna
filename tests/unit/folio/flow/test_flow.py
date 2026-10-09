@@ -245,6 +245,17 @@ async def falling(_: Falling) -> Done[Note]:
     )
 
 
+class Tied(BaseModel):
+    pass
+
+
+@step
+async def tied(_: Tied) -> Done[Note]:
+    return Done(
+        Note(text=await race(runner("first", seconds=0), runner("second", seconds=0)))
+    )
+
+
 @step
 async def empty_race(_: Unentered) -> Done[Note]:
     return Done(Note(text=await race()))
@@ -298,10 +309,17 @@ class TestRace:
             RitualError,
             match=(
                 r"every entrant in the race failed — "
-                r"RitualError: (one|two) fell; RitualError: (one|two) fell"
+                r"RitualError: one fell; RitualError: two fell"
             ),
         ):
             _raced(Falling())
+
+    # Both end in the same round, so neither finished first.
+    @staticmethod
+    def test_a_tie_goes_to_the_entrant_passed_first():
+        result, _ = _raced(Tied())
+
+        assert result == Note(text="first")
 
     @staticmethod
     def test_a_race_with_no_entrants_is_refused():
