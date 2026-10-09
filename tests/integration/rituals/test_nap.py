@@ -22,3 +22,4 @@ class TestNap:
 
         with pytest.raises(RitualError, match="nap 3 failed: Terminated"):
             trial.walk(sleep, Asleep(left=2, slept=2, seconds=5))
+        assert trial.shell.commands == ["sleep 5"]

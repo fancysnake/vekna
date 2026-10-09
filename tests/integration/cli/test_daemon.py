@@ -435,8 +435,14 @@ class TestServing:
     async def test_serve_as_the_child_detaches_and_logs_where_debug_goes(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
+        forks: list[None] = []
         sessions: list[None] = []
-        monkeypatch.setattr(os, "fork", lambda: 0)
+
+        def fork() -> int:
+            forks.append(None)
+            return 0
+
+        monkeypatch.setattr(os, "fork", fork)
         monkeypatch.setattr(os, "setsid", lambda: sessions.append(None))
         served = asyncio.create_task(
             asyncio.to_thread(CliRunner().invoke, init_command(), ["serve", "--debug"])
@@ -449,6 +455,7 @@ class TestServing:
         log = tmp_path / "state" / "vekna" / "debug.log"
         assert result.exit_code == 0
         assert f"logging every event to {log}" in result.stderr
+        assert forks == [None]
         assert sessions == [None]
 
 
@@ -575,14 +582,21 @@ class TestTheBareCommand:
     def test_serve_as_the_parent_returns_at_once(
         socket_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
+        forks: list[None] = []
         sessions: list[None] = []
-        monkeypatch.setattr(os, "fork", lambda: 4242)
+
+        def fork() -> int:
+            forks.append(None)
+            return 4242
+
+        monkeypatch.setattr(os, "fork", fork)
         monkeypatch.setattr(os, "setsid", lambda: sessions.append(None))
 
         result = CliRunner().invoke(init_command(), ["serve"])
 
         assert result.exit_code == 0
         assert not result.output
+        assert forks == [None]
         assert not sessions
         assert not socket_path.exists()
 
