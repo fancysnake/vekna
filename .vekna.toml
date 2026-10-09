@@ -34,10 +34,10 @@ sign_commits = false
 gate = "mise run pr-fix"
 coverage = "mise run test:py:cov:diff"
 
-# What the repair agent may run to check itself. The same list builds the SDK's
-# `Bash(<prefix>:*)` allowlist and the sentence in the prompt, so it cannot
-# promise a command that is then refused. Narrow on purpose: the ritual re-runs
-# the task that broke as soon as the agent stops, so a sweep the agent runs is
-# minutes spent on an answer it is about to be handed.
+# Slow tasks the repair agent is asked not to run: the ritual re-runs the task
+# that broke as soon as the agent stops, so a sweep the agent runs is minutes
+# spent on an answer it is about to be handed. Advice in the prompt, not a lock —
+# nothing refuses the command. `gate` and `coverage` are on the list already, so
+# only `fullcheck` needs naming.
 [cabinet.agent]
 may_not_run = ["mise run fullcheck"]
