@@ -18,7 +18,6 @@ from vekna.lexicon._pacts import (
     Done,
     ErrorInfo,
     FocusMissingError,
-    Goto,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -516,7 +515,7 @@ def recovery_for(payload: type[BaseModel]) -> Step | None:
 # failing. Only what the body raised is routed: a rite that never opened is
 # vekna's failure, not the step's.
 async def _taken(
-    the_step: Step, payload: BaseModel | None, *, failures: Counter[Step]
+    the_step: Step, payload: BaseModel, *, failures: Counter[Step]
 ) -> Transition:
     opened: OpenedRite | None = None
     try:
@@ -526,7 +525,6 @@ async def _taken(
         if (
             opened is not None
             and opened.error is not None
-            and payload is not None
             and recovery_for(type(payload)) is not None
         ):
             failures[the_step] += 1
@@ -554,11 +552,7 @@ async def run_cast(
         for _ in range(ritual.max_steps):
             if isinstance(transition, Done):
                 break
-            # ponytail: the legacy branch, named by the deletion note on `Goto`.
-            if isinstance(transition, Goto):
-                the_step, payload = transition.target, transition.payload
-            else:
-                the_step, payload = step_for(transition), transition
+            the_step = step_for(transition)
             visits[the_step] += 1
             if the_step.max_visits is not None and (
                 visits[the_step] > the_step.max_visits
@@ -567,7 +561,7 @@ async def run_cast(
                     f"step {the_step.name!r} exceeded max_visits={the_step.max_visits}"
                 )
                 raise StepBudgetExceededError(msg)
-            transition = await _taken(the_step, payload, failures=failures)
+            transition = await _taken(the_step, transition, failures=failures)
     if isinstance(transition, Done):
         return transition.result
     # Leaving the loop still mid-flight means the budget ran out, not that the

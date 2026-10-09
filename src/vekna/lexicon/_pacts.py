@@ -280,15 +280,13 @@ class Done(Generic[_ResultT_co]):
 
 # `exits` are the payload classes a body may return, and `ends` whether it may
 # return `Done` — both read off the return annotation at decoration, so the
-# graph `rituals show` draws is the one mypy checked. `exits` is None for a
-# step still annotated `-> Transition`: it declares nothing, routes by `goto`,
-# and is not registered by payload class.
+# graph `rituals show` draws is the one mypy checked.
 @dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
-    run: Callable[[BaseModel | None], Awaitable["Transition"]]
+    run: Callable[[BaseModel], Awaitable["Transition"]]
     payloads: tuple[type[BaseModel], ...]
-    exits: tuple[type[BaseModel], ...] | None
+    exits: tuple[type[BaseModel], ...]
     ends: bool
     max_visits: int | None = None
 
@@ -319,32 +317,9 @@ class Failure(BaseModel, Generic[_PayloadT]):
     attempt: int
 
 
-# ponytail: the pre-#103 transition, kept so cabinet 0.3.0 still casts. Delete
-# `Goto`, `goto`, `done`, the `Goto` arm of `Transition`, the `Goto` branch in
-# `run_cast`, the `| None` on `Step.run` and `_optional_payload` once cabinet
-# ships on return-annotated steps. An absent payload is part of that path: a
-# legacy step annotated `Work | None` was reached by a bare `goto(target)`.
-@dataclass(frozen=True)
-class Goto:
-    target: Step
-    payload: BaseModel | None = None
-
-    def __post_init__(self) -> None:
-        _checked(self.payload, kind="goto")
-
-
 # A step's payload is the next step, so what a step returns is a payload or
-# `Done`. Steps annotate the concrete union; this is the erased shape — and a
-# step that annotates it as written is the legacy kind above.
-Transition = BaseModel | Done[BaseModel | None] | Goto
-
-
-def goto(target: Step, payload: BaseModel | None = None) -> Goto:
-    return Goto(target=target, payload=payload)
-
-
-def done(result: BaseModel | None = None) -> Done[BaseModel | None]:
-    return Done(result)
+# `Done`. Steps annotate the concrete union; this is the erased shape.
+Transition = BaseModel | Done[BaseModel | None]
 
 
 # A ritual declares its components as a model, so one that needs nothing would
@@ -360,7 +335,7 @@ class Ritual:
     components: type[BaseModel]
     run: Callable[[BaseModel], Awaitable[Transition]]
     max_steps: int
-    exits: tuple[type[BaseModel], ...] | None
+    exits: tuple[type[BaseModel], ...]
     ends: bool
 
 

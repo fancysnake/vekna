@@ -75,8 +75,6 @@ class TestStepDecorator:
         with pytest.raises(StepBoundaryError, match="expected Ping, got str"):
             asyncio.run(wrapped.run("not a ping"))
 
-    # The legacy shim tolerates an absent payload; a step that declares its
-    # exits does not.
     @staticmethod
     def test_rejects_an_absent_payload():
         wrapped = step(_emit)
@@ -136,10 +134,10 @@ class TestStepDecorator:
         with pytest.raises(RitualDefinitionError, match="bare Done: name what it"):
             step(_vague)
 
-    # `Goto` is what marks the deprecated path; the erased `BaseModel` is an
-    # exit like any other, and `check_exits` is what refuses it.
+    # The erased `BaseModel` is an exit like any other, and `check_exits` is
+    # what refuses it.
     @staticmethod
-    def test_an_erased_basemodel_exit_is_not_the_legacy_path():
+    def test_an_erased_basemodel_exit_is_an_exit_like_any_other():
         class Fresh(BaseModel):
             pass
 
