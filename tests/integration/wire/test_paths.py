@@ -128,3 +128,10 @@ class TestProject:
     @staticmethod
     def test_a_directory_in_no_repository_is_its_own(tmp_path: Path):
         assert asyncio.run(project_of(tmp_path)) == str(tmp_path.resolve())
+
+    @staticmethod
+    def test_a_path_git_cannot_run_in_is_its_own(tmp_path: Path):
+        file = tmp_path / "file"
+        file.touch()
+
+        assert asyncio.run(project_of(file)) == str(file.resolve())

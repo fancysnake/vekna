@@ -87,7 +87,7 @@ async def project_of(directory: Path) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-    except FileNotFoundError:
+    except OSError:
         return str(here)
     answer, _ = await git.communicate()
     return answer.decode().strip() if git.returncode == 0 else str(here)
