@@ -40,4 +40,4 @@ coverage = "mise run test:py:cov:diff"
 # the task that broke as soon as the agent stops, so a sweep the agent runs is
 # minutes spent on an answer it is about to be handed.
 [cabinet.agent]
-may_run = ["mise run lint:py", "mise run test:py"]
+may_not_run = ["mise run fullcheck"]
