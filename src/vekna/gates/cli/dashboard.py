@@ -4,7 +4,7 @@ import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from vekna.pacts.casts import Casts
+from vekna.pacts.casts import Casts, CastView
 from vekna.pacts.screen import Screen
 
 from .screen import ordered, paint, scoped
@@ -144,10 +144,13 @@ class Dashboard:
         elif lowered:
             self._note = f"{line!r} is not a cast — {_KEYS}"
 
-    # The same order the listing paints, or the number typed picks the cast
-    # above the one it is next to.
+    # Worked out once for both the listing and the number typed against it, or
+    # the number picks the cast above the one it is next to.
+    def _listed(self) -> list[CastView]:
+        return ordered(scoped(list(self._casts.casts.values()), self._scope.project))
+
     def _nth(self, index: int) -> str | None:
-        found = ordered(scoped(list(self._casts.casts.values()), self._scope.project))
+        found = self._listed()
         if 1 <= index <= len(found):
             return found[index - 1].hello.cast_id
         self._note = f"there is no cast {index}"
@@ -157,10 +160,10 @@ class Dashboard:
     def _show(self) -> None:
         self._screen.show(
             paint(
-                casts=list(self._casts.casts.values()),
+                listed=self._listed(),
                 focus=self._focus,
-                note=self._note,
                 project=self._scope.project,
+                note=self._note,
             )
         )
         self._note = ""

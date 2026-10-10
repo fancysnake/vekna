@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 from datetime import UTC, datetime, timedelta
@@ -351,6 +352,21 @@ class TestReading:
 
         assert _ids(recent) == ["c1", "c0"]
         assert not isinstance(recent[1], DamagedRun)
+
+    # Written before a hello carried its repository: the run still reads, and
+    # still resumes, grouped by the tree it ran in.
+    @staticmethod
+    def test_a_record_from_before_projects_reads_as_its_own_tree(tmp_path: Path):
+        old = _hello().model_dump(mode="json", exclude={"project"})
+        (tmp_path / "c1").mkdir()
+        (tmp_path / "c1" / "run.json").write_text(
+            json.dumps({"hello": old, "status": "ok"})
+        )
+
+        record = Journal(tmp_path).read("c1")
+
+        assert record is not None
+        assert record.hello.project == "/proj"
 
     # Another daemon's prune, or an operator's `rm`, between the listing and the
     # stat of what it named: nothing left to read and nothing left to date it by,

@@ -10,7 +10,8 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from vekna.inits.cli import init_command, serve_daemon, stop_daemon, window
+from vekna.inits.cli import init_command, window
+from vekna.inits.daemon import serve_daemon, stop_daemon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.pacts.screen import Screen
@@ -364,22 +365,10 @@ class TestPeers:
 @pytest.mark.asyncio
 class TestServing:
     # Two windows summoning at once: the lock is taken before either binds, so
-    # the loser refuses even where the winner is not listening yet.
+    # the loser refuses even where the winner is not listening yet. The lock is
+    # the socket's, so keeping state elsewhere is no way past it.
     @staticmethod
-    async def test_a_second_daemon_refuses_while_the_first_holds_the_lock(
-        socket_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
-        async with _served(socket_path):
-            assert await serve_daemon() == 1
-
-            assert await alive(socket_path)
-        lock = tmp_path / "state" / "vekna" / "daemon.lock"
-        assert f"another daemon holds {lock}" in capsys.readouterr().err
-
-    # A daemon keeping its state elsewhere holds a lock this one cannot see,
-    # and a bind would still take its socket.
-    @staticmethod
-    async def test_a_second_daemon_refuses_rather_than_takes_the_socket(
+    async def test_a_second_daemon_on_the_same_socket_refuses(
         socket_path: Path,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -390,9 +379,22 @@ class TestServing:
             assert await serve_daemon() == 1
 
             assert await alive(socket_path)
-        assert f"a daemon is already listening on {socket_path}" in (
-            capsys.readouterr().err
-        )
+        assert f"another daemon holds {socket_path}.lock" in capsys.readouterr().err
+
+    # A sandbox that exports a socket of its own runs a daemon of its own,
+    # sharing the state root with the one outside.
+    @staticmethod
+    async def test_a_daemon_on_another_socket_starts_beside_the_first(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        sandboxed = tmp_path / "sandbox.sock"
+        async with _served(socket_path):
+            with monkeypatch.context() as sandbox:
+                sandbox.setenv("VEKNA_SOCKET", str(sandboxed))
+                async with _served(sandboxed) as host:
+                    assert await alive(sandboxed)
+                    assert await alive(socket_path)
+                assert await host == 0
 
     @staticmethod
     async def test_stop_with_nothing_running_says_so(socket_path: Path):
@@ -400,13 +402,32 @@ class TestServing:
 
         assert await stop_daemon() == "no daemon running"
 
+    # A socket this account may not connect to has somebody behind it, and
+    # saying nobody is there would send the operator off to start another.
+    @staticmethod
+    async def test_stop_says_so_when_the_daemon_cannot_be_reached(socket_path: Path):
+        server = await asyncio.start_unix_server(
+            lambda _reader, writer: writer.close(), path=str(socket_path)
+        )
+        await asyncio.to_thread(socket_path.chmod, 0)
+        try:
+            with pytest.raises(click.ClickException) as raised:
+                await stop_daemon()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert raised.value.message.startswith(
+            f"could not reach the daemon on {socket_path}: PermissionError("
+        )
+
     # The stub takes the stop and goes on listening, which is what a daemon
     # wedged on its way out looks like from here.
     @staticmethod
     async def test_stop_says_so_when_the_daemon_keeps_answering(
         socket_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("vekna.inits.cli._POLLS", 3)
+        monkeypatch.setattr("vekna.inits.daemon._POLLS", 3)
         heard: list[WireMessage] = []
 
         async def ignores(
@@ -506,7 +527,7 @@ class TestPruning:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ):
-        monkeypatch.setattr("vekna.inits.cli._KEPT", 1)
+        monkeypatch.setattr("vekna.inits.daemon._KEPT", 1)
         journal = Journal(tmp_path / "runs")
         for index in range(2):
             journal.record(
@@ -553,7 +574,7 @@ class TestTheBareCommand:
     def test_a_daemon_that_cannot_bind_is_said_with_its_log(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("vekna.inits.cli._POLLS", 10)
+        monkeypatch.setattr("vekna.inits.daemon._POLLS", 10)
         socket_path.write_text("somebody's file", encoding="utf-8")
 
         result = CliRunner().invoke(init_command(), [], input="q\n")
@@ -568,7 +589,7 @@ class TestTheBareCommand:
     def test_a_launch_that_fails_says_so_with_its_log(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.setattr("vekna.inits.cli._CLI_MODULE", "vekna.no_such_module")
+        monkeypatch.setattr("vekna.inits.daemon.CLI_MODULE", "vekna.no_such_module")
 
         result = CliRunner().invoke(init_command(), [], input="q\n")
 
