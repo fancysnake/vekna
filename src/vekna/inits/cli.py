@@ -1,10 +1,13 @@
 import asyncio
 import contextlib
+import fcntl
 import importlib
+import os
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import IO, Protocol, cast
 
 import click
 from click import Group
@@ -20,12 +23,14 @@ from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
-    CastMessage,
+    StopRequested,
     SurfaceHello,
+    cast_frames,
     default_runs_root,
     default_socket_path,
     default_state_root,
     encode_frame,
+    project_of,
     read_frames,
 )
 
@@ -51,7 +56,15 @@ _RECENT = 20
 _KEPT = 200
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
-_PEER = "attached to the vekna already running here"
+_DAEMON_LOG = "daemon.log"
+_DAEMON_LOCK = "daemon.lock"
+_STARTED = "started the daemon — q leaves it running, `vekna stop` ends it"
+_DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
+_NO_DAEMON = "no daemon running"
+_STOPPED = "stopped the daemon"
+# How long a daemon gets to start listening, and to stop.
+_POLL_SECONDS = 0.05
+_POLLS = 100
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -218,22 +231,38 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
     return record
 
 
-# A second `vekna` in the same account is a surface on the first: it says so, is
-# replayed every live cast, and paints the same view. It journals nothing — the
-# daemon that owns the socket owns the record.
-async def _as_peer(*, path: Path, screen: Screen) -> int:
+# Said into `daemon.log`, which is where a detached daemon's stderr goes: there
+# is no view of its own to say it on.
+def _logged(note: str) -> None:
+    click.echo(
+        f"{datetime.now(tz=UTC).astimezone():%Y-%m-%d %H:%M:%S} {note}", err=True
+    )
+
+
+# Every `vekna` is a window on the daemon, summoning it when none is listening:
+# it is replayed every live cast and paints the project it was opened in. It
+# journals nothing — the daemon that owns the socket owns the record — and `q`
+# leaves the daemon running.
+async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
+    path = default_socket_path()
+    hub = Hub()
+    dashboard = Dashboard(
+        casts=hub,
+        screen=screen if screen is not None else Terminal(),
+        project=await project_of(Path.cwd()),
+    )
+    if not await alive(path):
+        await _summon(path=path, debug=debug)
+        dashboard.say(_STARTED)
+    elif debug:
+        dashboard.say(_DEBUG_LATE)
     reader, writer = await attach(path)
     writer.write(encode_frame(SurfaceHello()))
-    hub = Hub()
-    dashboard = Dashboard(casts=hub, screen=screen)
-    dashboard.say(_PEER)
 
-    # What a daemon sends a surface is what it heard from its casts, so the
-    # handshake this end wrote is the only frame kind that cannot come back.
+    # What a daemon sends a surface is what it heard from its casts, and nothing
+    # that opens a connection is one of those.
     async def listen() -> None:
-        async for message in read_frames(reader):
-            if isinstance(message, SurfaceHello):
-                continue
+        async for message in cast_frames(read_frames(reader)):
             hub.apply(message)
             dashboard.changed()
         dashboard.stop(note=_DAEMON_ENDED)
@@ -245,42 +274,137 @@ async def _as_peer(*, path: Path, screen: Screen) -> int:
     return 0
 
 
-async def daemon(*, debug: Path | None = None, screen: Screen | None = None) -> int:
-    where: Screen = screen if screen is not None else Terminal()
+# The daemon itself, with no view: it binds, journals, fans out, and runs until
+# `vekna stop` asks it not to. Refuses rather than binds when another one holds
+# the lock or is listening, since a bind would take the socket from under it.
+# The lock is what settles two windows summoning at once; the kernel lets go of
+# it however the holder ends, so there is never a stale one to clear.
+async def serve_daemon(*, debug: Path | None = None) -> int:
     path = default_socket_path()
-    if await alive(path):
-        return await _as_peer(path=path, screen=where)
+    lock = default_state_root() / _DAEMON_LOCK
+    await asyncio.to_thread(lock.parent.mkdir, parents=True, exist_ok=True)
+    with lock.open("a") as held:
+        if not _locked(held):
+            _logged(f"another daemon holds {lock}")
+            return 1
+        if await alive(path):
+            _logged(f"a daemon is already listening on {path}")
+            return 1
+        return await _serving(path=path, debug=debug)
+
+
+def _locked(held: IO[str]) -> bool:
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
+
+
+async def _serving(*, path: Path, debug: Path | None) -> int:
     journal = Journal(default_runs_root())
     hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
-    dashboard = Dashboard(casts=hub, screen=where)
     if debug is not None:
-        dashboard.say(f"logging every event to {debug}")
-    # Pruned once the view exists to say how it went, and before the socket
-    # binds so nothing is being written while it runs.
+        _logged(f"logging every event to {debug}")
+    # Before the socket binds, so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
-        dashboard.say(f"could not prune {len(failed)} old cast(s): {failed[0]}")
-
-    def heard(message: CastMessage) -> None:
-        hub.apply(message)
-        dashboard.changed()
-
+        _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
     server = await serve(
         path=path,
-        on_message=heard,
+        on_message=hub.apply,
         on_attach=hub.attach_surface,
         on_detach=hub.detach_surface,
     )
+    _logged(f"listening on {path}")
     try:
-        await dashboard.run()
+        await server.stopped()
     finally:
         await server.close()
+    _logged("stopped")
     return 0
 
 
+# `vekna serve` detaches itself and its launcher exits at once, so what is
+# awaited here is the launch; whether the daemon came up is the socket's to say.
+async def _summon(*, path: Path, debug: bool) -> None:
+    log = default_state_root() / _DAEMON_LOG
+    await asyncio.to_thread(log.parent.mkdir, parents=True, exist_ok=True)
+    flags = ["--debug"] if debug else []
+    with log.open("ab") as out:
+        launched = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            _CLI_MODULE,
+            "serve",
+            *flags,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=out,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        code = await launched.wait()
+    if code != 0:
+        message = f"the daemon would not start ({code}) — {log} says why"
+        raise click.ClickException(message)
+    if not await _until(path, listening=True):
+        message = f"the daemon is not listening on {path} — {log} says why"
+        raise click.ClickException(message)
+
+
+# Whether the socket came to answer, or stopped answering, in the time a daemon
+# gets to start or to stop.
+async def _until(path: Path, *, listening: bool) -> bool:
+    for _ in range(_POLLS):
+        if await alive(path) is listening:
+            return True
+        await asyncio.sleep(_POLL_SECONDS)
+    return False
+
+
+# Waits for the socket to stop answering, so `vekna stop && vekna` starts a
+# fresh daemon rather than attaching to the one on its way out.
+async def stop_daemon() -> str:
+    path = default_socket_path()
+    try:
+        _, writer = await attach(path)
+    except OSError:
+        return _NO_DAEMON
+    writer.write(encode_frame(StopRequested()))
+    with contextlib.suppress(OSError):
+        await writer.drain()
+    writer.close()
+    with contextlib.suppress(OSError):
+        await writer.wait_closed()
+    if not await _until(path, listening=False):
+        message = f"asked the daemon to stop, and {path} is still answering"
+        raise click.ClickException(message)
+    return _STOPPED
+
+
+# Forked off and given a session of its own before the loop exists: the
+# terminal that started it closing — and the hangup that comes with it — reaches
+# the window and not the daemon, and the launcher's exit is what tells `vekna`
+# the launch went through.
+@click.command("serve", hidden=True, help="Start the daemon, detached, with no view.")
+@click.option("--debug", is_flag=True, help="Log every event the daemon processes.")
+def _serve(*, debug: bool = False) -> None:
+    if os.fork():
+        return
+    os.setsid()
+    # Resolved here rather than at import, so the environment a shell exports
+    # is the one that decides where the log goes.
+    where = default_state_root() / _DEBUG_LOG if debug else None
+    raise SystemExit(asyncio.run(serve_daemon(debug=where)))
+
+
+@click.command("stop", help="End the daemon. Running casts rejoin the next one.")
+def _stop() -> None:
+    click.echo(asyncio.run(stop_daemon()))
+
+
 def init_command() -> Group:
-    # Bare `vekna` is the daemon, which is why the group runs a body of its own
-    # rather than printing help: the first one binds the socket and renders,
-    # every one after attaches to it as another surface.
+    # Bare `vekna` is the project's view, which is why the group runs a body of
+    # its own rather than printing help: the first one starts the daemon, and
+    # every one attaches to it as a surface.
     @click.group(invoke_without_command=True)
     @click.option(
         "--debug",
@@ -290,15 +414,14 @@ def init_command() -> Group:
     def vekna(*, debug: bool = False) -> None:
         ctx = click.get_current_context()
         if ctx.invoked_subcommand is None:
-            # Resolved here rather than at import, so the environment a shell
-            # exports is the one that decides where the log goes.
-            where = default_state_root() / _DEBUG_LOG if debug else None
-            raise SystemExit(asyncio.run(daemon(debug=where)))
+            raise SystemExit(asyncio.run(window(debug=debug)))
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)
     vekna.add_command(_log)
     vekna.add_command(_cats)
+    vekna.add_command(_serve)
+    vekna.add_command(_stop)
     return vekna
 
 

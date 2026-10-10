@@ -54,6 +54,7 @@ def _hello(cast_id: str = "c1") -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={"bound": 3},
         started_at=_WHEN,

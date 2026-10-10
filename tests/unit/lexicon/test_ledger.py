@@ -14,6 +14,7 @@ def _ledger(*events: CastMessage) -> Ledger:
                 hello=CastHello(
                     cast_id="c0",
                     project_root="/proj",
+                    project="/proj/.git",
                     ritual="job",
                     components={},
                     started_at=_WHEN,

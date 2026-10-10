@@ -11,6 +11,21 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **The daemon outlives the window.** The first bare `vekna` starts it
+  detached, logging to `~/.local/state/vekna/daemon.log`; every `vekna` is a
+  surface on it and `q` closes only the window.
+  ([#138](https://github.com/fancysnake/vekna/issues/138))
+- **Bare `vekna` opens on its project.** A project is a repository, keyed by
+  its git common dir, so every worktree of one groups together; `CastHello`
+  carries it as `project`. `g` shows every project, `p` comes back.
+
+### Added
+
+- **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
+  one.
+
 ## [0.13.0] - 2026-10-05
 
 ### Added

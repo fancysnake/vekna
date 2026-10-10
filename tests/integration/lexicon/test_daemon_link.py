@@ -21,6 +21,7 @@ def _hello() -> CastHello:
     return CastHello(
         cast_id=_CAST,
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={"bound": 3},
         started_at=_WHEN,
