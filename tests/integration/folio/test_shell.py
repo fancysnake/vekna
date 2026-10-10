@@ -1,8 +1,10 @@
 import asyncio
 import io
 import os
+import signal
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -10,17 +12,20 @@ from typing_extensions import override
 
 from tests.conftest import entry, journalled
 from vekna.folio.shell import ShellOutputError, ShellResult, shell
+from vekna.folio.shell._links import run_bash
 from vekna.lexicon import (
     SHELL_FOCUS,
     Done,
+    RiteTimeoutError,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     step,
+    timeout,
 )
 from vekna.lexicon._links.standalone import StandaloneRenderer
 from vekna.lexicon._mills.engine import Grimoire, run_cast
-from vekna.lexicon._pacts import RiteStreamed, Ritual
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, Ritual
 
 _FAILURE_EXIT = 3
 # `read` meeting EOF straight away.
@@ -29,6 +34,8 @@ _EOF_EXIT = 1
 _LONG_LINE = 2_000_000
 # The ↳ that opens a rite and the ✓ that closes it, both quoting the command.
 _RITE_LINES = 2
+# The bash a cancelled `shell` ran, and the child it left in the background.
+_SPAWNED = 2
 
 
 class Echo(BaseModel):
@@ -315,3 +322,142 @@ class TestShellFocus:
             pass
 
         assert _cast(echoer).stdout.strip() == "hello"
+
+
+class Spawning(BaseModel):
+    pids: str
+
+
+# Writes its own pid and a background child's, then waits on the child — the
+# shape a cancelled `bash -c` used to leave running.
+@step
+async def spawning(state: Spawning) -> Done[ShellResult]:
+    command = f"sleep 300 & echo $$ $! > {state.pids}; wait"
+    return Done(await timeout(shell(command), seconds=0.5))
+
+
+# A zombie is still in `/proc`, and is not running anything.
+def _running(pid: str) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+class TestCancelledShell:
+    @staticmethod
+    def test_a_timed_out_command_leaves_no_process_behind(tmp_path):
+        pids = tmp_path / "pids"
+        the_ritual = entry(name="spawning", payload=Spawning(pids=str(pids)))
+        grimoire = Grimoire(cast_id="c1")
+
+        with pytest.raises(RiteTimeoutError, match=r"^shell timed out after 0\.5s$"):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=grimoire,
+                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                )
+            )
+
+        started = pids.read_text(encoding="utf-8").split()
+        assert len(started) == _SPAWNED
+        assert not [pid for pid in started if _running(pid)]
+        names = {
+            event.rite_id: event.name
+            for event in grimoire.events
+            if isinstance(event, RiteBegan)
+        }
+        assert [
+            (names[event.rite_id], event.status)
+            for event in grimoire.events
+            if isinstance(event, RiteEnded)
+        ] == [("shell", "cancelled"), ("spawning", "error")]
+
+
+class Stubborn(BaseModel):
+    pids: str
+
+
+# Ignores SIGTERM, so only the escalation ends it.
+@step
+async def stubborn(state: Stubborn) -> Done[ShellResult]:
+    command = f"trap '' TERM; echo $$ > {state.pids}; sleep 300 & wait"
+    return Done(await timeout(shell(command), seconds=0.5))
+
+
+class TestStubbornShell:
+    @staticmethod
+    def test_a_command_ignoring_sigterm_is_killed(tmp_path):
+        pids = tmp_path / "pids"
+        the_ritual = entry(name="stubborn", payload=Stubborn(pids=str(pids)))
+
+        with pytest.raises(RiteTimeoutError):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=Grimoire(cast_id="c1"),
+                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                )
+            )
+
+        assert not _running(pids.read_text(encoding="utf-8").strip())
+
+    @staticmethod
+    def test_a_second_cancel_in_the_grace_window_still_kills_the_group(tmp_path):
+        pids = tmp_path / "pids"
+        command = f"trap '' TERM; sleep 300 & echo $$ $! > {pids}; wait"
+
+        async def cancel_twice() -> None:
+            running = asyncio.create_task(run_bash(command))
+            await asyncio.sleep(0.5)
+            running.cancel()
+            await asyncio.sleep(0.2)
+            running.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await running
+
+        asyncio.run(cancel_twice())
+
+        started = pids.read_text(encoding="utf-8").split()
+        assert len(started) == _SPAWNED
+        assert not [pid for pid in started if _running(pid)]
+
+
+class TestEmptiedGroup:
+    # bash has exited and its one child moved to a session of its own, still
+    # holding stdout open: the cast keeps reading, yet no group is left to signal.
+    @staticmethod
+    def test_cancelling_a_command_whose_group_is_gone_still_cancels():
+        command = (
+            "python3 -c 'import os, time; os.setsid(); "
+            "print(os.getpid(), flush=True); time.sleep(300)' &"
+        )
+
+        async def cancel_once_bash_left() -> None:
+            pids: list[str] = []
+            moved_out = asyncio.Event()
+
+            def on_line(line: str) -> None:
+                pids.append(line)
+                moved_out.set()
+
+            running = asyncio.create_task(run_bash(command, on_line=on_line))
+            async with asyncio.timeout(5):
+                await moved_out.wait()
+            # Time for the child watcher to reap bash, emptying the group.
+            await asyncio.sleep(0.2)
+            running.cancel()
+            try:
+                with pytest.raises(asyncio.CancelledError):
+                    async with asyncio.timeout(5):
+                        await running
+            finally:
+                # Inside the loop, so the pipe it held closes while one runs.
+                os.kill(int(pids[0]), signal.SIGKILL)
+                await asyncio.sleep(0.2)
+
+        asyncio.run(cancel_once_bash_left())

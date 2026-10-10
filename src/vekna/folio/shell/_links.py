@@ -1,5 +1,8 @@
 import asyncio
 import codecs
+import contextlib
+import os
+import signal
 from collections.abc import Callable
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -19,6 +22,13 @@ from vekna.lexicon import (
 from ._pacts import ShellOutputError, ShellResult
 
 _CHUNK = 1 << 16
+# How long a cancelled command gets to go on SIGTERM before SIGKILL.
+_TICK_SECONDS = 0.05
+_GRACE_TICKS = 100
+# How many further cancels a reap is waited through, and the reaps still
+# running once their rite stopped waiting — held, as the loop holds tasks weakly.
+_CANCELS_OUTLASTED = 4
+_REAPING: set[asyncio.Task[None]] = set()
 # Read through the model and written through it too, so a field added to
 # `ShellResult` cannot land on one side of the round trip only. `model_dump()`
 # hands back `dict[str, Any]`; this is what says the journal holds JSON.
@@ -87,16 +97,52 @@ async def run_bash(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
+        start_new_session=True,
     )
     out: list[str] = []
     err: list[str] = []
-    # Both pipes are drained concurrently, so `on_line` sees them in arrival
-    # order and neither can fill and block the other.
-    await asyncio.gather(
-        _pump(stream=process.stdout, sink=out, on_line=on_line),
-        _pump(stream=process.stderr, sink=err, on_line=on_line),
-    )
-    return "".join(out), "".join(err), await process.wait()
+    try:
+        # Both pipes are drained concurrently, so `on_line` sees them in
+        # arrival order and neither can fill and block the other.
+        await asyncio.gather(
+            _pump(stream=process.stdout, sink=out, on_line=on_line),
+            _pump(stream=process.stderr, sink=err, on_line=on_line),
+        )
+        return "".join(out), "".join(err), await process.wait()
+    except asyncio.CancelledError:
+        # A second cancel inside the grace window — a race cut by an outer
+        # timeout, a double Ctrl-C — must not stop the reaping before SIGKILL.
+        # Past a few, the rite closes and the reaping carries on without it.
+        reaping = asyncio.create_task(_reap(process))
+        _REAPING.add(reaping)
+        reaping.add_done_callback(_REAPING.discard)
+        for _ in range(_CANCELS_OUTLASTED):
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.shield(reaping)
+                break
+        raise
+
+
+# The whole group, its own session from the start: `bash -c "a & b"` leaves
+# children a kill of bash alone would orphan. Gone means gone from the process
+# table, so the rite does not close while its work is still running.
+async def _reap(process: asyncio.subprocess.Process) -> None:
+    await _signal_group(process.pid)
+    await process.wait()
+
+
+async def _signal_group(group: int) -> None:
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(group, sig)
+        except ProcessLookupError:
+            return
+        for _ in range(_GRACE_TICKS):
+            await asyncio.sleep(_TICK_SECONDS)
+            try:
+                os.killpg(group, 0)
+            except ProcessLookupError:
+                return
 
 
 # The Focus bash answers through, and the default every unregistered `shell()`

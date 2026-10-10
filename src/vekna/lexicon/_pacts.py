@@ -14,7 +14,7 @@ from pydantic import (
     JsonValue,
 )
 
-from vekna.wire import RunRecord, WireMessage
+from vekna.wire import RiteEndStatus, RunRecord, WireMessage
 
 
 # Component types — the typed values on a ritual's external interface. They are
@@ -86,7 +86,7 @@ class RiteStreamed:
 @dataclass(frozen=True, kw_only=True)
 class RiteEnded:
     rite_id: str
-    status: Literal["ok", "error"]
+    status: RiteEndStatus
     result: JsonValue | None
     finished_at: datetime
     # What a step raised. A cast that recovers carries on past it, so this is
@@ -251,6 +251,12 @@ class UnattendedPromptError(RitualError):
 
 
 class FocusMissingError(RitualError):
+    pass
+
+
+# A `RitualError` raised inside the step, so a timeout is a `Failure` like any
+# other: routed where a step takes it, the cast's end where none does.
+class RiteTimeoutError(RitualError):
     pass
 
 

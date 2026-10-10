@@ -11,8 +11,25 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`timeout` and `race`** in `vekna.folio.flow`, and `@step(timeout=N)`. A
+  timeout cancels the work and raises `RiteTimeoutError` naming the call, which
+  a step taking `Failure[P]` recovers from. `race` returns the first entrant to
+  finish and cancels the rest; one that raises drops out.
+  ([#110](https://github.com/fancysnake/vekna/issues/110))
+- **A cut rite reads `cancelled`**, beside `ok` and `error`, on the wire, in the
+  journal and as `⊘` on every surface.
+- **`DecideWithdrawn`** on the wire: a question cut before its answer leaves the
+  daemon's view, and the terminal says it was withdrawn.
+- **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
+  one.
+
 ### Changed
 
+- **Cancelling a rite cancels its work.** `shell` kills the command's process
+  group and waits for it; `coding` closes the agent session. A `decide` cut
+  mid-prompt no longer leaves a reader behind to swallow the next answer.
 - **The daemon outlives the window.** The first bare `vekna` starts it
   detached, logging to `~/.local/state/vekna/daemon.log`; every `vekna` is a
   surface on it and `q` closes only the window.
@@ -20,11 +37,6 @@ when.
 - **Bare `vekna` opens on its project.** A project is a repository, keyed by
   its git common dir, so every worktree of one groups together; `CastHello`
   carries it as `project`. `g` shows every project, `p` comes back.
-
-### Added
-
-- **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
-  one.
 
 ## [0.13.0] - 2026-10-05
 

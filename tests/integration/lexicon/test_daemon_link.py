@@ -311,6 +311,26 @@ class TestPrompts:
         await daemon.stop()
 
     @staticmethod
+    async def test_a_cancelled_prompt_is_withdrawn_from_the_daemon(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        channel = TeeChannel(
+            inner=_Renderer(), link=link, cast_id=_CAST, rite_id=lambda: "r1"
+        )
+
+        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        asking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asking
+        await _eventually(lambda: not _waiting(daemon))
+
+        assert not channel.open_prompts()
+        await daemon.stop()
+
+    @staticmethod
     async def test_a_prompt_still_open_is_replayed_to_a_daemon_that_arrives(
         socket_path: Path,
     ):

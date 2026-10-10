@@ -18,6 +18,7 @@ from vekna.folio.coding import (
 )
 from vekna.lexicon import (
     CODING_FOCUS,
+    CodingFocusProtocol,
     Done,
     FocusMissingError,
     FocusReply,
@@ -33,7 +34,7 @@ def _fixed_clock() -> datetime:
     return datetime(2026, 1, 1, tzinfo=UTC)
 
 
-class FakeFocus:
+class FakeFocus(CodingFocusProtocol):
     def __init__(
         self,
         *,

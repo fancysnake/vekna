@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import traceback
 from collections import Counter
@@ -35,6 +36,7 @@ from vekna.lexicon._pacts import (
     StringOutput,
     Transition,
 )
+from vekna.wire import RiteEndStatus
 
 _FocusT = TypeVar("_FocusT")
 _REPLAYED = "(from the journal — this rite already ran)"
@@ -92,7 +94,7 @@ class Grimoire:
         self,
         rite_id: str,
         *,
-        status: Literal["ok", "error"] = "ok",
+        status: RiteEndStatus = "ok",
         result: JsonValue | None = None,
         error: str | None = None,
     ) -> None:
@@ -448,10 +450,15 @@ async def _rite(
     if replay is not None:
         parent.grimoire.rite_delta(rite_id, _REPLAYED)
     opened = OpenedRite(rite_id)
-    finished = False
+    status: RiteEndStatus = "error"
     try:
         yield opened
-        finished = True
+        status = "ok"
+    # Cut by a timeout, a race or Ctrl-C: neither done nor failed. What it had
+    # produced by then is its deltas, already in the grimoire.
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
     except Exception as raised:
         opened.error = ErrorInfo(
             type=type(raised).__name__,
@@ -466,7 +473,7 @@ async def _rite(
         # line, so the step is where it is said, once.
         parent.grimoire.rite_finished(
             rite_id,
-            status="ok" if finished else "error",
+            status=status,
             result=outcome.result,
             error=(
                 opened.error.message

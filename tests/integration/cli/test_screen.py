@@ -86,8 +86,10 @@ def _step(
     _add(view, name, ago=ago, status=status)
 
 
-def _medium(view: CastView, name: str, *, ago: int) -> None:
-    _add(view, name, ago=ago, category="medium")
+def _medium(
+    view: CastView, name: str, *, ago: int, status: RiteStatus = "running"
+) -> None:
+    _add(view, name, ago=ago, status=status, category="medium")
 
 
 # The listed casts, without the header, the blank lines and the key hints: a
@@ -224,6 +226,26 @@ class TestTheList:
         assert "recovering" in _row(painted, "fix_demo")
         assert "1 recovering" in painted
         assert "✗ attempt  — 3 tests still red" in drilled
+
+    @staticmethod
+    def test_a_cut_step_is_drawn_cancelled_not_failed():
+        view = _running("fix_demo", ago=60)
+        _step(view, "attempt", ago=50, status="cancelled")
+
+        drilled = paint(casts=[view], focus="fix_demo", now=_WHEN)
+
+        assert "⊘ attempt" in drilled
+
+    @staticmethod
+    def test_a_cut_medium_is_drawn_cancelled_and_a_finished_one_as_a_medium():
+        view = _running("fix_demo", ago=60)
+        _medium(view, "shell", ago=50, status="cancelled")
+        _medium(view, "coding", ago=40, status="ok")
+
+        drilled = paint(casts=[view], focus="fix_demo", now=_WHEN)
+
+        assert "⊘ shell" in drilled
+        assert "↳ coding" in drilled
 
     # A failure the cast did not route is a failed cast, not a recovering one.
     @staticmethod

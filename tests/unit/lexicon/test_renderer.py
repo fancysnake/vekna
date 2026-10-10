@@ -1,5 +1,7 @@
 import asyncio
 import io
+import os
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -288,6 +290,17 @@ class TestPromptEndOfInput:
         with pytest.raises(StandalonePromptError, match="input ended"):
             asyncio.run(renderer.decide(prompt="name?", free=True))
 
+    # The reading thread hands its failure to the question rather than dying
+    # with it and leaving the question waiting forever.
+    @staticmethod
+    def test_a_closed_input_raises_out_of_the_question():
+        inp = io.StringIO("y\n")
+        inp.close()
+        renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+
+        with pytest.raises(ValueError, match="closed file"):
+            asyncio.run(asyncio.wait_for(renderer.decide(prompt="ok?"), timeout=5))
+
 
 class TestDecideConfirm:
     @staticmethod
@@ -364,3 +377,55 @@ class TestNotify:
         renderer.notify("done", "x" * 500)
 
         assert out.getvalue() == f"\x1b]777;notify;vekna finished;{'x' * 120}\x07"
+
+
+class TestWithdrawnPrompt:
+    # A readline thread cannot be cancelled. Left behind by the withdrawn
+    # question, it would take the next answer and the next question would wait
+    # on a line already gone.
+    @staticmethod
+    def test_the_next_question_gets_the_line_typed_after_a_withdrawal():
+        read_fd, write_fd = os.pipe()
+        out = io.StringIO()
+
+        async def ask_twice() -> str:
+            with os.fdopen(read_fd, encoding="utf-8") as inp:
+                renderer = StandaloneRenderer(out=out, inp=inp)
+                first = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+                await asyncio.sleep(0.05)
+                first.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await first
+                second = asyncio.create_task(
+                    renderer.decide(prompt="second?", free=True)
+                )
+                await asyncio.sleep(0.05)
+                os.write(write_fd, b"answer\n")
+                os.close(write_fd)
+                return await asyncio.wait_for(second, timeout=5)
+
+        assert asyncio.run(ask_twice()) == "answer"
+        assert out.getvalue() == "first?\n\nwithdrawn: first?\nsecond?\n"
+
+    @staticmethod
+    def test_a_withdrawn_read_nobody_claims_does_not_hold_up_the_exit():
+        read_fd, write_fd = os.pipe()
+        inp = os.fdopen(read_fd, encoding="utf-8")
+
+        async def ask_and_withdraw() -> None:
+            renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+            asked = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+            await asyncio.sleep(0.05)
+            asked.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asked
+
+        cast = threading.Thread(target=asyncio.run, args=(ask_and_withdraw(),))
+        cast.start()
+        cast.join(timeout=5)
+        finished = not cast.is_alive()
+        os.close(write_fd)
+        cast.join()
+        inp.close()
+
+        assert finished

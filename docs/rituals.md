@@ -54,7 +54,9 @@ both.
 `max_steps` bounds the trampoline. A ritual that loops forever stops with
 `StepBudgetExceededError` rather than running until you notice.
 `@step(max_visits=N)` caps how often one cast enters one step, which ends a
-retry loop sooner than the whole budget would.
+retry loop sooner than the whole budget would. `@step(timeout=600)` bounds one
+visit in seconds: an overrun cancels the step's work and fails it with
+`RiteTimeoutError`, which recovers like any other failure.
 
 ## When a step fails
 

@@ -12,6 +12,7 @@ from vekna.wire import (
     CastHello,
     DecideRequested,
     DecideResolved,
+    DecideWithdrawn,
     GrimoireBegin,
     GrimoireEnd,
     RiteDelta,
@@ -184,6 +185,11 @@ class TeeChannel(Channel):
         self._link.send(request)
         try:
             answer = await self._inner.decide(prompt=prompt, options=options, free=free)
+        except BaseException:
+            self._link.send(
+                DecideWithdrawn(cast_id=self._cast_id, request_id=request.request_id)
+            )
+            raise
         finally:
             self._open.pop(request.request_id, None)
         self._link.send(
