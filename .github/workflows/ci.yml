@@ -43,6 +43,7 @@ jobs:
       - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
       - run: mise install
       - run: poetry install
+      - run: mise settings experimental=true
       - run: mise run test:py:cov
       - run: mise exec -- coverage xml
 
