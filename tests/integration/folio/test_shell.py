@@ -2,7 +2,7 @@ import asyncio
 import io
 import os
 import signal
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -276,7 +276,7 @@ class _RecordingFocus(ShellFocusProtocol):
 # itself. It is process-global state, so every fd is restored and closed even
 # when the cast raises, which is exactly what a regression here does.
 @contextmanager
-def _typed_at_stdin(text: bytes) -> Iterator[int]:
+def _typed_at_stdin(text: bytes) -> Generator[int]:
     read_fd, write_fd = os.pipe()
     try:
         os.write(write_fd, text)

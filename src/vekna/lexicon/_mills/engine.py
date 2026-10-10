@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import traceback
 from collections import Counter
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -214,7 +214,7 @@ def step_taking(payload: type[BaseModel]) -> Step | None:
 # class to a second step on the next case, which is the collision above — and
 # steps declared at module level, before the block, are kept.
 @contextlib.contextmanager
-def steps_scope() -> Iterator[None]:
+def steps_scope() -> Generator[None]:
     kept = dict(_steps)
     try:
         yield
@@ -289,7 +289,7 @@ class FocusSlot(Generic[_FocusT]):
     # author registered, and one that only registered would leave itself
     # installed for whatever ran next.
     @contextlib.contextmanager
-    def scope(self, focus: _FocusT) -> Iterator[None]:
+    def scope(self, focus: _FocusT) -> Generator[None]:
         token = self._scoped.set(focus)
         try:
             yield
@@ -427,7 +427,7 @@ class OpenedRite:
 @contextlib.asynccontextmanager
 async def _rite(
     *, name: str, category: Literal["step", "medium"], summary: str | None = None
-) -> AsyncIterator[OpenedRite]:
+) -> AsyncGenerator[OpenedRite]:
     parent = current_rite()
     rite_id = parent.grimoire.rite_started(
         name=name, parent_id=parent.parent_id, category=category, summary=summary
@@ -502,7 +502,7 @@ def medium_rite(
 @contextlib.contextmanager
 def cast_context(
     *, grimoire: Grimoire, channel: Channel, ledger: Ledger | None = None
-) -> Iterator[None]:
+) -> Generator[None]:
     token = _current_rite.set(
         RiteContext(grimoire=grimoire, channel=channel, ledger=ledger)
     )
