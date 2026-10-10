@@ -1,6 +1,7 @@
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import PurePath
 
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
 from vekna.wire import CastHello, RunRecord
@@ -17,7 +18,10 @@ _MEDIUM = "↳"
 _GAP = "◌"
 _DAMAGED = "?"
 _HOME = "\x1b[H\x1b[2J"
-_LIST_KEYS = "number to drill in · q to quit"
+_LIST_KEYS = "number to drill in · {scope} · q to quit"
+_TO_GLOBAL = "g every project"
+_TO_PROJECT = "p this project"
+_EVERY = "all projects"
 _CAST_KEYS = "b back · q quit"
 _ANSWER_HERE = "answer it where the cast was started"
 _DELTA_TAIL = 12
@@ -60,6 +64,20 @@ def ordered(casts: Sequence[CastView]) -> list[CastView]:
     asking = [view for view in live if view.waiting]
     working = [view for view in live if not view.waiting]
     return [*asking, *working, *reversed(done)]
+
+
+# The casts of one project, or of all of them when there is none to keep to.
+def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
+    if project is None:
+        return list(casts)
+    return [view for view in casts if view.hello.project == project]
+
+
+# A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
+# repository's name is what an operator calls it either way.
+def _named(project: str) -> str:
+    where = PurePath(project)
+    return where.parent.name if where.name == ".git" else where.name
 
 
 def _project(view: CastView) -> str:
@@ -313,15 +331,18 @@ def paint(
     focus: str | None,
     note: str = "",
     now: datetime | None = None,
+    project: str | None = None,
 ) -> str:
     at = now if now is not None else datetime.now(UTC)
-    found = [view for view in casts if view.hello.cast_id == focus]
+    shown = scoped(casts, project)
+    found = [view for view in shown if view.hello.cast_id == focus]
     if focus is not None and found:
         body = _drilled(found[0], at)
         keys = _CAST_KEYS
     else:
-        ranked = ordered(casts)
-        body = [f"vekna — {_counted(ranked)}", *_listing(ranked, at)]
-        keys = _LIST_KEYS
+        ranked = ordered(shown)
+        where = _EVERY if project is None else _named(project)
+        body = [f"vekna — {_counted(ranked)}  ({where})", *_listing(ranked, at)]
+        keys = _LIST_KEYS.format(scope=_TO_PROJECT if project is None else _TO_GLOBAL)
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"

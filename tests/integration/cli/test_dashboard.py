@@ -25,13 +25,14 @@ class _Keys(Screen):
 
 def _dashboard(*typed: str) -> tuple[Dashboard, _Keys]:
     keys = _Keys(*typed)
-    return Dashboard(casts=Hub(), screen=keys), keys
+    return Dashboard(casts=Hub(), screen=keys, project="/proj/.git"), keys
 
 
 def _hello(cast_id: str, ritual: str) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root="/proj",
+        project="/proj/.git",
         ritual=ritual,
         components={},
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -51,7 +52,8 @@ class TestPicking:
         hub.apply(_hello("c2", "still_going"))
         keys = _Keys("1", "q")
 
-        await asyncio.wait_for(Dashboard(casts=hub, screen=keys).run(), timeout=2)
+        dashboard = Dashboard(casts=hub, screen=keys, project="/proj/.git")
+        await asyncio.wait_for(dashboard.run(), timeout=2)
 
         assert any("vekna — still_going" in frame for frame in keys.frames)
 

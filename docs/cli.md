@@ -128,11 +128,12 @@ Three kinds:
 
 ## `vekna`
 
-With no subcommand, the daemon. The first `vekna` binds
-`$XDG_RUNTIME_DIR/vekna.sock` (mode `0600`, falling back to
-`/tmp/vekna-<uid>/vekna.sock`, in a directory of the user's own) and renders
-every cast running anywhere on this account; each one after attaches to it as
-another surface, and sees the same view.
+With no subcommand, the dashboard of the project it was typed in. The first
+`vekna` starts the daemon, detached: it binds `$XDG_RUNTIME_DIR/vekna.sock`
+(mode `0600`, falling back to `/tmp/vekna-<uid>/vekna.sock`, in a directory of
+the user's own), writes what it has to say to `~/.local/state/vekna/daemon.log`,
+and keeps running when the window closes. Every `vekna`, the first one too, is
+a surface on it, and `q` closes only the window. `vekna stop` ends the daemon.
 
 Both ends have to compute the same path, and `XDG_RUNTIME_DIR` is what decides
 it. A sandbox that cannot write to the session's runtime directory exports a
@@ -151,15 +152,21 @@ vekna
 vekna --debug
 ```
 
-`--debug` writes a line per event to `~/.local/state/vekna/debug.log` — the
-daemon is the one place every message passes, and the log says what it did with
-each one, including the ones it dropped.
+`--debug` starts the daemon writing a line per event to
+`~/.local/state/vekna/debug.log` — the daemon is the one place every message
+passes, and the log says what it did with each one, including the ones it
+dropped. A daemon already running is not restarted for it; the window says so.
+
+A project is a repository, not a directory: every worktree of one shares its git
+common dir, and its casts group under that. A directory in no repository is its
+own project. `g` shows every project's casts, read only; `p` comes back to this
+one.
 
 One row per cast, and no output in any of them — the row is for deciding which
 cast to go and look at:
 
 ```text
-vekna — 1 running · 1 waiting · 1 done · 1 aborted
+vekna — 1 running · 1 waiting · 1 done · 1 aborted  (all projects)
 
   #  cast      ritual           project     status      elapsed  steps  now
   1  7c01ffab  triage           ludamus     waiting       1m03s      1  merge #74 now, or wait?
@@ -180,12 +187,27 @@ recovery step; drilling in shows the error beside the step. Aborted is a cast
 whose socket closed without a goodbye, which is the one worth carrying on
 with, so its row prints the command that does it.
 
-A number drills into a cast, `b` comes back, `q` quits. Drilling in is where
+A number drills into a cast, `b` comes back, `g` and `p` switch between every
+project and this one, `q` closes the window. Drilling in is where
 the rite tree, the live output and the error a failed cast ended on are. A cast
 blocked on a prompt is answered in the terminal that started it, not here.
 
 Casts are not started from here. `vekna cast` is how a cast begins, and it runs
-in the directory it was typed in, attached or not.
+in the directory it was typed in, attached or not. It does not start a daemon:
+with none listening it runs on its own and joins the next one that starts.
+
+## `vekna stop`
+
+Ends the daemon, and every window on it with it. Casts still running carry on,
+and rejoin the next daemon with everything they have done so far.
+
+```bash
+vekna stop
+```
+
+Prints `stopped the daemon` once the socket stops answering, so `vekna stop &&
+vekna` starts a fresh one. With nothing listening, `no daemon running`; both
+exit `0`.
 
 ## `vekna log`
 

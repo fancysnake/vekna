@@ -13,6 +13,9 @@ class CastHello(BaseModel):
     kind: Literal["cast_hello"] = "cast_hello"
     cast_id: str
     project_root: str
+    # The repository the cast belongs to, as its git common dir: every worktree
+    # of one repository shares it, while `project_root` is the tree it runs in.
+    project: str
     ritual: str
     components: dict[str, JsonValue]
     started_at: datetime
@@ -34,6 +37,12 @@ class CastGoodbye(BaseModel):
 # fields: a surface is not addressed, only fanned out to.
 class SurfaceHello(BaseModel):
     kind: Literal["surface_hello"] = "surface_hello"
+
+
+# The daemon outlives every window on it, so ending it is a request of its own:
+# `vekna stop` opens a connection with this and nothing else.
+class StopRequested(BaseModel):
+    kind: Literal["stop_requested"] = "stop_requested"
 
 
 class GrimoireBegin(BaseModel):
@@ -169,7 +178,11 @@ CastUpdate = (
 
 CastMessage = CastHello | CastUpdate
 
-WireMessage = CastMessage | SurfaceHello
+# What a connection that is not a cast opens with, and only opens with: past the
+# first frame there is nothing left for one of these to say.
+Opening = SurfaceHello | StopRequested
+
+WireMessage = CastMessage | Opening
 
 
 # --- the record on disk ---

@@ -5,20 +5,16 @@ once. This is the only file the issues point at.
 
 ## Premise
 
-One binary, `vekna`, three roles with separate lifetimes:
+One binary, `vekna`, two roles with separate lifetimes:
 
 - **cast process** — spawned by `vekna cast <ritual>`. Imports lexicon,
   folios, and the user's `rituals.py`. Runs one cast to completion, streams
   events to the daemon when attached, exits. Always fresh; never pooled. A
   crash kills one cast.
-- **lich** — long-running, named, bound to one project directory (a directory
-  may hold several). Started by `vekna lich`. Runs one cast at a time in its
-  directory and takes orders from any surface — its terminal, another shell,
-  its own remote channel. Spawns cast processes; never loads them, so it sits
-  inside the same import rule as the daemon.
-- **vekna daemon** — long-running, one per machine/user. Started by bare
-  `vekna`. Coordinates locks, owns the durable journal, surfaces attention
-  across casts, routes commands to liches. Never imports user code, lexicon, or
+- **vekna daemon** — long-running, one per machine/user. Started detached by
+  the first bare `vekna`, outlives every window on it, ended by `vekna stop`.
+  Coordinates locks, owns the durable journal, surfaces attention across casts,
+  holds every project's casts on one socket. Never imports user code, lexicon, or
   folios — only the wire schema. The import boundary is enforced by
   import-linter on packages: the daemon's GLIMPSE layers may not import lexicon
   or folios, so the daemon process never loads them.
@@ -48,8 +44,7 @@ named `vekna`.
 | **Lexicon** | SDK users `import` in `rituals.py` — `@ritual`, `@step`, `Done`, `@medium`, components. |
 | **Compendium** | Runtime registry of steps, mediums, and foci inside a cast process. |
 | **Grimoire** | Live tree of rite invocations for one cast. Derived, not declared. |
-| **Lich** | A named, long-lived station bound to one project directory — several may share one. Runs one cast at a time, refuses a second, takes commands from any surface. Spawns cast processes; imports no ritual code. |
-| **Phylactery** | A lich's row in the daemon's registry, beside `runs/`: name, root, created, last cast, channel id. Outlives the process — a lich whose process died is dormant, not gone. Anything larger (session log, cast history) is the journal's already. |
+| **Project** | A repository, keyed by its git common dir, so every worktree of one is the same project. A directory in no repository is its own. Bare `vekna` opens on the project it was typed in. |
 
 `cast` is the verb: `vekna cast write-tests`.
 
@@ -140,21 +135,9 @@ rituals.py            ◄────── imports                          ┌
                               standalone fallback              │
                               cast event log                   ├──── runs/ on disk
                               acquires/releases locks          │
-                              renders prompts on stdin         ├──── lich routing
+                              renders prompts on stdin         ├──── project views
                               when no daemon                   │
                                                                └──── eye surfaces
-```
-
-A lich hangs off the same daemon, bound to one project directory — though a
-directory may hold several:
-
-```text
-lich "hollow-vesper"                       ┌── the terminal that raised it
-one directory            ◄── commands ─────┼── shells that attached later
-one cast at a time                         └── its own remote channel
-phylactery: one registry row
-      │                    (the daemon routes them, keyed by lich name)
-      └── spawns ──► cast process ──► reports itself to the daemon, as always
 ```
 
 **Lifecycle:**
@@ -255,15 +238,16 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 
 | Kind | Direction | Notes |
 |------|-----------|-------|
-| `CastHello` | cast → daemon | cast_id, project_root, ritual name, Components, started_at |
+| `CastHello` | cast → daemon | cast_id, project_root, project (git common dir), ritual name, Components, started_at |
 | `CastGoodbye` | cast → daemon | clean exit + final status |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. Both flow cast → daemon: the cast keeps its own stdin and the daemon is told it is waiting, not asked to answer. The daemon → cast direction is what a takeover would use |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
-| `LichRose` / `LichFell` / `LichStatus` | lich → daemon | name, project root, pid, idle-or-casting |
-| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon ↔ lich | the daemon routes by lich name |
+| `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
+| `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
+| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon | start, refuse, end a cast |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on
@@ -352,16 +336,13 @@ vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only comm
 vekna cast --prompt "<text>"                  # one-step cast on the coding medium, no rituals.py needed
 vekna rituals list                            # defined rituals + their Components
 vekna rituals show <ritual>                   # Component schema + inferred step graph
-vekna                                         # dashboard: observe running casts, drill in
+vekna                                         # this project's dashboard; starts the daemon if none
+vekna stop                                    # end the daemon; running casts rejoin the next
 vekna log                                     # list active + recent casts
 vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal
 vekna --debug                                 # daemon: log every event it processes
 vekna --help
 ```
-
-Inside a lich's session — terminal, attached shell, or remote channel — the
-vocabulary is the same: `cast`, `prompt`, `status`, `log`, `rituals`, `kill`.
-Only `cast` and `prompt` are refused while a cast is running.
 
 ### Hand and Eye (easter egg)
 
@@ -379,8 +360,7 @@ skin diverges from the plain path) is **to be shaped** — treat this as the
 intent, not a spec.
 
 The same lore names two of the idea tracks: Eye, the surfaces that watch, and
-Hand, the engine's acting half. `vekna lich` needs no skin — it is already the
-word.
+Hand, the engine's acting half.
 
 ## Dependency policy
 
@@ -392,9 +372,9 @@ dep elsewhere. Tooling: poetry deps, `mise run …` commands.
 
 ## Resolved decisions
 
-1. One `vekna` binary, three roles: the `vekna cast` process (imports
-   lexicon/folios/user code), the lich (spawns casts, loads none), and the
-   long-running daemon (imports neither). Blast radius = one cast.
+1. One `vekna` binary, two roles: the `vekna cast` process (imports
+   lexicon/folios/user code) and the long-running daemon (imports neither).
+   Blast radius = one cast.
 2. Vocabulary: ritual (workflow entrypoint) / step (task) / transition (the
    next payload, or `Done`) / cast (invocation) / rite (one executed
    step-or-medium node). "cast" = verb. A workflow is a graph of steps wired by
@@ -416,14 +396,7 @@ dep elsewhere. Tooling: poetry deps, `mise run …` commands.
    author's.
 10. Standalone is a feature. Every primitive works (locks degrade per setting).
 11. `folio/process` owns Process + Executable as mediums, not values.
-12. A lich runs **one cast at a time and refuses a second** — no queue. Control
-    commands (`status`, `log`, `kill`, decide answers) stay available while a
-    cast runs and while it is blocked, so its command loop is independent of
-    the cast it supervises.
-13. A lich's identity lives in its phylactery — a row in the daemon's registry,
-    not a store of its own — keyed by **name**, since a project root may hold
-    several liches.
-14. Remote control arrives over a channel the process **dials out** to. The
+12. Remote control arrives over a channel the process **dials out** to. The
     platform authenticates and vekna checks an allowlist, so the daemon still
     binds nothing but its Unix socket.
 
@@ -436,12 +409,10 @@ dep elsewhere. Tooling: poetry deps, `mise run …` commands.
 - Cross-machine peer-attach.
 - Graphical workflow editor. Rituals are Python.
 - Pooled cast processes. Always-fresh; pool later only if cold-start hurts.
-- "Block duplicate cast" mechanism. Locks already express exclusivity. (A lich
-  refusing a second cast is a different thing: one station, one job.)
+- "Block duplicate cast" mechanism. Locks already express exclusivity.
 - Cloud-hosted runs / SaaS control plane.
-- Two casts in one lich, or one lich over several project roots.
-- A bot per lich. Not possible on any platform, and not needed — a channel per
-  lich carries the addressing.
+- A bot per project. Not possible on any platform, and not needed — a channel
+  per project carries the addressing.
 - Sandboxed agent execution. Out of scope for the project — the agent edits your
   repo on purpose. Scope the token and fence the whole process instead;
   [`../safety.md`](../safety.md) says how.

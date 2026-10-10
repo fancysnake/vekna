@@ -3,7 +3,7 @@
 # ships. Loading it exercises what no unit test can: that the module imports,
 # that every annotation resolves, that each `@ritual` declares a model the CLI
 # can render flags from, and that every declared exit names a step.
-# Casting is out of scope here — three of the four rituals call an agent.
+# Casting is out of scope here — most of these rituals call an agent.
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ import pytest
 from vekna.lexicon._inits import rituals_list, rituals_show
 
 _ROOT = Path(__file__).resolve().parents[3]
-_EXPECTED = ("review", "cover_diff", "merge_ready", "triage")
+_EXPECTED = ("review", "cover_diff", "merge_ready", "triage", "nap")
 
 
 def _stand_at_root(monkeypatch: pytest.MonkeyPatch) -> None:

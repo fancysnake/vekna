@@ -173,6 +173,7 @@ class TestAttachedCast:
             CastHello(
                 cast_id="first",
                 project_root=str(tmp_path),
+                project=str(tmp_path),
                 ritual="countdown",
                 components={"start": 1},
                 started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),

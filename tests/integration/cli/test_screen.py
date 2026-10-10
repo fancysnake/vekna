@@ -21,6 +21,7 @@ def _hello() -> CastHello:
     return CastHello(
         cast_id="c1abcdef99",
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={},
         started_at=_WHEN,
@@ -45,6 +46,7 @@ def _running(ritual: str, *, ago: int) -> CastView:
         hello=CastHello(
             cast_id=ritual,
             project_root="/proj",
+            project="/proj/.git",
             ritual=ritual,
             components={},
             started_at=_WHEN - timedelta(seconds=ago),
