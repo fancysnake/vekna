@@ -216,11 +216,6 @@ type = "independence"
 modules = ["vekna.links.*"]
 
 [[tool.importlinter.contracts]]
-name = "inside-inits"
-type = "independence"
-modules = ["vekna.inits.*"]
-
-[[tool.importlinter.contracts]]
 name = "inside-mills"
 type = "independence"
 modules = ["vekna.mills.*"]

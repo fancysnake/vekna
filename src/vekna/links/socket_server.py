@@ -97,15 +97,11 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
     )
 
 
-# Binds, having been asked. Whether there is already a daemon here is `alive`'s
-# question and the caller's decision — the answer is what makes it a peer
-# instead, so it belongs where that branch is taken.
-# The check has to come first either way, because `create_unix_server` unlinks
-# an existing socket file for us: bind never reports the address as taken, so a
-# second daemon would silently steal the first one's socket and leave it
-# listening where nothing can reach it.
-# A check then a bind still leaves two daemons starting at once to race between
-# them; the daemon's caller closes that with a lock held for its whole life.
+# Binds, having been asked. `create_unix_server` unlinks an existing socket file
+# for us: bind never reports the address as taken, so a second daemon would
+# silently steal a live one's socket and leave it listening where nothing can
+# reach it. What stops that is the caller's lock beside the socket, held for the
+# daemon's whole life.
 async def serve(
     *,
     path: Path,
@@ -116,21 +112,30 @@ async def serve(
     writers: set[asyncio.StreamWriter] = set()
     stopping = asyncio.Event()
 
+    # What a connection opens with is what it is, and that is settled once: a
+    # surface is fanned out to, a stop ends the daemon, anything else is a cast
+    # and is routed. The first frame is the only place they can be told apart,
+    # so it is the only place that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         writers.add(writer)
+        frames = aiter(read_frames(reader))
         try:
-            if await _handle(
-                reader,
-                writer,
-                on_message=on_message,
-                on_attach=on_attach,
-                on_detach=on_detach,
-            ):
+            opened = await _opening(frames)
+            if isinstance(opened, SurfaceHello):
+                await _as_surface(
+                    frames, writer, on_attach=on_attach, on_detach=on_detach
+                )
+            elif isinstance(opened, StopRequested):
                 stopping.set()
+            elif opened is not None:
+                await _as_cast(opened, cast_frames(frames), on_message=on_message)
         finally:
             writers.discard(writer)
+            writer.close()
+            with contextlib.suppress(OSError):
+                await writer.wait_closed()
 
     if await asyncio.to_thread(_occupied, path):
         msg = f"{path} is not a socket — vekna has nowhere to bind"
@@ -144,34 +149,6 @@ async def serve(
 # else at that path is somebody's file, and is not vekna's to delete.
 def _occupied(path: Path) -> bool:
     return path.exists() and not path.is_socket()
-
-
-# What a connection opens with is what it is, and that is settled once: a
-# surface is fanned out to, a stop is handed back as `True`, anything else is a
-# cast and is routed. The first frame is the only place they can be told apart,
-# so it is the only place that asks.
-async def _handle(
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-    *,
-    on_message: Callable[[CastMessage], None],
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
-) -> bool:
-    frames = aiter(read_frames(reader))
-    try:
-        opened = await _opening(frames)
-        if isinstance(opened, SurfaceHello):
-            await _as_surface(frames, writer, on_attach=on_attach, on_detach=on_detach)
-        elif isinstance(opened, StopRequested):
-            return True
-        elif opened is not None:
-            await _as_cast(opened, cast_frames(frames), on_message=on_message)
-    finally:
-        writer.close()
-        with contextlib.suppress(OSError):
-            await writer.wait_closed()
-    return False
 
 
 # A connection that says nothing readable is nobody, and there is no cast to

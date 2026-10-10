@@ -6,7 +6,7 @@ from typing import Literal
 
 import pytest
 
-from vekna.gates.cli.screen import listing, paint
+from vekna.gates.cli.screen import listing, ordered, paint
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView
 from vekna.wire import CastHello, DecideRequested, RiteStarted, RunRecord
 
@@ -174,7 +174,9 @@ class TestTheList:
         _step(view, "land", ago=62)
         _medium(view, "coding", ago=61)
 
-        row = _row(paint(casts=[view], focus=None, now=_WHEN), "merge_ready")
+        row = _row(
+            paint(listed=[view], focus=None, project=None, now=_WHEN), "merge_ready"
+        )
 
         assert "running" in row
         assert "4m12s" in row
@@ -191,7 +193,9 @@ class TestTheList:
             cast_id="triage", request_id="q1", prompt="merge #74 now?"
         )
 
-        listed = _rows(paint(casts=[busy, asking], focus=None, now=_WHEN))
+        listed = _rows(
+            paint(listed=ordered([busy, asking]), focus=None, project=None, now=_WHEN)
+        )
 
         assert "triage" in listed[0]
         assert "waiting" in listed[0]
@@ -206,7 +210,9 @@ class TestTheList:
         view.status = "disconnected"
         _step(view, "compose", ago=760, status="ok")
 
-        row = _row(paint(casts=[view], focus=None, now=_WHEN), "fix_demo")
+        row = _row(
+            paint(listed=[view], focus=None, project=None, now=_WHEN), "fix_demo"
+        )
 
         assert "aborted" in row
         assert "vekna cast --continue fix_demo" in row
@@ -218,8 +224,8 @@ class TestTheList:
         view.rites["attempt"].error = "3 tests still red"
         _step(view, "triage", ago=40)
 
-        painted = paint(casts=[view], focus=None, now=_WHEN)
-        drilled = paint(casts=[view], focus="fix_demo", now=_WHEN)
+        painted = paint(listed=[view], focus=None, project=None, now=_WHEN)
+        drilled = paint(listed=[view], focus="fix_demo", project=None, now=_WHEN)
 
         assert "recovering" in _row(painted, "fix_demo")
         assert "1 recovering" in painted
@@ -232,7 +238,9 @@ class TestTheList:
         _step(view, "attempt", ago=50, status="error")
         _step(view, "triage", ago=40, status="ok")
 
-        row = _row(paint(casts=[view], focus=None, now=_WHEN), "fix_demo")
+        row = _row(
+            paint(listed=[view], focus=None, project=None, now=_WHEN), "fix_demo"
+        )
 
         assert "running" in row
 
@@ -244,7 +252,7 @@ class TestTheList:
         _step(view, "ping_it", ago=3595, status="ok")
         view.status = "ok"
 
-        row = _row(paint(casts=[view], focus=None, now=_WHEN), "ping")
+        row = _row(paint(listed=[view], focus=None, project=None, now=_WHEN), "ping")
 
         assert "done" in row
         # It began an hour ago and its one rite finished ten seconds later, so
@@ -260,8 +268,8 @@ class TestTheList:
         view.status = "error"
         view.detail = "does not validate:\n  Invalid JSON: expected ident\n  see docs"
 
-        listed = paint(casts=[view], focus=None, now=_WHEN)
-        drilled = paint(casts=[view], focus="planned", now=_WHEN)
+        listed = paint(listed=[view], focus=None, project=None, now=_WHEN)
+        drilled = paint(listed=[view], focus="planned", project=None, now=_WHEN)
 
         assert "failed" in _row(listed, "planned")
         assert "Invalid JSON" not in listed
@@ -275,7 +283,7 @@ class TestTheList:
         for view in ended:
             view.status = "ok"
 
-        painted = paint(casts=ended, focus=None, now=_WHEN)
+        painted = paint(listed=ordered(ended), focus=None, project=None, now=_WHEN)
 
         assert "vekna — 15 done" in painted
         assert "… 3 older" in painted
@@ -288,17 +296,33 @@ class TestTheList:
     @staticmethod
     def test_no_running_cast_is_ever_dropped_for_space():
         painted = paint(
-            casts=[_running(f"job{n}", ago=60) for n in range(_MANY)],
+            listed=[_running(f"job{n}", ago=60) for n in range(_MANY)],
             focus=None,
+            project=None,
             now=_WHEN,
         )
 
         assert "… " not in painted
         assert len(_rows(painted)) == _MANY
 
+    # A worktree's directory is named for its branch; the column names the
+    # repository, as the header does.
+    @staticmethod
+    def test_a_worktree_cast_names_its_repository():
+        view = _running("fix_demo", ago=60)
+        view.hello.project_root = "/trees/feature-x"
+        view.hello.project = "/code/vekna/.git"
+
+        row = _row(
+            paint(listed=[view], focus=None, project=None, now=_WHEN), "fix_demo"
+        )
+
+        assert "vekna" in row
+        assert "feature-x" not in row
+
     @staticmethod
     def test_nothing_running_says_where_casts_come_from():
-        assert "vekna cast <ritual>" in paint(casts=[], focus=None)
+        assert "vekna cast <ritual>" in paint(listed=[], focus=None, project=None)
 
 
 class TestDrilledIn:
@@ -310,7 +334,7 @@ class TestDrilledIn:
         view.rites["r1"] = _rite("r1", parent_id="r2")
         view.rites["r2"] = _rite("r2", parent_id="r1")
 
-        painted = paint(casts=[view], focus="c1abcdef99")
+        painted = paint(listed=[view], focus="c1abcdef99", project=None)
 
         assert "rite-r1" in painted
         assert "rite-r2" in painted
@@ -321,6 +345,8 @@ class TestDrilledIn:
         carried.cast_id = "c2beef0011"
         carried.resumed_from = "c1abcdef99"
 
-        painted = paint(casts=[CastView(hello=carried)], focus="c2beef0011")
+        painted = paint(
+            listed=[CastView(hello=carried)], focus="c2beef0011", project=None
+        )
 
         assert "↳ c1abcdef" in painted

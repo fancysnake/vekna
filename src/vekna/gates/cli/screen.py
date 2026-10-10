@@ -75,12 +75,6 @@ def _named(project: str) -> str:
     return where.parent.name if where.name == ".git" else where.name
 
 
-def _project(view: CastView) -> str:
-    return (
-        view.hello.project_root.rsplit("/", maxsplit=1)[-1] or view.hello.project_root
-    )
-
-
 def _word(view: CastView) -> str:
     if view.status == "running":
         if view.waiting:
@@ -175,7 +169,8 @@ def _now(view: CastView, now: datetime) -> str:
 def _line(index: int, view: CastView, now: datetime) -> str:
     return (
         f" {index:>2}  {view.hello.cast_id[:_ID]:<{_ID}}"
-        f"  {_fit(view.hello.ritual, _RITUAL)}  {_fit(_project(view), _PROJECT)}"
+        f"  {_fit(view.hello.ritual, _RITUAL)}"
+        f"  {_fit(_named(view.hello.project), _PROJECT)}"
         f"  {_word(view):<{_STATUS}}  {_elapsed(view, now):>7}"
         f"  {_steps_done(view):>5}  {_fit(_now(view, now), _NOW)}".rstrip()
     )
@@ -321,24 +316,24 @@ def _lost(record: RunRecord) -> str:
 # One string, painted over the top of the last one. A terminal that can only be
 # written to forwards is what the CLI surface has; the Textual dashboard in
 # issue #107 is where partial redraws belong.
+# `listed` is what the view numbers — already `scoped` and `ordered` — and
+# `project` the one it is scoped to, `None` being every project.
 def paint(
     *,
-    casts: Sequence[CastView],
+    listed: Sequence[CastView],
     focus: str | None,
+    project: str | None,
     note: str = "",
     now: datetime | None = None,
-    project: str | None = None,
 ) -> str:
     at = now if now is not None else datetime.now(UTC)
-    shown = scoped(casts, project)
-    found = [view for view in shown if view.hello.cast_id == focus]
+    found = [view for view in listed if view.hello.cast_id == focus]
     if focus is not None and found:
         body = _drilled(found[0], at)
         keys = _CAST_KEYS
     else:
-        ranked = ordered(shown)
         where = _EVERY if project is None else _named(project)
-        body = [f"vekna — {_counted(ranked)}  ({where})", *_listing(ranked, at)]
+        body = [f"vekna — {_counted(listed)}  ({where})", *_listing(listed, at)]
         keys = _LIST_KEYS.format(scope=_TO_PROJECT if project is None else _TO_GLOBAL)
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"

@@ -19,7 +19,8 @@ when.
   ([#138](https://github.com/fancysnake/vekna/issues/138))
 - **Bare `vekna` opens on its project.** A project is a repository, keyed by
   its git common dir, so every worktree of one groups together; `CastHello`
-  carries it as `project`. `g` shows every project, `p` comes back.
+  carries it as `project`. `g` shows every project, `p` comes back. Runs
+  recorded before it group by the tree they ran in, and still resume.
 
 ### Added
 

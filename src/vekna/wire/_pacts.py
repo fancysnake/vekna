@@ -1,7 +1,15 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Discriminator, JsonValue, TypeAdapter
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Discriminator,
+    Field,
+    JsonValue,
+    TypeAdapter,
+)
 
 # --- cast lifecycle ---
 
@@ -10,12 +18,16 @@ from pydantic import BaseModel, Discriminator, JsonValue, TypeAdapter
 # carrying on from. Recording it on the hello rather than beside it means the
 # daemon, the journal and a surface all learn it from the same message.
 class CastHello(BaseModel):
+    model_config = ConfigDict(validate_by_name=True)
+
     kind: Literal["cast_hello"] = "cast_hello"
     cast_id: str
     project_root: str
     # The repository the cast belongs to, as its git common dir: every worktree
     # of one repository shares it, while `project_root` is the tree it runs in.
-    project: str
+    # A record written before casts carried it still reads and resumes, grouped
+    # by the tree it ran in: what `project_of` answers outside git.
+    project: str = Field(validation_alias=AliasChoices("project", "project_root"))
     ritual: str
     components: dict[str, JsonValue]
     started_at: datetime
