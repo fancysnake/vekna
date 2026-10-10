@@ -8,9 +8,6 @@ from .engine import recovery_for, step_taking
 # it leaves.
 START = "(start)"
 ENDS = "(done)"
-# A legacy `-> Transition` step declares no exits; the graph says so rather
-# than guessing.
-UNKNOWN = "?"
 # Marks the step a raise routes to — the one taking `Failure[<what entered>]`.
 ON_FAILURE = " (on failure)"
 
@@ -42,24 +39,21 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
     def walk(
         *,
         label: str,
-        exits: tuple[type[BaseModel], ...] | None,
+        exits: tuple[type[BaseModel], ...],
         ends: bool,
         payloads: tuple[type[BaseModel], ...],
     ) -> None:
         forward = [
             _target(ritual=the_ritual.name, label=label, exit_type=exit_type)
-            for exit_type in exits or ()
+            for exit_type in exits
         ]
         # A union exit names one step several times; the graph draws it once,
         # in the order the annotation put them. Deduped by Step like `seen` is,
         # so two distinct steps of one name stay two edges.
         names = list({target: target.name for target in forward}.values())
-        if exits is None:
-            names.append(UNKNOWN)
-        elif ends:
+        if ends:
             names.append(ENDS)
-        # Failure edges are read off what enters, not what leaves, so a legacy
-        # step that declares no exits still has them.
+        # Failure edges are read off what enters, not what leaves.
         recoveries = [found for payload in payloads if (found := recovery_for(payload))]
         names += {found: f"{found.name}{ON_FAILURE}" for found in recoveries}.values()
         graph.append((label, names))

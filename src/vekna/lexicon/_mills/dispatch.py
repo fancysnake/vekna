@@ -1,6 +1,5 @@
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
-from types import NoneType
 from typing import ParamSpec, Protocol, TypeVar, cast, overload
 
 from pydantic import BaseModel
@@ -16,13 +15,7 @@ from vekna.lexicon._pacts import (
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 
-from ._annotations import (
-    _component_flags,
-    _components_model,
-    _exits,
-    _optional_payload,
-    _payloads,
-)
+from ._annotations import _component_flags, _components_model, _exits, _payloads
 from .engine import NAMESPACE_SEPARATOR, medium_rite, register_step
 
 _P = ParamSpec("_P")
@@ -44,9 +37,8 @@ _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 
 # The same contract with the payload type erased, which is the shape the
 # wrappers actually call. `_Erased` next door is the reflection half and says
-# nothing about the return, so the call side names it here. The `| None` is the
-# legacy `goto(target)` with no payload — it goes with the shim.
-_Called = Callable[[BaseModel | None], Transition | Awaitable[Transition]]
+# nothing about the return, so the call side names it here.
+_Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
 
 _SUMMARY_WIDTH = 60
 
@@ -119,11 +111,11 @@ def medium(
 
 # The one shape both wrappers end on. The question is whether what came back
 # still needs awaiting, so that is what gets asked — the alternative, an
-# isinstance against `Goto | Done`, answers it by enumerating the transitions
-# instead, which is a second copy of that union living in a module whose job is
-# not to know what a transition is. `iscoroutinefunction` at decoration time
-# would also miss a `def` body that hands back a coroutine, and costs a
-# TypeGuard whose typeshed signature is Any-tainted.
+# isinstance against `BaseModel | Done`, answers it by enumerating the
+# transitions instead, which is a second copy of that union living in a module
+# whose job is not to know what a transition is. `iscoroutinefunction` at
+# decoration time would also miss a `def` body that hands back a coroutine, and
+# costs a TypeGuard whose typeshed signature is Any-tainted.
 async def _settled(outcome: Transition | Awaitable[Transition]) -> Transition:
     return await outcome if isinstance(outcome, Awaitable) else outcome
 
@@ -158,19 +150,13 @@ def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
     name = func.__name__
     erased = cast("_Called", func)
     exits, ends = _exits(erased, decorator="step")
-    legacy = exits is None
-    payloads = _payloads(erased, legacy=legacy)
-    # ponytail: a legacy step annotated `Work | None` is fed by a bare
-    # `goto(target)`; on the new path a payload is a model and nothing else.
-    accepted: tuple[type, ...] = (
-        (*payloads, NoneType) if legacy and _optional_payload(erased) else payloads
-    )
+    payloads = _payloads(erased)
 
-    async def run(payload: BaseModel | None) -> Transition:
+    async def run(payload: BaseModel) -> Transition:
         # The cast above is discharged here: what the annotation declared is
         # checked against what arrived, and only then is the step called. The
         # engine routes by class and cannot miss; the trial's `walk` can.
-        if not isinstance(payload, accepted):
+        if not isinstance(payload, payloads):
             expected = " | ".join(model.__name__ for model in payloads)
             msg = f"step {name!r} expected {expected}, got {type(payload).__name__}"
             raise StepBoundaryError(msg)
@@ -184,10 +170,7 @@ def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
         ends=ends,
         max_visits=max_visits,
     )
-    # A legacy step is reached by `goto`, never by class, and its payload class
-    # may be shared — cabinet feeds one `Work` to fifteen steps.
-    if not legacy:
-        register_step(the_step)
+    register_step(the_step)
     return the_step
 
 
