@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import os
 import shutil
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -110,7 +110,7 @@ async def _say(path: Path, *messages: WireMessage) -> asyncio.StreamWriter:
 @contextlib.asynccontextmanager
 async def _served(
     socket_path: Path, *, debug: Path | None = None
-) -> AsyncIterator[asyncio.Task[int]]:
+) -> AsyncGenerator[asyncio.Task[int]]:
     host = asyncio.create_task(serve_daemon(debug=debug))
     await _eventually(socket_path.exists)
     try:
