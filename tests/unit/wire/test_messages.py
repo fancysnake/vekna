@@ -18,6 +18,7 @@ class TestRoundTrip:
         message = CastHello(
             cast_id="c1",
             project_root="/proj",
+            project="/proj/.git",
             ritual="fix_demo",
             components={"bound": 3, "path": "x.py"},
             started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),

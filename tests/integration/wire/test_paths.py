@@ -1,9 +1,11 @@
+import asyncio
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from vekna.wire import default_runs_root, default_socket_path
+from vekna.wire import default_runs_root, default_socket_path, project_of
 
 _PERMISSION_BITS = 0o777
 _PRIVATE = 0o700
@@ -83,3 +85,53 @@ class TestSocketPath:
 
         with pytest.raises(PermissionError, match="not this user's alone"):
             default_socket_path()
+
+
+def _git(*args: str, cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+# Git itself, in a directory nothing above can claim: what the cast and the
+# window agree on is whatever it answers.
+@pytest.fixture(name="_no_repository_above")
+def _ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+
+
+@pytest.mark.usefixtures("_no_repository_above")
+class TestProject:
+    @staticmethod
+    def test_a_checkout_and_its_worktree_are_one_project(tmp_path: Path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git("init", "-q", cwd=repo)
+        _git(
+            "-c",
+            "user.name=vekna",
+            "-c",
+            "user.email=vekna@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "root",
+            cwd=repo,
+        )
+        _git("worktree", "add", "-q", str(tmp_path / "wt"), cwd=repo)
+        common = str((repo / ".git").resolve())
+
+        assert asyncio.run(project_of(repo)) == common
+        assert asyncio.run(project_of(tmp_path / "wt")) == common
+
+    @staticmethod
+    def test_a_directory_in_no_repository_is_its_own(tmp_path: Path):
+        assert asyncio.run(project_of(tmp_path)) == str(tmp_path.resolve())
+
+    @staticmethod
+    def test_a_path_git_cannot_run_in_is_its_own(tmp_path: Path):
+        file = tmp_path / "file"
+        file.touch()
+
+        assert asyncio.run(project_of(file)) == str(file.resolve())

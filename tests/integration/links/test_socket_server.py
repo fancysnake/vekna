@@ -13,6 +13,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     RiteDelta,
+    StopRequested,
     SurfaceHello,
     WireMessage,
     encode_frame,
@@ -35,6 +36,7 @@ def _hello() -> CastHello:
     return CastHello(
         cast_id="c1",
         project_root="/proj",
+        project="/proj/.git",
         ritual="fix_demo",
         components={},
         started_at=_WHEN,
@@ -102,6 +104,20 @@ class TestServing:
             "cast_hello",
             "rite_delta",
         ]
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_is_heard_and_is_not_a_cast(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        assert not daemon.messages
+        writer.close()
         await server.close()
 
     # A shell medium's result is everything the command printed, so a `git diff`

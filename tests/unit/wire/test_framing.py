@@ -4,7 +4,10 @@ from vekna.wire import (
     CastGoodbye,
     GrimoireBegin,
     GrimoireEnd,
+    StopRequested,
+    SurfaceHello,
     WireMessage,
+    cast_frames,
     decode_frame,
     encode_frame,
     read_frames,
@@ -56,3 +59,19 @@ class TestReadFrames:
 
         assert len(result) == 1
         assert isinstance(result[0], GrimoireBegin)
+
+
+class TestCastFrames:
+    @staticmethod
+    def test_drops_an_opening_past_the_first_frame():
+        cast = GrimoireBegin(cast_id="c1")
+        late: list[WireMessage] = [SurfaceHello(), cast, StopRequested()]
+        payload = b"".join(encode_frame(message) for message in late)
+
+        async def collect() -> list[WireMessage]:
+            reader = asyncio.StreamReader()
+            reader.feed_data(payload)
+            reader.feed_eof()
+            return [message async for message in cast_frames(read_frames(reader))]
+
+        assert asyncio.run(collect()) == [cast]

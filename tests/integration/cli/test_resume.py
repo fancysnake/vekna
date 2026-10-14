@@ -63,6 +63,7 @@ def _journalled(project: Path, runs: Path, cast_id: str) -> None:
         CastHello(
             cast_id=cast_id,
             project_root=str(project),
+            project=str(project),
             ritual="job",
             components={"left": 1},
             started_at=_WHEN,

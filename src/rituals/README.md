@@ -7,6 +7,7 @@ vekna cast cover_diff [--bound N]
 vekna cast review [--base <ref>] [--only <file>] [--focus <text>]
 vekna cast merge_ready [--bound N]
 vekna cast triage --link <url>
+vekna cast nap [--naps N] [--seconds N]
 ```
 
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
@@ -20,6 +21,9 @@ vekna cast triage --link <url>
   green. Whichever went red picks the payload shape the repair step receives.
 - [`triage`](triage.py) reads a GitHub issue or PR with `gh`, has an agent
   size it against this codebase, and asks you what it deserves.
+- [`nap`](nap.py) sleeps N times, counting, and does nothing else: a cast to
+  watch from the dashboard, stop the daemon under, or kill and `--continue`,
+  without paying an agent.
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for

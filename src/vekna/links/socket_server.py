@@ -7,8 +7,10 @@ from vekna.pacts.routing import SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
     CastMessage,
+    StopRequested,
     SurfaceHello,
     WireMessage,
+    cast_frames,
     encode_frame,
     read_frames,
 )
@@ -44,10 +46,19 @@ class SocketSurface(Surface):
 # is left painting a view nobody will ever change again.
 class Serving:
     def __init__(
-        self, server: asyncio.Server, writers: set[asyncio.StreamWriter]
+        self,
+        server: asyncio.Server,
+        writers: set[asyncio.StreamWriter],
+        stopping: asyncio.Event,
     ) -> None:
         self._server = server
         self._writers = writers
+        self._stopping = stopping
+
+    # Until a connection opens with `StopRequested`. What ending means is the
+    # caller's: this only says that somebody asked.
+    async def stopped(self) -> None:
+        await self._stopping.wait()
 
     # Awaited one by one rather than left to `wait_closed`, which on 3.11 comes
     # back the moment the server stops accepting: what is buffered for a peer
@@ -93,9 +104,8 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
 # an existing socket file for us: bind never reports the address as taken, so a
 # second daemon would silently steal the first one's socket and leave it
 # listening where nothing can reach it.
-# ponytail: a live check then a bind, so two daemons starting in the same
-# millisecond can still race. A lock file opened O_EXCL is the upgrade, and it
-# costs a stale-lock story that this does not.
+# A check then a bind still leaves two daemons starting at once to race between
+# them; the daemon's caller closes that with a lock held for its whole life.
 async def serve(
     *,
     path: Path,
@@ -104,19 +114,21 @@ async def serve(
     on_detach: Callable[[Surface], None],
 ) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
+    stopping = asyncio.Event()
 
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         writers.add(writer)
         try:
-            await _handle(
+            if await _handle(
                 reader,
                 writer,
                 on_message=on_message,
                 on_attach=on_attach,
                 on_detach=on_detach,
-            )
+            ):
+                stopping.set()
         finally:
             writers.discard(writer)
 
@@ -125,7 +137,7 @@ async def serve(
         raise SocketPathError(msg)
     server = await asyncio.start_unix_server(handle, path=str(path), limit=_FRAME_LIMIT)
     await asyncio.to_thread(path.chmod, _SOCKET_MODE)
-    return Serving(server, writers)
+    return Serving(server, writers, stopping)
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything
@@ -135,9 +147,9 @@ def _occupied(path: Path) -> bool:
 
 
 # What a connection opens with is what it is, and that is settled once: a
-# surface is fanned out to, anything else is a cast and is routed. The first
-# frame is the only place the two can be told apart, so it is the only place
-# that asks.
+# surface is fanned out to, a stop is handed back as `True`, anything else is a
+# cast and is routed. The first frame is the only place they can be told apart,
+# so it is the only place that asks.
 async def _handle(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
@@ -145,18 +157,21 @@ async def _handle(
     on_message: Callable[[CastMessage], None],
     on_attach: Callable[[Surface], None],
     on_detach: Callable[[Surface], None],
-) -> None:
+) -> bool:
     frames = aiter(read_frames(reader))
     try:
         opened = await _opening(frames)
         if isinstance(opened, SurfaceHello):
             await _as_surface(frames, writer, on_attach=on_attach, on_detach=on_detach)
+        elif isinstance(opened, StopRequested):
+            return True
         elif opened is not None:
-            await _as_cast(opened, frames, on_message=on_message)
+            await _as_cast(opened, cast_frames(frames), on_message=on_message)
     finally:
         writer.close()
         with contextlib.suppress(OSError):
             await writer.wait_closed()
+    return False
 
 
 # A connection that says nothing readable is nobody, and there is no cast to
@@ -198,7 +213,7 @@ async def _as_surface(
 # this connection's own, leaving the cast that did open it running forever.
 async def _as_cast(
     opened: CastMessage,
-    frames: AsyncIterator[WireMessage],
+    frames: AsyncIterator[CastMessage],
     *,
     on_message: Callable[[CastMessage], None],
 ) -> None:
@@ -232,13 +247,11 @@ async def _as_cast(
 # Why the reading ended, for the goodbye above to carry.
 async def _reading(
     opened: CastMessage,
-    frames: AsyncIterator[WireMessage],
+    frames: AsyncIterator[CastMessage],
     *,
     on_message: Callable[[CastMessage], None],
 ) -> str:
     async for message in frames:
-        if isinstance(message, SurfaceHello):
-            continue
         if message.cast_id != opened.cast_id:
             return f"{_NOT_ITS_OWN} {message.cast_id!r}"
         on_message(message)

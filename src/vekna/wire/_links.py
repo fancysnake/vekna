@@ -4,7 +4,7 @@ import tempfile
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
-from ._pacts import RunRecord, WireMessage, decode_frame
+from ._pacts import CastMessage, Opening, RunRecord, WireMessage, decode_frame
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -20,6 +20,15 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
     async for raw in reader:
         if stripped := raw.strip():
             yield decode_frame(stripped)
+
+
+# What a connection carries once its first frame has said what it is. An opening
+# frame this late opens nothing, so it is dropped here once rather than by every
+# reader in turn.
+async def cast_frames(frames: AsyncIterator[WireMessage]) -> AsyncIterator[CastMessage]:
+    async for message in frames:
+        if not isinstance(message, Opening):
+            yield message
 
 
 # Where the socket and the journal are, and how to read back what the daemon
@@ -60,6 +69,28 @@ def default_socket_path() -> Path:
     if (runtime := os.environ.get(_RUNTIME_ENV)) is not None:
         return Path(runtime) / "vekna.sock"
     return _owned(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}") / "vekna.sock"
+
+
+# What a cast groups under and what a surface filters by, so both ends resolve
+# it here. Git's common dir is one per repository whatever tree asks. A
+# directory git will not place in a repository — or a machine without git — is
+# its own project.
+async def project_of(directory: Path) -> str:
+    here = await asyncio.to_thread(directory.resolve)
+    try:
+        git = await asyncio.create_subprocess_exec(
+            "git",
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            cwd=here,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        return str(here)
+    answer, _ = await git.communicate()
+    return answer.decode().strip() if git.returncode == 0 else str(here)
 
 
 def _owned(directory: Path) -> Path:

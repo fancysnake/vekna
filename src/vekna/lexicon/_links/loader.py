@@ -5,7 +5,7 @@ import importlib.util
 import pkgutil
 import sys
 import tomllib
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -44,7 +44,7 @@ def _package_directory(module: ModuleType) -> Path | None:
 # say which file produced it. `No module named 'reqeusts'` names the typo and
 # not the place, and a package sweep can be twenty files deep by then.
 @contextlib.contextmanager
-def _blamed(origin: str) -> Iterator[None]:
+def _blamed(origin: str) -> Generator[None]:
     try:
         yield
     # A module-level argparse exits on import; that is a source that does not

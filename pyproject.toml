@@ -73,7 +73,7 @@ dev = [
     "tingle (>=0.8.0,<0.9.0)",
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
-    "cabinet @ git+https://github.com/fancysnake/cabinet.git@v0.3.0",
+    "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0",
 ]
 
 # Only `site:*` and the site workflow install this one — nothing else needs a
