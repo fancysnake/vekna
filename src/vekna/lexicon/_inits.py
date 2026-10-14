@@ -548,7 +548,7 @@ async def _run(plan: _Plan) -> int:
     def backlog() -> list[WireMessage]:
         return _backlog(cast_id=cast_id, grimoire=grimoire, channel=tee)
 
-    await link.attach(backlog=backlog())
+    await link.attach(backlog=backlog)
     watcher = asyncio.create_task(link.keep_attached(backlog))
     try:
         return await _cast(
