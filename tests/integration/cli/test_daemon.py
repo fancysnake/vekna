@@ -405,6 +405,7 @@ class TestServing:
     # A socket this account may not connect to has somebody behind it, and
     # saying nobody is there would send the operator off to start another.
     @staticmethod
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the socket's mode")
     async def test_stop_says_so_when_the_daemon_cannot_be_reached(socket_path: Path):
         server = await asyncio.start_unix_server(
             lambda _reader, writer: writer.close(), path=str(socket_path)
