@@ -278,13 +278,18 @@ class Done(Generic[_ResultT_co]):
         _checked(self.result, kind="Done")
 
 
+# A step's payload is the next step, so what a step returns is a payload or
+# `Done`. Steps annotate the concrete union; this is the erased shape.
+Transition = BaseModel | Done[BaseModel | None]
+
+
 # `exits` are the payload classes a body may return, and `ends` whether it may
 # return `Done` — both read off the return annotation at decoration, so the
 # graph `rituals show` draws is the one mypy checked.
 @dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
-    run: Callable[[BaseModel], Awaitable["Transition"]]
+    run: Callable[[BaseModel], Awaitable[Transition]]
     payloads: tuple[type[BaseModel], ...]
     exits: tuple[type[BaseModel], ...]
     ends: bool
@@ -315,11 +320,6 @@ class Failure(BaseModel, Generic[_PayloadT]):
     payload: _PayloadT
     # How many times the failed step has failed in this cast, from 1.
     attempt: int
-
-
-# A step's payload is the next step, so what a step returns is a payload or
-# `Done`. Steps annotate the concrete union; this is the erased shape.
-Transition = BaseModel | Done[BaseModel | None]
 
 
 # A ritual declares its components as a model, so one that needs nothing would

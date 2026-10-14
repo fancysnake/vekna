@@ -52,19 +52,6 @@ def _components_model(func: _Erased) -> type[BaseModel]:
     raise RitualDefinitionError(msg)
 
 
-def _model_members(
-    annotation: type[Any] | UnionType | None,
-) -> tuple[type[BaseModel], ...] | None:
-    if not isinstance(annotation, UnionType):
-        return None
-    members: list[type[BaseModel]] = []
-    for arg in get_args(annotation):
-        if (model := _as_model(arg)) is None:
-            return None
-        members.append(model)
-    return tuple(members)
-
-
 def _is_union(annotation: type[Any] | UnionType | None) -> bool:
     if isinstance(annotation, UnionType):
         return True
@@ -78,15 +65,17 @@ def _is_union(annotation: type[Any] | UnionType | None) -> bool:
 # `None` is not one.
 def _payloads(func: _Erased) -> tuple[type[BaseModel], ...]:
     annotation = _sole_annotation(func, decorator="step", noun="payload")
-    if (model := _as_model(annotation)) is not None:
-        return (model,)
-    if (members := _model_members(annotation)) is not None:
-        return members
-    msg = (
-        f"@step {func.__name__!r} needs a pydantic model, or a union of them, "
-        "as its payload type"
-    )
-    raise RitualDefinitionError(msg)
+    members = get_args(annotation) if _is_union(annotation) else (annotation,)
+    payloads: list[type[BaseModel]] = []
+    for member in members:
+        if (model := _as_model(member)) is None:
+            msg = (
+                f"@step {func.__name__!r} needs a pydantic model, or a union of "
+                "them, as its payload type"
+            )
+            raise RitualDefinitionError(msg)
+        payloads.append(model)
+    return tuple(payloads)
 
 
 # Naming an annotation means reading an attribute off whatever the author wrote.

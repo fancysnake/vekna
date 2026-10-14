@@ -35,11 +35,6 @@ _LaterT = TypeVar("_LaterT", bound=BaseModel)
 # right to call.
 _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 
-# The same contract with the payload type erased, which is the shape the
-# wrappers actually call. `_Erased` next door is the reflection half and says
-# nothing about the return, so the call side names it here.
-_Called = Callable[[BaseModel], Transition | Awaitable[Transition]]
-
 _SUMMARY_WIDTH = 60
 
 
@@ -148,7 +143,7 @@ def step(
 
 def _step(func: _Written[_PayloadT], *, max_visits: int | None) -> Step:
     name = func.__name__
-    erased = cast("_Called", func)
+    erased = cast("_Written[BaseModel]", func)
     exits, ends = _exits(erased, decorator="step")
     payloads = _payloads(erased)
 
@@ -191,7 +186,7 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator
         raise RitualDefinitionError(msg)
 
     def wrap(func: _Written[_ComponentsT]) -> Ritual:
-        erased = cast("_Called", func)
+        erased = cast("_Written[BaseModel]", func)
         model = _components_model(erased)
         exits, ends = _exits(erased, decorator="ritual")
 

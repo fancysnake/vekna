@@ -15,7 +15,7 @@ from vekna.lexicon import (
     step,
 )
 from vekna.lexicon._mills.dispatch import component_flags
-from vekna.lexicon._mills.engine import step_taking
+from vekna.lexicon._mills.graph import check_exits
 
 
 class Ping(BaseModel):
@@ -146,8 +146,13 @@ class TestStepDecorator:
 
         wrapped = step(_erased)
 
+        @ritual("erased")
+        def _enter(components: Fresh) -> Fresh:
+            return components
+
         assert wrapped.exits == (BaseModel,)
-        assert step_taking(Fresh) is wrapped
+        with pytest.raises(RitualDefinitionError, match="which no step takes"):
+            check_exits(_enter)
 
 
 # A step two others transition into admits either shape.
