@@ -8,7 +8,7 @@ import pytest
 
 from vekna.links.journal import Journal
 from vekna.pacts.casts import DamagedRun, Run
-from vekna.wire import CastGoodbye, CastHello, RiteDelta
+from vekna.wire import CastGoodbye, CastHello, CastQueued, RiteDelta
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
@@ -44,6 +44,20 @@ def _hello(cast_id: str = "c1", *, started_at: datetime = _WHEN) -> CastHello:
 
 
 class TestRecording:
+    @staticmethod
+    def test_a_queued_cast_is_recorded_queued_until_its_own_hello(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+
+        journal.record(CastQueued(cast_id="c1"))
+        queued = journal.read("c1")
+        journal.record(_hello())
+
+        assert queued is not None
+        assert queued.status == "queued"
+        assert (record := journal.read("c1")) is not None
+        assert record.status == "running"
+
     @staticmethod
     def test_a_hello_opens_a_run_directory(tmp_path: Path):
         journal = Journal(tmp_path)

@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import os
 import shutil
+import textwrap
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +15,7 @@ from vekna.inits.cli import init_command, window
 from vekna.inits.daemon import serve_daemon, stop_daemon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
+from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastGoodbye,
@@ -652,3 +654,108 @@ class TestTheLogCommand:
 
         assert result.exit_code == 0
         assert result.output.strip() == "no casts recorded"
+
+
+_ASKER = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.flow import decide
+    from vekna.lexicon import Done, NoComponents, ritual, step
+
+
+    class Ask(BaseModel):
+        pass
+
+
+    @step
+    async def ask(_: Ask) -> Done[None]:
+        await decide("merge #74 now?")
+        return Done(None)
+
+
+    @ritual("asker")
+    async def asker(_: NoComponents) -> Ask:
+        return Ask()
+    """)
+# A spawned cast is a fresh interpreter importing pydantic and the lexicon.
+_SPAWN_PATIENCE = 3000
+
+
+async def _spawned(ready: Callable[[], bool]) -> None:
+    for _ in range(_SPAWN_PATIENCE):
+        if ready():
+            return
+        await asyncio.sleep(_TICK)
+    msg = f"gave up after {_SPAWN_PATIENCE * _TICK:.0f}s waiting for a spawned cast"
+    raise AssertionError(msg)
+
+
+@pytest.fixture(name="rituals")
+def _rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    project = socket_path.parent
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(project / "config"))
+    (project / "rituals.py").write_text(_ASKER)
+    return project
+
+
+@pytest.mark.asyncio
+class TestSpawning:
+    @staticmethod
+    async def test_c_starts_a_ritual_and_a_answers_it_from_the_view(
+        socket_path: Path, rituals: Path
+    ):
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c asker")
+            await _spawned(lambda: keys.painted("merge #74 now?"))
+            keys.press("1")
+            await _eventually(lambda: keys.painted("a yes|no"))
+            keys.press("a yes")
+            keys.press("b")
+            await _spawned(lambda: keys.showing("1 done"))
+            keys.press("q")
+            await peer
+
+        [run] = Journal(rituals / "runs").recent(limit=5)
+        assert not isinstance(run, DamagedRun)
+        assert run.status == "ok"
+        assert run.hello.ritual == "asker"
+        assert run.hello.resumed_from is None
+        assert run.hello.wired
+
+    @staticmethod
+    async def test_a_ritual_that_is_not_there_fails_saying_so(
+        socket_path: Path, rituals: Path
+    ):
+        del rituals
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c nothing")
+            await _spawned(lambda: keys.painted("1 failed"))
+            keys.press("1")
+            await _eventually(lambda: keys.painted("no ritual named 'nothing'"))
+            keys.press("q")
+            await peer
+
+    @staticmethod
+    async def test_past_the_project_s_processes_a_cast_waits_queued(
+        socket_path: Path, rituals: Path
+    ):
+        (rituals / ".vekna.toml").write_text("[circle]\nprocesses = 1\n")
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c asker")
+            await _spawned(lambda: keys.painted("merge #74 now?"))
+            keys.press("c asker")
+            await _eventually(lambda: keys.painted("1 waiting · 1 queued"))
+            keys.press("1")
+            await _eventually(lambda: keys.painted("a yes|no"))
+            keys.press("a no")
+            keys.press("b")
+            # The first one done frees its slot, and the second asks in turn.
+            await _spawned(lambda: keys.painted("1 waiting · 1 done"))
+            keys.press("q")
+            await peer

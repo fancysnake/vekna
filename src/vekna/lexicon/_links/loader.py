@@ -4,7 +4,6 @@ import importlib
 import importlib.util
 import pkgutil
 import sys
-import tomllib
 from collections.abc import Generator, Iterator
 from pathlib import Path
 from types import ModuleType
@@ -12,6 +11,7 @@ from types import ModuleType
 from pydantic import ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
+from vekna.wire import read_toml
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -138,11 +138,9 @@ def load_rituals_source(path: Path) -> list[RitualSource]:
 # would surface later as "no ritual named ...", which names neither the file
 # nor the mistake.
 def read_config(path: Path) -> Config:
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)  # type: ignore [misc]
-
+    data = read_toml(path)
     try:
-        return Config.model_validate(data)  # type: ignore [misc]
+        return Config.model_validate(data)
     except ValidationError as error:
         msg = f"{path}: {error}"
         raise RitualDefinitionError(msg) from error

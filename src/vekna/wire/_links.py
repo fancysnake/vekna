@@ -4,7 +4,16 @@ import tempfile
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
-from ._pacts import CastMessage, Opening, RunRecord, WireMessage, decode_frame
+from ._pacts import (
+    CastMessage,
+    CastRefused,
+    CastRequested,
+    RunRecord,
+    StopRequested,
+    SurfaceHello,
+    WireMessage,
+    decode_frame,
+)
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -12,6 +21,8 @@ _RUNS_ENV = "VEKNA_RUNS"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
+_CONFIG_ENV = "XDG_CONFIG_HOME"
+_PROJECT_CONFIG = ".vekna.toml"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 
@@ -27,7 +38,9 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
 # reader in turn.
 async def cast_frames(frames: AsyncIterator[WireMessage]) -> AsyncIterator[CastMessage]:
     async for message in frames:
-        if not isinstance(message, Opening):
+        if not isinstance(
+            message, (SurfaceHello, StopRequested, CastRequested, CastRefused)
+        ):
             yield message
 
 
@@ -53,6 +66,24 @@ def default_state_root() -> Path:
     if (named := os.environ.get(_STATE_ENV)) is not None:
         return Path(named) / "vekna"
     return Path.home() / ".local" / "state" / "vekna"
+
+
+# What the user configured, which is the one thing of vekna's that belongs in
+# the config namespace — the journal and the debug log are state and live under
+# `default_state_root()`. Here because the cast reads `[rituals]` from it and
+# the daemon reads `[circle]`.
+def default_config_path() -> Path:
+    if (named := os.environ.get(_CONFIG_ENV)) is not None:
+        return Path(named) / "vekna" / "config.toml"
+    return Path.home() / ".config" / "vekna" / "config.toml"
+
+
+# The project's own config, nearest first, as both ends find it.
+def project_config_path(directory: Path) -> Path | None:
+    for here in (directory, *directory.parents):
+        if (found := here / _PROJECT_CONFIG).is_file():
+            return found
+    return None
 
 
 # Inside a directory of this user's own, which is why this makes one. A socket

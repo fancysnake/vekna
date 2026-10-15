@@ -6,27 +6,42 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
+from uuid import uuid4
 
 import click
 
+from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
+from vekna.links.spawner import Spawner
+from vekna.mills.circle import Circle, CodingPool
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
-from vekna.pacts.routing import Routed
+from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
+    CastGoodbye,
+    CastHello,
+    CastMessage,
+    CastRefused,
+    CastRequested,
+    CodingSlotReleased,
+    CodingSlotRequested,
+    DecideResolved,
     StopRequested,
     default_runs_root,
     default_socket_path,
     default_state_root,
     encode_frame,
+    project_of,
 )
 
 # Spawned through the interpreter running this one rather than through whatever
 # `vekna` is on PATH, which in a venv, a `pipx` install or a test is not always
 # the same binary.
 CLI_MODULE = "vekna.inits.cli"
+# What the daemon spawns a cast with: no terminal, so prompts come over the wire.
+_CAST_COMMAND = (sys.executable, "-m", CLI_MODULE, "cast", "--wired")
 # What the daemon keeps on disk, trimmed once at startup rather than on every
 # write: a cast is a directory of a few kilobytes, and this is about a machine
 # that has been running vekna for a year, not about the last hour.
@@ -96,12 +111,15 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     # Before the socket binds, so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
-    server = await serve(
-        path=path,
-        on_message=hub.apply,
-        on_attach=hub.attach_surface,
-        on_detach=hub.detach_surface,
+    limits = ConfigLimits(say=_logged)
+    circle = Circle(
+        casts=hub,
+        apply=hub.apply,
+        spawn=Spawner(command=_CAST_COMMAND, runs=default_runs_root()),
+        limits=limits,
     )
+    pool = CodingPool(tell=hub.tell, limits=limits)
+    server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
     _logged(f"listening on {path}")
     try:
         await server.stopped()
@@ -170,3 +188,64 @@ async def stop_daemon() -> str:
         message = f"asked the daemon to stop, and {path} is still answering"
         raise click.ClickException(message)
     return _STOPPED
+
+
+# The hub, the circle and the coding pool behind one socket: the hub holds what
+# every cast is doing, the circle what may run next, the pool who is talking to
+# an agent. Slot traffic is the pool's alone, and an ending is everyone's.
+class _Daemon(Routes):
+    def __init__(self, *, hub: Hub, circle: Circle, pool: CodingPool) -> None:
+        self._hub = hub
+        self._circle = circle
+        self._pool = pool
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def apply(self, message: CastMessage) -> None:
+        if isinstance(message, CodingSlotRequested):
+            self._pool.requested(message)
+        elif isinstance(message, CodingSlotReleased):
+            self._pool.released(message)
+        else:
+            self._hub.apply(message)
+            if isinstance(message, CastGoodbye):
+                self._pool.ended(message.cast_id)
+                self._circle.ended()
+
+    def attach_surface(self, surface: Surface) -> None:
+        self._hub.attach_surface(surface)
+
+    def detach_surface(self, surface: Surface) -> None:
+        self._hub.detach_surface(surface)
+
+    def answer(self, resolved: DecideResolved) -> None:
+        self._hub.answer(resolved)
+
+    def open_cast(self, cast_id: str, peer: Surface) -> None:
+        self._hub.open_cast(cast_id, peer)
+
+    def close_cast(self, cast_id: str, peer: Surface) -> None:
+        self._hub.close_cast(cast_id, peer)
+
+    # Resolving the project asks git, so the queueing is a task of its own
+    # rather than a wait inside the surface's read loop.
+    def request(self, surface: Surface, request: CastRequested) -> None:
+        task = asyncio.create_task(self._queued(surface, request))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _queued(self, surface: Surface, request: CastRequested) -> None:
+        root = Path(request.project_root)
+        if not await asyncio.to_thread(root.is_dir):
+            surface.send(CastRefused(reason=f"{root} is not a directory"))
+            return
+        self._circle.enqueue(
+            CastHello(
+                cast_id=uuid4().hex,
+                project_root=str(root),
+                project=await project_of(root),
+                ritual=request.ritual,
+                components=dict(request.components),
+                started_at=datetime.now(tz=UTC),
+                wired=True,
+            )
+        )

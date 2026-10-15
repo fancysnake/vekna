@@ -5,6 +5,8 @@ reaches for, and nothing else. The CLI lives in the root project; the cast
 runtime is reached through `vekna.lexicon._inits`.
 """
 
+from vekna.wire import allowed_answers
+
 from ._mills.dispatch import medium, ritual, step
 from ._mills.engine import (
     CODING_FOCUS,
@@ -50,7 +52,6 @@ from ._pacts import (
     Transition,
     UnattendedPromptError,
     Url,
-    allowed_answers,
     done,
     goto,
     sha256_of,

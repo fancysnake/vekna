@@ -12,6 +12,7 @@ from vekna.lexicon._inits import main
 from vekna.links.journal import Journal
 from vekna.wire import (
     CastHello,
+    CastQueued,
     RiteFinished,
     RiteStarted,
     RunRecord,
@@ -116,6 +117,18 @@ def _record_an_interrupted_cast(project: Path, runs: Path) -> str:
 
 
 class TestResume:
+    # A queued record is a cast the daemon has not started yet: it runs from the
+    # first step, with nothing to replay.
+    @staticmethod
+    def test_a_queued_record_is_a_first_run(project: Path, tmp_path: Path):
+        runs = tmp_path / "runs"
+        _journalled(project, runs, "q1")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
     @staticmethod
     def test_a_rite_that_finished_is_not_run_again(project: Path, tmp_path: Path):
         cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")

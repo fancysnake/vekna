@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import importlib
-import os
+import itertools
 import sys
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -11,15 +11,30 @@ from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from vekna.wire import CastHello, WireMessage, default_socket_path, project_of
+from vekna.wire import (
+    CastHello,
+    WireMessage,
+    default_config_path,
+    default_socket_path,
+    parse_flags,
+    project_config_path,
+    project_of,
+)
 
-from ._links.daemon import DaemonLink, TeeChannel, to_wire
+from ._links.daemon import DaemonLink, TeeChannel, ThrottledFocus, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
 from ._links.unattended import UnattendedChannel
 from ._mills.dispatch import component_flags
-from ._mills.engine import Compendium, Grimoire, current_rite, prompt_runner, run_cast
+from ._mills.engine import (
+    CODING_FOCUS,
+    Compendium,
+    Grimoire,
+    current_rite,
+    prompt_runner,
+    run_cast,
+)
 from ._mills.graph import check_exits, step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
@@ -44,7 +59,10 @@ _USAGE = (
 )
 _RESUME_FLAG = "--resume"
 _UNATTENDED_FLAG = "--unattended"
-_CONFIG_ENV = "XDG_CONFIG_HOME"
+# Runtime-only, like `--resume`: the daemon spawns a cast with it, and a cast
+# with it has no terminal to ask on.
+_WIRED_FLAG = "--wired"
+_LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG})
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -123,25 +141,12 @@ def _no_rituals(near_miss: Path | None) -> str:
     return f"{_NO_RITUALS}\n({near_miss} is not one — every level needs an __init__.py)"
 
 
-# What the user configured, which is the one thing of vekna's that belongs in
-# the config namespace — the journal and the debug log are state and live under
-# `default_state_root()`.
-def _config_home() -> Path:
-    if (named := os.environ.get(_CONFIG_ENV)) is not None:
-        return Path(named)
-    return Path.home() / ".config"
-
-
 def _config_files(cwd: Path) -> list[Path]:
     found: list[Path] = []
-    global_config = _config_home() / "vekna" / "config.toml"
-    if global_config.is_file():
+    if (global_config := default_config_path()).is_file():
         found.append(global_config)
-    for directory in (cwd, *cwd.parents):
-        project_config = directory / ".vekna.toml"
-        if project_config.is_file():
-            found.append(project_config)
-            break
+    if (project_config := project_config_path(cwd)) is not None:
+        found.append(project_config)
     return found
 
 
@@ -375,30 +380,6 @@ def _prompt_text(argv: list[str]) -> str | None:
     return text
 
 
-def _parse_flags(flags: list[str]) -> dict[str, str]:
-    parsed: dict[str, str] = {}
-    tokens = iter(flags)
-    for token in tokens:
-        if not token.startswith("--"):
-            msg = f"unexpected argument: {token!r}"
-            raise ValueError(msg)
-        key, separator, inline = token[2:].partition("=")
-        if separator:
-            value = inline
-        else:
-            # Without this, `--a --b` reads --b as the value of --a and never
-            # sets b at all. `None` is the sentinel because the tokens are
-            # strings: a default of "" would read a trailing `--a` as `--a=`
-            # and set the field to empty instead of naming the mistake.
-            following = next(tokens, None)
-            if following is None or following.startswith("--"):
-                msg = f"--{key} is missing a value (write --{key}=<value>)"
-                raise ValueError(msg)
-            value = following
-        parsed[key.replace("-", "_")] = value
-    return parsed
-
-
 class _Plan(NamedTuple):
     ritual: Ritual
     components: BaseModel
@@ -407,6 +388,11 @@ class _Plan(NamedTuple):
     # for a cast that is starting rather than carrying one on.
     ledger: Ledger | None = None
     resumed_from: str | None = None
+    # A queued record is the cast's first run, so it keeps the id the daemon
+    # gave it rather than minting one that would leave the queued row open.
+    cast_id: str | None = None
+    # Spawned by the daemon: no terminal, so prompts are answered over the wire.
+    wired: bool = False
 
 
 # The record holds the components as the CLI already validated them once, so
@@ -416,9 +402,12 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
     the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
+    components = the_ritual.components.model_validate(hello.components)
+    if resumption.record.status == "queued":
+        return _Plan(the_ritual, components, unattended, cast_id=cast_id)
     return _Plan(
         ritual=the_ritual,
-        components=the_ritual.components.model_validate(hello.components),
+        components=components,
         unattended=unattended,
         ledger=Ledger.from_resumption(resumption),
         resumed_from=cast_id,
@@ -440,9 +429,7 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
         return _resume(wanted[0], unattended=unattended)
     the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
     return _Plan(
-        the_ritual,
-        the_ritual.components.model_validate(_parse_flags(flags)),
-        unattended,
+        the_ritual, the_ritual.components.model_validate(parse_flags(flags)), unattended
     )
 
 
@@ -461,6 +448,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
         started_at=datetime.now(tz=UTC),
         resumed_from=plan.resumed_from,
+        wired=plan.wired,
     )
 
 
@@ -473,6 +461,17 @@ def _backlog(
         to_wire(event, cast_id=cast_id) for event in grimoire.events
     ]
     return replayed + channel.open_prompts()
+
+
+# Every agent session this cast opens counts against the daemon's coding limit.
+# A cast with no coding focus is left to fail at the call that needs one, not
+# refused here for work it may never do.
+def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
+    try:
+        inner = CODING_FOCUS.resolve()
+    except FocusMissingError:
+        return contextlib.nullcontext()
+    return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
 # Every way a cast can end goes through one notify: an `except` per error type
@@ -488,13 +487,14 @@ async def _cast(
     renderer: StandaloneRenderer,
 ) -> int:
     try:
-        result = await run_cast(
-            ritual=plan.ritual,
-            components=plan.components,
-            grimoire=grimoire,
-            channel=channel,
-            ledger=plan.ledger,
-        )
+        with _throttled(link):
+            result = await run_cast(
+                ritual=plan.ritual,
+                components=plan.components,
+                grimoire=grimoire,
+                channel=channel,
+                ledger=plan.ledger,
+            )
     except FocusMissingError as error:
         sys.stderr.write(f"{error}\n")
         code, detail = 2, str(error)
@@ -522,14 +522,14 @@ async def _run(plan: _Plan) -> int:
     # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
     # is the wire's correlation key, and which cast this one carries on from is
     # a field of its own on the hello.
-    cast_id = uuid4().hex
+    cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
     renderer = StandaloneRenderer()
     link = DaemonLink(
         socket_path=default_socket_path(),
         hello=await _hello(cast_id=cast_id, plan=plan),
     )
     tee = TeeChannel(
-        inner=renderer,
+        inner=None if plan.wired else renderer,
         link=link,
         cast_id=cast_id,
         rite_id=lambda: current_rite().parent_id,
@@ -561,10 +561,11 @@ async def _run(plan: _Plan) -> int:
 
 
 async def _drive(argv: list[str]) -> int:
-    # Leading only, as the outer command hands it: past the ritual's name a
+    # Leading only, as the outer command hands them: past the ritual's name a
     # flag is a component's.
-    if unattended := argv[:1] == [_UNATTENDED_FLAG]:
-        argv = argv[1:]
+    leading = list(itertools.takewhile(_LEADING_FLAGS.__contains__, argv))
+    argv = argv[len(leading) :]
+    unattended = _UNATTENDED_FLAG in leading
     if argv and argv[0] in _HELP_FLAGS:
         sys.stdout.write(_help_text(Path.cwd()))
         return 0
@@ -573,7 +574,9 @@ async def _drive(argv: list[str]) -> int:
         return 2
     _load_folios()
     try:
-        plan = _resolve_cast(argv, unattended=unattended)
+        plan = _resolve_cast(argv, unattended=unattended)._replace(
+            wired=_WIRED_FLAG in leading
+        )
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2

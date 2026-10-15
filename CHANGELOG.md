@@ -22,10 +22,20 @@ when.
   carries it as `project`. `g` shows every project, `p` comes back. Runs
   recorded before it group by the tree they ran in, and still resume.
 
+- **The daemon starts casts.** 0.6.0 said it starts nothing; now `c <ritual>
+  [--flag value]` in the dashboard queues one, and the daemon spawns it in the
+  window's directory once the project has a free process slot. A spawned cast
+  has no terminal, so `a <answer>` in its drilled view answers its prompts.
+  ([#139](https://github.com/fancysnake/vekna/issues/139))
+
 ### Added
 
 - **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
   one.
+- **`[circle]`** in `.vekna.toml` or the user config. `processes` (default 4)
+  caps the casts a project runs at once, counting casts typed by hand.
+  `coding` (user config, default no limit) caps agent sessions at once across
+  every cast attached to the daemon; a `coding` call past it waits for a slot.
 
 ## [0.13.0] - 2026-10-05
 

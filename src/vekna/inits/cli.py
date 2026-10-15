@@ -18,8 +18,11 @@ from vekna.links.terminal import Terminal
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    CastRefused,
+    CastRequested,
+    StopRequested,
     SurfaceHello,
-    cast_frames,
+    WireMessage,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -202,10 +205,18 @@ _rituals.add_command(_rituals_show)
 async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
     path = default_socket_path()
     hub = Hub()
+    writers: list[asyncio.StreamWriter] = []
+
+    def send(message: WireMessage) -> None:
+        for writer in writers:
+            writer.write(encode_frame(message))
+
     dashboard = Dashboard(
         casts=hub,
         screen=screen if screen is not None else Terminal(),
         project=await project_of(Path.cwd()),
+        root=str(Path.cwd()),
+        send=send,
     )
     if not await alive(path):
         await summon(path=path, debug=debug)
@@ -214,13 +225,17 @@ async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
         dashboard.say(_DEBUG_LATE)
     reader, writer = await attach(path)
     writer.write(encode_frame(SurfaceHello()))
+    writers.append(writer)
 
-    # What a daemon sends a surface is what it heard from its casts, and nothing
-    # that opens a connection is one of those.
+    # What a daemon sends a surface is what it heard from its casts, and the
+    # refusal of a cast this window asked for.
     async def listen() -> None:
-        async for message in cast_frames(read_frames(reader)):
-            hub.apply(message)
-            dashboard.changed()
+        async for message in read_frames(reader):
+            if isinstance(message, CastRefused):
+                dashboard.say(message.reason)
+            elif not isinstance(message, (SurfaceHello, StopRequested, CastRequested)):
+                hub.apply(message)
+                dashboard.changed()
         dashboard.stop(note=_DAEMON_ENDED)
 
     await dashboard.run(alongside=[asyncio.create_task(listen())])

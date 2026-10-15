@@ -3,15 +3,17 @@ import socket
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
 from vekna.links.socket_server import Serving, alive, attach, serve
-from vekna.pacts.routing import SocketPathError
+from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastMessage,
+    CastRequested,
+    DecideResolved,
     RiteDelta,
     StopRequested,
     SurfaceHello,
@@ -19,9 +21,6 @@ from vekna.wire import (
     encode_frame,
     read_frames,
 )
-
-if TYPE_CHECKING:
-    from vekna.pacts.routing import Surface
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _OWNER_ONLY = 0o600
@@ -47,19 +46,48 @@ def _said_goodbye(daemon: "_Daemon") -> bool:
     return bool(daemon.messages) and isinstance(daemon.messages[-1], CastGoodbye)
 
 
-class _Daemon:
+class _Daemon(Routes):
     def __init__(self) -> None:
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
+        self.requests: list[CastRequested] = []
+        self.answers: list[DecideResolved] = []
+        self.peers: dict[str, Surface] = {}
+        self.closed: list[str] = []
+
+    def apply(self, message: CastMessage) -> None:
+        self.messages.append(message)
+
+    def attach_surface(self, surface: Surface) -> None:
+        self.attached.append(surface)
+
+    def detach_surface(self, surface: Surface) -> None:
+        self.detached.append(surface)
+
+    def request(self, surface: Surface, request: CastRequested) -> None:
+        del surface
+        self.requests.append(request)
+
+    def answer(self, resolved: DecideResolved) -> None:
+        self.answers.append(resolved)
+
+    def open_cast(self, cast_id: str, peer: Surface) -> None:
+        self.peers[cast_id] = peer
+
+    def close_cast(self, cast_id: str, peer: Surface) -> None:
+        del peer
+        self.closed.append(cast_id)
 
     async def start(self, path: Path) -> Serving:
-        return await serve(
-            path=path,
-            on_message=self.messages.append,
-            on_attach=self.attached.append,
-            on_detach=self.detached.append,
-        )
+        return await serve(path=path, routes=self)
+
+
+class _Unwritable(_Daemon):
+    def apply(self, message: CastMessage) -> None:
+        super().apply(message)
+        if isinstance(message, RiteDelta):
+            raise OSError(28, "No space left on device")
 
 
 # The daemon reacts on its own turn of the event loop, so a client that has
@@ -254,19 +282,8 @@ class TestUncleanExits:
 
     @staticmethod
     async def test_an_os_error_out_of_the_read_loop_is_a_goodbye(socket_path: Path):
-        daemon = _Daemon()
-
-        def unwritable(message: WireMessage) -> None:
-            daemon.messages.append(message)
-            if isinstance(message, RiteDelta):
-                raise OSError(28, "No space left on device")
-
-        server = await serve(
-            path=socket_path,
-            on_message=unwritable,
-            on_attach=daemon.attached.append,
-            on_detach=daemon.detached.append,
-        )
+        daemon = _Unwritable()
+        server = await daemon.start(socket_path)
         _, writer = await attach(socket_path)
         writer.write(encode_frame(_hello()))
         writer.write(encode_frame(RiteDelta(cast_id="c1", rite_id="r1", delta="x")))

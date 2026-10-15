@@ -572,6 +572,12 @@ disallow_any_expr = false
 module = "vekna.edges.pytest_plugin"
 disallow_any_expr = false
 
+# `tomllib` hands back `dict[str, Any]`. Both ends read their config through one
+# module, which hands the rest of the codebase `object` to validate.
+[[tool.mypy.overrides]]
+module = "vekna.wire._toml"
+disallow_any_expr = false
+
 # RUFF
 
 [tool.ruff]

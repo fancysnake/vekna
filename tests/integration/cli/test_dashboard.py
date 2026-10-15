@@ -6,7 +6,14 @@ import pytest
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
-from vekna.wire import CastGoodbye, CastHello
+from vekna.wire import (
+    CastGoodbye,
+    CastHello,
+    CastRequested,
+    DecideRequested,
+    DecideResolved,
+    WireMessage,
+)
 
 
 class _Keys(Screen):
@@ -23,12 +30,30 @@ class _Keys(Screen):
         return self._typed.pop(0)
 
 
+def _unsent(message: WireMessage) -> None:
+    msg = f"nothing here sends, and {message!r} was sent"
+    raise AssertionError(msg)
+
+
 def _dashboard(*typed: str) -> tuple[Dashboard, _Keys]:
     keys = _Keys(*typed)
-    return Dashboard(casts=Hub(), screen=keys, project="/proj/.git"), keys
+    dashboard = Dashboard(
+        casts=Hub(), screen=keys, project="/proj/.git", root="/proj", send=_unsent
+    )
+    return dashboard, keys
 
 
-def _hello(cast_id: str, ritual: str) -> CastHello:
+# A dashboard over `hub` that keeps what it sends the daemon.
+def _sending(hub: Hub, *typed: str) -> tuple[Dashboard, _Keys, list[WireMessage]]:
+    keys = _Keys(*typed)
+    sent: list[WireMessage] = []
+    dashboard = Dashboard(
+        casts=hub, screen=keys, project="/proj/.git", root="/proj", send=sent.append
+    )
+    return dashboard, keys, sent
+
+
+def _hello(cast_id: str, ritual: str, *, wired: bool = False) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root="/proj",
@@ -36,6 +61,16 @@ def _hello(cast_id: str, ritual: str) -> CastHello:
         ritual=ritual,
         components={},
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        wired=wired,
+    )
+
+
+def _asking(hub: Hub, *, wired: bool) -> None:
+    hub.apply(_hello("c1", "nap", wired=wired))
+    hub.apply(
+        DecideRequested(
+            cast_id="c1", request_id="q1", prompt="proceed?", options=["go", "stop"]
+        )
     )
 
 
@@ -52,7 +87,9 @@ class TestPicking:
         hub.apply(_hello("c2", "still_going"))
         keys = _Keys("1", "q")
 
-        dashboard = Dashboard(casts=hub, screen=keys, project="/proj/.git")
+        dashboard = Dashboard(
+            casts=hub, screen=keys, project="/proj/.git", root="/proj", send=_unsent
+        )
         await asyncio.wait_for(dashboard.run(), timeout=2)
 
         assert any("vekna — still_going" in frame for frame in keys.frames)
@@ -179,3 +216,74 @@ class TestLoops:
 
         dashboard.stop()
         await asyncio.wait_for(running, timeout=2)
+
+
+@pytest.mark.asyncio
+class TestCasting:
+    @staticmethod
+    async def test_c_asks_the_daemon_for_the_ritual_in_this_directory():
+        dashboard, _, sent = _sending(Hub(), "c nap --seconds 3 --why='a rest'", "q")
+
+        await asyncio.wait_for(dashboard.typing(), timeout=2)
+
+        assert sent == [
+            CastRequested(
+                project_root="/proj",
+                ritual="nap",
+                components={"seconds": "3", "why": "a rest"},
+            )
+        ]
+
+    @staticmethod
+    async def test_a_flag_with_no_value_is_said_and_nothing_is_sent():
+        dashboard, keys, sent = _sending(Hub(), "c nap --seconds", "q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert not sent
+        assert any("--seconds is missing a value" in frame for frame in keys.frames)
+
+
+@pytest.mark.asyncio
+class TestAnswering:
+    @staticmethod
+    async def test_a_answers_the_open_prompt_of_the_cast_in_view():
+        hub = Hub()
+        _asking(hub, wired=True)
+        dashboard, keys, sent = _sending(hub, "1", "a go", "q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert sent == [DecideResolved(cast_id="c1", request_id="q1", answer="go")]
+        assert any("a go|stop" in frame for frame in keys.frames)
+
+    @staticmethod
+    async def test_an_answer_the_prompt_does_not_offer_is_refused_here():
+        hub = Hub()
+        _asking(hub, wired=True)
+        dashboard, keys, sent = _sending(hub, "1", "a maybe", "q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert not sent
+        assert any("'maybe' is not one of go, stop" in frame for frame in keys.frames)
+
+    @staticmethod
+    async def test_a_cast_run_by_hand_is_answered_on_its_own_terminal():
+        hub = Hub()
+        _asking(hub, wired=False)
+        dashboard, keys, sent = _sending(hub, "1", "a go", "q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert not sent
+        assert any("answer it on its own terminal" in frame for frame in keys.frames)
+
+    @staticmethod
+    async def test_with_no_cast_in_view_there_is_nothing_to_answer():
+        dashboard, keys, sent = _sending(Hub(), "a go", "q")
+
+        await asyncio.wait_for(dashboard.run(), timeout=2)
+
+        assert not sent
+        assert any("nothing to answer" in frame for frame in keys.frames)

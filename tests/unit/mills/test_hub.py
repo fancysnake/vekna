@@ -11,6 +11,10 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastQueued,
+    CastRefused,
+    CastRequested,
+    CodingSlotRequested,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -411,3 +415,127 @@ class TestGrimoireBrackets:
             "grimoire_begin",
             "grimoire_end",
         ]
+
+
+class TestQueued:
+    @staticmethod
+    def test_a_queued_cast_shows_queued_and_replays_so():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastQueued(cast_id="c1"))
+        late = _Surface()
+
+        hub.attach_surface(late)
+
+        assert hub.casts["c1"].status == "queued"
+        assert late.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            GrimoireEnd(cast_id="c1"),
+            CastQueued(cast_id="c1"),
+        ]
+
+    # The spawned cast says its own hello under the queued id, and that is what
+    # makes it running.
+    @staticmethod
+    def test_the_cast_s_own_hello_makes_it_running():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastQueued(cast_id="c1"))
+
+        hub.apply(_hello())
+
+        assert hub.casts["c1"].status == "running"
+
+
+class TestPeers:
+    @staticmethod
+    def test_an_answer_to_an_open_prompt_goes_to_the_cast_and_not_the_view():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+        answer = DecideResolved(cast_id="c1", request_id="q1", answer="yes")
+
+        hub.answer(answer)
+
+        assert peer.sent == [answer]
+        assert "q1" in hub.casts["c1"].waiting
+        assert routed[-1] == Routed(
+            kind="decide_resolved", cast_id="c1", action="applied"
+        )
+
+    @staticmethod
+    def test_an_answer_to_no_open_prompt_goes_nowhere():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+
+        hub.answer(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+
+        assert not peer.sent
+        assert routed[-1] == Routed(
+            kind="decide_resolved",
+            cast_id="c1",
+            action="dropped",
+            reason="no such prompt",
+        )
+
+    @staticmethod
+    def test_an_answer_for_a_cast_with_no_connection_is_dropped():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.apply(_asked())
+
+        hub.answer(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+
+        assert routed[-1].reason == "the cast is not connected"
+
+    # A cast that reattached is on its new connection before the old one has
+    # finished closing.
+    @staticmethod
+    def test_the_old_connection_closing_keeps_the_new_one():
+        hub = Hub()
+        old, new = _Surface(), _Surface()
+        hub.open_cast("c1", old)
+        hub.open_cast("c1", new)
+
+        hub.close_cast("c1", old)
+
+        assert hub.tell("c1", CastQueued(cast_id="c1"))
+        assert new.sent == [CastQueued(cast_id="c1")]
+
+    @staticmethod
+    def test_a_peer_that_has_gone_is_told_nothing_more():
+        hub = Hub()
+        gone = _Gone()
+        hub.open_cast("c1", gone)
+
+        assert not hub.tell("c1", CastQueued(cast_id="c1"))
+        assert not hub.tell("c1", CastQueued(cast_id="c1"))
+        assert len(gone.tried) == 1
+
+    @staticmethod
+    def test_a_hub_alone_starts_nothing():
+        surface = _Surface()
+
+        Hub().request(
+            surface, CastRequested(project_root="/proj", ritual="nap", components={})
+        )
+
+        assert surface.sent == [CastRefused(reason="this daemon starts no casts")]
+
+    @staticmethod
+    def test_a_slot_message_is_the_circle_s_not_the_hub_s():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+
+        hub.apply(CodingSlotRequested(cast_id="c1", request_id="s1"))
+
+        assert routed[-1].reason == "coding slots are the circle's"

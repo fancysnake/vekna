@@ -32,6 +32,9 @@ class CastHello(BaseModel):
     components: dict[str, JsonValue]
     started_at: datetime
     resumed_from: str | None = None
+    # Spawned by the daemon, so its prompts are answered over the wire. A cast
+    # run by hand answers on its own terminal and nowhere else.
+    wired: bool = False
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -55,6 +58,30 @@ class SurfaceHello(BaseModel):
 # `vekna stop` opens a connection with this and nothing else.
 class StopRequested(BaseModel):
     kind: Literal["stop_requested"] = "stop_requested"
+
+
+# What a surface asks the daemon for, past its `SurfaceHello`: start a ritual in
+# a directory. The components cross as the strings the operator typed — the
+# daemon loads no ritual, so the cast it spawns is what validates them.
+class CastRequested(BaseModel):
+    kind: Literal["cast_requested"] = "cast_requested"
+    project_root: str
+    ritual: str
+    components: dict[str, str]
+
+
+# Said back to the surface that asked, and to nobody else: a request the daemon
+# would not queue is that operator's to hear about.
+class CastRefused(BaseModel):
+    kind: Literal["cast_refused"] = "cast_refused"
+    reason: str
+
+
+# A cast the daemon has a record of and no process for yet: it waits for a
+# process slot, and the hello before it was written by the daemon, not the cast.
+class CastQueued(BaseModel):
+    kind: Literal["cast_queued"] = "cast_queued"
+    cast_id: str
 
 
 class GrimoireBegin(BaseModel):
@@ -153,6 +180,33 @@ class LockReleased(BaseModel):
     token: str
 
 
+# --- coding slots ---
+
+
+# How many agent sessions run at once across every cast on the account. A cast
+# asks before each coding call and says when it is done; the daemon grants in
+# the order asked. The daemon sends the grant, a cast sends the other two.
+class CodingSlotRequested(BaseModel):
+    kind: Literal["coding_slot_requested"] = "coding_slot_requested"
+    cast_id: str
+    request_id: str
+
+
+class CodingSlotGranted(BaseModel):
+    kind: Literal["coding_slot_granted"] = "coding_slot_granted"
+    cast_id: str
+    request_id: str
+
+
+class CodingSlotReleased(BaseModel):
+    kind: Literal["coding_slot_released"] = "coding_slot_released"
+    cast_id: str
+    request_id: str
+
+
+CodingSlotMessage = CodingSlotRequested | CodingSlotGranted | CodingSlotReleased
+
+
 # Everything a cast says about itself, and the one thing that does not. Split so
 # that `cast_id` is a field of the type rather than something each consumer
 # re-establishes: the daemon's hub, the journal and the debug log all take
@@ -163,6 +217,7 @@ class LockReleased(BaseModel):
 # to look up for a hello.
 CastUpdate = (
     CastGoodbye
+    | CastQueued
     | GrimoireBegin
     | GrimoireEnd
     | RiteStarted
@@ -174,6 +229,9 @@ CastUpdate = (
     | LockGranted
     | LockDenied
     | LockReleased
+    | CodingSlotRequested
+    | CodingSlotGranted
+    | CodingSlotReleased
 )
 
 CastMessage = CastHello | CastUpdate
@@ -182,7 +240,10 @@ CastMessage = CastHello | CastUpdate
 # first frame there is nothing left for one of these to say.
 Opening = SurfaceHello | StopRequested
 
-WireMessage = CastMessage | Opening
+# Between a surface and the daemon, and never about a cast that exists yet.
+Request = CastRequested | CastRefused
+
+WireMessage = CastMessage | Opening | Request
 
 
 # --- the record on disk ---
@@ -191,7 +252,7 @@ WireMessage = CastMessage | Opening
 # own types because it is shared exactly the way a message is: the daemon writes
 # it, and a resumed cast process — which may not import the daemon's layers —
 # reads it back to learn what it is carrying on.
-CastStatus = Literal["running", "ok", "error", "disconnected"]
+CastStatus = Literal["queued", "running", "ok", "error", "disconnected"]
 
 
 # `gapped` is what the event log cannot say for itself: an append the daemon

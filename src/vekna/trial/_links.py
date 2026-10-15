@@ -13,8 +13,8 @@ from vekna.lexicon._pacts import (
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
-    allowed_answers,
 )
+from vekna.wire import allowed_answers
 
 from ._pacts import Answer, Asked, CodingAnswer, ScriptProtocol, TrialScriptError
 

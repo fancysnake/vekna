@@ -3,10 +3,13 @@ import contextlib
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
-from vekna.pacts.routing import SocketPathError, Surface
+from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     CastGoodbye,
     CastMessage,
+    CastRefused,
+    CastRequested,
+    DecideResolved,
     StopRequested,
     SurfaceHello,
     WireMessage,
@@ -102,13 +105,7 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
 # silently steal a live one's socket and leave it listening where nothing can
 # reach it. What stops that is the caller's lock beside the socket, held for the
 # daemon's whole life.
-async def serve(
-    *,
-    path: Path,
-    on_message: Callable[[CastMessage], None],
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
-) -> Serving:
+async def serve(*, path: Path, routes: Routes) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
     stopping = asyncio.Event()
 
@@ -124,13 +121,19 @@ async def serve(
         try:
             opened = await _opening(frames)
             if isinstance(opened, SurfaceHello):
-                await _as_surface(
-                    frames, writer, on_attach=on_attach, on_detach=on_detach
-                )
+                await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif opened is not None:
-                await _as_cast(opened, cast_frames(frames), on_message=on_message)
+            # A request is a surface's to make, after it has said it is one.
+            elif opened is not None and not isinstance(
+                opened, CastRequested | CastRefused
+            ):
+                await _as_cast(
+                    opened,
+                    cast_frames(frames),
+                    peer=SocketSurface(writer),
+                    routes=routes,
+                )
         finally:
             writers.discard(writer)
             writer.close()
@@ -159,24 +162,21 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is sent to and not heard from: answering a prompt from `vekna`
-# itself is deferred, so what arrives after the handshake is read to notice the
-# disconnect and nothing else.
+# A surface is fanned out to, and says two things back: start a cast, and
+# answer one. Anything else it sends is read past, to notice the disconnect.
 async def _as_surface(
-    frames: AsyncIterator[WireMessage],
-    writer: asyncio.StreamWriter,
-    *,
-    on_attach: Callable[[Surface], None],
-    on_detach: Callable[[Surface], None],
+    frames: AsyncIterator[WireMessage], surface: Surface, *, routes: Routes
 ) -> None:
-    surface = SocketSurface(writer)
-    on_attach(surface)
+    routes.attach_surface(surface)
     try:
         with contextlib.suppress(ValueError, OSError):
-            async for _ in frames:
-                pass
+            async for message in frames:
+                if isinstance(message, CastRequested):
+                    routes.request(surface, message)
+                elif isinstance(message, DecideResolved):
+                    routes.answer(message)
     finally:
-        on_detach(surface)
+        routes.detach_surface(surface)
 
 
 # A cast that goes without a goodbye gets one anyway, or the daemon would hold
@@ -188,13 +188,17 @@ async def _as_surface(
 # one is not routed: it would otherwise let any process on this account write
 # into a cast it is not — and a `CastGoodbye` for somebody else would count as
 # this connection's own, leaving the cast that did open it running forever.
+# The connection is the cast's peer for as long as it lasts: what the daemon
+# writes back to a cast — an answer, a slot — goes down it.
 async def _as_cast(
     opened: CastMessage,
     frames: AsyncIterator[CastMessage],
     *,
-    on_message: Callable[[CastMessage], None],
+    peer: Surface,
+    routes: Routes,
 ) -> None:
     said_goodbye = isinstance(opened, CastGoodbye)
+    on_message = routes.apply
 
     # Noted on the way past rather than read back off the loop, because reading
     # is what raises: a cast that said goodbye and then lost its socket must not
@@ -205,6 +209,7 @@ async def _as_cast(
         said_goodbye = isinstance(message, CastGoodbye)
 
     detail = _GONE
+    routes.open_cast(opened.cast_id, peer)
     try:
         heard(opened)
         detail = await _reading(opened, frames, on_message=heard)
@@ -213,6 +218,7 @@ async def _as_cast(
     except OSError as error:
         detail = f"connection lost: {error}"
     finally:
+        routes.close_cast(opened.cast_id, peer)
         if not said_goodbye:
             on_message(
                 CastGoodbye(
