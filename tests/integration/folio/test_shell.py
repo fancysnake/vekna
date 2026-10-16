@@ -12,7 +12,13 @@ from typing_extensions import override
 
 from tests.conftest import entry, journalled
 from vekna.folio.shell import ShellOutputError, ShellResult, shell
-from vekna.folio.shell._links import run_bash
+from vekna.folio.shell import _links as shell_links
+from vekna.folio.shell._links import (
+    _CANCELS_OUTLASTED,
+    _REAPING,
+    _signal_group,
+    run_bash,
+)
 from vekna.lexicon import (
     SHELL_FOCUS,
     Done,
@@ -461,3 +467,44 @@ class TestEmptiedGroup:
                 await asyncio.sleep(0.2)
 
         asyncio.run(cancel_once_bash_left())
+
+
+class TestCancelsOutlasted:
+    # Past the cancels a reap waits through, the rite closes and the reap
+    # carries on without it, still through to SIGKILL.
+    @staticmethod
+    def test_cancelled_past_the_limit_the_rite_closes_and_the_reap_goes_on(tmp_path):
+        pids = tmp_path / "pids"
+        command = f"trap '' TERM; sleep 300 & echo $$ $! > {pids}; wait"
+
+        async def cancel_past_the_limit() -> None:
+            running = asyncio.create_task(run_bash(command))
+            await asyncio.sleep(0.5)
+            for _ in range(_CANCELS_OUTLASTED + 1):
+                running.cancel()
+                await asyncio.sleep(0.05)
+
+            assert running.cancelled()
+            assert _REAPING
+            await asyncio.gather(*_REAPING)
+
+        asyncio.run(cancel_past_the_limit())
+
+        started = pids.read_text(encoding="utf-8").split()
+        assert len(started) == _SPAWNED
+        assert not [pid for pid in started if _running(pid)]
+
+
+class TestUnkillableGroup:
+    # A group SIGKILL cannot clear — stuck in uninterruptible sleep — is given
+    # up on once the grace runs out.
+    @staticmethod
+    def test_a_group_outliving_sigkill_is_given_up_on(monkeypatch):
+        sent: list[tuple[int, int]] = []
+        monkeypatch.setattr(os, "killpg", lambda group, sig: sent.append((group, sig)))
+        monkeypatch.setattr(shell_links, "_TICK_SECONDS", 0)
+        monkeypatch.setattr(shell_links, "_GRACE_TICKS", 1)
+
+        asyncio.run(_signal_group(42))
+
+        assert sent == [(42, signal.SIGTERM), (42, 0), (42, signal.SIGKILL), (42, 0)]

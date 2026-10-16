@@ -150,6 +150,18 @@ class TestTimeout:
         ):
             asyncio.run(bad())
 
+    @staticmethod
+    def test_refused_work_that_is_no_coroutine_is_left_as_it_came():
+        async def refused() -> asyncio.Future[str]:
+            work: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+            with pytest.raises(
+                MediumBoundaryError, match="positive number of seconds, got -1"
+            ):
+                await timeout(work, seconds=-1)
+            return work
+
+        assert not asyncio.run(refused()).done()
+
 
 class TestStepTimeout:
     @staticmethod

@@ -245,6 +245,23 @@ async def falling(_: Falling) -> Done[Note]:
     )
 
 
+class Staggered(BaseModel):
+    pass
+
+
+# Each round ends one entrant, so the last round leaves none running.
+@step
+async def staggered(_: Staggered) -> Done[Note]:
+    return Done(
+        Note(
+            text=await race(
+                runner("one", seconds=0, fails=True),
+                runner("two", seconds=0.01, fails=True),
+            )
+        )
+    )
+
+
 class Tied(BaseModel):
     pass
 
@@ -313,6 +330,17 @@ class TestRace:
             ),
         ):
             _raced(Falling())
+
+    @staticmethod
+    def test_entrants_raising_one_at_a_time_fail_the_race_naming_each():
+        with pytest.raises(
+            RitualError,
+            match=(
+                r"every entrant in the race failed — "
+                r"RitualError: one fell; RitualError: two fell"
+            ),
+        ):
+            _raced(Staggered())
 
     # Both end in the same round, so neither finished first.
     @staticmethod
