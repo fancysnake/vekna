@@ -473,6 +473,31 @@ class TestAnsweredOverTheWire:
         await link.close(status="ok")
         await daemon.stop()
 
+    # Two answers in one read: the first settles the prompt before the cast
+    # resumes to stop listening, and the second must not settle it again.
+    @staticmethod
+    async def test_the_first_answer_stands_over_a_second_in_the_same_read(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        request_id = _asked_id(daemon)
+
+        for answer in ("go", "stop"):
+            daemon.hub.tell(
+                _CAST,
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer=answer),
+            )
+
+        assert await asyncio.wait_for(asking, timeout=2) == "go"
+        await link.close(status="ok")
+        await daemon.stop()
+
 
 @pytest.mark.asyncio
 class TestCodingSlots:
@@ -556,6 +581,66 @@ class TestCodingSlots:
         await asyncio.wait_for(calling, timeout=2)
         await link.close(status="ok")
         await daemon.stop()
+
+    @staticmethod
+    async def test_a_grant_for_a_slot_never_asked_for_is_dropped(socket_path: Path):
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        entered = asyncio.Event()
+
+        async def call() -> None:
+            async with link.coding():
+                entered.set()
+
+        calling = asyncio.create_task(call())
+        await _eventually(lambda: bool(hub.slots))
+        asked = hub.slots[0]
+        assert isinstance(asked, CodingSlotRequested)
+
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id="never"))
+        await _settle()
+        assert not entered.is_set()
+
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+        await asyncio.wait_for(calling, timeout=2)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # A slot taken with no daemon has no grant to let go, and one already
+    # granted is not let go twice: both blocks run on until they end.
+    @staticmethod
+    async def test_a_daemon_that_goes_leaves_held_slots_held(socket_path: Path):
+        released = asyncio.Event()
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+
+        async def call() -> None:
+            async with link.coding():
+                await released.wait()
+
+        unasked = asyncio.create_task(call())
+        await _settle()
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        await link.attach()
+        granted = asyncio.create_task(call())
+        await _eventually(lambda: len(hub.slots) > 1)
+        asked = hub.slots[1]
+        assert isinstance(asked, CodingSlotRequested)
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+        await _settle()
+
+        await daemon.stop()
+        await _eventually(lambda: not link.attached)
+
+        assert not unasked.done()
+        assert not granted.done()
+        released.set()
+        await asyncio.wait_for(asyncio.gather(unasked, granted), timeout=2)
+        await link.close(status="ok")
 
 
 # Says what slot traffic the daemon had seen by the time the agent ran.
