@@ -10,6 +10,7 @@ from vekna.wire import (
     CastUpdate,
     DecideRequested,
     DecideResolved,
+    DecideWithdrawn,
     GrimoireBegin,
     GrimoireEnd,
     LockAcquireRequested,
@@ -167,7 +168,7 @@ def _update(view: CastView, message: CastUpdate) -> str | None:
             refused = _update_rite(view, message)
         case DecideRequested():
             view.waiting[message.request_id] = message
-        case DecideResolved():
+        case DecideResolved() | DecideWithdrawn():
             refused = _answer(view, message)
         case CastGoodbye():
             view.status = message.status
@@ -179,7 +180,7 @@ def _update(view: CastView, message: CastUpdate) -> str | None:
     return refused
 
 
-def _answer(view: CastView, message: DecideResolved) -> str | None:
+def _answer(view: CastView, message: DecideResolved | DecideWithdrawn) -> str | None:
     if view.waiting.pop(message.request_id, None) is None:
         return _NO_PROMPT
     return None

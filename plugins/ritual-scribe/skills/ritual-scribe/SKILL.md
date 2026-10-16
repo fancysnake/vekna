@@ -57,7 +57,8 @@ async def measure(state: Uncovered) -> WriteTests | Done[CoverReport]:
     return WriteTests(budget=state.budget, report=result.stdout)
 ```
 
-- A **bare decorator**. Not `@step()`, not `@step(max_visits=3)`.
+- A **bare decorator**, or `@step(max_visits=N, timeout=S)` with keywords
+  only — either or both.
 - **Exactly one** parameter, a pydantic model — or a **union** of them, when
   several steps route into it:
 
@@ -396,6 +397,12 @@ ending into one final step that `emit_delta`s the summary. Under
 `vekna cast --unattended` a `decide` raises `UnattendedPromptError` — route it
 if the ritual can do without the answer.
 
+**Bound time per call, not per step loop.** `await timeout(coding(...),
+seconds=600)` and `await race(a, b)` from `vekna.folio.flow`; `@step(timeout=600)`
+bounds a whole visit. An overrun cancels the work — shell process group killed,
+agent session closed — and raises `RiteTimeoutError`, a `Failure` like any
+other.
+
 **Concurrency lives inside a step**, as plain `asyncio`. Steps never run
 concurrently.
 
@@ -547,7 +554,7 @@ all.
 | `RitualDefinitionError` | `@ritual`/`@step` signature wrong: not exactly one parameter, the annotation is not a pydantic model (or a union of them), or the return annotation does not name the exits. Also two steps taking one payload class, an exit no step takes, a bad `.vekna.toml`, or two sources claiming one ritual name. |
 | `StepBoundaryError` | a step received a payload of the wrong type (`trial.walk` with the wrong model), or a step returned a value no step takes |
 | `RitualBoundaryError` | `Done` handed a non-model, or components that are not the declared model |
-| `MediumBoundaryError` | a medium called with an argument it does not take — including `decide(options=[])`, an empty option list |
+| `MediumBoundaryError` | a medium or flow primitive (`race`, `timeout`) called with an argument it does not take — including `decide(options=[])`, an empty option list |
 | `StepBudgetExceededError` | `max_steps` or a step's `max_visits` exhausted — the ritual is not settling |
 | `FocusMissingError` | no backend registered (`pip install claude-agent-sdk` for `coding`) |
 | `CodingOptsError` | `CodingOpts` given an unknown field — did you mean `session`/`key` on `coding()`? |
@@ -555,6 +562,7 @@ all.
 | `CodingOutputError` | the agent's reply did not validate against `output=` |
 | `StandalonePromptError` | three invalid answers to a `decide` prompt, or stdin closed before one was given |
 | `UnattendedPromptError` | a `decide` reached in a cast run with `--unattended` |
+| `RiteTimeoutError` | a `timeout(...)` or `@step(timeout=...)` ran out; the cut rite reads `cancelled` |
 
 All descend from `RitualError`.
 

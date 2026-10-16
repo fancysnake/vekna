@@ -135,3 +135,30 @@ The `coding` medium runs through the Claude Code CLI, which installs separately
 from this package. If it is missing, the cast fails with a message saying so
 rather than a traceback. Anything else the SDK raises mid-cast — the subprocess
 dying, a dropped connection — ends the cast with the failure named.
+
+## Bounding a call: `timeout` and `race`
+
+Nothing else bounds a single rite in time, so an agent that stops making
+progress would hang the cast all night. Both live in `vekna.folio.flow`.
+
+```python
+from vekna.folio.flow import race, timeout
+
+result = await timeout(coding(prompt="..."), seconds=600)
+winner = await race(coding(prompt=fast_path), coding(prompt=thorough))
+```
+
+`timeout` cancels the work at the deadline and raises `RiteTimeoutError`,
+naming the call: `coding timed out after 600s`. It is raised inside the step,
+so it is a `Failure` like any other — a step that takes `Failure[P]` recovers
+from it, and without one the cast ends with that message.
+
+`race` returns the first entrant to finish and cancels the rest. An entrant
+that raises drops out without ending the race; when every one raises, the race
+fails naming each error.
+
+Cancelling a call cancels the work, not only the wait. A `shell` command is
+killed with its whole process group, and a `coding` call closes its agent
+session, before the rite closes. A cut rite is drawn `⊘` and recorded as
+`cancelled`, with the output it had produced by then. A `decide` that is cut
+is withdrawn: the terminal says so and the daemon stops showing it.
