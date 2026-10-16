@@ -261,20 +261,24 @@ class TestReading:
         assert not list(journal.events("nope"))
 
     @staticmethod
-    def test_a_goodbye_for_a_cast_that_never_said_hello_closes_nothing(tmp_path: Path):
+    def test_a_goodbye_without_its_hello_creates_no_run_record(tmp_path: Path):
         journal = Journal(tmp_path)
 
         journal.record(CastGoodbye(cast_id="ghost", status="ok"))
 
         assert journal.read("ghost") is None
+        assert list(journal.events("ghost")) == [
+            CastGoodbye(cast_id="ghost", status="ok")
+        ]
 
     @staticmethod
-    def test_a_cast_queued_without_its_hello_records_nothing(tmp_path: Path):
+    def test_a_cast_queued_without_its_hello_creates_no_run_record(tmp_path: Path):
         journal = Journal(tmp_path)
 
         journal.record(CastQueued(cast_id="ghost"))
 
         assert journal.read("ghost") is None
+        assert list(journal.events("ghost")) == [CastQueued(cast_id="ghost")]
 
     @staticmethod
     def test_a_blank_line_in_the_log_is_not_an_event(tmp_path: Path):
