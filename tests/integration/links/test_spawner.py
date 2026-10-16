@@ -51,6 +51,19 @@ class TestSpawner:
         assert exited.code is None
         assert "no-such" in exited.said
 
+    # A cast that swaps its own log for a directory is the way a log that will
+    # not read back looks from here, for root as much as for anyone else.
+    @staticmethod
+    async def test_a_log_that_will_not_read_back_says_why(tmp_path: Path):
+        log = tmp_path / "runs" / "c1" / "cast.log"
+        swaps = f"import os,sys;os.remove({str(log)!r});os.mkdir({str(log)!r})"
+        spawn = Spawner(command=[sys.executable, "-c", swaps], runs=tmp_path / "runs")
+
+        exited = await spawn(_hello(tmp_path))
+
+        assert exited.code == 0
+        assert str(log) in exited.said
+
     @staticmethod
     async def test_a_runs_root_it_cannot_write_says_why(tmp_path: Path):
         runs = tmp_path / "runs"

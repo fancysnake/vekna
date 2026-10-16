@@ -20,6 +20,11 @@ from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastRefused,
+    CastRequested,
+    CodingSlotGranted,
+    CodingSlotReleased,
+    CodingSlotRequested,
     DecideRequested,
     RiteFinished,
     RiteStarted,
@@ -782,3 +787,66 @@ class TestSpawning:
             await peer
 
         assert "could not queue asker" in capsys.readouterr().err
+
+    @staticmethod
+    async def test_a_tree_that_is_not_there_is_refused(
+        socket_path: Path, tmp_path: Path
+    ):
+        nowhere = tmp_path / "nowhere"
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            writer.write(encode_frame(SurfaceHello()))
+            writer.write(
+                encode_frame(
+                    CastRequested(
+                        project_root=str(nowhere), ritual="asker", components={}
+                    )
+                )
+            )
+            await writer.drain()
+
+            # What else a surface is told on the way is not this test's.
+            async with asyncio.timeout(5):
+                refused = None
+                async for frame in read_frames(reader):
+                    if isinstance(frame, CastRefused):
+                        refused = frame
+                        break
+            writer.close()
+
+        assert refused == CastRefused(reason=f"{nowhere} is not a directory")
+
+
+@pytest.mark.asyncio
+class TestCodingSlots:
+    @staticmethod
+    async def test_a_slot_past_the_limit_waits_for_the_one_released(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        (tmp_path / "config" / "vekna").mkdir(parents=True)
+        (tmp_path / "config" / "vekna" / "config.toml").write_text(
+            "[circle]\ncoding = 1\n"
+        )
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            frames = aiter(read_frames(reader))
+            for message in (
+                _hello(),
+                CodingSlotRequested(cast_id="c1", request_id="s1"),
+                CodingSlotRequested(cast_id="c1", request_id="s2"),
+            ):
+                writer.write(encode_frame(message))
+            await writer.drain()
+
+            async with asyncio.timeout(5):
+                first = await anext(frames)
+                writer.write(
+                    encode_frame(CodingSlotReleased(cast_id="c1", request_id="s1"))
+                )
+                await writer.drain()
+                second = await anext(frames)
+            writer.close()
+
+        assert first == CodingSlotGranted(cast_id="c1", request_id="s1")
+        assert second == CodingSlotGranted(cast_id="c1", request_id="s2")

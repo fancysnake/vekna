@@ -269,6 +269,14 @@ class TestReading:
         assert journal.read("ghost") is None
 
     @staticmethod
+    def test_a_cast_queued_without_its_hello_records_nothing(tmp_path: Path):
+        journal = Journal(tmp_path)
+
+        journal.record(CastQueued(cast_id="ghost"))
+
+        assert journal.read("ghost") is None
+
+    @staticmethod
     def test_a_blank_line_in_the_log_is_not_an_event(tmp_path: Path):
         journal = Journal(tmp_path)
         journal.record(_hello())

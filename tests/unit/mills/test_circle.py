@@ -142,6 +142,23 @@ class TestProcesses:
         assert spawn.spawned == ["c1"]
 
     @staticmethod
+    async def test_a_queued_cast_that_ends_before_its_turn_is_never_spawned():
+        circle, hub, spawn = _circle(_Limits(processes=1))
+        circle.enqueue(_hello("c1"))
+        circle.enqueue(_hello("c2"))
+        await _settled()
+        hub.apply(CastGoodbye(cast_id="c2", status="error", detail="cancelled"))
+        circle.ended()
+        hub.apply(_hello("c1"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+
+        spawn.exit("c1")
+        await _settled()
+
+        assert spawn.spawned == ["c1"]
+        assert hub.casts["c2"].status == "error"
+
+    @staticmethod
     async def test_each_project_counts_its_own():
         circle, _, spawn = _circle(_Limits(processes=1))
 

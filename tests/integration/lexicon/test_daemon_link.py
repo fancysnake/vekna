@@ -450,6 +450,29 @@ class TestAnsweredOverTheWire:
         await link.close(status="ok")
         await daemon.stop()
 
+    @staticmethod
+    async def test_an_answer_to_a_prompt_never_asked_is_dropped(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+
+        daemon.hub.tell(
+            _CAST, DecideResolved(cast_id=_CAST, request_id="never", answer="go")
+        )
+        await _settle()
+        assert not asking.done()
+
+        daemon.hub.answer(
+            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="stop")
+        )
+        assert await asyncio.wait_for(asking, timeout=2) == "stop"
+        await link.close(status="ok")
+        await daemon.stop()
+
 
 @pytest.mark.asyncio
 class TestCodingSlots:
