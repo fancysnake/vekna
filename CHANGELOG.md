@@ -26,6 +26,12 @@ when.
 - **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
   one.
 
+### Removed
+
+- **`goto`, `Goto`, `done` and `Transition`** are gone from `vekna.lexicon`. A
+  step returns the next step's payload or `Done(result)` and annotates its
+  exits; `rituals show` no longer draws `?`.
+
 ## [0.13.0] - 2026-10-05
 
 ### Added
