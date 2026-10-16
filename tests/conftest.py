@@ -8,10 +8,10 @@ from typing import Literal
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon import NoComponents, Transition
+from vekna.lexicon import NoComponents
 from vekna.lexicon._mills.engine import steps_scope
 from vekna.lexicon._mills.ledger import Ledger
-from vekna.lexicon._pacts import Resumption, Ritual
+from vekna.lexicon._pacts import Resumption, Ritual, Transition
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
 from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
 
