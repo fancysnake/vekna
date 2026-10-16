@@ -1,4 +1,5 @@
-from collections.abc import Awaitable, Callable
+import contextlib
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
@@ -207,16 +208,29 @@ async def _streamed(
     num_turns: int | None = None
     cost_usd: float | None = None
     result_text: str | None = None
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, _AssistantLike):
-            for text in _texts(message.content):
-                parts.append(text)
-                on_delta(text)
-        elif isinstance(message, _ResultLike):
-            session_id = message.session_id
-            num_turns = message.num_turns
-            cost_usd = message.total_cost_usd
-            result_text = message.result
+    # `async for` leaves a generator open when its body is cut (PEP 533), and
+    # an open `query` is a CLI still working the repo. Closed here, a cancelled
+    # rite takes the session down before it closes. Typed an `AsyncIterator`,
+    # which has no `aclose`, so the generator it is at runtime is asked for —
+    # and anything else refused, since it could not be closed.
+    messages = query(prompt=prompt, options=options)
+    if not isinstance(messages, AsyncGenerator):
+        msg = (
+            "claude_agent_sdk.query returned "
+            f"{type(messages).__name__}, not an async generator vekna can close"
+        )
+        raise RitualError(msg)
+    async with contextlib.aclosing(messages):
+        async for message in messages:
+            if isinstance(message, _AssistantLike):
+                for text in _texts(message.content):
+                    parts.append(text)
+                    on_delta(text)
+            elif isinstance(message, _ResultLike):
+                session_id = message.session_id
+                num_turns = message.num_turns
+                cost_usd = message.total_cost_usd
+                result_text = message.result
     return FocusReply(
         text=result_text if result_text is not None else "".join(parts),
         session_id=session_id,

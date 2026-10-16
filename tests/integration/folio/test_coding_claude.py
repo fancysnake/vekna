@@ -1,20 +1,25 @@
 import asyncio
+import importlib
 import io
 import sys
 import textwrap
 import types
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from claude_agent_sdk import ClaudeSDKError, CLINotFoundError
+from claude_agent_sdk._internal.transport import subprocess_cli
 from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
 
+from vekna.lexicon import CodingCall
 from vekna.lexicon._inits import main
 from vekna.lexicon._mills.engine import reset_registry
 
 _USAGE_EXIT = 2
 _CAST_FAILED_EXIT = 1
 _MAX_TURNS = 2
+_SPAWN_TICKS = 500
 
 
 # Three rituals differ only by the coding(...) call and the ritual name, so
@@ -246,27 +251,23 @@ def _sdk_stub(
     return stub
 
 
+def _raised(error):
+    raise error
+
+
 # The SDK reaches its subprocess on the first `anext`, not on the call, so a
-# failure to reach it at all has to surface from the iteration. An iterator
-# spelled out beats an `async def` that raises before its `yield`: that shape
-# needs an unreachable statement to stay a generator, and the pragma to go with
-# it.
-class _FailingStream:
-    def __init__(self, error):
-        self._error = error
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        raise self._error
+# failure to reach it at all has to surface from the iteration. Raised inside
+# the `yield` expression, so the generator has no unreachable statement.
+async def _failing_stream(error):
+    await asyncio.sleep(0)
+    yield _raised(error)
 
 
 def _sdk_stub_failing_with(error):
     stub = _sdk_stub({})
 
     def query(**_kwargs):
-        return _FailingStream(error)
+        return _failing_stream(error)
 
     stub.query = query
     return stub
@@ -331,6 +332,25 @@ class TestAgentUnreachable:
         assert exit_code == _CAST_FAILED_EXIT
         assert "cast failed: the agent failed" in err
         assert "ClaudeSDKError: the transport went away" in err
+
+    # A stream that is not a generator cannot be closed, and an unclosed stream
+    # is a CLI left working the repo after its rite is cut.
+    @staticmethod
+    def test_a_stream_that_cannot_be_closed_is_refused(tmp_path, monkeypatch, capsys):
+        stub = _sdk_stub({})
+        stub.query = lambda **_kwargs: []
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        assert (
+            "claude_agent_sdk.query returned list, not an async generator vekna "
+            "can close" in err
+        )
 
 
 class TestCastWithClaudeFocus:
@@ -629,3 +649,65 @@ class TestPromptSugar:
 
         assert exit_code == _USAGE_EXIT
         assert "no ritual named" in capsys.readouterr().err
+
+
+# A stand-in CLI that records its pid and never answers the SDK's handshake: the
+# shape of an agent still working when its rite is cut. The SDK's transport is
+# the boundary mocked — it finds the bundled CLI before anything on PATH.
+def _silent_cli(tmp_path):
+    pid_file = tmp_path / "pid"
+    cli = tmp_path / "claude"
+    cli.write_text(f"#!/bin/sh\necho $$ > {pid_file}\nexec sleep 300\n")
+    cli.chmod(0o755)
+    return cli, pid_file
+
+
+# A zombie is still in `/proc`, and is not running anything.
+def _running(pid):
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    return stat.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+def _never_asked(_question, _options):
+    return asyncio.sleep(0, result="")
+
+
+class TestCancelledAgent:
+    @staticmethod
+    def test_cancelling_a_coding_rite_ends_the_cli_process(tmp_path, monkeypatch):
+        cli, pid_file = _silent_cli(tmp_path)
+        monkeypatch.setattr(
+            subprocess_cli.SubprocessCLITransport, "_find_cli", lambda _self: str(cli)
+        )
+        monkeypatch.setenv("CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK", "1")
+        # Imported per test, like every test here: the autouse fixture purges it.
+        focus = importlib.import_module("vekna.folio.coding_claude._links")
+        call = CodingCall(
+            prompt="work",
+            model=None,
+            system=None,
+            cwd=str(tmp_path),
+            output_schema=None,
+            focus_options=None,
+        )
+
+        async def cut():
+            running = asyncio.ensure_future(
+                focus.ClaudeCodingFocus().run(
+                    call, on_delta=lambda _text: None, gate=None, ask=_never_asked
+                )
+            )
+            for _ in range(_SPAWN_TICKS):
+                if pid_file.exists():
+                    break
+                await asyncio.sleep(0.01)
+            running.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await running
+
+        asyncio.run(cut())
+
+        assert not _running(pid_file.read_text(encoding="utf-8").strip())

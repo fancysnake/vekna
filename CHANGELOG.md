@@ -11,8 +11,29 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`timeout` and `race`** in `vekna.folio.flow`, and `@step(timeout=N)`. A
+  timeout cancels the work and raises `RiteTimeoutError` naming the call, which
+  a step taking `Failure[P]` recovers from. `race` returns the first entrant to
+  finish and cancels the rest; one that raises drops out.
+  ([#110](https://github.com/fancysnake/vekna/issues/110))
+- **A cut rite reads `cancelled`**, beside `ok` and `error`, on the wire, in the
+  journal and as `⊘` on every surface.
+- **`DecideWithdrawn`** on the wire: a question cut before its answer leaves the
+  daemon's view, and the terminal says it was withdrawn.
+- **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
+  one.
+- **`[circle]`** in `.vekna.toml` or the user config. `processes` (default 4)
+  caps the casts a project runs at once, counting casts typed by hand.
+  `coding` (user config, default no limit) caps agent sessions at once across
+  every cast attached to the daemon; a `coding` call past it waits for a slot.
+
 ### Changed
 
+- **Cancelling a rite cancels its work.** `shell` kills the command's process
+  group and waits for it; `coding` closes the agent session. A `decide` cut
+  mid-prompt no longer leaves a reader behind to swallow the next answer.
 - **The daemon outlives the window.** The first bare `vekna` starts it
   detached, logging to `~/.local/state/vekna/daemon.log`; every `vekna` is a
   surface on it and `q` closes only the window.
@@ -21,21 +42,11 @@ when.
   its git common dir, so every worktree of one groups together; `CastHello`
   carries it as `project`. `g` shows every project, `p` comes back. Runs
   recorded before it group by the tree they ran in, and still resume.
-
 - **The daemon starts casts.** 0.6.0 said it starts nothing; now `c <ritual>
   [--flag value]` in the dashboard queues one, and the daemon spawns it in the
   window's directory once the project has a free process slot. A spawned cast
   has no terminal, so `a <answer>` in its drilled view answers its prompts.
   ([#139](https://github.com/fancysnake/vekna/issues/139))
-
-### Added
-
-- **`vekna stop`** ends the daemon. Running casts carry on and rejoin the next
-  one.
-- **`[circle]`** in `.vekna.toml` or the user config. `processes` (default 4)
-  caps the casts a project runs at once, counting casts typed by hand.
-  `coding` (user config, default no limit) caps agent sessions at once across
-  every cast attached to the daemon; a `coding` call past it waits for a slot.
 
 ### Removed
 

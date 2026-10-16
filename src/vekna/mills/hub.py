@@ -18,6 +18,7 @@ from vekna.wire import (
     CodingSlotRequested,
     DecideRequested,
     DecideResolved,
+    DecideWithdrawn,
     GrimoireBegin,
     GrimoireEnd,
     LockAcquireRequested,
@@ -51,6 +52,7 @@ _Viewed = (
     | RiteFinished
     | DecideRequested
     | DecideResolved
+    | DecideWithdrawn
 )
 
 
@@ -241,7 +243,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             refused = _update_rite(view, message)
         case DecideRequested():
             view.waiting[message.request_id] = message
-        case DecideResolved():
+        case DecideResolved() | DecideWithdrawn():
             refused = _answer(view, message)
         case CastGoodbye():
             view.status = message.status
@@ -269,7 +271,7 @@ def _elsewhere(
     return _LOCKS_LATER
 
 
-def _answer(view: CastView, message: DecideResolved) -> str | None:
+def _answer(view: CastView, message: DecideResolved | DecideWithdrawn) -> str | None:
     if view.waiting.pop(message.request_id, None) is None:
         return _NO_PROMPT
     return None

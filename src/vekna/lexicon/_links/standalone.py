@@ -1,6 +1,8 @@
 import asyncio
+import concurrent.futures
 import socket
 import sys
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, TextIO
@@ -12,10 +14,12 @@ from vekna.lexicon._pacts import (
     RiteStreamed,
     StandalonePromptError,
 )
+from vekna.wire import RiteEndStatus
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
+_MARK: dict[RiteEndStatus, str] = {"ok": "✓", "error": "✗", "cancelled": "⊘"}
 
 # What this renderer raises a desktop notification for. `decide` is any question
 # that stops for a human — the flow medium's own, coding's tool gate, the
@@ -73,6 +77,22 @@ async def probe_daemon(
     return await asyncio.to_thread(_socket_alive, socket_path, connect_timeout)
 
 
+# A daemon thread, not `to_thread`: a readline that no question is left to
+# claim would hold up `asyncio.run` and the interpreter's exit until Enter. A
+# text stream's readline raises OSError, or ValueError when closed or undecodable.
+def _read_line(inp: TextIO) -> asyncio.Future[str]:
+    line: concurrent.futures.Future[str] = concurrent.futures.Future()
+
+    def read() -> None:
+        try:
+            line.set_result(inp.readline())
+        except (OSError, ValueError) as error:
+            line.set_exception(error)
+
+    threading.Thread(target=read, name="vekna-readline", daemon=True).start()
+    return asyncio.wrap_future(line)
+
+
 @dataclass
 class _Rite:
     name: str
@@ -99,6 +119,7 @@ class StandaloneRenderer:
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
+        self._abandoned: asyncio.Future[str] | None = None
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -116,8 +137,20 @@ class StandaloneRenderer:
     # there, an empty line being "\n". Raising here rather than in each prompt
     # keeps confirm, choose and free text from each inventing their own reading
     # of exhausted input.
+    # A thread cannot be cancelled, so a withdrawn question leaves its readline
+    # behind. Left alone it would swallow the answer to the next question; it
+    # is kept and awaited by that question instead. A line it already read
+    # answered nothing that is still open, and is dropped.
     async def _readline(self) -> str:
-        if not (line := await asyncio.to_thread(self._inp.readline)):
+        reading, self._abandoned = self._abandoned, None
+        if reading is None or reading.done():
+            reading = _read_line(self._inp)
+        try:
+            line = await asyncio.shield(reading)
+        except asyncio.CancelledError:
+            self._abandoned = reading
+            raise
+        if not line:
             msg = "input ended before the question was answered"
             raise StandalonePromptError(msg)
         return line.strip()
@@ -181,7 +214,7 @@ class StandaloneRenderer:
 
     def _ended(self, event: RiteEnded) -> None:
         self._open.discard(event.rite_id)
-        mark = "✓" if event.status == "ok" else "✗"
+        mark = _MARK[event.status]
         if (rite := self._rites.get(event.rite_id)) is None:
             self._say(f"{mark} {event.rite_id}\n")
             return
@@ -210,6 +243,15 @@ class StandaloneRenderer:
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
         self.notify("decide", prompt)
+        try:
+            return await self._asked(prompt=prompt, options=options, free=free)
+        except asyncio.CancelledError:
+            self._say(f"\nwithdrawn: {prompt}\n")
+            raise
+
+    async def _asked(
+        self, *, prompt: str, options: Sequence[str] | None, free: bool
+    ) -> str:
         if options:
             if free:
                 return await self._suggest(prompt, options)

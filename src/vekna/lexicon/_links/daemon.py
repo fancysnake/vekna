@@ -27,6 +27,7 @@ from vekna.wire import (
     CodingSlotRequested,
     DecideRequested,
     DecideResolved,
+    DecideWithdrawn,
     GrimoireBegin,
     GrimoireEnd,
     RiteDelta,
@@ -94,8 +95,12 @@ class DaemonLink:
     # Asked again once the connection is up, because `close` can run while this
     # is waiting for it: a cast that ended mid-connect would otherwise leave a
     # socket the daemon never hears a goodbye on, and hold it open until the
-    # process exits.
-    async def attach(self, *, backlog: Sequence[WireMessage] = ()) -> bool:
+    # process exits. The backlog is read once the connection is up, for the same
+    # reason: what is sent while connecting is dropped, so a snapshot taken
+    # before it would replay a prompt or rite that settled in between.
+    async def attach(
+        self, *, backlog: Callable[[], Sequence[WireMessage]] = list
+    ) -> bool:
         try:
             reader, writer = await asyncio.open_unix_connection(str(self._path))
         except OSError:
@@ -109,7 +114,7 @@ class DaemonLink:
         # what follows, so a daemon that started mid-cast is not missing a half.
         self.send(self._hello)
         self.send(GrimoireBegin(cast_id=self._hello.cast_id))
-        for message in (*backlog, *(slot.request for slot in self._slots.values())):
+        for message in (*backlog(), *(slot.request for slot in self._slots.values())):
             self.send(message)
         self.send(GrimoireEnd(cast_id=self._hello.cast_id))
         self._watcher = asyncio.create_task(self._watch(reader))
@@ -128,7 +133,7 @@ class DaemonLink:
         for _ in itertools.takewhile(lambda _: not self._closed, itertools.count()):
             await asyncio.sleep(every)
             if not self.attached:
-                await self.attach(backlog=backlog())
+                await self.attach(backlog=backlog)
 
     # The probe stops here too: a cast that has said goodbye has nothing left to
     # tell a daemon that turns up afterwards.
@@ -302,6 +307,11 @@ class TeeChannel(Channel):
             else:
                 self._link.send(request)
                 answer = await inner.decide(prompt=prompt, options=options, free=free)
+        except BaseException:
+            self._link.send(
+                DecideWithdrawn(cast_id=self._cast_id, request_id=request.request_id)
+            )
+            raise
         finally:
             self._open.pop(request.request_id, None)
         self._link.send(

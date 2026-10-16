@@ -4,6 +4,9 @@
 
 ## Friction
 
+- `pytest -W error` to catch an unawaited coroutine in new tests failed six
+  existing `test_daemon_link.py` tests on a `StreamWriter.__del__` unraisable
+  warning, so the flag cannot be used suite-wide; ran it per file instead.
 - `coverage` stops tracing a coroutine's frame after it awaits another
   coroutine whose `finally` does `task.cancel()` then `await task` under
   `contextlib.suppress(CancelledError)` — every line after that await reports as

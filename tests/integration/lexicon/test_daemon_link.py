@@ -201,7 +201,7 @@ class TestAttaching:
         daemon = _Daemon()
         await daemon.start(socket_path)
         link = DaemonLink(socket_path=socket_path, hello=_hello())
-        await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
+        await link.attach(backlog=lambda: [to_wire(_began("r1"), cast_id=_CAST)])
         probing = asyncio.create_task(link.keep_attached(list, every=0.01))
 
         await asyncio.sleep(0.05)
@@ -262,7 +262,7 @@ class TestAttaching:
         first = _Daemon()
         await first.start(socket_path)
         link = DaemonLink(socket_path=socket_path, hello=_hello())
-        await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
+        await link.attach(backlog=lambda: [to_wire(_began("r1"), cast_id=_CAST)])
         await _eventually(lambda: bool(first.hub.casts))
         await first.stop()
         await _eventually(lambda: not link.attached)
@@ -286,10 +286,10 @@ class TestAttaching:
         daemon = _Daemon()
         await daemon.start(socket_path)
         link = DaemonLink(socket_path=socket_path, hello=_hello())
-        await link.attach(backlog=[to_wire(_began("r1"), cast_id=_CAST)])
+        await link.attach(backlog=lambda: [to_wire(_began("r1"), cast_id=_CAST)])
         await _eventually(lambda: bool(daemon.hub.casts))
 
-        await link.attach(backlog=[to_wire(_began("r2"), cast_id=_CAST)])
+        await link.attach(backlog=lambda: [to_wire(_began("r2"), cast_id=_CAST)])
         await _eventually(lambda: "r2" in daemon.hub.casts[_CAST].rites)
 
         assert list(daemon.hub.casts[_CAST].rites) == ["r2"]
@@ -323,6 +323,26 @@ class TestPrompts:
         await daemon.stop()
 
     @staticmethod
+    async def test_a_cancelled_prompt_is_withdrawn_from_the_daemon(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        channel = TeeChannel(
+            inner=_Renderer(), link=link, cast_id=_CAST, rite_id=lambda: "r1"
+        )
+
+        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        asking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asking
+        await _eventually(lambda: not _waiting(daemon))
+
+        assert not channel.open_prompts()
+        await daemon.stop()
+
+    @staticmethod
     async def test_a_prompt_still_open_is_replayed_to_a_daemon_that_arrives(
         socket_path: Path,
     ):
@@ -336,12 +356,37 @@ class TestPrompts:
 
         daemon = _Daemon()
         await daemon.start(socket_path)
-        await link.attach(backlog=channel.open_prompts())
+        await link.attach(backlog=channel.open_prompts)
         await _eventually(lambda: bool(_waiting(daemon)))
 
         assert [message.prompt for message in _waiting(daemon)] == ["ok?"]
         renderer.released.set()
         await asking
+        await daemon.stop()
+
+    # The withdrawal is sent while the link is still connecting, so it is
+    # dropped: only a backlog read after the connect leaves the prompt out.
+    @staticmethod
+    async def test_a_prompt_withdrawn_mid_connect_is_not_replayed(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        renderer = _Renderer()
+        channel = TeeChannel(
+            inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
+        )
+        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        await _eventually(lambda: bool(renderer.asked))
+
+        attaching = asyncio.create_task(link.attach(backlog=channel.open_prompts))
+        asking.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asking
+        assert await attaching
+        await _eventually(lambda: _CAST in daemon.hub.casts)
+        await _settle()
+
+        assert not _waiting(daemon)
         await daemon.stop()
 
     @staticmethod
