@@ -233,6 +233,15 @@ class _Daemon(Routes):
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
+        def settled(done: asyncio.Task[None]) -> None:
+            if done.cancelled() or (error := done.exception()) is None:
+                return
+            reason = f"could not queue {request.ritual}: {error}"
+            _logged(reason)
+            surface.send(CastRefused(reason=reason))
+
+        task.add_done_callback(settled)
+
     async def _queued(self, surface: Surface, request: CastRequested) -> None:
         root = Path(request.project_root)
         if not await asyncio.to_thread(root.is_dir):

@@ -50,3 +50,14 @@ class TestSpawner:
 
         assert exited.code is None
         assert "no-such" in exited.said
+
+    @staticmethod
+    async def test_a_runs_root_it_cannot_write_says_why(tmp_path: Path):
+        runs = tmp_path / "runs"
+        runs.write_text("")
+        spawn = Spawner(command=[sys.executable, "-c", _SAYS], runs=runs)
+
+        exited = await spawn(_hello(tmp_path))
+
+        assert exited.code is None
+        assert str(runs) in exited.said

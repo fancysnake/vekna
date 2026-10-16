@@ -20,9 +20,9 @@ class Spawner:
 
     async def __call__(self, hello: CastHello) -> Exited:
         log = run_file(self._runs, hello.cast_id).parent / _LOG
-        await asyncio.to_thread(log.parent.mkdir, parents=True, exist_ok=True)
-        with log.open("ab") as out:
-            try:
+        try:
+            await asyncio.to_thread(log.parent.mkdir, parents=True, exist_ok=True)
+            with log.open("ab") as out:
                 process = await asyncio.create_subprocess_exec(
                     *self._command,
                     _RESUME,
@@ -32,12 +32,17 @@ class Spawner:
                     stdout=out,
                     stderr=asyncio.subprocess.STDOUT,
                 )
-            except OSError as error:
-                return Exited(code=None, said=str(error))
-            code = await process.wait()
+                code = await process.wait()
+        except OSError as error:
+            return Exited(code=None, said=str(error))
         return Exited(code=code, said=await asyncio.to_thread(_last_line, log))
 
 
+# A log that will not read back still leaves the exit code to say how it ended.
 def _last_line(log: Path) -> str:
-    lines = log.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        return str(error)
+    lines = text.strip().splitlines()
     return lines[-1] if lines else ""

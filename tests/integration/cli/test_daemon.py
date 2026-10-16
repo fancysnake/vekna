@@ -759,3 +759,26 @@ class TestSpawning:
             await _spawned(lambda: keys.painted("1 waiting · 1 done"))
             keys.press("q")
             await peer
+
+    @staticmethod
+    async def test_a_request_that_cannot_be_queued_is_refused_and_logged(
+        socket_path: Path,
+        rituals: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        del rituals
+
+        async def undecodable(_: Path) -> str:
+            return await asyncio.to_thread(b"\xff".decode)
+
+        monkeypatch.setattr("vekna.inits.daemon.project_of", undecodable)
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c asker")
+            await _eventually(lambda: keys.painted("could not queue asker"))
+            keys.press("q")
+            await peer
+
+        assert "could not queue asker" in capsys.readouterr().err
