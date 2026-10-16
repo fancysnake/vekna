@@ -1,15 +1,30 @@
 import asyncio
 import contextlib
 import itertools
-from collections.abc import Callable, Sequence
+import sys
+from collections.abc import AsyncGenerator, Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from vekna.lexicon._pacts import Channel, RiteBegan, RiteEvent, RiteStreamed
+from vekna.lexicon._pacts import (
+    AskFn,
+    Channel,
+    CodingCall,
+    CodingFocusProtocol,
+    FocusReply,
+    GateFn,
+    RiteBegan,
+    RiteEvent,
+    RiteStreamed,
+)
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CodingSlotGranted,
+    CodingSlotReleased,
+    CodingSlotRequested,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -19,7 +34,9 @@ from vekna.wire import (
     RiteFinished,
     RiteStarted,
     WireMessage,
+    allowed_answers,
     encode_frame,
+    read_frames,
 )
 
 _REATTACH_SECONDS = 2.0
@@ -47,10 +64,16 @@ def to_wire(event: RiteEvent, *, cast_id: str) -> WireMessage:
     )
 
 
-# The cast's end of the wire, and send-only: it writes what the cast is doing
-# and reads the socket for one thing, the EOF that says the daemon has gone. A
-# cast that awaited the daemon for anything would be a cast a dying daemon could
-# strand, and there is nothing it needs back.
+# The cast's end of the wire. It writes what the cast is doing, and reads back
+# the two things a daemon has for a cast: an answer to a prompt and a coding
+# slot. A grant waited on is let go when the daemon goes, so a dying daemon
+# cannot strand a cast at an agent call. An answer is not: the prompt is asked
+# again on the next attach, and nobody else can answer it.
+# A held slot and a waited one are both said again on a reattach, so a daemon
+# started mid-cast counts what is already running before it grants anything.
+# shortcut: a slot taken with no daemon attached is asked for again on the next
+# attach and counted only once granted, so the daemon can run past its limit
+# until then; reporting it as held rather than asked is the upgrade.
 class DaemonLink:
     def __init__(self, *, socket_path: Path, hello: CastHello) -> None:
         self._path = socket_path
@@ -58,6 +81,8 @@ class DaemonLink:
         self._writer: asyncio.StreamWriter | None = None
         self._watcher: asyncio.Task[None] | None = None
         self._closed = False
+        self._answers: dict[str, _Awaited] = {}
+        self._slots: dict[str, _Slot] = {}
 
     @property
     def attached(self) -> bool:
@@ -89,7 +114,7 @@ class DaemonLink:
         # what follows, so a daemon that started mid-cast is not missing a half.
         self.send(self._hello)
         self.send(GrimoireBegin(cast_id=self._hello.cast_id))
-        for message in backlog():
+        for message in (*backlog(), *(slot.request for slot in self._slots.values())):
             self.send(message)
         self.send(GrimoireEnd(cast_id=self._hello.cast_id))
         self._watcher = asyncio.create_task(self._watch(reader))
@@ -129,17 +154,87 @@ class DaemonLink:
         writer, self._writer = self._writer, None
         await self._shut(writer)
 
+    # The answer to `request`, from whichever surface gives one the prompt
+    # allows. Sent as well as awaited here, so a prompt is never on the wire
+    # without somebody listening for what comes back.
+    async def answer(self, request: DecideRequested) -> str:
+        future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+        awaited = _Awaited(
+            future=future,
+            allowed=allowed_answers(options=request.options, free=request.free),
+        )
+        self._answers[request.request_id] = awaited
+        self.send(request)
+        try:
+            return await awaited.future
+        finally:
+            self._answers.pop(request.request_id, None)
+
+    # Held for as long as the block runs. With no daemon there is nobody to
+    # share with, so there is no limit to wait on.
+    @contextlib.asynccontextmanager
+    async def coding(self) -> AsyncGenerator[None]:
+        slot = _Slot(
+            request=CodingSlotRequested(
+                cast_id=self._hello.cast_id, request_id=uuid4().hex
+            )
+        )
+        self._slots[slot.request.request_id] = slot
+        try:
+            if self.attached:
+                slot.granted = asyncio.get_running_loop().create_future()
+                self.send(slot.request)
+                await slot.granted
+            yield
+        finally:
+            del self._slots[slot.request.request_id]
+            self.send(
+                CodingSlotReleased(
+                    cast_id=self._hello.cast_id, request_id=slot.request.request_id
+                )
+            )
+
     # A daemon that goes away is as likely to reset the connection as to close
     # it cleanly, and either way this is how the cast finds out. The detach has
     # to happen whichever arrives, or a link keeps writing into a socket nobody
-    # holds and the cast believes it is still attached.
+    # holds and the cast believes it is still attached. A frame it cannot read
+    # is a daemon it cannot talk to, and ends the same way.
     async def _watch(self, reader: asyncio.StreamReader) -> None:
-        with contextlib.suppress(OSError):
-            await reader.read()
+        with contextlib.suppress(OSError, ValueError):
+            async for message in read_frames(reader):
+                self._heard(message)
         self._detach()
+
+    def _heard(self, message: WireMessage) -> None:
+        if isinstance(message, DecideResolved):
+            self._answered(message)
+        elif (
+            isinstance(message, CodingSlotGranted)
+            and (slot := self._slots.get(message.request_id)) is not None
+            and slot.granted is not None
+        ):
+            _settle(slot.granted)
+
+    # An answer the prompt does not allow is refused here and the prompt stays
+    # open: the dashboard checks before it sends, so this is somebody else
+    # writing to the socket, and the cast says so where its output goes.
+    def _answered(self, message: DecideResolved) -> None:
+        if (awaited := self._answers.get(message.request_id)) is None:
+            return
+        if awaited.allowed is not None and message.answer not in awaited.allowed:
+            sys.stderr.write(
+                f"refused answer {message.answer!r}:"
+                f" not one of {', '.join(awaited.allowed)}\n"
+            )
+            return
+        if not awaited.future.done():
+            awaited.future.set_result(message.answer)
 
     def _detach(self) -> None:
         self._writer = None
+        for slot in self._slots.values():
+            if slot.granted is not None:
+                _settle(slot.granted)
 
     @staticmethod
     async def _shut(writer: asyncio.StreamWriter) -> None:
@@ -150,15 +245,35 @@ class DaemonLink:
             await writer.wait_closed()
 
 
-# The prompt stays where the cast is. This asks whatever the cast would have
-# asked anyway — the standalone renderer, one stdin — and tells the daemon a
-# prompt is open on either side of the wait, so a surface can raise a waiting
-# cast and then stop raising it.
+@dataclass(frozen=True, kw_only=True)
+class _Awaited:
+    future: asyncio.Future[str]
+    allowed: tuple[str, ...] | None
+
+
+# A coding slot this cast holds or is waiting for. `granted` is what the wait is
+# on, and there is none for a slot taken with no daemon to ask.
+@dataclass(kw_only=True)
+class _Slot:
+    request: CodingSlotRequested
+    granted: asyncio.Future[None] | None = None
+
+
+def _settle(future: asyncio.Future[None]) -> None:
+    if not future.done():
+        future.set_result(None)
+
+
+# A cast run by hand keeps its prompt where it is: this asks whatever the cast
+# would have asked anyway — the standalone renderer, one stdin — and tells the
+# daemon a prompt is open on either side of the wait, so a surface can raise a
+# waiting cast and then stop raising it. A spawned cast has no stdin, so with no
+# `inner` the answer comes over the wire from a surface instead.
 class TeeChannel(Channel):
     def __init__(
         self,
         *,
-        inner: Channel,
+        inner: Channel | None,
         link: DaemonLink,
         cast_id: str,
         rite_id: Callable[[], str | None],
@@ -186,9 +301,12 @@ class TeeChannel(Channel):
             free=free,
         )
         self._open[request.request_id] = request
-        self._link.send(request)
         try:
-            answer = await self._inner.decide(prompt=prompt, options=options, free=free)
+            if (inner := self._inner) is None:
+                answer = await self._link.answer(request)
+            else:
+                self._link.send(request)
+                answer = await inner.decide(prompt=prompt, options=options, free=free)
         except BaseException:
             self._link.send(
                 DecideWithdrawn(cast_id=self._cast_id, request_id=request.request_id)
@@ -202,3 +320,24 @@ class TeeChannel(Channel):
             )
         )
         return answer
+
+
+# The coding focus a cast registered, behind the daemon's coding limit: every
+# agent session waits for a slot and holds it until the session ends. Only
+# `coding` is throttled — a medium a human drives as it runs has the human for
+# a limit.
+class ThrottledFocus(CodingFocusProtocol):
+    def __init__(self, *, inner: CodingFocusProtocol, link: DaemonLink) -> None:
+        self._inner = inner
+        self._link = link
+
+    async def run(
+        self,
+        call: CodingCall,
+        *,
+        on_delta: Callable[[str], None],
+        gate: GateFn | None,
+        ask: AskFn,
+    ) -> FocusReply:
+        async with self._link.coding():
+            return await self._inner.run(call, on_delta=on_delta, gate=gate, ask=ask)

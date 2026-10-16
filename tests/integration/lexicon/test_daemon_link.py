@@ -1,15 +1,32 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, to_wire
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, ThrottledFocus, to_wire
+from vekna.lexicon._pacts import (
+    AskFn,
+    CodingCall,
+    CodingFocusProtocol,
+    FocusReply,
+    GateFn,
+    RiteBegan,
+    RiteEnded,
+    RiteStreamed,
+)
 from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
-from vekna.wire import CastHello, WireMessage
+from vekna.wire import (
+    CastHello,
+    CastMessage,
+    CodingSlotGranted,
+    CodingSlotReleased,
+    CodingSlotRequested,
+    DecideResolved,
+    WireMessage,
+)
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c1"
@@ -73,17 +90,12 @@ def _waiting(daemon: "_Daemon") -> list[WireMessage]:
 
 
 class _Daemon:
-    def __init__(self) -> None:
-        self.hub = Hub()
+    def __init__(self, hub: Hub | None = None) -> None:
+        self.hub = hub if hub is not None else Hub()
         self.server: Serving | None = None
 
     async def start(self, path: Path) -> None:
-        self.server = await serve(
-            path=path,
-            on_message=self.hub.apply,
-            on_attach=self.hub.attach_surface,
-            on_detach=self.hub.detach_surface,
-        )
+        self.server = await serve(path=path, routes=self.hub)
 
     async def stop(self) -> None:
         assert self.server is not None
@@ -416,3 +428,322 @@ class TestProjection:
         assert message.kind == "rite_finished"
         assert message.status == "error"
         assert message.result == {"x": 1}
+
+
+# A hub that keeps the slot traffic the real daemon hands its circle, so a test
+# can grant by hand.
+class _Slots(Hub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.slots: list[CastMessage] = []
+
+    def apply(self, message: CastMessage) -> None:
+        if isinstance(message, CodingSlotRequested | CodingSlotReleased):
+            self.slots.append(message)
+        else:
+            super().apply(message)
+
+
+def _asked_id(daemon: _Daemon) -> str:
+    return _waiting(daemon)[0].request_id
+
+
+@pytest.mark.asyncio
+class TestAnsweredOverTheWire:
+    @staticmethod
+    async def test_a_spawned_cast_takes_the_answer_a_surface_sends(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+
+        daemon.hub.answer(
+            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="go")
+        )
+
+        assert await asyncio.wait_for(asking, timeout=2) == "go"
+        await _eventually(lambda: not _waiting(daemon))
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_an_answer_the_prompt_does_not_offer_leaves_it_open(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        request_id = _asked_id(daemon)
+
+        daemon.hub.answer(
+            DecideResolved(cast_id=_CAST, request_id=request_id, answer="maybe")
+        )
+        await _settle()
+        assert not asking.done()
+
+        daemon.hub.answer(
+            DecideResolved(cast_id=_CAST, request_id=request_id, answer="stop")
+        )
+        assert await asyncio.wait_for(asking, timeout=2) == "stop"
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_an_answer_to_a_prompt_never_asked_is_dropped(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+
+        daemon.hub.tell(
+            _CAST, DecideResolved(cast_id=_CAST, request_id="never", answer="go")
+        )
+        await _settle()
+        assert not asking.done()
+
+        daemon.hub.answer(
+            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="stop")
+        )
+        assert await asyncio.wait_for(asking, timeout=2) == "stop"
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # Two answers in one read: the first settles the prompt before the cast
+    # resumes to stop listening, and the second must not settle it again.
+    @staticmethod
+    async def test_the_first_answer_stands_over_a_second_in_the_same_read(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        request_id = _asked_id(daemon)
+
+        for answer in ("go", "stop"):
+            daemon.hub.tell(
+                _CAST,
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer=answer),
+            )
+
+        assert await asyncio.wait_for(asking, timeout=2) == "go"
+        await link.close(status="ok")
+        await daemon.stop()
+
+
+@pytest.mark.asyncio
+class TestCodingSlots:
+    @staticmethod
+    async def test_the_call_waits_for_its_grant_and_says_when_done(socket_path: Path):
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        entered = asyncio.Event()
+
+        async def call() -> None:
+            async with link.coding():
+                entered.set()
+
+        calling = asyncio.create_task(call())
+        await _eventually(lambda: bool(hub.slots))
+        await _settle()
+        assert not entered.is_set()
+
+        asked = hub.slots[0]
+        assert isinstance(asked, CodingSlotRequested)
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+        await asyncio.wait_for(calling, timeout=2)
+
+        released = CodingSlotReleased(cast_id=_CAST, request_id=asked.request_id)
+        await _eventually(lambda: hub.slots == [asked, released])
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_with_no_daemon_there_is_no_limit_to_wait_on(socket_path: Path):
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+
+        async with asyncio.timeout(2), link.coding():
+            pass
+
+    # A dying daemon must not strand a cast at an agent call.
+    @staticmethod
+    async def test_a_daemon_that_goes_lets_the_wait_go(socket_path: Path):
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+
+        async def call() -> None:
+            async with link.coding():
+                pass
+
+        calling = asyncio.create_task(call())
+        await _eventually(lambda: bool(hub.slots))
+
+        await daemon.stop()
+
+        await asyncio.wait_for(calling, timeout=2)
+        await link.close(status="ok")
+
+    # A daemon started mid-session counts the slot already held.
+    @staticmethod
+    async def test_a_slot_held_is_asked_for_again_on_the_next_attach(socket_path: Path):
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        released = asyncio.Event()
+
+        async def call() -> None:
+            async with link.coding():
+                await released.wait()
+
+        calling = asyncio.create_task(call())
+        await _settle()
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+
+        await link.attach()
+
+        await _eventually(lambda: bool(hub.slots))
+        assert isinstance(hub.slots[0], CodingSlotRequested)
+        released.set()
+        await asyncio.wait_for(calling, timeout=2)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_a_grant_for_a_slot_never_asked_for_is_dropped(socket_path: Path):
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        entered = asyncio.Event()
+
+        async def call() -> None:
+            async with link.coding():
+                entered.set()
+
+        calling = asyncio.create_task(call())
+        await _eventually(lambda: bool(hub.slots))
+        asked = hub.slots[0]
+        assert isinstance(asked, CodingSlotRequested)
+
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id="never"))
+        await _settle()
+        assert not entered.is_set()
+
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+        await asyncio.wait_for(calling, timeout=2)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # A slot taken with no daemon has no grant to let go, and one already
+    # granted is not let go twice: both blocks run on until they end.
+    @staticmethod
+    async def test_a_daemon_that_goes_leaves_held_slots_held(socket_path: Path):
+        released = asyncio.Event()
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+
+        async def call() -> None:
+            async with link.coding():
+                await released.wait()
+
+        unasked = asyncio.create_task(call())
+        await _settle()
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        await link.attach()
+        granted = asyncio.create_task(call())
+        await _eventually(lambda: len(hub.slots) > 1)
+        asked = hub.slots[1]
+        assert isinstance(asked, CodingSlotRequested)
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+        await _settle()
+
+        await daemon.stop()
+        await _eventually(lambda: not link.attached)
+
+        assert not unasked.done()
+        assert not granted.done()
+        released.set()
+        await asyncio.wait_for(asyncio.gather(unasked, granted), timeout=2)
+        await link.close(status="ok")
+
+
+# Says what slot traffic the daemon had seen by the time the agent ran.
+class _Agent(CodingFocusProtocol):
+    def __init__(self, hub: _Slots) -> None:
+        self._hub = hub
+        self.seen: list[CastMessage] = []
+
+    async def run(
+        self,
+        call: CodingCall,
+        *,
+        on_delta: Callable[[str], None],
+        gate: GateFn | None,
+        ask: AskFn,
+    ) -> FocusReply:
+        del call, on_delta, gate, ask
+        self.seen = list(self._hub.slots)
+        return FocusReply(text="done")
+
+
+@pytest.mark.asyncio
+class TestThrottledFocus:
+    @staticmethod
+    async def test_the_agent_runs_inside_a_granted_slot(socket_path: Path):
+        hub = _Slots()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        agent = _Agent(hub)
+        call = CodingCall(
+            prompt="fix it",
+            model=None,
+            system=None,
+            cwd=None,
+            output_schema=None,
+            focus_options=None,
+        )
+
+        running = asyncio.create_task(
+            ThrottledFocus(inner=agent, link=link).run(
+                call, on_delta=print, gate=None, ask=_never
+            )
+        )
+        await _eventually(lambda: bool(hub.slots))
+        asked = hub.slots[0]
+        assert isinstance(asked, CodingSlotRequested)
+        hub.tell(_CAST, CodingSlotGranted(cast_id=_CAST, request_id=asked.request_id))
+
+        assert await asyncio.wait_for(running, timeout=2) == FocusReply(text="done")
+        assert agent.seen == [asked]
+        released = CodingSlotReleased(cast_id=_CAST, request_id=asked.request_id)
+        await _eventually(lambda: hub.slots == [asked, released])
+        await link.close(status="ok")
+        await daemon.stop()
+
+
+def _never(question: str, options: Sequence[str] | None) -> Awaitable[str]:
+    msg = f"the agent was not meant to ask {question!r} ({options!r})"
+    raise AssertionError(msg)

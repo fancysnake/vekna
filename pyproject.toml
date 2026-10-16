@@ -216,11 +216,6 @@ type = "independence"
 modules = ["vekna.links.*"]
 
 [[tool.importlinter.contracts]]
-name = "inside-inits"
-type = "independence"
-modules = ["vekna.inits.*"]
-
-[[tool.importlinter.contracts]]
 name = "inside-mills"
 type = "independence"
 modules = ["vekna.mills.*"]
@@ -575,6 +570,12 @@ disallow_any_expr = false
 # the exemption from spreading anywhere it could matter.
 [[tool.mypy.overrides]]
 module = "vekna.edges.pytest_plugin"
+disallow_any_expr = false
+
+# `tomllib` hands back `dict[str, Any]`. Both ends read their config through one
+# module, which hands the rest of the codebase `object` to validate.
+[[tool.mypy.overrides]]
+module = "vekna.wire._toml"
 disallow_any_expr = false
 
 # RUFF

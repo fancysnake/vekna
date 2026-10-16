@@ -1,11 +1,19 @@
 import asyncio
 import contextlib
 import itertools
-from collections.abc import Sequence
+import shlex
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from vekna.pacts.casts import Casts
+from vekna.pacts.casts import Casts, CastView
 from vekna.pacts.screen import Screen
+from vekna.wire import (
+    CastRequested,
+    DecideResolved,
+    WireMessage,
+    allowed_answers,
+    parse_flags,
+)
 
 from .screen import ordered, paint, scoped
 
@@ -19,16 +27,21 @@ _QUIT = frozenset({"q", "quit"})
 _BACK = frozenset({"b", "back"})
 _EVERY = frozenset({"g", "global"})
 _HOME = frozenset({"p", "project"})
-_KEYS = "a number, b, g, p, or q"
+_KEYS = "a number, c <ritual>, a <answer>, b, g, p, or q"
+_CAST = "c "
+_ANSWER = "a "
 _BROKE = "the view stopped"
 
 
-# The project this view opened in, and whether it is showing every project
-# instead. One attribute on the view rather than two.
+# Where this view opened — its project, and the directory a ritual started from
+# it runs in — and what it is showing: every project instead, and the one cast
+# drilled into. One attribute on the view rather than four.
 @dataclass
 class _Scope:
     home: str
+    root: str
     every: bool = False
+    focus: str | None = None
 
     @property
     def project(self) -> str | None:
@@ -38,11 +51,21 @@ class _Scope:
 # What the operator does with the view, and nothing about where the events came
 # from: it reads casts and paints a screen, each through a protocol.
 class Dashboard:
-    def __init__(self, *, casts: Casts, screen: Screen, project: str) -> None:
+    # `send` is the window's line to the daemon, and `root` the directory it was
+    # opened in, which is where a ritual it starts runs.
+    def __init__(
+        self,
+        *,
+        casts: Casts,
+        screen: Screen,
+        project: str,
+        root: str,
+        send: Callable[[WireMessage], None],
+    ) -> None:
         self._casts = casts
         self._screen = screen
-        self._scope = _Scope(home=project)
-        self._focus: str | None = None
+        self._send = send
+        self._scope = _Scope(home=project, root=root)
         self._note = ""
         self._changed = asyncio.Event()
         self._done = asyncio.Event()
@@ -134,20 +157,69 @@ class Dashboard:
         if lowered in _QUIT:
             self.stop()
         elif lowered in _BACK:
-            self._focus = None
+            self._scope.focus = None
         elif lowered in _EVERY:
-            self._scope.every, self._focus = True, None
+            self._scope.every, self._scope.focus = True, None
         elif lowered in _HOME:
-            self._scope.every, self._focus = False, None
+            self._scope.every, self._scope.focus = False, None
+        elif lowered.startswith(_CAST):
+            self._cast(line[len(_CAST) :])
+        elif lowered.startswith(_ANSWER):
+            self._answer(line[len(_ANSWER) :].strip())
         elif lowered.isdecimal():
-            self._focus = self._nth(int(lowered))
+            self._scope.focus = self._nth(int(lowered))
         elif lowered:
             self._note = f"{line!r} is not a cast — {_KEYS}"
 
-    # The same order the listing paints, or the number typed picks the cast
-    # above the one it is next to.
+    # The flags read the way `vekna cast` reads them, and what they mean is the
+    # ritual's to say: the cast the daemon spawns validates them, and a bad one
+    # shows as that cast failing.
+    def _cast(self, typed: str) -> None:
+        try:
+            ritual, *flags = shlex.split(typed)
+            components = parse_flags(flags)
+        except ValueError as error:
+            self._note = f"c <ritual> [--flag value ...] — {error}"
+            return
+        self._send(
+            CastRequested(
+                project_root=self._scope.root, ritual=ritual, components=components
+            )
+        )
+        self._note = f"asked for {ritual}"
+
+    # The oldest open prompt of the cast in view, checked here by the rule the
+    # cast checks it by, so a typo is said at once rather than ignored there.
+    def _answer(self, answer: str) -> None:
+        view = (
+            None
+            if self._scope.focus is None
+            else self._casts.casts.get(self._scope.focus)
+        )
+        if view is None or not view.waiting:
+            self._note = "nothing to answer — open a waiting cast first"
+            return
+        if not view.hello.wired:
+            self._note = "this cast was run by hand — answer it on its own terminal"
+            return
+        request = next(iter(view.waiting.values()))
+        allowed = allowed_answers(options=request.options, free=request.free)
+        if allowed is not None and answer not in allowed:
+            self._note = f"{answer!r} is not one of {', '.join(allowed)}"
+            return
+        self._send(
+            DecideResolved(
+                cast_id=request.cast_id, request_id=request.request_id, answer=answer
+            )
+        )
+
+    # Worked out once for both the listing and the number typed against it, or
+    # the number picks the cast above the one it is next to.
+    def _listed(self) -> list[CastView]:
+        return ordered(scoped(list(self._casts.casts.values()), self._scope.project))
+
     def _nth(self, index: int) -> str | None:
-        found = ordered(scoped(list(self._casts.casts.values()), self._scope.project))
+        found = self._listed()
         if 1 <= index <= len(found):
             return found[index - 1].hello.cast_id
         self._note = f"there is no cast {index}"
@@ -157,10 +229,10 @@ class Dashboard:
     def _show(self) -> None:
         self._screen.show(
             paint(
-                casts=list(self._casts.casts.values()),
-                focus=self._focus,
-                note=self._note,
+                listed=self._listed(),
+                focus=self._scope.focus,
                 project=self._scope.project,
+                note=self._note,
             )
         )
         self._note = ""

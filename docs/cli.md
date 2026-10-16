@@ -179,20 +179,54 @@ inside it, and how long that step has been running. A step that has not moved
 in ten minutes is the thing this view exists to show. Casts waiting on an
 answer sort to the top, then the ones still running, then the ones that ended.
 
-The status word is `running`, `waiting`, `recovering`, `done`, `failed` or
-`aborted`. Recovering is a running cast whose last step raised and went to a
-recovery step; drilling in shows the error beside the step. Aborted is a cast
-whose socket closed without a goodbye, which is the one worth carrying on
-with, so its row prints the command that does it.
+The status word is `running`, `waiting`, `recovering`, `queued`, `done`,
+`failed` or `aborted`. Queued is a cast the daemon has not started yet, because
+its project already runs as many casts as it allows. Recovering is a running
+cast whose last step raised and went to a recovery step; drilling in shows the
+error beside the step. Aborted is a cast whose socket closed without a goodbye,
+which is the one worth carrying on with, so its row prints the command that does
+it.
 
 A number drills into a cast, `b` comes back, `g` and `p` switch between every
 project and this one, `q` closes the window. Drilling in is where
-the rite tree, the live output and the error a failed cast ended on are. A cast
-blocked on a prompt is answered in the terminal that started it, not here.
+the rite tree, the live output and the error a failed cast ended on are.
 
-Casts are not started from here. `vekna cast` is how a cast begins, and it runs
-in the directory it was typed in, attached or not. It does not start a daemon:
-with none listening it runs on its own and joins the next one that starts.
+`c <ritual> [--<component> value …]` starts a ritual in the directory the window
+was opened in, with the flags `vekna cast` takes. The daemon spawns it as `vekna
+cast` with no terminal, logging its output to `cast.log` beside its record. A
+ritual that is not there, or a component that will not validate, shows as that
+cast failing, with the reason in its drilled view.
+
+A cast the daemon started has no terminal, so its prompts are answered here:
+drill into it and type `a <answer>`. The prompt line says what it takes —
+`a yes|no`, the options offered, or `a <anything>` for free text. An answer it
+does not offer is refused before it leaves the window. A cast nobody answers
+waits. A cast typed as `vekna cast` keeps its prompts on its own terminal and
+is answered there.
+
+`vekna cast` still runs in the directory it was typed in, attached or not. It
+does not start a daemon: with none listening it runs on its own and joins the
+next one that starts.
+
+### The circle
+
+How much runs at once is set under `[circle]`, in the project's `.vekna.toml`
+or in `~/.config/vekna/config.toml`:
+
+```toml
+[circle]
+processes = 4   # casts running at once in this project; the project's own wins
+coding = 2      # agent sessions at once, across every project; user config only
+```
+
+`processes` counts every running cast of the project, whether `c` started it or
+somebody typed `vekna cast`; past it, `c` queues. It defaults to 4. `coding`
+limits how many `coding` calls talk to an agent at once, in every cast attached
+to the daemon: past it, a call waits for a slot before its session starts, and
+gives it back when the session ends. It defaults to no limit. With no daemon
+running there is nobody to share with, and nothing waits. Both are read again
+for every cast, so an edit counts from the next one. A `[circle]` that does not
+validate is noted in `daemon.log`, and the defaults stand.
 
 ## `vekna stop`
 

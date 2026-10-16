@@ -1,13 +1,21 @@
 from collections.abc import Callable, Iterator
 from typing import assert_never
 
+from typing_extensions import override
+
 from vekna.pacts.casts import Casts, CastView, RiteView
-from vekna.pacts.routing import Action, Routed, Surface
+from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastQueued,
+    CastRefused,
+    CastRequested,
     CastUpdate,
+    CodingSlotGranted,
+    CodingSlotReleased,
+    CodingSlotRequested,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -27,6 +35,25 @@ _LOCKS_LATER = "locks are not built yet"
 _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
+_NO_PEER = "the cast is not connected"
+_SLOTS_ELSEWHERE = "coding slots are the circle's"
+_STARTS_NOTHING = "this daemon starts no casts"
+_LOCKS = (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
+_SLOTS = (CodingSlotRequested, CodingSlotGranted, CodingSlotReleased)
+_ELSEWHERE = (*_LOCKS, *_SLOTS)
+# What a view is made of: every update but the ones above.
+_Viewed = (
+    CastGoodbye
+    | CastQueued
+    | GrimoireBegin
+    | GrimoireEnd
+    | RiteStarted
+    | RiteDelta
+    | RiteFinished
+    | DecideRequested
+    | DecideResolved
+    | DecideWithdrawn
+)
 
 
 # A hub with no journal and one with a journal that does nothing behave the
@@ -45,7 +72,7 @@ def _unjournalled(_: CastMessage) -> None:
 # an hour of scrollback.
 # ponytail: one hub, no locking — the socket server drives it from a single
 # event loop. Per-cast locking is the upgrade if it ever runs threaded.
-class Hub(Casts):
+class Hub(Casts, Routes):
     def __init__(
         self,
         *,
@@ -54,6 +81,9 @@ class Hub(Casts):
     ) -> None:
         self._casts: dict[str, CastView] = {}
         self._surfaces: list[Surface] = []
+        # The connection each cast is on, which is how the daemon writes back to
+        # one: an answer from a surface, a slot.
+        self._peers: dict[str, Surface] = {}
         self._on_routed = on_routed
         self._on_journal = on_journal
 
@@ -72,6 +102,45 @@ class Hub(Casts):
             self._surfaces.remove(surface)
         self._say(kind="surface_hello", cast_id=None, action="detached")
 
+    def open_cast(self, cast_id: str, peer: Surface) -> None:
+        self._peers[cast_id] = peer
+
+    # A cast that reattached has a newer peer by the time its old connection
+    # goes, and that one is the one to keep.
+    def close_cast(self, cast_id: str, peer: Surface) -> None:
+        if self._peers.get(cast_id) is peer:
+            del self._peers[cast_id]
+
+    # Whether it reached the cast. A peer whose socket has gone is dropped the
+    # same way a surface is.
+    def tell(self, cast_id: str, message: WireMessage) -> bool:
+        if (peer := self._peers.get(cast_id)) is None:
+            return False
+        try:
+            peer.send(message)
+        except OSError:
+            self._peers.pop(cast_id, None)
+            return False
+        return True
+
+    @override
+    def request(self, surface: Surface, request: CastRequested) -> None:
+        del request
+        surface.send(CastRefused(reason=_STARTS_NOTHING))
+
+    # Forwarded, not applied: the cast's own `DecideResolved` is what closes the
+    # prompt, so the journal and every surface hear one answer, from the cast
+    # that took it. A prompt that is not open — answered already, withdrawn,
+    # never asked — goes nowhere.
+    def answer(self, resolved: DecideResolved) -> None:
+        view = self._casts.get(resolved.cast_id)
+        if view is None or resolved.request_id not in view.waiting:
+            self._drop(resolved, reason=_NO_PROMPT)
+        elif not self.tell(resolved.cast_id, resolved):
+            self._drop(resolved, reason=_NO_PEER)
+        else:
+            self._say(kind=resolved.kind, cast_id=resolved.cast_id, action="applied")
+
     def apply(self, message: CastMessage) -> None:
         if isinstance(message, CastHello):
             self._casts[message.cast_id] = CastView(hello=message)
@@ -79,7 +148,7 @@ class Hub(Casts):
             return
         if (view := self._casts.get(message.cast_id)) is None:
             self._drop(message, reason=_NO_CAST)
-        elif (refused := _update(view, message)) is not None:
+        elif (refused := _refusal(view, message)) is not None:
             self._drop(message, reason=refused)
         else:
             self._accept(message)
@@ -139,20 +208,24 @@ class Hub(Casts):
             yield from _replay_rites(view)
             yield from view.waiting.values()
             yield GrimoireEnd(cast_id=view.hello.cast_id)
+            if view.status == "queued":
+                yield CastQueued(cast_id=view.hello.cast_id)
             yield from _replay_goodbye(view)
 
 
 # `view`, not `cast`, throughout: the domain word collides with `typing.cast` in
 # the repository's own debt metrics, and a view is what these actually hold.
 # Returns why the message was refused, or None once it has been applied.
-def _update(view: CastView, message: CastUpdate) -> str | None:
-    # Answered here rather than by a catch-all under the match: the reason is
-    # true of these four and of nothing else, and what is left over is what the
-    # match then has to cover for `assert_never` to hold.
-    if isinstance(
-        message, (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
-    ):
-        return _LOCKS_LATER
+# Answered here rather than by a catch-all under the match: the reasons are true
+# of these seven and of nothing else, and what is left over is what the match
+# then has to cover for `assert_never` to hold.
+def _refusal(view: CastView, message: CastUpdate) -> str | None:
+    if isinstance(message, _ELSEWHERE):
+        return _elsewhere(message)
+    return _update(view, message)
+
+
+def _update(view: CastView, message: _Viewed) -> str | None:
     refused: str | None = None
     match message:
         case GrimoireBegin():
@@ -162,6 +235,8 @@ def _update(view: CastView, message: CastUpdate) -> str | None:
             view.waiting.clear()
         case GrimoireEnd():
             pass
+        case CastQueued():
+            view.status = "queued"
         case RiteStarted():
             view.rites[message.rite_id] = RiteView(started=message)
         case RiteDelta() | RiteFinished():
@@ -178,6 +253,22 @@ def _update(view: CastView, message: CastUpdate) -> str | None:
         case _:
             assert_never(message)
     return refused
+
+
+def _elsewhere(
+    message: (
+        LockAcquireRequested
+        | LockGranted
+        | LockDenied
+        | LockReleased
+        | CodingSlotRequested
+        | CodingSlotGranted
+        | CodingSlotReleased
+    ),
+) -> str:
+    if isinstance(message, _SLOTS):
+        return _SLOTS_ELSEWHERE
+    return _LOCKS_LATER
 
 
 def _answer(view: CastView, message: DecideResolved | DecideWithdrawn) -> str | None:
@@ -221,5 +312,10 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
 # ended — `vekna log` lists recent casts, and the daemon has not forgotten
 # this one yet.
 def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
-    if (status := view.status) != "running":
-        yield CastGoodbye(cast_id=view.hello.cast_id, status=status, detail=view.detail)
+    match view.status:
+        case "ok" | "error" | "disconnected" as status:
+            yield CastGoodbye(
+                cast_id=view.hello.cast_id, status=status, detail=view.detail
+            )
+        case _:
+            pass

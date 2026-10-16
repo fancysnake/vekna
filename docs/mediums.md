@@ -100,6 +100,12 @@ tool; the cast blocks until you answer, exactly as `decide` does. Any options it
 offers are suggestions — pick one by number or by name, or answer in your own
 words, which is what the agent gets.
 
+With `[circle] coding = N` in the user config, at most N `coding` calls talk to
+an agent at once across every cast attached to the daemon. A call past the
+limit waits for a slot before its session starts, and gives the slot back when
+the session ends. A rite replayed from the journal calls no agent and takes no
+slot. See [the circle](cli.md#the-circle).
+
 ### Sessions
 
 Two `coding` calls in one cast either share the agent's context or they do not.

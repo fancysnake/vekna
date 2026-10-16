@@ -149,7 +149,10 @@ rituals.py            ◄────── imports                          ┌
    registered themselves, by payload class, when they were decorated.
 3. It probes `$XDG_RUNTIME_DIR/vekna.sock`. Reachable → attach + `CastHello`.
    Not → standalone. Either way the cast renders to its own stdout and takes
-   its prompts on its own stdin; attaching adds a listener, not an owner.
+   its prompts on its own stdin; attaching adds a listener, not an owner. The
+   exception is a cast the daemon spawned (`c` in the dashboard): it runs as
+   `vekna cast --wired --resume <id>` from a record the daemon wrote, keeps
+   that id, and takes its answers over the wire.
 4. It runs the ritual: the engine takes the opening payload and trampolines
    step→step on each returned payload, validating it at every boundary, until
    a step returns `Done`. Steps and the mediums they call emit
@@ -238,16 +241,19 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 
 | Kind | Direction | Notes |
 |------|-----------|-------|
-| `CastHello` | cast → daemon | cast_id, project_root, project (git common dir), ritual name, Components, started_at |
+| `CastHello` | cast → daemon | cast_id, project_root, project (git common dir), ritual name, Components, started_at, wired (spawned by the daemon) |
+| `CastQueued` | daemon → surfaces | a cast the daemon recorded and has not spawned yet: no process slot is free |
 | `CastGoodbye` | cast → daemon | clean exit + final status |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
-| `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. Both flow cast → daemon: the cast keeps its own stdin and the daemon is told it is waiting, not asked to answer. The daemon → cast direction is what a takeover would use |
+| `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand keeps its own stdin, and the daemon is told it is waiting, not asked to answer. A spawned cast has no terminal: a surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open, and the cast's own `DecideResolved` closes it |
+| `CodingSlotRequested` / `CodingSlotGranted` / `CodingSlotReleased` | both | the account's coding limit: a cast asks before each agent session, the daemon grants in order, the cast releases when the session ends. Not journaled |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
-| `CastRequested` / `CastRefused` / `CastKillRequested` | surface ↔ daemon | start, refuse, end a cast |
+| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused only when the directory is not there |
+| `CastKillRequested` | surface → daemon | end a cast. Not built |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on

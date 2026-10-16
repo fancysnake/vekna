@@ -11,6 +11,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastQueued,
     RunRecord,
     WireMessage,
     encode_frame,
@@ -46,6 +47,8 @@ class Journal:
         # interrupted cast leaves, and a resume knows what to do with it.
         if isinstance(message, CastHello):
             self._write(RunRecord(hello=message))
+        elif isinstance(message, CastQueued):
+            self._queue(message)
         try:
             self._append_unless_gapped(message)
         finally:
@@ -213,6 +216,14 @@ class Journal:
         half = path.with_suffix(".part")
         half.write_text(record.model_dump_json(indent=2))
         half.replace(path)
+
+    # Read back and written on, as a goodbye is: a queued record is what a
+    # spawned cast reads to learn it is starting rather than resuming.
+    def _queue(self, queued: CastQueued) -> None:
+        if (record := self.read(queued.cast_id)) is None:
+            return
+        record.status = "queued"
+        self._write(record)
 
     # A goodbye for a cast whose hello never landed leaves nothing to close —
     # the daemon would have dropped it, so this is only reachable by a journal

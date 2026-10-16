@@ -105,12 +105,7 @@ class _DaemonThread:
     async def _serve(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop = asyncio.Event()
-        server = await serve(
-            path=self._path,
-            on_message=self.hub.apply,
-            on_attach=self.hub.attach_surface,
-            on_detach=self.hub.detach_surface,
-        )
+        server = await serve(path=self._path, routes=self.hub)
         assert server is not None
         self._ready.set()
         await self._stop.wait()

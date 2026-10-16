@@ -1,13 +1,26 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from vekna.wire import WireMessage
+from vekna.wire import CastMessage, CastRequested, DecideResolved, WireMessage
 
 
 # Sending is not awaited: a surface owns a queue and a writer task, so a slow
 # terminal cannot stall the cast whose event it is being sent.
 class Surface(Protocol):
     def send(self, message: WireMessage) -> None: ...
+
+
+# Everything a connection can bring the daemon, once its first frame has said
+# what it is. A cast is `apply`d and has a peer the daemon can write back to; a
+# surface is attached, and can ask for a cast or answer one.
+class Routes(Protocol):
+    def apply(self, message: CastMessage) -> None: ...
+    def attach_surface(self, surface: Surface) -> None: ...
+    def detach_surface(self, surface: Surface) -> None: ...
+    def request(self, surface: Surface, request: CastRequested) -> None: ...
+    def answer(self, resolved: DecideResolved) -> None: ...
+    def open_cast(self, cast_id: str, peer: Surface) -> None: ...
+    def close_cast(self, cast_id: str, peer: Surface) -> None: ...
 
 
 # Something that is not a socket is sitting where the daemon binds. Its own

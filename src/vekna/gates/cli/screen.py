@@ -4,9 +4,15 @@ from datetime import UTC, datetime
 from pathlib import PurePath
 
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
-from vekna.wire import CastHello, RunRecord
+from vekna.wire import CastHello, DecideRequested, RunRecord, allowed_answers
 
-_CAST_GLYPH = {"running": "▶", "ok": "✓", "error": "✗", "disconnected": "⚠"}
+_CAST_GLYPH = {
+    "queued": "…",
+    "running": "▶",
+    "ok": "✓",
+    "error": "✗",
+    "disconnected": "⚠",
+}
 _RITE_GLYPH: dict[RiteStatus, str] = {
     "running": "▶",
     "ok": "✓",
@@ -18,11 +24,12 @@ _MEDIUM = "↳"
 _GAP = "◌"
 _DAMAGED = "?"
 _HOME = "\x1b[H\x1b[2J"
-_LIST_KEYS = "number to drill in · {scope} · q to quit"
+_LIST_KEYS = "number to drill in · c <ritual> to cast · {scope} · q to quit"
 _TO_GLOBAL = "g every project"
 _TO_PROJECT = "p this project"
 _EVERY = "all projects"
 _CAST_KEYS = "b back · q quit"
+_ANSWER_KEYS = "a <answer> · b back · q quit"
 _ANSWER_HERE = "answer it where the cast was started"
 _DELTA_TAIL = 12
 # A daemon left up holds every cast it has ever heard, and what an operator
@@ -34,12 +41,13 @@ _SHOWN = 12
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
 _WORD = {
+    "queued": "queued",
     "running": "running",
     "ok": "done",
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = ("running", "waiting", "recovering", "done", "failed", "aborted")
+_TALLY = ("running", "waiting", "recovering", "queued", "done", "failed", "aborted")
 _STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
@@ -53,17 +61,19 @@ _MINUTE = 60
 _HOUR = 3600
 
 
-# Whoever is blocked on a human first, then what is still going, then the ones
-# that ended, newest first: a cast that ended an hour ago is not what the view
-# is for, and one sitting on a question is the whole reason to look at it.
+# Whoever is blocked on a human first, then what is still going, then what is
+# waiting for a slot, then the ones that ended, newest first: a cast that ended
+# an hour ago is not what the view is for, and one sitting on a question is the
+# whole reason to look at it.
 # Shared with the dashboard rather than done at paint time, because the number
 # an operator types is a position in this order.
 def ordered(casts: Sequence[CastView]) -> list[CastView]:
     live = [view for view in casts if view.status == "running"]
-    done = [view for view in casts if view.status != "running"]
+    queued = [view for view in casts if view.status == "queued"]
+    done = [view for view in casts if view.status not in {"running", "queued"}]
     asking = [view for view in live if view.waiting]
     working = [view for view in live if not view.waiting]
-    return [*asking, *working, *reversed(done)]
+    return [*asking, *working, *queued, *reversed(done)]
 
 
 # The casts of one project, or of all of them when there is none to keep to.
@@ -78,12 +88,6 @@ def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
 def _named(project: str) -> str:
     where = PurePath(project)
     return where.parent.name if where.name == ".git" else where.name
-
-
-def _project(view: CastView) -> str:
-    return (
-        view.hello.project_root.rsplit("/", maxsplit=1)[-1] or view.hello.project_root
-    )
 
 
 def _word(view: CastView) -> str:
@@ -136,7 +140,8 @@ def _ended_at(view: CastView) -> datetime | None:
 
 
 def _elapsed(view: CastView, now: datetime) -> str:
-    if (until := now if view.status == "running" else _ended_at(view)) is None:
+    live = view.status in {"running", "queued"}
+    if (until := now if live else _ended_at(view)) is None:
         return "—"
     return _clock((until - view.hello.started_at).total_seconds())
 
@@ -180,7 +185,8 @@ def _now(view: CastView, now: datetime) -> str:
 def _line(index: int, view: CastView, now: datetime) -> str:
     return (
         f" {index:>2}  {view.hello.cast_id[:_ID]:<{_ID}}"
-        f"  {_fit(view.hello.ritual, _RITUAL)}  {_fit(_project(view), _PROJECT)}"
+        f"  {_fit(view.hello.ritual, _RITUAL)}"
+        f"  {_fit(_named(view.hello.project), _PROJECT)}"
         f"  {_word(view):<{_STATUS}}  {_elapsed(view, now):>7}"
         f"  {_steps_done(view):>5}  {_fit(_now(view, now), _NOW)}".rstrip()
     )
@@ -195,13 +201,17 @@ def _counted(casts: Sequence[CastView]) -> str:
 # for, and a machine running fifteen at once is exactly when it matters. What is
 # left of the screenful goes to the ones that ended, newest first.
 def _shown(casts: Sequence[CastView]) -> Sequence[CastView]:
-    live = sum(1 for view in casts if view.status == "running")
+    live = sum(1 for view in casts if view.status in {"running", "queued"})
     return casts[: max(live, _SHOWN)]
 
 
 def _listing(casts: Sequence[CastView], now: datetime) -> list[str]:
     if not casts:
-        return ["", " no casts — run `vekna cast <ritual>` anywhere", ""]
+        return [
+            "",
+            " no casts — `c <ritual>` here, or `vekna cast <ritual>` anywhere",
+            "",
+        ]
     shown = _shown(casts)
     lines = [_line(index, view, now) for index, view in enumerate(shown, 1)]
     if (hidden := len(casts) - len(shown)) > 0:
@@ -250,13 +260,22 @@ def _carried(hello: CastHello) -> str:
     return f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
 
 
+# A spawned cast is answered from here, and says what it will take; one run by
+# hand is reading its own terminal and nothing else.
+def _how(view: CastView, request: DecideRequested) -> str:
+    if not view.hello.wired:
+        return _ANSWER_HERE
+    allowed = allowed_answers(options=request.options, free=request.free)
+    return "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
+
+
 def _waiting_lines(view: CastView) -> list[str]:
     if not view.waiting:
         return []
     return [
         "",
         *(
-            f" {_WAITING} {request.prompt}   ({_ANSWER_HERE})"
+            f" {_WAITING} {request.prompt}   ({_how(view, request)})"
             for request in view.waiting.values()
         ),
     ]
@@ -325,24 +344,24 @@ def _lost(record: RunRecord) -> str:
 # One string, painted over the top of the last one. A terminal that can only be
 # written to forwards is what the CLI surface has; the Textual dashboard in
 # issue #107 is where partial redraws belong.
+# `listed` is what the view numbers — already `scoped` and `ordered` — and
+# `project` the one it is scoped to, `None` being every project.
 def paint(
     *,
-    casts: Sequence[CastView],
+    listed: Sequence[CastView],
     focus: str | None,
+    project: str | None,
     note: str = "",
     now: datetime | None = None,
-    project: str | None = None,
 ) -> str:
     at = now if now is not None else datetime.now(UTC)
-    shown = scoped(casts, project)
-    found = [view for view in shown if view.hello.cast_id == focus]
+    found = [view for view in listed if view.hello.cast_id == focus]
     if focus is not None and found:
         body = _drilled(found[0], at)
-        keys = _CAST_KEYS
+        keys = _ANSWER_KEYS if found[0].hello.wired and found[0].waiting else _CAST_KEYS
     else:
-        ranked = ordered(shown)
         where = _EVERY if project is None else _named(project)
-        body = [f"vekna — {_counted(ranked)}  ({where})", *_listing(ranked, at)]
+        body = [f"vekna — {_counted(listed)}  ({where})", *_listing(listed, at)]
         keys = _LIST_KEYS.format(scope=_TO_PROJECT if project is None else _TO_GLOBAL)
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"
