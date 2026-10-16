@@ -37,6 +37,12 @@ when.
   `coding` (user config, default no limit) caps agent sessions at once across
   every cast attached to the daemon; a `coding` call past it waits for a slot.
 
+### Removed
+
+- **`goto`, `Goto`, `done` and `Transition`** are gone from `vekna.lexicon`. A
+  step returns the next step's payload or `Done(result)` and annotates its
+  exits; `rituals show` no longer draws `?`.
+
 ## [0.13.0] - 2026-10-05
 
 ### Added

@@ -152,29 +152,6 @@ _UNWIRED = textwrap.dedent("""
         return components
     """)
 
-# The pre-#103 spelling, which an installed tome may still use.
-_LEGACY = textwrap.dedent("""
-    from pydantic import BaseModel
-
-    from vekna.lexicon import Transition, done, goto, ritual, step
-
-
-    class Tick(BaseModel):
-        left: int
-
-
-    @step
-    async def tick(state: Tick) -> Transition:
-        if not state.left:
-            return done(state)
-        return goto(tick, Tick(left=state.left - 1))
-
-
-    @ritual("countdown")
-    async def countdown(components: Tick) -> Transition:
-        return goto(tick, components)
-    """)
-
 _PACKAGE = {
     "__init__.py": "",
     "components.py": _COMPONENTS,
@@ -273,19 +250,6 @@ class TestRitualsShow:
         assert exit_code == 0
         assert "components:\n  (none)\n" in out
         assert "  (start) → (done)\n" in out
-
-    @staticmethod
-    def test_a_legacy_ritual_still_shows_with_an_unknown_graph(
-        tmp_path, monkeypatch, capsys
-    ):
-        (tmp_path / "rituals.py").write_text(_LEGACY)
-        monkeypatch.chdir(tmp_path)
-
-        exit_code = rituals_show("countdown")
-
-        out = capsys.readouterr().out
-        assert exit_code == 0
-        assert "  (start) → ?\n" in out
 
     @staticmethod
     def test_unknown_ritual_is_a_usage_error(tmp_path, monkeypatch, capsys):
