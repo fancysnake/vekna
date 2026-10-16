@@ -13,6 +13,7 @@ from ._links import (
     run_file,
 )
 from ._pacts import (
+    NEEDS_TREE,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -41,6 +42,7 @@ from ._pacts import (
     RunRecord,
     StopRequested,
     SurfaceHello,
+    TreeBlocked,
     WireMessage,
     decode_frame,
     encode_frame,
@@ -49,6 +51,7 @@ from ._specs import allowed_answers, parse_flags
 from ._toml import read_toml
 
 __all__ = [
+    "NEEDS_TREE",
     "CastGoodbye",
     "CastHello",
     "CastMessage",
@@ -77,6 +80,7 @@ __all__ = [
     "RunRecord",
     "StopRequested",
     "SurfaceHello",
+    "TreeBlocked",
     "WireMessage",
     "allowed_answers",
     "cast_frames",

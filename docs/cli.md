@@ -228,6 +228,38 @@ running there is nobody to share with, and nothing waits. Both are read again
 for every cast, so an edit counts from the next one. A `[circle]` that does not
 validate is noted in `daemon.log`, and the defaults stand.
 
+### Worktrees
+
+A ritual declared `@ritual("fix", worktree=True)` runs in a pooled worktree
+rather than in the directory `c` was typed in. The daemon leases a tree before
+it spawns the cast and releases it once the process exits. The pool takes two
+more keys:
+
+```toml
+[circle]
+worktrees = 2                          # pooled trees per project
+prepare = "mise install && poetry install"   # run once in each new tree
+```
+
+Trees live under `~/.local/state/vekna/worktrees/<repo>-<hash>/<n>`, each parked
+on its own branch, `vekna/wt-<n>`, while no cast holds it. The pool is whatever
+`git worktree list` shows there, so a restarted daemon finds the same trees. A
+tree is made when every existing one is held and the pool is under
+`worktrees` (default 2), from the primary tree's `HEAD`; `prepare` runs once in
+it, logging to `<n>.prepare.log` beside it. A prepare that fails fails the cast
+and runs again at the tree's next lease. Nothing removes a tree.
+
+After the cast, the daemon parks a clean tree. A tree with uncommitted or
+untracked changes, or with a merge, rebase, cherry-pick or revert in progress,
+is left as it is and marked blocked: the cast's drilled view and `daemon.log`
+say which tree and why. It joins the pool again once it is clean. Gitignored
+files are not changes, so whatever `prepare` builds must be gitignored, or
+every tree reads dirty. Past the pool, a cast waits queued for a tree.
+
+A tree holds only what git tracks. A `.vekna.toml` or `rituals.py` kept out of
+git is not there, and a cast in the tree will not find its rituals. A
+`worktree=True` ritual typed as `vekna cast` runs where it was typed.
+
 ## `vekna stop`
 
 Ends the daemon, and every window on it with it. Casts still running carry on,

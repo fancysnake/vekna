@@ -28,6 +28,12 @@ when.
   caps the casts a project runs at once, counting casts typed by hand.
   `coding` (user config, default no limit) caps agent sessions at once across
   every cast attached to the daemon; a `coding` call past it waits for a slot.
+- **The worktree pool.** `@ritual(worktree=True)` runs a spawned cast in a
+  pooled worktree, leased before spawn and parked on `vekna/wt-<n>` after.
+  `[circle] worktrees` (default 2) sizes the pool and `prepare` runs once in
+  each new tree. A tree left dirty or mid-merge is reported as blocked
+  (`TreeBlocked`) and stays out of the pool until it is clean.
+  ([#140](https://github.com/fancysnake/vekna/issues/140))
 
 ### Changed
 

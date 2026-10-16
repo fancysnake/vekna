@@ -15,6 +15,7 @@ from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner
+from vekna.links.worktrees import GitTrees
 from vekna.mills.circle import Circle, CodingPool
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
@@ -29,6 +30,7 @@ from vekna.wire import (
     CodingSlotRequested,
     DecideResolved,
     StopRequested,
+    TreeBlocked,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -47,6 +49,9 @@ _CAST_COMMAND = (sys.executable, "-m", CLI_MODULE, "cast", "--wired")
 # that has been running vekna for a year, not about the last hour.
 _KEPT = 200
 _DAEMON_LOG = "daemon.log"
+# Out of the way of editors and `mise`, which would trip over a tree in the
+# project.
+_WORKTREES = "worktrees"
 _LOCK_SUFFIX = ".lock"
 _NO_DAEMON = "no daemon running"
 _STOPPED = "stopped the daemon"
@@ -68,6 +73,20 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
         log.write(debug_line(routed))
 
     return record
+
+
+# A tree left blocked is the operator's to clean, and the daemon's log is where
+# it says so whether or not a window is open.
+def _logging(apply: Callable[[CastMessage], None]) -> Callable[[CastMessage], None]:
+    def logged(message: CastMessage) -> None:
+        if isinstance(message, TreeBlocked):
+            _logged(
+                f"{message.path} is blocked after cast {message.cast_id}: "
+                f"{message.reason}"
+            )
+        apply(message)
+
+    return logged
 
 
 # Said into `daemon.log`, which is where a detached daemon's stderr goes: there
@@ -114,8 +133,9 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     limits = ConfigLimits(say=_logged)
     circle = Circle(
         casts=hub,
-        apply=hub.apply,
+        apply=_logging(hub.apply),
         spawn=Spawner(command=_CAST_COMMAND, runs=default_runs_root()),
+        trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
     )
     pool = CodingPool(tell=hub.tell, limits=limits)

@@ -12,6 +12,7 @@ from uuid import uuid4
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from vekna.wire import (
+    NEEDS_TREE,
     CastHello,
     WireMessage,
     default_config_path,
@@ -62,7 +63,10 @@ _UNATTENDED_FLAG = "--unattended"
 # Runtime-only, like `--resume`: the daemon spawns a cast with it, and a cast
 # with it has no terminal to ask on.
 _WIRED_FLAG = "--wired"
-_LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG})
+# Spawned in a tree the daemon leased for it.
+_LEASED_FLAG = "--leased"
+_LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG, _LEASED_FLAG})
+_NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -308,6 +312,7 @@ def _show_text(the_ritual: Ritual) -> str:
     lines = [
         the_ritual.name,
         f"max steps: {the_ritual.max_steps}",
+        *(["worktree: yes"] if the_ritual.worktree else []),
         "",
         "components:",
         *_component_lines(the_ritual),
@@ -560,6 +565,14 @@ async def _run(plan: _Plan) -> int:
             await watcher
 
 
+# Only a queued first run asks: a cast typed by hand runs where it was typed, and
+# a resumed one carries on in the tree its interrupted run left.
+def _needs_tree(plan: _Plan, *, leased: bool) -> bool:
+    return (
+        plan.wired and plan.cast_id is not None and plan.ritual.worktree and not leased
+    )
+
+
 async def _drive(argv: list[str]) -> int:
     # Leading only, as the outer command hands them: past the ritual's name a
     # flag is a component's.
@@ -580,6 +593,9 @@ async def _drive(argv: list[str]) -> int:
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
+    if _needs_tree(plan, leased=_LEASED_FLAG in leading):
+        sys.stderr.write(_NEEDS_TREE)
+        return NEEDS_TREE
     return await _run(plan)
 
 

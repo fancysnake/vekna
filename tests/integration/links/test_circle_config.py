@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from vekna.links.circle_config import ConfigLimits
-from vekna.pacts.circle import DEFAULT_PROCESSES
+from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES
 
 _MINE = 8
 _THE_PROJECT_S = 2
@@ -88,3 +88,33 @@ class TestCoding:
 
         assert ConfigLimits(say=said.append).coding() is None
         assert len(said) == 1
+
+
+@pytest.mark.usefixtures("config")
+class TestWorktrees:
+    @staticmethod
+    def test_nothing_configured_is_two_trees_and_no_prepare(tmp_path: Path):
+        limits = ConfigLimits(say=_quiet)
+        project = str(_project(tmp_path))
+
+        assert limits.worktrees(project) == DEFAULT_WORKTREES
+        assert limits.prepare(project) is None
+
+    @staticmethod
+    def test_the_project_s_own_wins_over_the_user_s(config: Path, tmp_path: Path):
+        config.write_text(
+            '[circle]\nworktrees = 5\nprepare = "mine"\n', encoding="utf-8"
+        )
+        project = _project(tmp_path, '[circle]\nworktrees = 0\nprepare = "ours"\n')
+        limits = ConfigLimits(say=_quiet)
+
+        assert limits.worktrees(str(project / "deep")) == 0
+        assert limits.prepare(str(project / "deep")) == "ours"
+
+    @staticmethod
+    def test_the_user_s_counts_where_the_project_says_nothing(
+        config: Path, tmp_path: Path
+    ):
+        config.write_text('[circle]\nprepare = "mine"\n', encoding="utf-8")
+
+        assert ConfigLimits(say=_quiet).prepare(str(_project(tmp_path))) == "mine"

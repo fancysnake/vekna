@@ -28,6 +28,7 @@ from vekna.wire import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
+    TreeBlocked,
     WireMessage,
 )
 
@@ -211,6 +212,8 @@ class Hub(Casts, Routes):
             if view.status == "queued":
                 yield CastQueued(cast_id=view.hello.cast_id)
             yield from _replay_goodbye(view)
+            if view.blocked is not None:
+                yield view.blocked
 
 
 # `view`, not `cast`, throughout: the domain word collides with `typing.cast` in
@@ -222,6 +225,10 @@ class Hub(Casts, Routes):
 def _refusal(view: CastView, message: CastUpdate) -> str | None:
     if isinstance(message, _ELSEWHERE):
         return _elsewhere(message)
+    # Said after the cast is gone, and nothing else about it changes.
+    if isinstance(message, TreeBlocked):
+        view.blocked = message
+        return None
     return _update(view, message)
 
 

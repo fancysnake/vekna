@@ -6,14 +6,17 @@ from vekna.wire import CastHello
 
 # What a project's circle allows when nothing says otherwise.
 DEFAULT_PROCESSES = 4
+DEFAULT_WORKTREES = 2
 
 
 # Read each time they are asked for, so an edited config counts from the next
-# cast on without restarting the daemon. `processes` is per project, found from
-# the tree the cast runs in; `coding` is per account, so only the user's own
-# config says it, and `None` is no limit.
+# cast on without restarting the daemon. `processes`, `worktrees` and `prepare`
+# are per project, found from the tree the cast was asked from; `coding` is per
+# account, so only the user's own config says it, and `None` is no limit.
 class Limits(Protocol):
     def processes(self, project_root: str) -> int: ...
+    def worktrees(self, project_root: str) -> int: ...
+    def prepare(self, project_root: str) -> str | None: ...
     def coding(self) -> int | None: ...
 
 
@@ -26,4 +29,30 @@ class Exited:
     said: str
 
 
-Spawn = Callable[[CastHello], Awaitable[Exited]]
+# The tree is where the cast runs, or `None` for the tree it was asked from.
+Spawn = Callable[[CastHello, str | None], Awaitable[Exited]]
+
+
+# A tree could not be made ready: `git worktree add` refused, or `prepare`
+# failed. The cast that wanted it ends with this as its reason.
+class TreeError(Exception):
+    pass
+
+
+# A project's pooled worktrees, read off git each time rather than remembered.
+# `held` is every tree a live cast stands in, which only the daemon knows.
+class Trees(Protocol):
+    # A free tree, or a new one while the pool is under `count`, prepared;
+    # `None` when every tree is held or blocked. Raises `TreeError`.
+    async def lease(
+        self,
+        *,
+        project_root: str,
+        project: str,
+        held: set[str],
+        count: int,
+        prepare: str | None,
+    ) -> str | None: ...
+
+    # Why the tree could not be parked, or `None` once it is.
+    async def release(self, tree: str) -> str | None: ...

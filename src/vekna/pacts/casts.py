@@ -10,6 +10,7 @@ from vekna.wire import (
     RiteEndStatus,
     RiteStarted,
     RunRecord,
+    TreeBlocked,
 )
 
 RiteStatus = Literal["running"] | RiteEndStatus
@@ -59,6 +60,8 @@ class CastView:
     detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, DecideRequested] = field(default_factory=dict)
+    # The pooled tree it left unparkable, if it did.
+    blocked: TreeBlocked | None = None
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator
