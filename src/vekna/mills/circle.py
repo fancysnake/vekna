@@ -98,7 +98,7 @@ class Leasing:
             )
             if tree is not None:
                 self._needs_tree[hello.cast_id] = tree
-        return tree
+            return tree
 
     def _lock(self, project: str) -> asyncio.Lock:
         return self._locks.setdefault(project, asyncio.Lock())

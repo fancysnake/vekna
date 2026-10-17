@@ -305,6 +305,7 @@ class TestTrees:
         await _asked_for_a_tree(circle, spawn, "c1")
         await _asked_for_a_tree(circle, spawn, "c2")
         assert spawn.trees == [None, "/pool/1", None]
+        assert trees.leases[1]["held"] == {"/pool/1"}
         assert hub.casts["c2"].status == "queued"
 
         hub.apply(_hello("c1"))
