@@ -37,7 +37,8 @@ async def look(state: Look) -> Done[Stood]:
     if result.exit_code:
         msg = f"reading the tree failed: {said(result)}"
         raise RitualError(msg)
-    root, branch = result.stdout.splitlines()
+    # A detached HEAD prints no branch line.
+    root, _, branch = result.stdout.rstrip("\n").partition("\n")
     if state.dirty and (left := await shell(f"echo dirt > {DIRT}")).exit_code:
         msg = f"leaving {DIRT} failed: {said(left)}"
         raise RitualError(msg)

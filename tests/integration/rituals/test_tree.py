@@ -34,3 +34,12 @@ class TestTree:
         with pytest.raises(RitualError, match="reading the tree failed: not a git"):
             trial.walk(look, Look(dirty=False))
         assert trial.shell.commands == [_WHERE]
+
+    @staticmethod
+    def test_detached_head_reads_no_branch(trial: Trial) -> None:
+        trial.shell.replies(when=_WHERE, exit_code=0, stdout="/pool/1\n")
+
+        transition = trial.walk(look, Look(dirty=False))
+
+        assert transition == Done(Stood(root="/pool/1", branch="", dirty=False))
+        assert trial.shell.commands == [_WHERE]
