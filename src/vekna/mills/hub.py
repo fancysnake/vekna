@@ -54,6 +54,7 @@ _Viewed = (
     | DecideRequested
     | DecideResolved
     | DecideWithdrawn
+    | TreeBlocked
 )
 
 
@@ -225,10 +226,6 @@ class Hub(Casts, Routes):
 def _refusal(view: CastView, message: CastUpdate) -> str | None:
     if isinstance(message, _ELSEWHERE):
         return _elsewhere(message)
-    # Said after the cast is gone, and nothing else about it changes.
-    if isinstance(message, TreeBlocked):
-        view.blocked = message
-        return None
     return _update(view, message)
 
 
@@ -248,15 +245,16 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             view.rites[message.rite_id] = RiteView(started=message)
         case RiteDelta() | RiteFinished():
             refused = _update_rite(view, message)
-        case DecideRequested():
-            view.waiting[message.request_id] = message
-        case DecideResolved() | DecideWithdrawn():
-            refused = _answer(view, message)
+        case DecideRequested() | DecideResolved() | DecideWithdrawn():
+            refused = _update_decide(view, message)
         case CastGoodbye():
             view.status = message.status
             view.detail = message.detail
             # A cast that is gone is not still asking.
             view.waiting.clear()
+        case TreeBlocked():
+            # Said after the cast is gone, and nothing else about it changes.
+            view.blocked = message
         case _:
             assert_never(message)
     return refused
@@ -278,7 +276,12 @@ def _elsewhere(
     return _LOCKS_LATER
 
 
-def _answer(view: CastView, message: DecideResolved | DecideWithdrawn) -> str | None:
+def _update_decide(
+    view: CastView, message: DecideRequested | DecideResolved | DecideWithdrawn
+) -> str | None:
+    if isinstance(message, DecideRequested):
+        view.waiting[message.request_id] = message
+        return None
     if view.waiting.pop(message.request_id, None) is None:
         return _NO_PROMPT
     return None

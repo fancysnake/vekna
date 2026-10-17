@@ -16,7 +16,7 @@ from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner
 from vekna.links.worktrees import GitTrees
-from vekna.mills.circle import Circle, CodingPool
+from vekna.mills.circle import Circle, CodingPool, Leasing
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Routes, Surface
@@ -30,7 +30,6 @@ from vekna.wire import (
     CodingSlotRequested,
     DecideResolved,
     StopRequested,
-    TreeBlocked,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -75,20 +74,6 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
     return record
 
 
-# A tree left blocked is the operator's to clean, and the daemon's log is where
-# it says so whether or not a window is open.
-def _logging(apply: Callable[[CastMessage], None]) -> Callable[[CastMessage], None]:
-    def logged(message: CastMessage) -> None:
-        if isinstance(message, TreeBlocked):
-            _logged(
-                f"{message.path} is blocked after cast {message.cast_id}: "
-                f"{message.reason}"
-            )
-        apply(message)
-
-    return logged
-
-
 # Said into `daemon.log`, which is where a detached daemon's stderr goes: there
 # is no view of its own to say it on.
 def _logged(note: str) -> None:
@@ -131,13 +116,14 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
     limits = ConfigLimits(say=_logged)
-    circle = Circle(
+    leasing = Leasing(
         casts=hub,
-        apply=_logging(hub.apply),
+        say=_logged,
         spawn=Spawner(command=_CAST_COMMAND, runs=default_runs_root()),
         trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
     )
+    circle = Circle(casts=hub, apply=hub.apply, leasing=leasing, limits=limits)
     pool = CodingPool(tell=hub.tell, limits=limits)
     server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
     _logged(f"listening on {path}")

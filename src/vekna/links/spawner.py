@@ -7,7 +7,6 @@ from vekna.wire import CastHello, run_file
 
 _LOG = "cast.log"
 _RESUME = "--resume"
-_LEASED = "--leased"
 
 
 # A spawned cast is a `vekna cast --resume <id>` in the tree it was asked from,
@@ -27,7 +26,6 @@ class Spawner:
             with log.open("ab") as out:
                 process = await asyncio.create_subprocess_exec(
                     *self._command,
-                    *([] if tree is None else [_LEASED]),
                     _RESUME,
                     hello.cast_id,
                     cwd=hello.project_root if tree is None else tree,

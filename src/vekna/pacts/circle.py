@@ -42,17 +42,15 @@ class TreeError(Exception):
 # A project's pooled worktrees, read off git each time rather than remembered.
 # `held` is every tree a live cast stands in, which only the daemon knows.
 class Trees(Protocol):
-    # A free tree, or a new one while the pool is under `count`, prepared;
-    # `None` when every tree is held or blocked. Raises `TreeError`.
+    # A free tree, or a new one while the pool is under `count`; `None` while
+    # one is held, as it frees when its cast ends. Raises `TreeError`, also
+    # when every tree is blocked and none held, since nothing would free one.
     async def lease(
-        self,
-        *,
-        project_root: str,
-        project: str,
-        held: set[str],
-        count: int,
-        prepare: str | None,
+        self, *, project_root: str, project: str, held: set[str], count: int
     ) -> str | None: ...
+
+    # Once per tree, not per lease. Raises `TreeError`.
+    async def prepare(self, tree: str, command: str | None) -> None: ...
 
     # Why the tree could not be parked, or `None` once it is.
     async def release(self, tree: str) -> str | None: ...

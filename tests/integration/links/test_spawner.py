@@ -43,16 +43,16 @@ class TestSpawner:
         assert log == f"{project}\nasked --resume c1\n"
 
     @staticmethod
-    async def test_a_leased_cast_runs_in_the_tree_and_is_told_so(tmp_path: Path):
+    async def test_a_leased_cast_runs_in_the_tree(tmp_path: Path):
         tree = tmp_path / "tree"
         tree.mkdir()
         spawn = Spawner(command=[sys.executable, "-c", _SAYS], runs=tmp_path / "runs")
 
         exited = await spawn(_hello(tmp_path), str(tree))
 
-        assert exited == Exited(code=3, said="asked --leased --resume c1")
+        assert exited == Exited(code=3, said="asked --resume c1")
         log = (tmp_path / "runs" / "c1" / "cast.log").read_text()
-        assert log == f"{tree}\nasked --leased --resume c1\n"
+        assert log == f"{tree}\nasked --resume c1\n"
 
     @staticmethod
     async def test_a_command_that_will_not_start_says_why(tmp_path: Path):

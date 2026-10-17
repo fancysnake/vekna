@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt, ValidationError
+from pydantic import BaseModel, ConfigDict, PositiveInt, ValidationError
 
 from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES, Limits
 from vekna.wire import default_config_path, project_config_path, read_toml
@@ -14,7 +14,7 @@ class _Circle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     processes: PositiveInt | None = None
-    worktrees: NonNegativeInt | None = None
+    worktrees: PositiveInt | None = None
     prepare: str | None = None
     coding: PositiveInt | None = None
 

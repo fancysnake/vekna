@@ -245,8 +245,9 @@ Trees live under `~/.local/state/vekna/worktrees/<repo>-<hash>/<n>`, each parked
 on its own branch, `vekna/wt-<n>`, while no cast holds it. The pool is whatever
 `git worktree list` shows there, so a restarted daemon finds the same trees. A
 tree is made when every existing one is held and the pool is under
-`worktrees` (default 2), from the primary tree's `HEAD`; `prepare` runs once in
-it, logging to `<n>.prepare.log` beside it. A prepare that fails fails the cast
+`worktrees` (default 2), from the `HEAD` of the tree the cast was asked from;
+`prepare` runs once in it, logging to `<n>.prepare.log` beside it. A prepare
+that fails fails the cast
 and runs again at the tree's next lease. Nothing removes a tree.
 
 After the cast, the daemon parks a clean tree. A tree with uncommitted or
@@ -254,7 +255,9 @@ untracked changes, or with a merge, rebase, cherry-pick or revert in progress,
 is left as it is and marked blocked: the cast's drilled view and `daemon.log`
 say which tree and why. It joins the pool again once it is clean. Gitignored
 files are not changes, so whatever `prepare` builds must be gitignored, or
-every tree reads dirty. Past the pool, a cast waits queued for a tree.
+every tree reads dirty. Past the pool, a cast waits queued for a tree while
+another cast holds one; once every tree is blocked and none is held, nothing
+would free one, so the cast fails and names the blocked trees.
 
 A tree holds only what git tracks. A `.vekna.toml` or `rituals.py` kept out of
 git is not there, and a cast in the tree will not find its rituals. A

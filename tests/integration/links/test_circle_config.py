@@ -8,6 +8,7 @@ from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES
 _MINE = 8
 _THE_PROJECT_S = 2
 _CODING = 2
+_THE_PROJECT_S_TREES = 3
 
 
 @pytest.fixture(name="config")
@@ -105,10 +106,13 @@ class TestWorktrees:
         config.write_text(
             '[circle]\nworktrees = 5\nprepare = "mine"\n', encoding="utf-8"
         )
-        project = _project(tmp_path, '[circle]\nworktrees = 0\nprepare = "ours"\n')
+        project = _project(
+            tmp_path,
+            f'[circle]\nworktrees = {_THE_PROJECT_S_TREES}\nprepare = "ours"\n',
+        )
         limits = ConfigLimits(say=_quiet)
 
-        assert limits.worktrees(str(project / "deep")) == 0
+        assert limits.worktrees(str(project / "deep")) == _THE_PROJECT_S_TREES
         assert limits.prepare(str(project / "deep")) == "ours"
 
     @staticmethod
@@ -118,3 +122,13 @@ class TestWorktrees:
         config.write_text('[circle]\nprepare = "mine"\n', encoding="utf-8")
 
         assert ConfigLimits(say=_quiet).prepare(str(_project(tmp_path))) == "mine"
+
+    @staticmethod
+    def test_zero_is_refused(config: Path, tmp_path: Path):
+        said: list[str] = []
+        config.write_text("[circle]\nworktrees = 0\n", encoding="utf-8")
+
+        limits = ConfigLimits(say=said.append)
+
+        assert limits.worktrees(str(_project(tmp_path))) == DEFAULT_WORKTREES
+        assert len(said) == 1

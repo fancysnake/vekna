@@ -47,13 +47,15 @@ class _Pool:
         count: int = 2,
         prepare: str | None = None,
     ) -> str | None:
-        return await self.trees.lease(
+        tree = await self.trees.lease(
             project_root=str(self.repo),
             project=str(self.repo / ".git"),
             held=held or set(),
             count=count,
-            prepare=prepare,
         )
+        if tree is not None:
+            await self.trees.prepare(tree, prepare)
+        return tree
 
 
 @pytest.fixture(name="pool")
@@ -114,14 +116,26 @@ class TestLease:
 
     @staticmethod
     async def test_a_dirty_leftover_is_skipped_and_left_as_it_is(pool: _Pool):
-        tree = await pool.lease(count=1)
+        tree = await pool.lease(count=2)
         assert tree is not None
+        held = await pool.lease(held={tree}, count=2)
+        assert held is not None
         _git(Path(tree), "checkout", "-q", "-b", "feature")
         (Path(tree) / "a.txt").write_text("edited\n")
 
-        assert await pool.lease(count=1) is None
+        assert await pool.lease(held={held}, count=2) is None
         assert _git(Path(tree), "branch", "--show-current") == "feature"
         assert (Path(tree) / "a.txt").read_text() == "edited\n"
+
+    # No cast holds a tree, so none is going to free one.
+    @staticmethod
+    async def test_every_tree_blocked_and_none_held_says_which(pool: _Pool):
+        tree = await pool.lease(count=1)
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+
+        with pytest.raises(TreeError, match=r"every tree is blocked: .*/1 \(unc"):
+            await pool.lease(count=1)
 
     # No marker, so the next lease prepares it again rather than handing out a
     # tree that only looks ready.
@@ -206,6 +220,27 @@ class TestRelease:
         assert reason is not None
         assert "is not a tree of the pool" in reason
         assert _git(repo, "branch", "--show-current") == "feature"
+
+    @staticmethod
+    async def test_a_directory_under_the_root_not_numbered_is_no_tree(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        odd = Path(tree).parent / "notes"
+        odd.mkdir()
+
+        reason = await pool.trees.release(str(odd))
+
+        assert reason is not None
+        assert "is not a tree of the pool" in reason
+
+    @staticmethod
+    async def test_a_checkout_outside_the_pool_is_never_prepared(
+        pool: _Pool, repo: Path
+    ):
+        with pytest.raises(TreeError, match="is not a tree of the pool"):
+            await pool.trees.prepare(str(repo / "1"), "touch prepared")
+
+        assert not (repo / "1.prepared").exists()
 
 
 @pytest.mark.asyncio

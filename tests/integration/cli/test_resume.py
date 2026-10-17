@@ -152,15 +152,35 @@ class TestResume:
         assert not (project / "ran.log").exists()
         assert "needs a worktree" in capsys.readouterr().err
 
+    # Spawned anywhere but where it was asked from is spawned in its lease.
     @staticmethod
-    def test_a_leased_tree_ritual_runs(project: Path, tmp_path: Path):
+    def test_a_leased_tree_ritual_runs(
+        project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         runs = tmp_path / "runs"
         _journalled(project, runs, "q1", ritual="tree_job")
         Journal(runs).record(CastQueued(cast_id="q1"))
+        tree = tmp_path / "tree"
+        tree.mkdir()
+        shutil.copy(project / "rituals.py", tree)
+        monkeypatch.chdir(tree)
 
-        assert main(["--wired", "--leased", "--resume", "q1"]) == 0
+        assert main(["--wired", "--resume", "q1"]) == 0
 
-        assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+        assert (tree / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    # The same tree by another path is still where it was asked from.
+    @staticmethod
+    def test_asked_from_a_symlink_to_where_it_runs_still_asks_for_a_tree(
+        project: Path, tmp_path: Path
+    ):
+        runs = tmp_path / "runs"
+        link = tmp_path / "link"
+        link.symlink_to(project)
+        _journalled(link, runs, "q1", ritual="tree_job")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--wired", "--resume", "q1"]) == NEEDS_TREE
 
     # Typed by hand, it runs where it was typed: the operator picked the tree.
     @staticmethod

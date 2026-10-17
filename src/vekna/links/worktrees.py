@@ -30,13 +30,7 @@ class GitTrees(Trees):
         self._root = root
 
     async def lease(
-        self,
-        *,
-        project_root: str,
-        project: str,
-        held: set[str],
-        count: int,
-        prepare: str | None,
+        self, *, project_root: str, project: str, held: set[str], count: int
     ) -> str | None:
         try:
             home = await asyncio.to_thread(_home, self._root, project)
@@ -45,22 +39,36 @@ class GitTrees(Trees):
             raise TreeError(msg) from error
         pool = await _pool(project_root, home)
         taken = await asyncio.to_thread(_resolved, held)
-        for number, tree in sorted(pool.items()):
+        blocked: list[str] = []
+        for tree in (tree for _, tree in sorted(pool.items()) if tree not in taken):
             # A tree nobody holds and off its parking branch is one a dead cast
             # left; the release that parks it is the check that it is clean.
-            if tree in taken or await self.release(str(tree)) is not None:
-                continue
-            await _prepared(home=home, number=number, prepare=prepare)
+            if (reason := await self.release(str(tree))) is None:
+                return str(tree)
+            blocked.append(f"{tree} ({reason})")
+        if len(pool) < count:
+            number = next(n for n in range(1, count + 1) if n not in pool)
+            tree = home / str(number)
+            await _git(
+                project_root,
+                "worktree",
+                "add",
+                str(tree),
+                "-B",
+                _branch(number),
+                "HEAD",
+            )
             return str(tree)
-        if len(pool) >= count:
+        if len(blocked) < len(pool):
             return None
-        number = next(n for n in range(1, count + 1) if n not in pool)
-        tree = home / str(number)
-        await _git(
-            project_root, "worktree", "add", str(tree), "-B", _branch(number), "HEAD"
-        )
-        await _prepared(home=home, number=number, prepare=prepare)
-        return str(tree)
+        msg = f"every tree is blocked: {', '.join(blocked)}"
+        raise TreeError(msg)
+
+    # The marker and the log are written beside the tree, so only a tree of
+    # the pool is prepared.
+    async def prepare(self, tree: str, command: str | None) -> None:
+        number = await self._numbered(tree)
+        await _prepared(home=Path(tree).parent, number=number, prepare=command)
 
     # Parked only once it is clean, because `git checkout` carries local
     # changes across a branch switch whenever they do not conflict. Gitignored
@@ -68,20 +76,26 @@ class GitTrees(Trees):
     # Only a tree of the pool is ever switched: a path from anywhere else is
     # somebody's checkout.
     async def release(self, tree: str) -> str | None:
-        resolved = await asyncio.to_thread(Path(tree).resolve)
-        if resolved.parent.parent != await asyncio.to_thread(self._root.resolve):
-            return f"{tree} is not a tree of the pool under {self._root}"
         try:
+            number = await self._numbered(tree)
             if await _git(tree, "status", "--porcelain"):
                 return "uncommitted changes"
             git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
             for marker, operation in _IN_PROGRESS.items():
                 if await asyncio.to_thread((git_dir / marker).exists):
                     return f"{operation} in progress"
-            await _git(tree, "checkout", "--quiet", _branch(int(Path(tree).name)))
+            await _git(tree, "checkout", "--quiet", _branch(number))
         except TreeError as error:
             return str(error)
         return None
+
+    async def _numbered(self, tree: str) -> int:
+        resolved = await asyncio.to_thread(Path(tree).resolve)
+        root = await asyncio.to_thread(self._root.resolve)
+        if (number := _number(resolved, root)) is None:
+            msg = f"{tree} is not a tree of the pool under {self._root}"
+            raise TreeError(msg)
+        return number
 
 
 def _branch(number: int) -> str:
@@ -112,9 +126,16 @@ def _parsed(listed: str, home: Path) -> dict[int, Path]:
         if not line.startswith(_WORKTREE):
             continue
         tree = Path(line.removeprefix(_WORKTREE)).resolve()
-        if tree.parent == home and tree.name.isdigit():
-            pool[int(tree.name)] = tree
+        if tree.parent == home and (number := _number(tree, home.parent)) is not None:
+            pool[number] = tree
     return pool
+
+
+# `<root>/<home>/<n>`, both resolved; `None` for any other path.
+def _number(tree: Path, root: Path) -> int | None:
+    if tree.parent.parent != root or not tree.name.isdecimal():
+        return None
+    return int(tree.name)
 
 
 # Once per tree, not per cast: installing a venv is minutes. A tree whose
