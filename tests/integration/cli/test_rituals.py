@@ -39,7 +39,7 @@ _RITUALS = textwrap.dedent("""
         return Tick(left=components.start)
 
 
-    @ritual("ping")
+    @ritual("ping", worktree=True)
     async def ping(_: NoComponents) -> Done[Pong]:
         return Done(Pong(said="pong"))
     """)
@@ -233,6 +233,7 @@ class TestRitualsShow:
         out = capsys.readouterr().out
         assert exit_code == 0
         assert "countdown\nmax steps: " in out
+        assert "worktree" not in out
         assert "  --start <int>\n" in out
         assert "  --label <str>  (optional)\n" in out
         assert "  --note <str>  (optional)\n" in out
@@ -248,6 +249,7 @@ class TestRitualsShow:
 
         out = capsys.readouterr().out
         assert exit_code == 0
+        assert "ping\nmax steps: 1000\nworktree: yes\n" in out
         assert "components:\n  (none)\n" in out
         assert "  (start) → (done)\n" in out
 

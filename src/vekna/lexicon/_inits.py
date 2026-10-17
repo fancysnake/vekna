@@ -12,6 +12,7 @@ from uuid import uuid4
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from vekna.wire import (
+    NEEDS_TREE,
     CastHello,
     WireMessage,
     default_config_path,
@@ -63,6 +64,7 @@ _UNATTENDED_FLAG = "--unattended"
 # with it has no terminal to ask on.
 _WIRED_FLAG = "--wired"
 _LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG})
+_NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -308,6 +310,7 @@ def _show_text(the_ritual: Ritual) -> str:
     lines = [
         the_ritual.name,
         f"max steps: {the_ritual.max_steps}",
+        *(["worktree: yes"] if the_ritual.worktree else []),
         "",
         "components:",
         *_component_lines(the_ritual),
@@ -393,6 +396,9 @@ class _Plan(NamedTuple):
     cast_id: str | None = None
     # Spawned by the daemon: no terminal, so prompts are answered over the wire.
     wired: bool = False
+    # Run somewhere other than the tree it was asked from, which only the tree
+    # the daemon leased for it is: its first spawn is always where it was asked.
+    leased: bool = False
 
 
 # The record holds the components as the CLI already validated them once, so
@@ -404,7 +410,13 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
     components = the_ritual.components.model_validate(hello.components)
     if resumption.record.status == "queued":
-        return _Plan(the_ritual, components, unattended, cast_id=cast_id)
+        return _Plan(
+            the_ritual,
+            components,
+            unattended,
+            cast_id=cast_id,
+            leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
+        )
     return _Plan(
         ritual=the_ritual,
         components=components,
@@ -560,6 +572,17 @@ async def _run(plan: _Plan) -> int:
             await watcher
 
 
+# Only a queued first run asks: a cast typed by hand runs where it was typed, and
+# a resumed one carries on in the tree its interrupted run left.
+def _needs_tree(plan: _Plan) -> bool:
+    return (
+        plan.wired
+        and plan.cast_id is not None
+        and plan.ritual.worktree
+        and not plan.leased
+    )
+
+
 async def _drive(argv: list[str]) -> int:
     # Leading only, as the outer command hands them: past the ritual's name a
     # flag is a component's.
@@ -580,6 +603,9 @@ async def _drive(argv: list[str]) -> int:
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
+    if _needs_tree(plan):
+        sys.stderr.write(_NEEDS_TREE)
+        return NEEDS_TREE
     return await _run(plan)
 
 

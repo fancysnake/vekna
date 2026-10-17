@@ -84,6 +84,23 @@ class CastQueued(BaseModel):
     cast_id: str
 
 
+# How a spawned cast whose ritual runs in a worktree says it was spawned without
+# one: it exits with this before its hello, and the daemon queues it again for a
+# slot and a tree. Only the cast knows its ritual, and the daemon loads none.
+# EX_TEMPFAIL: try again later.
+NEEDS_TREE = 75
+
+
+# The tree a cast ran in was not parked after it: uncommitted work, or a merge or
+# rebase left open. Nothing resets it, so it stays out of the pool until somebody
+# cleans it, and the cast that left it is who it is reported against.
+class TreeBlocked(BaseModel):
+    kind: Literal["tree_blocked"] = "tree_blocked"
+    cast_id: str
+    path: str
+    reason: str
+
+
 class GrimoireBegin(BaseModel):
     kind: Literal["grimoire_begin"] = "grimoire_begin"
     cast_id: str
@@ -244,6 +261,7 @@ CastUpdate = (
     | CodingSlotRequested
     | CodingSlotGranted
     | CodingSlotReleased
+    | TreeBlocked
 )
 
 CastMessage = CastHello | CastUpdate
