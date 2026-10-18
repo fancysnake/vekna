@@ -28,6 +28,19 @@ class TestTree:
         assert trial.shell.commands == [_WHERE, "echo dirt > tree.dirt"]
 
     @staticmethod
+    def test_dirt_that_will_not_write_fails_the_cast(trial: Trial) -> None:
+        trial.shell.replies(when=_WHERE, exit_code=0, stdout="/pool/1\nfix\n")
+        trial.shell.replies(
+            when="echo dirt > tree.dirt", exit_code=1, stderr="permission denied"
+        )
+
+        with pytest.raises(
+            RitualError, match=r"leaving tree\.dirt failed: permission denied"
+        ):
+            trial.walk(look, Look(dirty=True))
+        assert trial.shell.commands == [_WHERE, "echo dirt > tree.dirt"]
+
+    @staticmethod
     def test_outside_git_fails_the_cast(trial: Trial) -> None:
         trial.shell.replies(when=_WHERE, exit_code=128, stderr="not a git repository")
 
