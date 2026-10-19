@@ -13,7 +13,7 @@ from vekna.lexicon._pacts import (
     StepBoundaryError,
     Transition,
 )
-from vekna.lexicon._specs import DEFAULT_MAX_STEPS
+from vekna.lexicon._specs import DEFAULT_MAX_STEPS, SUMMARY_WIDTH
 
 from ._annotations import _component_flags, _components_model, _exits, _payloads
 from .bounds import bounded
@@ -36,19 +36,16 @@ _LaterT = TypeVar("_LaterT", bound=BaseModel)
 # right to call.
 _Written = Callable[[_PayloadT], Transition | Awaitable[Transition]]
 
-_SUMMARY_WIDTH = 60
-
 
 # One line, cut to fit, of what the call was actually given. Cut here rather
-# than at the surface: `summary` is what the journal keeps, and a 5KB prompt
-# under that name is not a summary. Not `textwrap.shorten`, which drops a token
-# longer than the width entirely — a no-space command or URL would summarize to
-# a bare `…`.
+# than at the surface: a 5KB prompt is not a summary, whichever surface reads
+# it. Not `textwrap.shorten`, which drops a token longer than the width
+# entirely — a no-space command or URL would summarize to a bare `…`.
 def _cut(text: str) -> str:
     collapsed = " ".join(text.split())
-    if len(collapsed) <= _SUMMARY_WIDTH:
+    if len(collapsed) <= SUMMARY_WIDTH:
         return collapsed
-    return collapsed[: _SUMMARY_WIDTH - 1] + "…"
+    return collapsed[: SUMMARY_WIDTH - 1] + "…"
 
 
 # Signature-forwarding via ParamSpec is str-tainted the same way the rest of
