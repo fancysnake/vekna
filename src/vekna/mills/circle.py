@@ -93,7 +93,8 @@ class Leasing:
             tree = await self._trees.lease(
                 project_root=root,
                 project=hello.project,
-                held=running | {held for held in self._needs_tree.values() if held},
+                held=running
+                | {held for held in self._needs_tree.values() if held is not None},
                 count=self._limits.worktrees(root),
             )
             if tree is not None:

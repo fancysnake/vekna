@@ -203,6 +203,24 @@ class TestStepOptions:
             asyncio.run(wrapped.run(Ping(n=4)))
 
 
+class TestRitualOptions:
+    @staticmethod
+    def test_a_ritual_runs_in_its_project_unless_it_asks_for_a_worktree():
+        @ritual("plain")
+        def _enter(components: Ping) -> Done[Pong]:
+            return Done(Pong(n=components.n))
+
+        assert _enter.worktree is False
+
+    @staticmethod
+    def test_a_ritual_that_asks_for_a_worktree_says_so():
+        @ritual("pooled", worktree=True)
+        def _enter(components: Ping) -> Done[Pong]:
+            return Done(Pong(n=components.n))
+
+        assert _enter.worktree is True
+
+
 # A step two others transition into admits either shape.
 class TestUnionPayload:
     @staticmethod
