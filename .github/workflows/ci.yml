@@ -29,6 +29,18 @@ jobs:
       - run: poetry install
       - run: mise run lint:py
 
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - run: mise install
+      - run: mise settings experimental=true
+      - run: poetry install
+      - run: mise run test:mutation
+
   test:
     runs-on: ubuntu-latest
     strategy:
