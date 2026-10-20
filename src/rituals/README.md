@@ -8,6 +8,7 @@ vekna cast review [--base <ref>] [--only <file>] [--focus <text>]
 vekna cast merge_ready [--bound N]
 vekna cast triage --link <url>
 vekna cast nap [--naps N] [--seconds N]
+vekna cast tree [--dirty true]
 ```
 
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
@@ -24,6 +25,10 @@ vekna cast nap [--naps N] [--seconds N]
 - [`nap`](nap.py) sleeps N times, counting, and does nothing else: a cast to
   watch from the dashboard, stop the daemon under, or kill and `--continue`,
   without paying an agent.
+- [`tree`](tree.py) runs in a pooled worktree and returns its root and
+  branch; `--dirty true` leaves an untracked file, so the tree is left
+  blocked. Start it with `c` from the dashboard: a cast typed in a shell runs
+  where it was typed.
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for

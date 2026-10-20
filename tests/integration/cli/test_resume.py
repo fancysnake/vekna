@@ -11,6 +11,7 @@ from vekna.inits.cli import init_command
 from vekna.lexicon._inits import main
 from vekna.links.journal import Journal
 from vekna.wire import (
+    NEEDS_TREE,
     CastHello,
     CastQueued,
     RiteFinished,
@@ -55,17 +56,24 @@ _RITUALS = textwrap.dedent("""
     @ritual("job")
     async def job(components: State) -> State:
         return State(left=components.left)
+
+
+    @ritual("tree_job", worktree=True)
+    async def tree_job(components: State) -> State:
+        return State(left=components.left)
     """)
 
 
-def _journalled(project: Path, runs: Path, cast_id: str) -> None:
+def _journalled(
+    project: Path, runs: Path, cast_id: str, *, ritual: str = "job"
+) -> None:
     journal = Journal(runs)
     journal.record(
         CastHello(
             cast_id=cast_id,
             project_root=str(project),
             project=str(project),
-            ritual="job",
+            ritual=ritual,
             components={"left": 1},
             started_at=_WHEN,
         )
@@ -123,6 +131,64 @@ class TestResume:
     def test_a_queued_record_is_a_first_run(project: Path, tmp_path: Path):
         runs = tmp_path / "runs"
         _journalled(project, runs, "q1")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    # Only the cast knows its ritual wants a tree, so a spawned one without a
+    # lease says so before it does anything, and the daemon queues it again.
+    @staticmethod
+    def test_a_spawned_tree_ritual_without_a_lease_asks_for_one(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        runs = tmp_path / "runs"
+        _journalled(project, runs, "q1", ritual="tree_job")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--wired", "--resume", "q1"]) == NEEDS_TREE
+
+        assert not (project / "ran.log").exists()
+        assert "needs a worktree" in capsys.readouterr().err
+
+    # Spawned anywhere but where it was asked from is spawned in its lease.
+    @staticmethod
+    def test_a_leased_tree_ritual_runs(
+        project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        runs = tmp_path / "runs"
+        _journalled(project, runs, "q1", ritual="tree_job")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+        tree = tmp_path / "tree"
+        tree.mkdir()
+        shutil.copy(project / "rituals.py", tree)
+        monkeypatch.chdir(tree)
+
+        assert main(["--wired", "--resume", "q1"]) == 0
+
+        assert (tree / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    # The same tree by another path is still where it was asked from.
+    @staticmethod
+    def test_asked_from_a_symlink_to_where_it_runs_still_asks_for_a_tree(
+        project: Path, tmp_path: Path
+    ):
+        runs = tmp_path / "runs"
+        link = tmp_path / "link"
+        link.symlink_to(project)
+        _journalled(link, runs, "q1", ritual="tree_job")
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--wired", "--resume", "q1"]) == NEEDS_TREE
+
+    # Typed by hand, it runs where it was typed: the operator picked the tree.
+    @staticmethod
+    def test_a_tree_ritual_resumed_by_hand_runs_where_it_is(
+        project: Path, tmp_path: Path
+    ):
+        runs = tmp_path / "runs"
+        _journalled(project, runs, "q1", ritual="tree_job")
         Journal(runs).record(CastQueued(cast_id="q1"))
 
         assert main(["--resume", "q1"]) == 0

@@ -242,7 +242,8 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | Kind | Direction | Notes |
 |------|-----------|-------|
 | `CastHello` | cast → daemon | cast_id, project_root, project (git common dir), ritual name, Components, started_at, wired (spawned by the daemon) |
-| `CastQueued` | daemon → surfaces | a cast the daemon recorded and has not spawned yet: no process slot is free |
+| `CastQueued` | daemon → surfaces | a cast the daemon recorded and has not spawned yet: no process slot, or no worktree, is free |
+| `TreeBlocked` | daemon → surfaces | the pooled worktree a cast ran in could not be parked after it: uncommitted changes, or a merge or rebase left open. Journaled with that cast |
 | `CastGoodbye` | cast → daemon | clean exit + final status |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |

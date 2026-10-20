@@ -15,7 +15,8 @@ from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner
-from vekna.mills.circle import Circle, CodingPool
+from vekna.links.worktrees import GitTrees
+from vekna.mills.circle import Circle, CodingPool, Leasing
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Routes, Surface
@@ -47,6 +48,9 @@ _CAST_COMMAND = (sys.executable, "-m", CLI_MODULE, "cast", "--wired")
 # that has been running vekna for a year, not about the last hour.
 _KEPT = 200
 _DAEMON_LOG = "daemon.log"
+# Out of the way of editors and `mise`, which would trip over a tree in the
+# project.
+_WORKTREES = "worktrees"
 _LOCK_SUFFIX = ".lock"
 _NO_DAEMON = "no daemon running"
 _STOPPED = "stopped the daemon"
@@ -112,12 +116,14 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
     limits = ConfigLimits(say=_logged)
-    circle = Circle(
+    leasing = Leasing(
         casts=hub,
-        apply=hub.apply,
+        say=_logged,
         spawn=Spawner(command=_CAST_COMMAND, runs=default_runs_root()),
+        trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
     )
+    circle = Circle(casts=hub, apply=hub.apply, leasing=leasing, limits=limits)
     pool = CodingPool(tell=hub.tell, limits=limits)
     server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
     _logged(f"listening on {path}")

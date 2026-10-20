@@ -24,6 +24,7 @@ from vekna.wire import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
+    TreeBlocked,
     WireMessage,
 )
 
@@ -523,6 +524,25 @@ class TestQueued:
         hub.apply(_hello())
 
         assert hub.casts["c1"].status == "running"
+
+
+class TestTreeBlocked:
+    # Said after the cast is gone, so it is replayed after its goodbye.
+    @staticmethod
+    def test_a_blocked_tree_is_held_on_its_cast_and_replayed_last():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        blocked = TreeBlocked(
+            cast_id="c1", path="/pool/1", reason="a merge in progress"
+        )
+
+        hub.apply(blocked)
+        late = _Surface()
+        hub.attach_surface(late)
+
+        assert hub.casts["c1"].blocked == blocked
+        assert late.sent[-2:] == [CastGoodbye(cast_id="c1", status="ok"), blocked]
 
 
 class TestPeers:
