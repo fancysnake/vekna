@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import os
 import shutil
+import subprocess
 import textwrap
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
@@ -850,3 +851,97 @@ class TestCodingSlots:
 
         assert first == CodingSlotGranted(cast_id="c1", request_id="s1")
         assert second == CodingSlotGranted(cast_id="c1", request_id="s2")
+
+
+_TREE_RITUALS = textwrap.dedent("""
+    from pathlib import Path
+
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, NoComponents, ritual, step
+
+
+    class Touch(BaseModel):
+        pass
+
+
+    @step
+    async def touch(_: Touch) -> Done[None]:
+        (Path.cwd() / "left.txt").write_text("mine")
+        return Done(None)
+
+
+    @ritual("tidy", worktree=True)
+    async def tidy(_: NoComponents) -> Done[None]:
+        return Done(None)
+
+
+    @ritual("messy", worktree=True)
+    async def messy(_: NoComponents) -> Touch:
+        return Touch()
+    """)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.name=v", "-c", "user.email=v@example.com", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+# A pool tree holds only what git tracks, so the rituals are committed.
+@pytest.fixture(name="repo")
+def _repo(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    project = socket_path.parent
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(project / "config"))
+    (project / "rituals.py").write_text(_TREE_RITUALS)
+    (project / ".gitignore").write_text("runs/\nstate/\nconfig/\nvekna.sock*\n")
+    _git(project, "init", "-q", "-b", "main")
+    _git(project, "add", ".")
+    _git(project, "commit", "-q", "-m", "rituals")
+    return project
+
+
+def _pool_tree(repo: Path) -> Path:
+    [tree] = (repo / "state" / "vekna" / "worktrees").glob("*/1")
+    return tree
+
+
+@pytest.mark.asyncio
+class TestWorktrees:
+    @staticmethod
+    async def test_a_worktree_ritual_runs_in_a_pool_tree_parked_after(repo: Path):
+        keys = _Keys()
+        async with _served(repo / "vekna.sock"):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c tidy")
+            await _spawned(lambda: keys.showing("1 done"))
+            keys.press("q")
+            await peer
+
+        tree = _pool_tree(repo)
+        [run] = Journal(repo / "runs").recent(limit=5)
+        assert not isinstance(run, DamagedRun)
+        assert run.status == "ok"
+        assert Path(run.hello.project_root) == tree.resolve()
+        assert _git(tree, "branch", "--show-current") == "vekna/wt-1"
+
+    @staticmethod
+    async def test_a_tree_left_dirty_is_blocked_and_said(
+        repo: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        keys = _Keys()
+        async with _served(repo / "vekna.sock"):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c messy")
+            await _spawned(lambda: keys.showing("1 done"))
+            keys.press("1")
+            await _spawned(lambda: keys.painted("left blocked: uncommitted changes"))
+            keys.press("q")
+            await peer
+
+        assert (_pool_tree(repo) / "left.txt").read_text() == "mine"
+        assert "is blocked after cast" in capsys.readouterr().err

@@ -327,6 +327,9 @@ class Ritual:
     max_steps: int
     exits: tuple[type[BaseModel], ...]
     ends: bool
+    # Run in a pooled worktree the daemon leases before spawn, never in the
+    # tree it was asked from. A cast typed by hand runs where it was typed.
+    worktree: bool = False
 
 
 def _identifier(value: str) -> str:

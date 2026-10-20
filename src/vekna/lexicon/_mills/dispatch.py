@@ -191,7 +191,9 @@ class _RitualDecorator(Protocol):
     def __call__(self, func: _Written[_ComponentsT]) -> Ritual: ...
 
 
-def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator:
+def ritual(
+    name: str, *, max_steps: int = DEFAULT_MAX_STEPS, worktree: bool = False
+) -> _RitualDecorator:
     if NAMESPACE_SEPARATOR in name:
         msg = (
             f"ritual {name!r}: {NAMESPACE_SEPARATOR!r} is reserved for a tome's "
@@ -223,6 +225,7 @@ def ritual(name: str, *, max_steps: int = DEFAULT_MAX_STEPS) -> _RitualDecorator
             max_steps=max_steps,
             exits=exits,
             ends=ends,
+            worktree=worktree,
         )
 
     return wrap
