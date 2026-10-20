@@ -74,6 +74,7 @@ dev = [
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
     "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0",
+    "mutmut (>=3.8.0,<4.0.0)",
 ]
 
 # Only `site:*` and the site workflow install this one — nothing else needs a
@@ -92,6 +93,33 @@ target-version = ['py311']
 
 [tool.deptry]
 known_first_party = ["vekna"]
+
+# MUTMUT
+
+[tool.mutmut]
+# NOTE: the unit suite owns `mills` (tests/CLAUDE.md); a mutant in any other
+# layer survives whatever only the integration suite could have killed, so
+# mutating `src` wholesale reports noise instead of gaps. `specs` is empty.
+source_paths = ["src/vekna/mills", "src/vekna/lexicon/_mills"]
+pytest_add_cli_args_test_selection = ["tests/unit"]
+# NOTE: mutmut runs the suite from a copy of the tree, so everything the unit
+# suite imports — and `vekna.edges`, which pytest loads through the pytest11
+# entry point — has to be copied beside the mutants. A new top-level package
+# under `src/vekna` belongs in this list.
+also_copy = [
+    "src/vekna/__init__.py",
+    "src/vekna/py.typed",
+    "src/vekna/edges",
+    "src/vekna/folio",
+    "src/vekna/gates",
+    "src/vekna/inits",
+    "src/vekna/lexicon",
+    "src/vekna/links",
+    "src/vekna/pacts",
+    "src/vekna/specs",
+    "src/vekna/trial",
+    "src/vekna/wire",
+]
 
 # IMPORT LINTER
 

@@ -1,0 +1,33 @@
+---
+name: Mutation Tests
+
+# A full run takes too long for the merge path, so it runs nightly on main,
+# where a failure means "a test got weaker" rather than "your change is wrong".
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - run: mise install
+      - run: mise exec -- poetry install
+      - run: mise run test:mutation
+
+      - run: mise exec -- mutmut export-cicd-stats
+        if: ${{ !cancelled() }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: mutation-report
+          path: ./mutants/mutmut-cicd-stats.json
+          retention-days: 30
