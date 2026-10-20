@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, PositiveInt, ValidationError
+from pydantic import BaseModel, ConfigDict, PositiveInt
 
 from vekna.pacts.circle import DEFAULT_PROCESSES, Limits
 from vekna.wire import default_config_path, project_config_path, read_toml
@@ -40,6 +40,6 @@ class ConfigLimits(Limits):
             return _Circle()
         try:
             return _File.model_validate(read_toml(path)).circle
-        except (OSError, ValueError, ValidationError) as error:
+        except (OSError, ValueError) as error:
             self._say(f"{path}: {error} — [circle] ignored")
             return _Circle()
