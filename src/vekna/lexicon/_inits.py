@@ -540,7 +540,7 @@ async def _run(plan: _Plan) -> int:
         renderer.render(event)
         link.send(to_wire(event, cast_id=cast_id))
 
-    grimoire = Grimoire(cast_id=cast_id, on_event=emit)
+    grimoire = Grimoire(on_event=emit)
 
     # The same backlog either way: at the start it is empty, and a daemon that
     # turns up later gets whatever has happened by then. One path, so the

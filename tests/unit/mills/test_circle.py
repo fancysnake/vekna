@@ -45,7 +45,7 @@ class _Spawn:
         self._exits[hello.cast_id] = future
         return await future
 
-    def exit(self, cast_id: str, *, code: int = 0, said: str = "") -> None:
+    def exit(self, cast_id: str, *, code: int | None = 0, said: str = "") -> None:
         self._exits[cast_id].set_result(Exited(code=code, said=said))
 
 
@@ -89,7 +89,8 @@ async def _settled() -> None:
 class TestProcesses:
     @staticmethod
     async def test_a_cast_past_the_limit_waits_queued():
-        circle, hub, spawn = _circle(_Limits(processes=1))
+        limits = _Limits(processes=1)
+        circle, hub, spawn = _circle(limits)
 
         circle.enqueue(_hello("c1"))
         circle.enqueue(_hello("c2"))
@@ -97,6 +98,17 @@ class TestProcesses:
 
         assert spawn.spawned == ["c1"]
         assert hub.casts["c2"].status == "queued"
+        assert limits.asked == ["/proj", "/proj"]
+
+    @staticmethod
+    async def test_the_limit_is_how_many_run_at_once():
+        circle, _, spawn = _circle(_Limits(processes=2))
+
+        for cast_id in ("c1", "c2", "c3"):
+            circle.enqueue(_hello(cast_id))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
 
     # Between its spawn and its hello a cast is still `queued` in the view, and
     # holds its slot all the same.
@@ -124,6 +136,23 @@ class TestProcesses:
         await _settled()
 
         assert spawn.spawned == ["c1", "c2"]
+        assert hub.casts["c1"].status == "ok"
+        assert hub.casts["c1"].detail is None
+
+    @staticmethod
+    async def test_a_cast_that_has_exited_leaves_the_loop_nothing_to_report():
+        errors: list[dict[str, object]] = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _, context: errors.append(context)
+        )
+        circle, _, spawn = _circle(_Limits())
+        circle.enqueue(_hello("c1"))
+        await _settled()
+
+        spawn.exit("c1")
+        await _settled()
+
+        assert not errors
 
     # Counting what is running in the project, not what this daemon spawned:
     # a `vekna cast` typed by hand takes a slot too.
@@ -171,18 +200,30 @@ class TestProcesses:
     # A ritual that is not there dies before its hello, so the only goodbye it
     # gets is the one written here, with what the process last said.
     @staticmethod
-    async def test_a_cast_that_dies_before_its_hello_fails_saying_why():
+    @pytest.mark.parametrize(
+        ("code", "said", "why"),
+        [
+            (
+                2,
+                "no ritual named 'nap'",
+                "exited 2 before its hello: no ritual named 'nap'",
+            ),
+            (None, "no such file", "would not start before its hello: no such file"),
+            (3, "", "exited 3"),
+        ],
+    )
+    async def test_a_cast_that_dies_before_its_hello_fails_saying_why(
+        code: int | None, said: str, why: str
+    ):
         circle, hub, spawn = _circle(_Limits())
         circle.enqueue(_hello("c1"))
         await _settled()
 
-        spawn.exit("c1", code=2, said="no ritual named 'nap'")
+        spawn.exit("c1", code=code, said=said)
         await _settled()
 
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].detail == (
-            "exited 2 before its hello: no ritual named 'nap'"
-        )
+        assert hub.casts["c1"].detail == why
 
 
 @pytest.mark.asyncio

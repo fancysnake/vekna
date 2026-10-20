@@ -53,6 +53,12 @@ async def same_name_as_alpha(components: State) -> Done[State]:
     return Done(State(x=components.x))
 
 
+@ritual("alpha")
+async def third_alpha(components: State) -> Done[State]:
+    await asyncio.sleep(0)
+    return Done(State(x=components.x))
+
+
 @ritual("beta")
 async def same_name_as_beta(components: State) -> Done[State]:
     await asyncio.sleep(0)
@@ -119,6 +125,23 @@ class TestCompendium:
             "name collisions:\n  ritual 'alpha' — declared in both local and other.a"
         )
 
+    @staticmethod
+    def test_two_rivals_to_one_ritual_are_two_collisions():
+        shelves = [
+            _shelf(alpha, origin="local"),
+            _shelf(same_name_as_alpha, origin="other.a"),
+            _shelf(third_alpha, origin="other.b"),
+        ]
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            Compendium(shelves)
+
+        assert str(raised.value) == (
+            "name collisions:\n"
+            "  ritual 'alpha' — declared in both local and other.a\n"
+            "  ritual 'alpha' — declared in both local and other.b"
+        )
+
     # A submodule that reaches a sibling's ritual imports it, so the sweep of a
     # package hands the same object over once per module that names it.
     @staticmethod
@@ -139,11 +162,24 @@ class TestCompendium:
         assert compendium.ritual("alpha") is alpha
 
     @staticmethod
-    def test_missing_ritual_raises():
+    def test_a_missing_ritual_lists_the_known_ones():
+        compendium = Compendium([_shelf(alpha, beta)])
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            compendium.ritual("nope")
+
+        assert str(raised.value) == (
+            "no ritual named 'nope' — known rituals: alpha, beta"
+        )
+
+    @staticmethod
+    def test_a_missing_ritual_in_an_empty_library_lists_nothing():
         compendium = Compendium([])
 
-        with pytest.raises(RitualDefinitionError):
+        with pytest.raises(RitualDefinitionError) as raised:
             compendium.ritual("nope")
+
+        assert str(raised.value) == "no ritual named 'nope'"
 
 
 class TestNamespaces:
@@ -176,7 +212,13 @@ class TestNamespaces:
 
     @staticmethod
     def test_a_bare_name_offered_by_one_tome_resolves_to_it():
-        compendium = Compendium([_shelf(beta), _shelf(alpha, namespace="tome")])
+        compendium = Compendium(
+            [
+                _shelf(beta),
+                _shelf(alpha, namespace="tome"),
+                _shelf(same_name_as_beta, namespace="other"),
+            ]
+        )
 
         assert compendium.ritual("alpha").name == "tome:alpha"
 

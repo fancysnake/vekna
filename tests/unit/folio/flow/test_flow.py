@@ -41,7 +41,7 @@ survey = entry(name="survey", payload=Gathering())
 class TestDecideMedium:
     @staticmethod
     def test_choice_confirm_free_round_trip_via_stdin():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
         renderer = StandaloneRenderer(
             out=io.StringIO(), inp=io.StringIO("y\nyes\nhello\n")
         )
@@ -120,7 +120,7 @@ jotter = entry(name="jotter", payload=Jotting())
 
 
 def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
-    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    grimoire = Grimoire(clock=_fixed_clock)
     return asyncio.run(
         run_cast(
             ritual=ritual,
@@ -177,7 +177,7 @@ class TestEmptyOptions:
     # resume, so it stops at the medium instead.
     @staticmethod
     def test_offering_no_options_is_refused():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
         with pytest.raises(MediumBoundaryError, match="at least one option"):
             asyncio.run(
@@ -279,7 +279,7 @@ async def empty_race(_: Unentered) -> Done[Note]:
 
 
 def _raced(payload: BaseModel) -> tuple[BaseModel | None, Grimoire]:
-    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    grimoire = Grimoire(clock=_fixed_clock)
     the_ritual = entry(payload=payload)
     result = asyncio.run(
         run_cast(

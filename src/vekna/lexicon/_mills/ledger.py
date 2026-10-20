@@ -26,7 +26,6 @@ class _Entry:
 class Ledger:
     def __init__(self, entries: dict[str, _Entry]) -> None:
         self._entries = entries
-        self._spent = False
 
     @classmethod
     def from_resumption(cls, resumption: Resumption) -> "Ledger":
@@ -51,10 +50,8 @@ class Ledger:
         return cls(entries)
 
     def take(self, *, rite_id: str, name: str) -> JsonValue | None:
-        if self._spent:
-            return None
         entry = self._entries.get(rite_id)
         if entry is None or entry.name != name:
-            self._spent = True
+            self._entries = {}
             return None
         return entry.result

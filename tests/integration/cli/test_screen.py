@@ -8,7 +8,7 @@ import pytest
 
 from vekna.gates.cli.screen import listing, ordered, paint
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView
-from vekna.wire import CastHello, DecideRequested, RiteStarted, RunRecord
+from vekna.wire import CastHello, DecideRequested, RiteFinished, RiteStarted, RunRecord
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _WIDE_TERMINAL = 120
@@ -74,9 +74,13 @@ def _add(
             started_at=_WHEN - timedelta(seconds=ago),
         )
     )
-    rite.status = status
     if status != "running":
-        rite.finished_at = _WHEN - timedelta(seconds=ago - _TOOK)
+        rite.finished = RiteFinished(
+            cast_id=view.hello.cast_id,
+            rite_id=name,
+            status=status,
+            finished_at=_WHEN - timedelta(seconds=ago - _TOOK),
+        )
     view.rites[name] = rite
 
 
@@ -223,7 +227,10 @@ class TestTheList:
     def test_a_cast_past_a_failed_step_is_recovering_and_says_why():
         view = _running("fix_demo", ago=60)
         _step(view, "attempt", ago=50, status="error")
-        view.rites["attempt"].error = "3 tests still red"
+        attempt = view.rites["attempt"]
+        attempt.finished = attempt.finished.model_copy(
+            update={"error": "3 tests still red"}
+        )
         _step(view, "triage", ago=40)
 
         painted = paint(listed=[view], focus=None, project=None, now=_WHEN)

@@ -249,3 +249,27 @@ class TestStepGraph:
             ("attempt", [ENDS, f"triage{ON_FAILURE}"]),
             ("triage", ["attempt", ENDS]),
         ]
+
+    # A target already walked is skipped, not the end of the row: `out` comes
+    # after `loop` has been seen.
+    @staticmethod
+    def test_targets_after_a_seen_one_are_still_walked():
+        class Loop(BaseModel):
+            pass
+
+        class Out(BaseModel):
+            pass
+
+        @step
+        def loop(_: Loop) -> Loop | Out:
+            return Out()
+
+        @step
+        def out(_: Out) -> Done[None]:
+            return Done(None)
+
+        assert step_graph(_hand_built_ritual(exits=(Loop,))) == [
+            (START, ["loop"]),
+            ("loop", ["loop", "out"]),
+            ("out", [ENDS]),
+        ]

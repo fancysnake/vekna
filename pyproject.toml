@@ -120,6 +120,11 @@ also_copy = [
     "src/vekna/trial",
     "src/vekna/wire",
 ]
+# NOTE: `typing.cast` ignores its quoted type at runtime, so a mutant of it never
+# changes behaviour. The task set only holds a reference so the loop's weak one
+# does not let a running task be collected; no deterministic check can tell it
+# is missing.
+do_not_mutate_patterns = ['\bcast\("', 'self\._tasks\.add\(']
 
 # IMPORT LINTER
 

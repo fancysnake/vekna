@@ -8,6 +8,7 @@ from vekna.wire import (
     CastStatus,
     DecideRequested,
     RiteEndStatus,
+    RiteFinished,
     RiteStarted,
     RunRecord,
 )
@@ -41,10 +42,12 @@ DELTA_LINES = 200
 @dataclass
 class RiteView:
     started: RiteStarted
-    status: RiteStatus = "running"
-    finished_at: datetime | None = None
-    error: str | None = None
+    finished: RiteFinished | None = None
     deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
+
+    @property
+    def status(self) -> RiteStatus:
+        return "running" if self.finished is None else self.finished.status
 
 
 # Insertion-ordered, which is the order the rites began — the tree a surface

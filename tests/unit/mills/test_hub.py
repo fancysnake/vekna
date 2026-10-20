@@ -132,13 +132,25 @@ class TestRites:
         hub.apply(_hello())
         hub.apply(_started())
 
-        hub.apply(
-            RiteFinished(cast_id="c1", rite_id="r1", status="error", finished_at=_WHEN)
+        finished = RiteFinished(
+            cast_id="c1", rite_id="r1", status="error", finished_at=_WHEN, error="boom"
         )
+
+        hub.apply(finished)
 
         rite = hub.casts["c1"].rites["r1"]
         assert rite.status == "error"
-        assert rite.finished_at == _WHEN
+        assert rite.finished == finished
+
+    @staticmethod
+    def test_an_empty_delta_is_kept_as_a_blank_line():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=""))
+
+        assert list(hub.casts["c1"].rites["r1"].deltas) == [""]
 
 
 class TestPrompts:
@@ -228,7 +240,7 @@ class TestDrops:
         hub.attach_surface(surface)
         surface.sent.clear()
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match="kind='unknown', cast_id='c1'"):
             hub.apply(as_type("CastMessage", _Unknown(cast_id="c1")))
 
         assert not surface.sent
@@ -245,6 +257,31 @@ class TestDrops:
 
         assert seen[-1].action == "dropped"
         assert seen[-1].reason == "locks are not built yet"
+
+
+class TestRouted:
+    @staticmethod
+    def test_an_applied_message_says_what_and_whose():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+
+        hub.apply(_hello())
+
+        assert seen == [Routed(kind="cast_hello", cast_id="c1", action="applied")]
+
+    @staticmethod
+    def test_a_surface_coming_and_going_is_said():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+        surface = _Surface()
+
+        hub.attach_surface(surface)
+        hub.detach_surface(surface)
+
+        assert seen == [
+            Routed(kind="surface_hello", cast_id=None, action="attached"),
+            Routed(kind="surface_hello", cast_id=None, action="detached"),
+        ]
 
 
 class TestFanOut:
@@ -374,6 +411,29 @@ class TestLateSurface:
         assert peer.casts == hub.casts
 
     @staticmethod
+    def test_a_failed_rite_replays_its_output_and_its_error():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo"))
+        failed = RiteFinished(
+            cast_id="c1", rite_id="r1", status="error", finished_at=_WHEN, error="boom"
+        )
+        hub.apply(failed)
+        surface = _Surface()
+
+        hub.attach_surface(surface)
+
+        assert surface.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            _started(),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo"),
+            failed,
+            GrimoireEnd(cast_id="c1"),
+        ]
+
+    @staticmethod
     def test_a_rite_that_has_said_nothing_replays_no_output():
         hub = Hub()
         hub.apply(_hello())
@@ -390,15 +450,20 @@ class TestLateSurface:
         ]
 
     @staticmethod
-    def test_a_cast_that_already_ended_replays_its_ending():
+    @pytest.mark.parametrize("status", ["ok", "error", "disconnected"])
+    def test_a_cast_that_already_ended_replays_its_ending(
+        status: Literal["ok", "error", "disconnected"],
+    ):
         hub = Hub()
         hub.apply(_hello())
-        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        hub.apply(CastGoodbye(cast_id="c1", status=status, detail="why"))
         surface = _Surface()
 
         hub.attach_surface(surface)
 
-        assert surface.sent[-1] == CastGoodbye(cast_id="c1", status="ok", detail=None)
+        assert surface.sent[-1] == CastGoodbye(
+            cast_id="c1", status=status, detail="why"
+        )
 
     @staticmethod
     def test_a_replay_is_not_journaled_twice():
@@ -521,6 +586,17 @@ class TestPeers:
 
         assert hub.tell("c1", CastQueued(cast_id="c1"))
         assert new.sent == [CastQueued(cast_id="c1")]
+
+    @staticmethod
+    def test_a_closed_connection_is_told_nothing():
+        hub = Hub()
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+
+        hub.close_cast("c1", peer)
+
+        assert not hub.tell("c1", CastQueued(cast_id="c1"))
+        assert not peer.sent
 
     @staticmethod
     def test_a_peer_that_has_gone_is_told_nothing_more():

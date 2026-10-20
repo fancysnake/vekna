@@ -134,7 +134,9 @@ def _clock(seconds: float) -> str:
 # replayed a cast that ended before it attached and would stamp its own clock.
 def _ended_at(view: CastView) -> datetime | None:
     stamps = [
-        rite.finished_at for rite in view.rites.values() if rite.finished_at is not None
+        rite.finished.finished_at
+        for rite in view.rites.values()
+        if rite.finished is not None
     ]
     return max(stamps) if stamps else None
 
@@ -244,7 +246,8 @@ def _rite_lines(view: CastView) -> list[str]:
         pad = "  " * _depth(rite, view)
         medium = rite.started.category == "medium" and rite.status != "cancelled"
         mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
-        said = "" if rite.error is None else f"  — {rite.error}"
+        error = None if rite.finished is None else rite.finished.error
+        said = "" if error is None else f"  — {error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":
             lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
