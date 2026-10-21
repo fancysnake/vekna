@@ -114,7 +114,7 @@ rituals.py       # the rituals this project casts on itself, named by
 lexicon/
   _pacts.py      # Ritual, Step, Transition, Channel, rite events,
                  # component types (File, Directory, Text, Url, GitRef)
-  _specs.py      # DEFAULT_MAX_STEPS
+  _specs.py      # DEFAULT_MAX_STEPS, SUMMARY_WIDTH
   _mills/
     engine.py    # Grimoire, Compendium, FocusSlot, rite ctx, run_cast
     dispatch.py  # @step/@ritual/@medium and signature reflection
