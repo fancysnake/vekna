@@ -86,7 +86,7 @@ def _isolated_registry():
 
 def _cast(the_ritual, *, stdin: str = "", ledger=None) -> tuple[object, Grimoire]:
     renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO(stdin))
-    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    grimoire = Grimoire(clock=_fixed_clock)
     result = asyncio.run(
         run_cast(
             ritual=the_ritual,

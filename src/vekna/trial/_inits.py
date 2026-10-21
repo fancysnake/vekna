@@ -23,8 +23,6 @@ from ._pacts import TrialError
 
 _ResultT = TypeVar("_ResultT")
 
-_CAST_ID = "trial"
-
 
 # A ritual test is an ordinary test, so the pair a test calls owns the loop.
 # From inside a running one there is nothing to own, and the async pair is what
@@ -94,7 +92,7 @@ class Trial:
         return list(self._recorder.events)
 
     def _grimoire(self) -> Grimoire:
-        return Grimoire(cast_id=_CAST_ID, on_event=self._recorder.record)
+        return Grimoire(on_event=self._recorder.record)
 
     def cast(self, ritual: Ritual, components: BaseModel) -> BaseModel | None:
         return _driven(self.cast_async(ritual, components))

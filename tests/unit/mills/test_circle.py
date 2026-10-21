@@ -25,22 +25,24 @@ class _Limits(Limits):
     def __init__(
         self, *, processes: int = 1, worktrees: int = 2, coding: int | None = None
     ) -> None:
-        self._processes = processes
+        self.slots = processes
         self._worktrees = worktrees
         self.prepares = "make venv"
         self._coding = coding
         self.asked: list[str] = []
+        self.asked_trees: list[str] = []
+        self.asked_prepares: list[str] = []
 
     def processes(self, project_root: str) -> int:
         self.asked.append(project_root)
-        return self._processes
+        return self.slots
 
     def worktrees(self, project_root: str) -> int:
-        del project_root
+        self.asked_trees.append(project_root)
         return self._worktrees
 
     def prepare(self, project_root: str) -> str | None:
-        del project_root
+        self.asked_prepares.append(project_root)
         return self.prepares
 
     def coding(self) -> int | None:
@@ -61,7 +63,7 @@ class _Spawn:
         self._exits[hello.cast_id] = future
         return await future
 
-    def exit(self, cast_id: str, *, code: int = 0, said: str = "") -> None:
+    def exit(self, cast_id: str, *, code: int | None = 0, said: str = "") -> None:
         self._exits[cast_id].set_result(Exited(code=code, said=said))
 
 
@@ -74,8 +76,8 @@ class _Trees(Trees):
         self.leases: list[dict[str, object]] = []
         self.prepared: list[tuple[str, str | None]] = []
         self.released: list[str] = []
-        self.refuse: str | None = None
-        # What a prepare waits on before it is done, or fails with.
+        # What a lease or a prepare waits on before it is done, or fails with.
+        self.leasing: asyncio.Future[None] | None = None
         self.preparing: asyncio.Future[None] | None = None
 
     async def lease(
@@ -89,8 +91,8 @@ class _Trees(Trees):
                 "count": count,
             }
         )
-        if self.refuse is not None:
-            raise TreeError(self.refuse)
+        if self.leasing is not None:
+            await self.leasing
         return self.free.pop(0) if self.free else None
 
     async def prepare(self, tree: str, command: str | None) -> None:
@@ -160,7 +162,8 @@ async def _settled() -> None:
 class TestProcesses:
     @staticmethod
     async def test_a_cast_past_the_limit_waits_queued():
-        circle, hub, spawn = _circle(_Limits(processes=1))
+        limits = _Limits(processes=1)
+        circle, hub, spawn = _circle(limits)
 
         circle.enqueue(_hello("c1"))
         circle.enqueue(_hello("c2"))
@@ -168,6 +171,17 @@ class TestProcesses:
 
         assert spawn.spawned == ["c1"]
         assert hub.casts["c2"].status == "queued"
+        assert limits.asked == ["/proj", "/proj"]
+
+    @staticmethod
+    async def test_the_limit_is_how_many_run_at_once():
+        circle, _, spawn = _circle(_Limits(processes=2))
+
+        for cast_id in ("c1", "c2", "c3"):
+            circle.enqueue(_hello(cast_id))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
 
     # Between its spawn and its hello a cast is still `queued` in the view, and
     # holds its slot all the same.
@@ -195,6 +209,23 @@ class TestProcesses:
         await _settled()
 
         assert spawn.spawned == ["c1", "c2"]
+        assert hub.casts["c1"].status == "ok"
+        assert hub.casts["c1"].detail is None
+
+    @staticmethod
+    async def test_a_cast_that_has_exited_leaves_the_loop_nothing_to_report():
+        errors: list[dict[str, object]] = []
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _, context: errors.append(context)
+        )
+        circle, _, spawn = _circle(_Limits())
+        circle.enqueue(_hello("c1"))
+        await _settled()
+
+        spawn.exit("c1")
+        await _settled()
+
+        assert not errors
 
     # Counting what is running in the project, not what this daemon spawned:
     # a `vekna cast` typed by hand takes a slot too.
@@ -242,18 +273,30 @@ class TestProcesses:
     # A ritual that is not there dies before its hello, so the only goodbye it
     # gets is the one written here, with what the process last said.
     @staticmethod
-    async def test_a_cast_that_dies_before_its_hello_fails_saying_why():
+    @pytest.mark.parametrize(
+        ("code", "said", "why"),
+        [
+            (
+                2,
+                "no ritual named 'nap'",
+                "exited 2 before its hello: no ritual named 'nap'",
+            ),
+            (None, "no such file", "would not start before its hello: no such file"),
+            (3, "", "exited 3"),
+        ],
+    )
+    async def test_a_cast_that_dies_before_its_hello_fails_saying_why(
+        code: int | None, said: str, why: str
+    ):
         circle, hub, spawn = _circle(_Limits())
         circle.enqueue(_hello("c1"))
         await _settled()
 
-        spawn.exit("c1", code=2, said="no ritual named 'nap'")
+        spawn.exit("c1", code=code, said=said)
         await _settled()
 
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].detail == (
-            "exited 2 before its hello: no ritual named 'nap'"
-        )
+        assert hub.casts["c1"].detail == why
 
 
 # A cast learns its ritual wants a tree only once spawned, so it exits saying so
@@ -270,10 +313,13 @@ class TestTrees:
     @staticmethod
     async def test_a_cast_that_needs_a_tree_runs_again_in_one_it_leased():
         trees = _Trees("/pool/1")
-        circle, hub, spawn = _circle(_Limits(worktrees=3), trees)
+        limits = _Limits(worktrees=3)
+        circle, hub, spawn = _circle(limits, trees)
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
+        assert limits.asked_trees == ["/proj"]
+        assert limits.asked_prepares == ["/proj"]
         assert spawn.spawned == ["c1", "c1"]
         assert spawn.trees == [None, "/pool/1"]
         assert hub.casts["c1"].status == "queued"
@@ -344,14 +390,16 @@ class TestTrees:
     @staticmethod
     async def test_a_lease_that_fails_fails_the_cast():
         trees = _Trees()
-        trees.refuse = "every tree is blocked: /pool/1 (uncommitted changes)"
+        refused = "every tree is blocked: /pool/1 (uncommitted changes)"
+        trees.leasing = asyncio.get_running_loop().create_future()
+        trees.leasing.set_exception(TreeError(refused))
         circle, hub, spawn = _circle(_Limits(), trees)
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
         assert spawn.spawned == ["c1"]
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].detail == trees.refuse
+        assert hub.casts["c1"].detail == refused
 
     # The tree goes back to the pool, so the next cast leases it again.
     @staticmethod
@@ -407,6 +455,111 @@ class TestTrees:
         )
         assert not trees.free
         assert said == ["/pool/1 is blocked after cast c1: uncommitted changes"]
+
+    @staticmethod
+    async def test_a_cast_that_dies_before_its_hello_in_a_dirty_tree_says_why():
+        trees = _Trees("/pool/1")
+        trees.blocked["/pool/1"] = "uncommitted changes"
+        circle, hub, spawn = _circle(_Limits(), trees)
+        await _asked_for_a_tree(circle, spawn, "c1")
+
+        spawn.exit("c1", code=1, said="boom")
+        await _settled()
+
+        assert hub.casts["c1"].status == "error"
+        assert hub.casts["c1"].detail == "exited 1 before its hello: boom"
+
+    @staticmethod
+    async def test_a_lease_that_fails_gives_its_slot_back():
+        trees = _Trees()
+        trees.leasing = asyncio.get_running_loop().create_future()
+        trees.leasing.set_exception(TreeError("every tree is blocked"))
+        circle, _, spawn = _circle(_Limits(processes=1), trees)
+        await _asked_for_a_tree(circle, spawn, "c1")
+
+        circle.enqueue(_hello("c2"))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
+
+    # Back at the head of the line it waited in, not behind a cast that queued
+    # while it was looking for a tree.
+    @staticmethod
+    async def test_a_cast_with_no_free_tree_goes_first_once_one_is_free():
+        trees = _Trees("/pool/1")
+        limits = _Limits(processes=2)
+        circle, _, spawn = _circle(limits, trees)
+        await _asked_for_a_tree(circle, spawn, "c1")
+        circle.enqueue(_hello("c2"))
+        circle.enqueue(_hello("c3"))
+        await _settled()
+        spawn.exit("c2", code=NEEDS_TREE)
+        await _settled()
+        limits.slots = 1
+
+        spawn.exit("c1")
+        await _settled()
+
+        assert spawn.spawned[-1] == "c2"
+        assert spawn.trees[-1] == "/pool/1"
+
+    @staticmethod
+    async def test_projects_lease_without_waiting_on_each_other():
+        trees = _Trees("/pool/1", "/pool/2")
+        trees.leasing = asyncio.get_running_loop().create_future()
+        circle, _, spawn = _circle(_Limits(), trees)
+        circle.enqueue(_hello("c1", project="/one/.git"))
+        circle.enqueue(_hello("c2", project="/two/.git"))
+        await _settled()
+
+        spawn.exit("c1", code=NEEDS_TREE)
+        spawn.exit("c2", code=NEEDS_TREE)
+        await _settled()
+
+        assert [lease["project"] for lease in trees.leases] == [
+            "/one/.git",
+            "/two/.git",
+        ]
+        trees.leasing.set_result(None)
+
+    @staticmethod
+    async def test_a_release_waits_for_a_lease_in_its_project():
+        trees = _Trees("/pool/1", "/pool/2")
+        circle, _, spawn = _circle(_Limits(processes=2), trees)
+        await _asked_for_a_tree(circle, spawn, "c1")
+        trees.leasing = asyncio.get_running_loop().create_future()
+        circle.enqueue(_hello("c2"))
+        await _settled()
+        spawn.exit("c2", code=NEEDS_TREE)
+        await _settled()
+
+        spawn.exit("c1")
+        await _settled()
+        assert not trees.released
+
+        trees.leasing.set_result(None)
+        await _settled()
+        assert trees.released == ["/pool/1"]
+
+    @staticmethod
+    async def test_a_failed_prepare_waits_for_a_lease_in_its_project():
+        trees = _Trees("/pool/1", "/pool/2")
+        trees.preparing = asyncio.get_running_loop().create_future()
+        circle, hub, spawn = _circle(_Limits(processes=2), trees)
+        await _asked_for_a_tree(circle, spawn, "c1")
+        trees.leasing = asyncio.get_running_loop().create_future()
+        circle.enqueue(_hello("c2"))
+        await _settled()
+        spawn.exit("c2", code=NEEDS_TREE)
+        await _settled()
+
+        trees.preparing.set_exception(TreeError("prepare exited 1"))
+        await _settled()
+        assert hub.casts["c1"].status == "queued"
+
+        trees.leasing.set_result(None)
+        await _settled()
+        assert hub.casts["c1"].status == "error"
 
 
 @pytest.mark.asyncio

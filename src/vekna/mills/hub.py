@@ -121,7 +121,7 @@ class Hub(Casts, Routes):
         try:
             peer.send(message)
         except OSError:
-            self._peers.pop(cast_id, None)
+            del self._peers[cast_id]
             return False
         return True
 
@@ -293,9 +293,7 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
     if isinstance(message, RiteDelta):
         rite.deltas.extend(message.delta.splitlines() or [""])
     else:
-        rite.status = message.status
-        rite.finished_at = message.finished_at
-        rite.error = message.error
+        rite.finished = message
     return None
 
 
@@ -308,14 +306,8 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
                 rite_id=rite.started.rite_id,
                 delta="\n".join(rite.deltas),
             )
-        if rite.finished_at is not None and (status := rite.status) != "running":
-            yield RiteFinished(
-                cast_id=view.hello.cast_id,
-                rite_id=rite.started.rite_id,
-                status=status,
-                finished_at=rite.finished_at,
-                error=rite.error,
-            )
+        if rite.finished is not None:
+            yield rite.finished
 
 
 # A cast that ended before this surface arrived still shows, and shows how it
@@ -327,5 +319,3 @@ def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
             yield CastGoodbye(
                 cast_id=view.hello.cast_id, status=status, detail=view.detail
             )
-        case _:
-            pass

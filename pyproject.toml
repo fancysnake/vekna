@@ -74,6 +74,7 @@ dev = [
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
     "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0",
+    "mutmut (>=3.8.0,<4.0.0)",
 ]
 
 # Only `site:*` and the site workflow install this one — nothing else needs a
@@ -92,6 +93,22 @@ target-version = ['py311']
 
 [tool.deptry]
 known_first_party = ["vekna"]
+
+# MUTMUT
+
+[tool.mutmut]
+# NOTE: the unit suite owns `mills` (tests/CLAUDE.md); a mutant in any other
+# layer survives whatever only the integration suite could have killed, so
+# mutating `src` wholesale reports noise instead of gaps. `specs` is empty.
+source_paths = ["src/vekna/mills", "src/vekna/lexicon/_mills"]
+pytest_add_cli_args_test_selection = ["tests/unit"]
+also_copy = ["src/vekna"]
+# NOTE: `typing.cast` ignores its quoted type at runtime, so a mutant of it never
+# changes behaviour. The task set only holds a reference so the loop's weak one
+# does not let a running task be collected; no deterministic check can tell it
+# is missing. A medium called with nothing summarizes to nothing whether `first`
+# is `None` or `""`.
+do_not_mutate_patterns = ['\bcast\("', 'self\._tasks\.add\(', '^\s*first = None$']
 
 # IMPORT LINTER
 

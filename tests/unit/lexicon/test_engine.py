@@ -28,6 +28,8 @@ from vekna.lexicon._mills.engine import (
     FocusSlot,
     Grimoire,
     SessionBook,
+    cast_context,
+    emit_delta,
     offer_prompt,
     prompt_runner,
     run_cast,
@@ -186,7 +188,10 @@ class TestRitualDefinition:
 
     @staticmethod
     def test_a_name_holding_the_namespace_separator_is_rejected():
-        with pytest.raises(RitualDefinitionError, match="'cabinet:review'"):
+        with pytest.raises(
+            RitualDefinitionError,
+            match=r"^ritual 'cabinet:review': ':' is reserved for a tome's namespace$",
+        ):
             ritual("cabinet:review")
 
 
@@ -194,7 +199,7 @@ class TestRunCast:
     @staticmethod
     def test_trampolines_until_done():
         start = 3
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
         result = asyncio.run(
             run_cast(
@@ -212,7 +217,7 @@ class TestRunCast:
 
     @staticmethod
     def test_returns_result_of_the_last_affordable_step():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
         result = asyncio.run(
             run_cast(
@@ -231,7 +236,7 @@ class TestRunCast:
     # mypy.
     @staticmethod
     def test_a_transition_no_step_takes_is_a_boundary_error():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
         wandering = entry(payload=Lost())
 
         with pytest.raises(StepBoundaryError, match="no step takes Lost"):
@@ -246,9 +251,9 @@ class TestRunCast:
 
     @staticmethod
     def test_budget_exceeded_raises():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
-        with pytest.raises(StepBudgetExceededError):
+        with pytest.raises(StepBudgetExceededError) as raised:
             asyncio.run(
                 run_cast(
                     ritual=spinner,
@@ -258,11 +263,13 @@ class TestRunCast:
                 )
             )
 
+        assert str(raised.value) == "ritual 'spinner' exceeded max_steps=5"
+
 
 class TestFailedRiteIsJournaled:
     @staticmethod
     def _cast(the_ritual) -> Grimoire:
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
         with pytest.raises(BoomError):
             asyncio.run(
                 run_cast(
@@ -301,7 +308,7 @@ class TestFailedRiteIsJournaled:
     def test_renderer_marks_a_failed_rite(cls):
         out = io.StringIO()
         renderer = StandaloneRenderer(out=out, inp=io.StringIO())
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=renderer.render)
+        grimoire = Grimoire(clock=_fixed_clock, on_event=renderer.render)
         with pytest.raises(BoomError):
             asyncio.run(
                 run_cast(
@@ -411,7 +418,7 @@ def unasked(failure: Failure[Ask]) -> Done[Report]:
 
 
 def _cast(the_step_payload: BaseModel, *, channel=None) -> tuple[object, Grimoire]:
-    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    grimoire = Grimoire(clock=_fixed_clock)
     the_ritual = entry(payload=the_step_payload)
     result = asyncio.run(
         run_cast(
@@ -438,7 +445,7 @@ class TestFailureRouting:
 
     @staticmethod
     def test_a_narrowed_retry_runs_the_step_again_until_it_holds():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
         result = asyncio.run(
             run_cast(
@@ -465,7 +472,7 @@ class TestFailureRouting:
             run_cast(
                 ritual=retry,
                 components=Attempt(left=9),
-                grimoire=Grimoire(cast_id="c1", clock=_fixed_clock),
+                grimoire=Grimoire(clock=_fixed_clock),
                 channel=_channel(),
             )
         )
@@ -486,9 +493,7 @@ class TestFailureRouting:
                 run_cast(
                     ritual=the_ritual,
                     components=the_ritual.components(),
-                    grimoire=Grimoire(
-                        cast_id="c1", clock=_fixed_clock, on_event=refuse
-                    ),
+                    grimoire=Grimoire(clock=_fixed_clock, on_event=refuse),
                     channel=_channel(),
                 )
             )
@@ -506,6 +511,28 @@ class TestFailureRouting:
             StepBudgetExceededError, match="'stubborn' exceeded max_visits=3"
         ):
             _cast(Stubborn())
+
+    @staticmethod
+    def test_a_step_runs_exactly_max_visits_times():
+        grimoire = Grimoire(clock=_fixed_clock)
+        the_ritual = entry(payload=Stubborn())
+
+        with pytest.raises(StepBudgetExceededError):
+            asyncio.run(
+                run_cast(
+                    ritual=the_ritual,
+                    components=the_ritual.components(),
+                    grimoire=grimoire,
+                    channel=_channel(),
+                )
+            )
+
+        ran = [
+            event
+            for event in grimoire.events
+            if isinstance(event, RiteBegan) and event.name == "stubborn"
+        ]
+        assert len(ran) == _STUBBORN_VISITS
 
     @staticmethod
     def test_a_refused_prompt_routes_like_any_failure():
@@ -575,7 +602,7 @@ class TestFocusSlot:
 
         with pytest.raises(FocusMissingError) as raised:
             slot.resolve()
-        assert "pip install" not in str(raised.value)
+        assert str(raised.value) == "no Focus registered for medium 'coding'"
 
 
 class TestPrompts:
@@ -723,7 +750,7 @@ class TestSessionBook:
                 run_cast(
                     ritual=noting,
                     components=noting.components(start=1),
-                    grimoire=Grimoire(cast_id="c1", clock=_fixed_clock),
+                    grimoire=Grimoire(clock=_fixed_clock),
                     channel=_channel(),
                 )
             )
@@ -739,7 +766,7 @@ class TestGrimoire:
     @staticmethod
     def test_on_event_fires_live_in_order():
         seen = []
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock, on_event=seen.append)
+        grimoire = Grimoire(clock=_fixed_clock, on_event=seen.append)
 
         rite_id = grimoire.rite_started(name="fix")
         grimoire.rite_delta(rite_id, "working...")
@@ -750,7 +777,7 @@ class TestGrimoire:
 
     @staticmethod
     def test_rite_finished_carries_result():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
 
         rite_id = grimoire.rite_started(name="fix")
         grimoire.rite_finished(rite_id, result={"cost": 1})
@@ -758,3 +785,61 @@ class TestGrimoire:
         finished = grimoire.events[-1]
         assert isinstance(finished, RiteEnded)
         assert finished.result == {"cost": 1}
+
+    @staticmethod
+    def test_a_rite_is_a_step_that_ended_ok_unless_told_otherwise():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_finished(rite_id)
+
+        assert grimoire.events == [
+            RiteBegan(
+                rite_id="r1",
+                parent_id=None,
+                name="fix",
+                category="step",
+                started_at=_fixed_clock(),
+            ),
+            RiteEnded(
+                rite_id="r1",
+                status="ok",
+                result=None,
+                finished_at=_fixed_clock(),
+                error=None,
+            ),
+        ]
+
+    @staticmethod
+    def test_the_default_clock_tells_utc():
+        grimoire = Grimoire()
+
+        grimoire.rite_started(name="fix")
+
+        began = grimoire.events[0]
+        assert isinstance(began, RiteBegan)
+        assert began.started_at.tzinfo is UTC
+
+
+class TestCurrentRite:
+    @staticmethod
+    def test_outside_a_cast_it_says_so():
+        with pytest.raises(RitualError) as raised:
+            current_rite()
+
+        assert str(raised.value) == "mediums can only be called inside a running cast"
+
+    @staticmethod
+    def test_a_delta_at_the_cast_root_has_no_rite_to_hang_off():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        with (
+            cast_context(grimoire=grimoire, channel=_channel()),
+            pytest.raises(RitualError) as raised,
+        ):
+            emit_delta("stray")
+
+        assert str(raised.value) == (
+            "no rite is running — deltas belong to a step or a medium"
+        )
+        assert not grimoire.events

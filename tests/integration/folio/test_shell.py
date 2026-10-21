@@ -135,7 +135,7 @@ reads_stdin = entry(name="reads_stdin", payload=ReadsStdin())
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
     out = io.StringIO()
     renderer = StandaloneRenderer(out=out, inp=io.StringIO())
-    grimoire = Grimoire(cast_id="c1", on_event=renderer.render)
+    grimoire = Grimoire(on_event=renderer.render)
     result = asyncio.run(
         run_cast(
             ritual=the_ritual,
@@ -159,7 +159,7 @@ def _resumed(recorded: JsonValue) -> object:
         run_cast(
             ritual=echoer,
             components=echoer.components(),
-            grimoire=Grimoire(cast_id="c1"),
+            grimoire=Grimoire(),
             channel=renderer,
             ledger=journalled(recorded, name="shell"),
         )
@@ -356,7 +356,7 @@ class TestCancelledShell:
     def test_a_timed_out_command_leaves_no_process_behind(tmp_path):
         pids = tmp_path / "pids"
         the_ritual = entry(name="spawning", payload=Spawning(pids=str(pids)))
-        grimoire = Grimoire(cast_id="c1")
+        grimoire = Grimoire()
 
         with pytest.raises(RiteTimeoutError, match=r"^shell timed out after 0\.5s$"):
             asyncio.run(
@@ -405,7 +405,7 @@ class TestStubbornShell:
                 run_cast(
                     ritual=the_ritual,
                     components=the_ritual.components(),
-                    grimoire=Grimoire(cast_id="c1"),
+                    grimoire=Grimoire(),
                     channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
                 )
             )
