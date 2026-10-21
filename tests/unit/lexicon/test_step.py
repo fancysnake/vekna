@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from vekna.lexicon import (
     Directory,
     Done,
+    RiteTimeoutError,
     RitualBoundaryError,
     RitualDefinitionError,
     StepBoundaryError,
@@ -113,8 +114,20 @@ class TestStepDecorator:
         def _mute(payload: Ping):
             return Done(Pong(n=payload.n))
 
-        with pytest.raises(RitualDefinitionError, match="declare its exits"):
+        with pytest.raises(
+            RitualDefinitionError, match=r"^@step '_mute' must declare its exits"
+        ):
             step(_mute)
+
+    @staticmethod
+    def test_an_entrypoint_without_a_return_annotation_is_named_as_a_ritual():
+        def _mute(components: Ping):
+            return Done(Pong(n=components.n))
+
+        with pytest.raises(
+            RitualDefinitionError, match=r"^@ritual '_mute' must declare its exits"
+        ):
+            ritual("mute")(_mute)
 
     @staticmethod
     def test_rejects_an_exit_that_is_not_a_model_naming_it():
@@ -153,6 +166,59 @@ class TestStepDecorator:
         assert wrapped.exits == (BaseModel,)
         with pytest.raises(RitualDefinitionError, match="which no step takes"):
             check_exits(_enter)
+
+
+class TestStepOptions:
+    @staticmethod
+    def test_a_single_visit_is_a_cap_it_keeps():
+        def _once(payload: Ping) -> Done[Pong]:
+            return Done(Pong(n=payload.n))
+
+        wrapped = step(max_visits=1)(_once)
+
+        assert wrapped.max_visits == 1
+        assert asyncio.run(wrapped.run(Ping(n=1))) == Done(Pong(n=1))
+
+    @staticmethod
+    def test_a_visit_within_a_fraction_of_a_second_finishes():
+        def _quick(payload: Ping) -> Done[Pong]:
+            return Done(Pong(n=payload.n))
+
+        wrapped = step(timeout=0.5)(_quick)
+
+        assert wrapped.max_visits is None
+        assert asyncio.run(wrapped.run(Ping(n=3))) == Done(Pong(n=3))
+
+    @staticmethod
+    def test_a_visit_past_its_timeout_fails_naming_the_step():
+        async def _stalls(payload: Ping) -> Done[Pong]:
+            await asyncio.sleep(1)
+            return Done(Pong(n=payload.n))
+
+        wrapped = step(timeout=0.01)(_stalls)
+
+        with pytest.raises(
+            RiteTimeoutError, match=r"^step '_stalls' timed out after 0\.01s$"
+        ):
+            asyncio.run(wrapped.run(Ping(n=4)))
+
+
+class TestRitualOptions:
+    @staticmethod
+    def test_a_ritual_runs_in_its_project_unless_it_asks_for_a_worktree():
+        @ritual("plain")
+        def _enter(components: Ping) -> Done[Pong]:
+            return Done(Pong(n=components.n))
+
+        assert _enter.worktree is False
+
+    @staticmethod
+    def test_a_ritual_that_asks_for_a_worktree_says_so():
+        @ritual("pooled", worktree=True)
+        def _enter(components: Ping) -> Done[Pong]:
+            return Done(Pong(n=components.n))
+
+        assert _enter.worktree is True
 
 
 # A step two others transition into admits either shape.
@@ -227,7 +293,10 @@ class TestSyncBody:
         def _enter(components: Ping) -> Done[Pong]:
             return Done(Pong(n=components.n))
 
-        with pytest.raises(RitualBoundaryError):
+        assert _enter.name == "plain"
+        with pytest.raises(
+            RitualBoundaryError, match=r"^ritual 'plain' expected Ping, got Elsewhere$"
+        ):
             asyncio.run(_enter.run(Elsewhere(n=1)))
 
     # Not a designed feature — a consequence of asking the value whether it

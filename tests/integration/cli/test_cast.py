@@ -250,13 +250,13 @@ class TestCastId:
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
         seen: list[str] = []
-        real = _inits.Grimoire
+        real = _inits.TeeChannel
 
         def _record(*, cast_id: str, **kwargs):
             seen.append(cast_id)
             return real(cast_id=cast_id, **kwargs)
 
-        monkeypatch.setattr(_inits, "Grimoire", _record)
+        monkeypatch.setattr(_inits, "TeeChannel", _record)
 
         assert main(["countdown", "--start", "0"]) == 0
         assert main(["countdown", "--start", "0"]) == 0

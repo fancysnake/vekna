@@ -12,7 +12,9 @@ from vekna.lexicon import (
     MediumBoundaryError,
     RiteTimeoutError,
     RitualDefinitionError,
+    RitualError,
     medium,
+    race,
     step,
     timeout,
 )
@@ -84,7 +86,7 @@ async def own_timeout(_: OwnTimeout) -> Done[str]:
 
 
 def _cast(payload: BaseModel) -> tuple[BaseModel | None, Grimoire]:
-    grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+    grimoire = Grimoire(clock=_fixed_clock)
     the_ritual = entry(payload=payload)
     result = asyncio.run(
         run_cast(
@@ -118,7 +120,7 @@ class TestTimeout:
 
     @staticmethod
     def test_the_cut_rite_reads_cancelled_and_its_step_failed():
-        grimoire = Grimoire(cast_id="c1", clock=_fixed_clock)
+        grimoire = Grimoire(clock=_fixed_clock)
         the_ritual = entry(payload=Slow())
 
         with pytest.raises(RiteTimeoutError):
@@ -162,6 +164,22 @@ class TestTimeout:
 
         assert not asyncio.run(refused()).done()
 
+    # Outside a cast the coroutine itself is the name: `asyncio.sleep` here.
+    @staticmethod
+    def test_an_overrun_outside_a_rite_names_the_coroutine():
+        with pytest.raises(RiteTimeoutError, match=r"^sleep timed out after 0\.01s$"):
+            asyncio.run(timeout(asyncio.sleep(1), seconds=0.01))
+
+    @staticmethod
+    def test_an_overrun_of_work_that_is_no_coroutine_names_the_work():
+        async def overrun() -> None:
+            await timeout(asyncio.ensure_future(asyncio.sleep(1)), seconds=0.01)
+
+        with pytest.raises(
+            RiteTimeoutError, match=r"^the work timed out after 0\.01s$"
+        ):
+            asyncio.run(overrun())
+
 
 class TestStepTimeout:
     @staticmethod
@@ -188,3 +206,42 @@ class TestStepTimeout:
     def test_a_timeout_must_be_positive():
         with pytest.raises(RitualDefinitionError, match="timeout must be positive"):
             step(timeout=0)
+
+
+async def _gives_up() -> str:
+    await asyncio.sleep(0)
+    raise asyncio.CancelledError
+
+
+async def _falls() -> str:
+    await asyncio.sleep(0)
+    msg = "fell"
+    raise RitualError(msg)
+
+
+class TestRace:
+    # The loser is awaited out, not just asked to stop: it reads cancelled by
+    # the time the winner comes back.
+    @staticmethod
+    def test_the_winner_returns_once_the_loser_is_cancelled():
+        async def run() -> tuple[str, bool]:
+            loser = asyncio.ensure_future(asyncio.sleep(1, result="slow"))
+            won = await race(loser, asyncio.sleep(0, result="fast"))
+            return won, loser.cancelled()
+
+        assert asyncio.run(run()) == ("fast", True)
+
+    @staticmethod
+    def test_a_cancelled_entrant_is_named_among_the_failures():
+        with pytest.raises(
+            RitualError,
+            match=r"^every entrant in the race failed — cancelled; RitualError: fell$",
+        ):
+            asyncio.run(race(_gives_up(), _falls()))
+
+    @staticmethod
+    def test_a_race_with_no_entrants_is_refused():
+        with pytest.raises(
+            MediumBoundaryError, match=r"^race needs at least one entrant$"
+        ):
+            asyncio.run(race())

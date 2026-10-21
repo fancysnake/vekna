@@ -49,11 +49,9 @@ class Grimoire:
     def __init__(
         self,
         *,
-        cast_id: str,
         clock: Callable[[], datetime] = _now,
         on_event: Callable[[RiteEvent], None] | None = None,
     ) -> None:
-        self.cast_id = cast_id
         self._clock = clock
         self._on_event = on_event
         self._events: list[RiteEvent] = []
@@ -167,7 +165,7 @@ class Compendium:
         namespace, _, bare = name.rpartition(NAMESPACE_SEPARATOR)
         if (key := (namespace, bare)) in self._known:
             return key
-        offered = [key for key in sorted(self._known) if key[0] and key[1] == name]
+        offered = [key for key in sorted(self._known) if key[1] == name]
         if len(offered) == 1:
             return offered[0]
         if offered:

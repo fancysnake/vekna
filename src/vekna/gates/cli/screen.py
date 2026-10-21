@@ -133,9 +133,7 @@ def _clock(seconds: float) -> str:
 # say so. Derived rather than stamped on arrival, because a peer surface is
 # replayed a cast that ended before it attached and would stamp its own clock.
 def _ended_at(view: CastView) -> datetime | None:
-    stamps = [
-        rite.finished_at for rite in view.rites.values() if rite.finished_at is not None
-    ]
+    stamps = [rite.finished_at for rite in view.rites.values() if rite.finished_at]
     return max(stamps) if stamps else None
 
 
