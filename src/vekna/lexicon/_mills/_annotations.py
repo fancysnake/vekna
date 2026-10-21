@@ -52,7 +52,7 @@ def _components_model(func: _Erased) -> type[BaseModel]:
     raise RitualDefinitionError(msg)
 
 
-def _is_union(annotation: type[Any] | UnionType | None) -> bool:
+def _is_union(annotation: object) -> bool:
     if isinstance(annotation, UnionType):
         return True
     origin = getattr(annotation, "__origin__", None)
@@ -81,7 +81,7 @@ def _payloads(func: _Erased) -> tuple[type[BaseModel], ...]:
 # Naming an annotation means reading an attribute off whatever the author wrote.
 # `name: str` is what keeps that untyped read from spreading: everything below
 # narrows by isinstance, as the rest of this module does.
-def _plain_name(annotation: type[Any] | UnionType | None) -> str:
+def _plain_name(annotation: object) -> str:
     name = getattr(annotation, "__name__", None)
     return name if isinstance(name, str) else _NAMELESS
 
@@ -101,7 +101,7 @@ def _sole_annotation(func: _Erased, *, decorator: str, noun: str) -> Any | None:
 # `Annotated[Path, ...]` into metadata, but inside a union it does not, so
 # `File | None` rendered `<Annotated>`. An optional `--only` takes a Path;
 # saying so is the whole point of printing a type at all.
-def _type_name(annotation: type[Any] | UnionType | None) -> str:
+def _type_name(annotation: object) -> str:
     if _is_union(annotation):
         members = get_args(annotation)
         named = [_type_name(member) for member in members if member is not NoneType]

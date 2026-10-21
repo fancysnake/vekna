@@ -58,6 +58,10 @@ retry loop sooner than the whole budget would. `@step(timeout=600)` bounds one
 visit in seconds: an overrun cancels the step's work and fails it with
 `RiteTimeoutError`, which recovers like any other failure.
 
+`@ritual("fix", worktree=True)` asks for a checkout of its own: started from
+the dashboard, the cast runs in a pooled worktree, not in the tree it was asked
+from. [The CLI reference](cli.md#worktrees) has the pool.
+
 ## When a step fails
 
 A step that raises ends the cast — unless some step takes `Failure[P]`, `P`

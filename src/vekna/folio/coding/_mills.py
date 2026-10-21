@@ -172,7 +172,7 @@ def _validate_output(*, output: type[_OutputT], text: str) -> _OutputT:
     adapter: TypeAdapter[_OutputT] = TypeAdapter(output)
     try:
         return adapter.validate_json(text)
-    except (ValidationError, ValueError) as error:
+    except ValueError as error:
         msg = f"agent output does not validate as {output!r}: {error}"
         raise CodingOutputError(msg) from error
 
