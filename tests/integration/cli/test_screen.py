@@ -57,13 +57,8 @@ def _running(ritual: str, *, ago: int) -> CastView:
 # The rite's name is its id too: a cast in a test has one rite per name, and
 # every assertion here is about a name.
 def _add(
-    view: CastView,
-    name: str,
-    *,
-    ago: int,
-    status: RiteStatus = "running",
-    category: Literal["step", "medium"] = "step",
-) -> None:
+    view: CastView, name: str, *, ago: int, category: Literal["step", "medium"]
+) -> RiteView:
     rite = RiteView(
         started=RiteStarted(
             cast_id=view.hello.cast_id,
@@ -74,26 +69,36 @@ def _add(
             started_at=_WHEN - timedelta(seconds=ago),
         )
     )
+    view.rites[name] = rite
+    return rite
+
+
+def _end(rite: RiteView, *, status: RiteStatus, error: str | None = None) -> None:
     if status != "running":
         rite.finished = RiteFinished(
-            cast_id=view.hello.cast_id,
-            rite_id=name,
+            cast_id=rite.started.cast_id,
+            rite_id=rite.started.rite_id,
             status=status,
-            finished_at=_WHEN - timedelta(seconds=ago - _TOOK),
+            error=error,
+            finished_at=rite.started.started_at + timedelta(seconds=_TOOK),
         )
-    view.rites[name] = rite
 
 
 def _step(
-    view: CastView, name: str, *, ago: int, status: RiteStatus = "running"
+    view: CastView,
+    name: str,
+    *,
+    ago: int,
+    status: RiteStatus = "running",
+    error: str | None = None,
 ) -> None:
-    _add(view, name, ago=ago, status=status)
+    _end(_add(view, name, ago=ago, category="step"), status=status, error=error)
 
 
 def _medium(
     view: CastView, name: str, *, ago: int, status: RiteStatus = "running"
 ) -> None:
-    _add(view, name, ago=ago, status=status, category="medium")
+    _end(_add(view, name, ago=ago, category="medium"), status=status)
 
 
 # The listed casts, without the header, the blank lines and the key hints: a
@@ -226,11 +231,7 @@ class TestTheList:
     @staticmethod
     def test_a_cast_past_a_failed_step_is_recovering_and_says_why():
         view = _running("fix_demo", ago=60)
-        _step(view, "attempt", ago=50, status="error")
-        attempt = view.rites["attempt"]
-        attempt.finished = attempt.finished.model_copy(
-            update={"error": "3 tests still red"}
-        )
+        _step(view, "attempt", ago=50, status="error", error="3 tests still red")
         _step(view, "triage", ago=40)
 
         painted = paint(listed=[view], focus=None, project=None, now=_WHEN)

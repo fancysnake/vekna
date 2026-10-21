@@ -50,6 +50,14 @@ class RiteView:
     def status(self) -> RiteStatus:
         return "running" if self.finished is None else self.finished.status
 
+    @property
+    def error(self) -> str | None:
+        return None if self.finished is None else self.finished.error
+
+    @property
+    def finished_at(self) -> datetime | None:
+        return None if self.finished is None else self.finished.finished_at
+
 
 # Insertion-ordered, which is the order the rites began — the tree a surface
 # draws is built from each rite's `parent_id` at paint time, so nothing here has

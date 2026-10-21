@@ -31,6 +31,7 @@ class _Limits(Limits):
         self._coding = coding
         self.asked: list[str] = []
         self.asked_trees: list[str] = []
+        self.asked_prepares: list[str] = []
 
     def processes(self, project_root: str) -> int:
         self.asked.append(project_root)
@@ -41,7 +42,7 @@ class _Limits(Limits):
         return self._worktrees
 
     def prepare(self, project_root: str) -> str | None:
-        self.asked_trees.append(project_root)
+        self.asked_prepares.append(project_root)
         return self.prepares
 
     def coding(self) -> int | None:
@@ -317,7 +318,8 @@ class TestTrees:
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
-        assert limits.asked_trees == ["/proj", "/proj"]
+        assert limits.asked_trees == ["/proj"]
+        assert limits.asked_prepares == ["/proj"]
         assert spawn.spawned == ["c1", "c1"]
         assert spawn.trees == [None, "/pool/1"]
         assert hub.casts["c1"].status == "queued"

@@ -67,17 +67,22 @@ def medium(
     # Once, at decoration time: a signature rebuilt per call would put a
     # reflection cost on every medium a cast reaches.
     signature = inspect.signature(func)
-    params = tuple(signature.parameters)
+    head = next(iter(signature.parameters), None)
 
     async def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _MediumT:
         # What a rite's line says the call is *doing*: the medium's first
         # argument — a shell's command, an agent's prompt. The declared first
         # parameter, not the first string the caller happened to write:
         # `shell(cwd=..., command=...)` is legal, and kwargs keep call-site
-        # order, so scanning would summarize the cwd. Named through `params` so
-        # a keyword-only first parameter — `pick(*, prompt, options)` — reads
-        # the same as a positional one.
-        first = args[0] if args else kwargs.get(params[0]) if params else None
+        # order, so scanning would summarize the cwd. Named through `head` so a
+        # keyword-only first parameter — `pick(*, prompt, options)` — reads the
+        # same as a positional one.
+        if args:
+            first = args[0]
+        elif head is not None:
+            first = kwargs.get(head)
+        else:
+            first = None
         summary = _cut(first) if isinstance(first, str) and first.strip() else None
         # Inside the rite, not before it: the call is what failed, so the rite
         # that names the medium is where the failure belongs.
