@@ -5,6 +5,10 @@
 # can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — most of these rituals call an agent.
 
+import json
+import subprocess
+import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -78,3 +82,43 @@ class TestProjectRituals:
         assert "  (start) → quality_gates\n" in out
         assert "  quality_gates → repair, (done)\n" in out
         assert "  repair → quality_gates\n" in out
+
+
+def _strings(value: object) -> Iterator[str]:
+    match value:
+        case str():
+            yield value
+        case dict():
+            for item in value.values():
+                yield from _strings(item)
+        case list():
+            for item in value:
+                yield from _strings(item)
+
+
+# `.vekna.toml` hands other tools commands to run, and nothing resolves them
+# before a cast does. Keyed off the `mise run ` shape, not any one tool's keys,
+# so a block added later is checked without touching this test.
+class TestVeknaToml:
+    @staticmethod
+    def test_every_mise_task_it_names_exists(monkeypatch):
+        # mise keeps its trust list under `XDG_STATE_HOME`, which the suite
+        # moves to a fresh directory, so the repo's `mise.toml` reads untrusted.
+        monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(_ROOT))
+        config = tomllib.loads((_ROOT / ".vekna.toml").read_text())
+        listed = subprocess.run(
+            ["mise", "tasks", "--json", "--hidden"],
+            cwd=_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        named = {
+            command.split()[2]
+            for command in _strings(config)
+            if command.startswith("mise run ")
+        }
+        tasks = {task["name"] for task in json.loads(listed.stdout)}
+        assert named
+        assert named - tasks == set()
