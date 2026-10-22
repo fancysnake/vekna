@@ -86,6 +86,9 @@ when.
   there repeats why each skipped module failed, and `rituals list` exits 1
   while any module is skipped. Files and the discovered source still stop the
   command. ([#131](https://github.com/fancysnake/vekna/issues/131))
+- **A tome ritual's boundary error names it in full.** Casting `cabinet:review`
+  with components it does not take says `ritual 'cabinet:review'`, not
+  `ritual 'review'`. ([#156](https://github.com/fancysnake/vekna/issues/156))
 
 ## [0.12.0] - 2026-10-03
 
