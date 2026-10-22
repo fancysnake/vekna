@@ -42,9 +42,10 @@ class TestProjectTasks:
         # moves to a fresh directory, so the repo's `mise.toml` reads untrusted.
         monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(_ROOT))
         commands = [*_strings(read_toml(_ROOT / ".vekna.toml")), *_ritual_strings()]
-        # The timeout because `mise.toml` includes tasks over `git::https`.
+        # The timeout because `mise.toml` includes tasks over `git::https`;
+        # `--local` so a global task cannot stand in for a missing repo one.
         listed = subprocess.run(
-            ["mise", "tasks", "--json", "--hidden"],
+            ["mise", "tasks", "--json", "--hidden", "--local"],
             cwd=_ROOT,
             check=True,
             stdout=subprocess.PIPE,
