@@ -1,5 +1,6 @@
 import asyncio
 import io
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -155,11 +156,6 @@ class TestRitual:
         assert opening == Tick(left=2)
         assert (countdown.exits, countdown.ends) == ((Tick,), False)
 
-    @staticmethod
-    def test_components_of_another_ritual_do_not_pass_the_boundary():
-        with pytest.raises(RitualBoundaryError, match="expected Start, got Tick"):
-            asyncio.run(countdown.run(Tick(left=2)))
-
 
 class TestRitualDefinition:
     @staticmethod
@@ -214,6 +210,31 @@ class TestRunCast:
         started = [event for event in grimoire.events if isinstance(event, RiteBegan)]
         assert len(started) == start + 1
         assert {event.name for event in started} == {"tick"}
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("countdown", r"^ritual 'countdown' expected Start, got Tick$"),
+            # The compendium renames a tome's ritual on the dataclass alone.
+            (
+                "cabinet:countdown",
+                r"^ritual 'cabinet:countdown' expected Start, got Tick$",
+            ),
+        ],
+    )
+    def test_components_of_another_ritual_do_not_pass_the_boundary(
+        name: str, expected: str
+    ):
+        with pytest.raises(RitualBoundaryError, match=expected):
+            asyncio.run(
+                run_cast(
+                    ritual=replace(countdown, name=name),
+                    components=Tick(left=2),
+                    grimoire=Grimoire(clock=_fixed_clock),
+                    channel=_channel(),
+                )
+            )
 
     @staticmethod
     def test_returns_result_of_the_last_affordable_step():

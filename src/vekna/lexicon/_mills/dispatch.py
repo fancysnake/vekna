@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from vekna.lexicon._pacts import (
     MediumBoundaryError,
     Ritual,
-    RitualBoundaryError,
     RitualDefinitionError,
     Step,
     StepBoundaryError,
@@ -208,16 +207,7 @@ def ritual(
         model = _components_model(erased)
         exits, ends = _exits(erased, decorator="ritual")
 
-        # The cast's entry boundary, and the counterpart to the step's: nothing
-        # ties the instance the CLI validated to the model this ritual
-        # declared, so the check is what makes a mis-wiring say so.
         async def run(values: BaseModel) -> Transition:
-            if not isinstance(values, model):
-                msg = (
-                    f"ritual {name!r} expected {model.__name__}, "
-                    f"got {type(values).__name__}"
-                )
-                raise RitualBoundaryError(msg)
             return await _settled(erased(values))
 
         return Ritual(

@@ -287,18 +287,6 @@ class TestSyncBody:
         assert asyncio.run(_enter.run(Ping(n=4))) == Ping(n=4)
         assert (_enter.exits, _enter.ends) == ((Ping,), False)
 
-    @staticmethod
-    def test_still_checks_the_components_of_an_entrypoint_that_only_routes():
-        @ritual("plain")
-        def _enter(components: Ping) -> Done[Pong]:
-            return Done(Pong(n=components.n))
-
-        assert _enter.name == "plain"
-        with pytest.raises(
-            RitualBoundaryError, match=r"^ritual 'plain' expected Ping, got Elsewhere$"
-        ):
-            asyncio.run(_enter.run(Elsewhere(n=1)))
-
     # Not a designed feature — a consequence of asking the value whether it
     # needs awaiting rather than asking the function whether it was `async`.
     # Pinned because it is the forgiving direction: an author who writes

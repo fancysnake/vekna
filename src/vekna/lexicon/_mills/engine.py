@@ -25,6 +25,7 @@ from vekna.lexicon._pacts import (
     RiteRef,
     RiteStreamed,
     Ritual,
+    RitualBoundaryError,
     RitualDefinitionError,
     RitualError,
     RitualSource,
@@ -542,6 +543,20 @@ async def _taken(
         raise
 
 
+# The cast's entry boundary, and the counterpart to the step's: nothing ties
+# the instance the CLI validated to the model this ritual declared, so the
+# check is what makes a mis-wiring say so. Here rather than in the ritual's
+# `run`, which cannot see the name a tome qualifies it by.
+def _admitted(ritual: Ritual, components: BaseModel) -> None:
+    if isinstance(components, ritual.components):
+        return
+    msg = (
+        f"ritual {ritual.name!r} expected {ritual.components.__name__}, "
+        f"got {type(components).__name__}"
+    )
+    raise RitualBoundaryError(msg)
+
+
 async def run_cast(
     *,
     ritual: Ritual,
@@ -550,6 +565,7 @@ async def run_cast(
     channel: Channel,
     ledger: Ledger | None = None,
 ) -> BaseModel | None:
+    _admitted(ritual, components)
     visits: Counter[Step] = Counter()
     failures: Counter[Step] = Counter()
     with cast_context(grimoire=grimoire, channel=channel, ledger=ledger):
