@@ -212,29 +212,24 @@ class TestRunCast:
         assert {event.name for event in started} == {"tick"}
 
     @staticmethod
-    def test_components_of_another_ritual_do_not_pass_the_boundary():
-        with pytest.raises(
-            RitualBoundaryError, match=r"^ritual 'countdown' expected Start, got Tick$"
-        ):
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("countdown", r"^ritual 'countdown' expected Start, got Tick$"),
+            # The compendium renames a tome's ritual on the dataclass alone.
+            (
+                "cabinet:countdown",
+                r"^ritual 'cabinet:countdown' expected Start, got Tick$",
+            ),
+        ],
+    )
+    def test_components_of_another_ritual_do_not_pass_the_boundary(
+        name: str, expected: str
+    ):
+        with pytest.raises(RitualBoundaryError, match=expected):
             asyncio.run(
                 run_cast(
-                    ritual=countdown,
-                    components=Tick(left=2),
-                    grimoire=Grimoire(clock=_fixed_clock),
-                    channel=_channel(),
-                )
-            )
-
-    # The compendium renames a tome's ritual on the dataclass alone.
-    @staticmethod
-    def test_boundary_error_names_a_tome_ritual_by_its_qualified_name():
-        with pytest.raises(
-            RitualBoundaryError,
-            match=r"^ritual 'cabinet:countdown' expected Start, got Tick$",
-        ):
-            asyncio.run(
-                run_cast(
-                    ritual=replace(countdown, name="cabinet:countdown"),
+                    ritual=replace(countdown, name=name),
                     components=Tick(left=2),
                     grimoire=Grimoire(clock=_fixed_clock),
                     channel=_channel(),
