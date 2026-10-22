@@ -16,6 +16,14 @@ class Pong(BaseModel):
 
 class TestRitualSignature:
     @staticmethod
+    def test_the_ritual_carries_the_name_given_not_the_function_name():
+        @ritual("echo")
+        def _echo(components: Ping) -> Done[Ping]:
+            return Done(components)
+
+        assert _echo.name == "echo"
+
+    @staticmethod
     def test_a_second_parameter_is_refused_naming_the_components():
         with pytest.raises(
             RitualDefinitionError,
