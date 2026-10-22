@@ -48,7 +48,7 @@ from ._pacts import (
     encode_frame,
 )
 from ._specs import allowed_answers, parse_flags
-from ._toml import read_toml
+from ._toml import TomlValue, read_toml
 
 __all__ = [
     "NEEDS_TREE",
@@ -80,6 +80,7 @@ __all__ = [
     "RunRecord",
     "StopRequested",
     "SurfaceHello",
+    "TomlValue",
     "TreeBlocked",
     "WireMessage",
     "allowed_answers",
