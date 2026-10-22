@@ -13,7 +13,7 @@ from pathlib import Path
 from vekna.wire import TomlValue, read_toml
 
 _ROOT = Path(__file__).resolve().parents[2]
-_MISE_RUN = re.compile(r"mise run (\S+)")
+_MISE_RUN = re.compile(r"mise run ([^\s`]+)")
 
 
 def _strings(value: TomlValue) -> Iterator[str]:
@@ -53,7 +53,7 @@ class TestProjectTasks:
         )
 
         named = {
-            match[1] for command in commands if (match := _MISE_RUN.match(command))
+            match[1] for command in commands for match in _MISE_RUN.finditer(command)
         }
         tasks = {task["name"] for task in json.loads(listed.stdout)}
         assert named
