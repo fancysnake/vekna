@@ -5,6 +5,7 @@
 # can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — most of these rituals call an agent.
 
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,10 @@ def _at_root(monkeypatch) -> None:
 @pytest.mark.usefixtures("_at_root")
 class TestProjectRituals:
     @staticmethod
+    @pytest.mark.skipif(
+        find_spec("cabinet") is None,
+        reason="cabinet not installed; pyproject pins it to the Pythons it supports",
+    )
     def test_every_ritual_loads_and_lists_its_flags(capsys):
         exit_code = rituals_list()
 
