@@ -5,6 +5,7 @@
 # can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — most of these rituals call an agent.
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -42,20 +43,31 @@ def _at_root(monkeypatch) -> None:
 class TestProjectRituals:
     @staticmethod
     def test_every_ritual_loads_and_lists_its_flags(capsys):
-        exit_code = rituals_list()
+        rituals_list()
 
         out = capsys.readouterr().out
-        assert not exit_code
         for name in _EXPECTED:
             assert f"{name}" in out
         # The flag rendering that broke on 3.11: an optional Annotated component
         # names the type it validates, not `Optional` or `Annotated`.
-        # A whole line: `review` is a suffix of `cabinet:review`, which
-        # `.vekna.toml` loads beside it under its own namespace.
+        # A whole line: `review` is a suffix of `cabinet:review`.
         lines = out.splitlines()
         assert "review  [--base <str>] [--only <Path>] [--focus <str>]" in lines
-        assert any(line.startswith("cabinet:review  ") for line in lines)
         assert "triage  --link <AnyUrl>\n" in out
+
+    # The exit code is checked here, not above: a module that fails to load
+    # makes `list` exit 1, and cabinet's does wherever cabinet is not installed.
+    @staticmethod
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 15), reason="pyproject installs cabinet only below 3.15"
+    )
+    def test_cabinet_rituals_load_beside_the_project_ones(capsys):
+        exit_code = rituals_list()
+
+        out = capsys.readouterr().out
+        assert not exit_code
+        # `.vekna.toml` loads cabinet's rituals under their own namespace.
+        assert any(line.startswith("cabinet:review  ") for line in out.splitlines())
 
     @staticmethod
     @pytest.mark.parametrize("name", _EXPECTED)

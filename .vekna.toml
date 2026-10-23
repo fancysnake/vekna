@@ -30,7 +30,7 @@ sign_commits = false
 # named because cabinet's default is `mise run diff-cover`, which is not a task
 # here. The CI jobs these stand in for are cabinet's own `gate_checks` default,
 # `["checks", "test"]`, matched by prefix — which is how the bare `test` covers
-# `test (3.11)` through `test (3.14)`.
+# every `test (<python>)` job in the matrix.
 gate = "mise run pr-fix"
 coverage = "mise run test:py:cov:diff"
 
