@@ -11,8 +11,11 @@ when.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-23
+
 ### Added
 
+- **Python 3.15** runs vekna.
 - **`timeout` and `race`** in `vekna.folio.flow`, and `@step(timeout=N)`. A
   timeout cancels the work and raises `RiteTimeoutError` naming the call, which
   a step taking `Failure[P]` recovers from. `race` returns the first entrant to
@@ -34,6 +37,8 @@ when.
   each new tree. A tree left dirty or mid-merge is reported as blocked
   (`TreeBlocked`) and stays out of the pool until it is clean.
   ([#140](https://github.com/fancysnake/vekna/issues/140))
+- **`ritual-scribe`** teaches `timeout`, `race`, `@step(timeout=N)` and
+  `@ritual(worktree=True)`.
 
 ### Changed
 
@@ -48,10 +53,10 @@ when.
   its git common dir, so every worktree of one groups together; `CastHello`
   carries it as `project`. `g` shows every project, `p` comes back. Runs
   recorded before it group by the tree they ran in, and still resume.
-- **The daemon starts casts.** 0.6.0 said it starts nothing; now `c <ritual>
-  [--flag value]` in the dashboard queues one, and the daemon spawns it in the
-  window's directory once the project has a free process slot. A spawned cast
-  has no terminal, so `a <answer>` in its drilled view answers its prompts.
+- **The daemon starts casts.** `c <ritual> [--flag value]` in the dashboard
+  queues one, and the daemon spawns it in the window's directory once the
+  project has a free process slot. A spawned cast has no terminal, so
+  `a <answer>` in its drilled view answers its prompts.
   ([#139](https://github.com/fancysnake/vekna/issues/139))
 
 ### Removed
@@ -59,6 +64,12 @@ when.
 - **`goto`, `Goto`, `done` and `Transition`** are gone from `vekna.lexicon`. A
   step returns the next step's payload or `Done(result)` and annotates its
   exits; `rituals show` no longer draws `?`.
+
+### Fixed
+
+- **A tome ritual's boundary error names it in full.** Casting `cabinet:review`
+  with components it does not take says `ritual 'cabinet:review'`, not
+  `ritual 'review'`. ([#156](https://github.com/fancysnake/vekna/issues/156))
 
 ## [0.13.0] - 2026-10-05
 
@@ -86,9 +97,6 @@ when.
   there repeats why each skipped module failed, and `rituals list` exits 1
   while any module is skipped. Files and the discovered source still stop the
   command. ([#131](https://github.com/fancysnake/vekna/issues/131))
-- **A tome ritual's boundary error names it in full.** Casting `cabinet:review`
-  with components it does not take says `ritual 'cabinet:review'`, not
-  `ritual 'review'`. ([#156](https://github.com/fancysnake/vekna/issues/156))
 
 ## [0.12.0] - 2026-10-03
 
@@ -821,7 +829,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.13.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/fancysnake/vekna/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/fancysnake/vekna/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fancysnake/vekna/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fancysnake/vekna/compare/v0.10.0...v0.11.0
