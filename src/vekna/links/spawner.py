@@ -1,19 +1,26 @@
 import asyncio
+import contextlib
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from vekna.pacts.circle import Exited
+from pydantic import TypeAdapter
+
+from vekna.pacts.circle import Exited, Spawned
 from vekna.wire import CastHello, run_file
 
 _LOG = "cast.log"
+_SPAWNED = "spawned.json"
 _RESUME = "--resume"
+_SPAWNED_ADAPTER: TypeAdapter[Spawned] = TypeAdapter(Spawned)
 
 
 # A spawned cast is a `vekna cast --resume <id>` in the tree it was asked from,
 # or in the pooled one leased for it, reading its own record, so nothing typed
 # crosses the daemon. It has no terminal: what it prints goes to `cast.log`
 # beside its record, which is where the reason a cast died before its hello is
-# read back from.
+# read back from. Beside them, `spawned.json` says the process is running for as
+# long as this waits on it, so a daemon that stops under it leaves it behind.
 class Spawner:
     def __init__(self, *, command: Sequence[str], runs: Path) -> None:
         self._command = command
@@ -21,22 +28,75 @@ class Spawner:
 
     async def __call__(self, hello: CastHello, tree: str | None) -> Exited:
         log = run_file(self._runs, hello.cast_id).parent / _LOG
+        mark = log.with_name(_SPAWNED)
         try:
             await asyncio.to_thread(log.parent.mkdir, parents=True, exist_ok=True)
-            with log.open("ab") as out:
-                process = await asyncio.create_subprocess_exec(
-                    *self._command,
-                    _RESUME,
-                    hello.cast_id,
-                    cwd=hello.project_root if tree is None else tree,
-                    stdin=asyncio.subprocess.DEVNULL,
-                    stdout=out,
-                    stderr=asyncio.subprocess.STDOUT,
-                )
-                code = await process.wait()
+            code = await self._waited(hello, tree=tree, log=log, mark=mark)
         except OSError as error:
             return Exited(code=None, said=str(error))
+        # A mark left behind only costs a look at a pid that is gone.
+        with contextlib.suppress(OSError):
+            await asyncio.to_thread(mark.unlink, missing_ok=True)
         return Exited(code=code, said=await asyncio.to_thread(_last_line, log))
+
+    async def _waited(
+        self, hello: CastHello, *, tree: str | None, log: Path, mark: Path
+    ) -> int:
+        with log.open("ab") as out:
+            process = await asyncio.create_subprocess_exec(
+                *self._command,
+                _RESUME,
+                hello.cast_id,
+                cwd=hello.project_root if tree is None else tree,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=out,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            spawned = Spawned(
+                cast_id=hello.cast_id, pid=process.pid, project=hello.project, tree=tree
+            )
+            try:
+                await asyncio.to_thread(
+                    mark.write_bytes, _SPAWNED_ADAPTER.dump_json(spawned)
+                )
+            except OSError:
+                # Unmarked, it is a cast the next daemon could lease a tree from
+                # under, so it does not run at all.
+                process.kill()
+                await process.wait()
+                raise
+            return await process.wait()
+
+    # Read once, before the daemon spawns anything of its own. A mark whose
+    # process is gone, or that will not read back, is cleared on the way.
+    def left_behind(self) -> list[Spawned]:
+        if not self._runs.is_dir():
+            return []
+        left: list[Spawned] = []
+        for mark in self._runs.glob(f"*/{_SPAWNED}"):
+            try:
+                spawned = _SPAWNED_ADAPTER.validate_json(mark.read_bytes())
+            except (OSError, ValueError):
+                spawned = None
+            if spawned is not None and alive(spawned.pid):
+                left.append(spawned)
+            else:
+                with contextlib.suppress(OSError):
+                    mark.unlink(missing_ok=True)
+        return left
+
+
+# shortcut: a pid reused by another process reads as the cast still running,
+# holding its slot and tree until that process ends; a start time beside the
+# pid would tell them apart.
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 # A log that will not read back still leaves the exit code to say how it ended.

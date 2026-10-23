@@ -32,8 +32,10 @@ when.
   pooled worktree, leased before spawn and parked on `vekna/wt-<n>` after.
   `[circle] worktrees` (default 2) sizes the pool and `prepare` runs once in
   each new tree. A tree left dirty or mid-merge is reported as blocked
-  (`TreeBlocked`) and stays out of the pool until it is clean.
-  ([#140](https://github.com/fancysnake/vekna/issues/140))
+  (`TreeBlocked`) and stays out of the pool until it is clean. A restarted
+  daemon keeps the slots and trees of casts still running until they reattach.
+  ([#140](https://github.com/fancysnake/vekna/issues/140),
+  [#172](https://github.com/fancysnake/vekna/issues/172))
 
 ### Changed
 

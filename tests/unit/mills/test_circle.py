@@ -1,11 +1,12 @@
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
 
-from vekna.mills.circle import Circle, CodingPool, Leasing
+from vekna.mills.circle import Circle, CodingPool, Leasing, LiveCasts
 from vekna.mills.hub import Hub
-from vekna.pacts.circle import Exited, Limits, TreeError, Trees
+from vekna.pacts.circle import Exited, Limits, Spawned, TreeError, Trees
 from vekna.pacts.routing import Surface
 from vekna.wire import (
     NEEDS_TREE,
@@ -134,18 +135,39 @@ def _hello(cast_id: str, *, project: str = "/proj/.git") -> CastHello:
 
 
 def _circle(
-    limits: _Limits, trees: _Trees | None = None, said: list[str] | None = None
+    limits: _Limits,
+    trees: _Trees | None = None,
+    said: list[str] | None = None,
+    *,
+    left: list[Spawned] | None = None,
+    alive: Callable[[int], bool] = lambda _: False,
 ) -> tuple[Circle, Hub, _Spawn]:
     hub, spawn = Hub(), _Spawn()
+    live = LiveCasts(casts=hub, spawned=left or [], alive=alive)
     leasing = Leasing(
-        casts=hub,
+        live=live,
         say=([] if said is None else said).append,
         spawn=spawn,
         trees=trees or _Trees(),
         limits=limits,
     )
-    circle = Circle(casts=hub, apply=hub.apply, leasing=leasing, limits=limits)
+    circle = Circle(live=live, apply=hub.apply, leasing=leasing, limits=limits)
     return circle, hub, spawn
+
+
+# Which pids are alive, and every pid asked about.
+class _Alive:
+    def __init__(self, *pids: int) -> None:
+        self.pids = set(pids)
+        self.asked: list[int] = []
+
+    def __call__(self, pid: int) -> bool:
+        self.asked.append(pid)
+        return pid in self.pids
+
+
+def _left(cast_id: str, *, pid: int, tree: str | None) -> Spawned:
+    return Spawned(cast_id=cast_id, pid=pid, project="/proj/.git", tree=tree)
 
 
 def _pool(limits: _Limits) -> tuple[CodingPool, Hub]:
@@ -242,6 +264,23 @@ class TestProcesses:
         circle.ended()
         await _settled()
         assert spawn.spawned == ["c1"]
+
+    @staticmethod
+    async def test_a_cast_left_running_takes_a_slot_until_it_reattaches():
+        alive = _Alive(7)
+        left = [_left("before", pid=7, tree=None)]
+        circle, hub, spawn = _circle(_Limits(processes=1), left=left, alive=alive)
+
+        circle.enqueue(_hello("c1"))
+        await _settled()
+        assert not spawn.spawned
+
+        hub.apply(_hello("before"))
+        hub.apply(CastGoodbye(cast_id="before", status="ok"))
+        circle.ended()
+        await _settled()
+        assert spawn.spawned == ["c1"]
+        assert alive.asked == [7]
 
     @staticmethod
     async def test_a_queued_cast_that_ends_before_its_turn_is_never_spawned():
@@ -372,6 +411,32 @@ class TestTrees:
         await _asked_for_a_tree(circle, spawn, "c1")
 
         assert trees.leases[0]["held"] == {"/pool/1"}
+
+    # A daemon restarted under a running cast hears from it only once it
+    # reattaches, seconds later; its process says it is there before that.
+    @staticmethod
+    async def test_a_tree_a_cast_left_running_stands_in_is_held():
+        trees = _Trees("/pool/2")
+        left = [_left("before", pid=7, tree="/pool/1")]
+        circle, _, spawn = _circle(
+            _Limits(processes=2), trees, left=left, alive=_Alive(7)
+        )
+
+        await _asked_for_a_tree(circle, spawn, "c1")
+
+        assert trees.leases[0]["held"] == {"/pool/1"}
+
+    @staticmethod
+    async def test_a_tree_whose_cast_is_gone_is_not_held():
+        trees = _Trees("/pool/1")
+        alive = _Alive()
+        left = [_left("before", pid=7, tree="/pool/1")]
+        circle, _, spawn = _circle(_Limits(processes=2), trees, left=left, alive=alive)
+
+        await _asked_for_a_tree(circle, spawn, "c1")
+
+        assert trees.leases[0]["held"] == set()
+        assert alive.asked == [7]
 
     # Read at the lease, not at the spawn before it, which takes seconds.
     @staticmethod
