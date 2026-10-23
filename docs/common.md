@@ -248,6 +248,7 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand keeps its own stdin, and the daemon is told it is waiting, not asked to answer. A spawned cast has no terminal: a surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open, and the cast's own `DecideResolved` closes it |
+| `DecideWithdrawn` | cast → daemon | a prompt cut before its answer; the daemon drops it from the view and the terminal says it was withdrawn |
 | `CodingSlotRequested` / `CodingSlotGranted` / `CodingSlotReleased` | both | the account's coding limit: a cast asks before each agent session, the daemon grants in order, the cast releases when the session ends. Not journaled |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
