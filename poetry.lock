@@ -664,18 +664,18 @@ files = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.2.167"
+version = "0.2.168"
 description = "Python SDK for Claude Code"
 optional = false
 python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "claude_agent_sdk-0.2.167-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e9f699d6f00f5f710e696a00010d5efe5ab2de21b040b4e843cbd170f01d1008"},
-    {file = "claude_agent_sdk-0.2.167-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:2947d9fc4e5e172bcf1bb2f7582aec41c52a26f1f7cc88ac231790a80294b294"},
-    {file = "claude_agent_sdk-0.2.167-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:5dc2e3f08d78913a05ab7dea3e7fe8f5614813a8311f7a098cab6434e0b3b4b4"},
-    {file = "claude_agent_sdk-0.2.167-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:e3a6aaa40b36aea29fef6d4a96ad1bcfc1700b394896e308c4f261f52b805b7c"},
-    {file = "claude_agent_sdk-0.2.167-py3-none-win_amd64.whl", hash = "sha256:139597261e6d7329c3a99fbadcbb6e7835f40bda77fa7d34db53888beef777b8"},
-    {file = "claude_agent_sdk-0.2.167.tar.gz", hash = "sha256:06c9b8137f39c5dd8d0959321267c1de006f0458f5a27f645dfbffe479f8e207"},
+    {file = "claude_agent_sdk-0.2.168-py3-none-macosx_11_0_arm64.whl", hash = "sha256:2ef1e7fc442c5abdc1e698027bf1b5faa8ea2130134a14364e2ae3c53bf31fdd"},
+    {file = "claude_agent_sdk-0.2.168-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:653fc7bbe56630e6ddd9601a7cfe50586667e74102da3fb90571456c63655a62"},
+    {file = "claude_agent_sdk-0.2.168-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:77ae66b10edfd07b6ea3dec2af106ad47a9d616f8eb52d4f9b385e1b00bb2a27"},
+    {file = "claude_agent_sdk-0.2.168-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:be197be92549909ec62a2cee04c27f4b0a38c80f723735538a3efc352507f81d"},
+    {file = "claude_agent_sdk-0.2.168-py3-none-win_amd64.whl", hash = "sha256:ed1814b0dd1c113bdaf3e51e6a67aa5b96b8f5c5839a43aeb6ae1e6ed23a5b35"},
+    {file = "claude_agent_sdk-0.2.168.tar.gz", hash = "sha256:80388054a09c137d76fc29caa6e46bc90d2ae2ef09fac5ee1c38fc36d2762fda"},
 ]
 markers = {dev = "python_version <= \"3.14\""}
 
