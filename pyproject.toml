@@ -6,7 +6,7 @@ authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.11,<3.16"
 keywords = ["agents", "claude", "llm", "orchestration", "workflow"]
 # No `License ::` classifier: PEP 639 supersedes it with the `License-Expression`
 # metadata field that `license` above produces, and PyPI rejects carrying both.
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Software Development :: Build Tools",
     "Typing :: Typed",
 ]
@@ -73,7 +74,7 @@ dev = [
     "tingle (>=0.8.0,<0.9.0)",
     "taplo (>=0.9.3,<0.10.0)",
     "pytest-xdist (>=3.8.0,<4.0.0)",
-    "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0",
+    "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0 ; python_version < \"3.15\"",
     "mutmut (>=3.8.0,<4.0.0)",
 ]
 
