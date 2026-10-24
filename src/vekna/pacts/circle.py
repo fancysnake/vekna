@@ -33,6 +33,17 @@ class Exited:
 Spawn = Callable[[CastHello, str | None], Awaitable[Exited]]
 
 
+# A cast process a daemon spawned and was still waiting on when it stopped. The
+# next daemon hears from the cast only once it reattaches, so until then this is
+# what says the cast holds a slot, and the tree it stands in.
+@dataclass(frozen=True, kw_only=True)
+class Spawned:
+    cast_id: str
+    pid: int
+    project: str
+    tree: str | None
+
+
 # A tree could not be made ready: `git worktree add` refused, or `prepare`
 # failed. The cast that wanted it ends with this as its reason.
 class TreeError(Exception):

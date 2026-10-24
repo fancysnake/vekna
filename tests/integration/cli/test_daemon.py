@@ -557,6 +557,27 @@ class TestPruning:
         assert f"{tmp_path / 'runs' / 'c0'}: [Errno 13] Permission denied" in said
 
 
+@pytest.mark.asyncio
+class TestLeftBehind:
+    # This test's own process stands in for a cast a stopped daemon spawned.
+    @staticmethod
+    async def test_a_cast_still_running_from_a_stopped_daemon_is_said_held(
+        socket_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        mark = tmp_path / "runs" / "c1" / "spawned.json"
+        mark.parent.mkdir(parents=True)
+        mark.write_text(
+            f'{{"cast_id":"c1","pid":{os.getpid()},"project":"p","tree":null}}'
+        )
+
+        async with _served(socket_path):
+            assert await alive(socket_path)
+
+        said = capsys.readouterr().err
+        assert "holding 1 cast(s) left running until they reattach" in said
+        assert mark.exists()
+
+
 # The whole path a person takes: a real `vekna`, a daemon in a process of its
 # own, `q`, and `vekna stop`.
 class TestTheBareCommand:
