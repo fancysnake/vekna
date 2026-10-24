@@ -420,7 +420,7 @@ ending into one final step that `emit_delta`s the summary. Under
 `vekna cast --unattended` a `decide` raises `UnattendedPromptError` — route it
 if the ritual can do without the answer. Or ask first: `attended()` from
 `vekna.lexicon` is false under the flag, and `trial.decide.attended = False`
-stands in for it in a test.
+stands in for it in a test, refusing every `decide` the way the flag does.
 
 **Bound time per call, not per step loop.** `await timeout(coding(...),
 seconds=600)` and `await race(a, b)` from `vekna.folio.flow`; `@step(timeout=600)`

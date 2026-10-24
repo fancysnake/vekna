@@ -425,10 +425,11 @@ class _Plan(NamedTuple):
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
-    # Unattended once is unattended for good: a step that skipped a question
-    # the first time round must skip it again, or the record stops lining up
-    # with what the replay asks of it.
-    unattended = unattended or hello.unattended
+    # Unattended if either the record or the operator says so. Unattended once
+    # stays so: a step that skipped a question must skip it again, or the record
+    # stops lining up with the replay. Turning an attended cast unattended only
+    # ends the replay at the first `decide` it now skips, which replay handles.
+    refusing = unattended or hello.unattended
     library = _build_library(Path.cwd())
     compendium = library.compendium
     the_ritual = compendium.ritual(hello.ritual)
@@ -438,7 +439,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
         return _Plan(
             the_ritual,
             library.defaults.components(the_ritual, hello.components),
-            unattended,
+            refusing,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
             compendium=compendium,
@@ -450,7 +451,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     return _Plan(
         ritual=the_ritual,
         components=the_ritual.components.model_validate(hello.components),
-        unattended=unattended,
+        unattended=refusing,
         ledger=Ledger.from_resumption(resumption),
         resumed_from=cast_id,
         compendium=compendium,

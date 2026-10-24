@@ -122,7 +122,7 @@ class Resumption:
 class Channel(Protocol):
     # Whether somebody is there to answer. False only where every question is
     # refused, which is what a step asks `attended()` before it asks one.
-    attended: bool
+    attended: bool = True
 
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False

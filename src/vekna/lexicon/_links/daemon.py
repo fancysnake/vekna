@@ -378,8 +378,6 @@ def _settle(future: asyncio.Future[None]) -> None:
 # waiting cast and then stop raising it. A spawned cast has no stdin, so with no
 # `inner` the answer comes over the wire from a surface instead.
 class TeeChannel(Channel):
-    attended = True
-
     def __init__(
         self,
         *,
@@ -462,6 +460,7 @@ class LinkQueue(CastQueueProtocol):
             wired=True,
             enqueued_by=parent.cast_id,
             worktree=found.worktree,
+            unattended=parent.unattended,
         )
         await self._link.enqueue(hello)
         return hello.cast_id

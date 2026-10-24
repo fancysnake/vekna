@@ -17,6 +17,7 @@ from vekna.lexicon import (
     ShellFocusProtocol,
     ShellReply,
     StepBoundaryError,
+    UnattendedPromptError,
     attended,
     ritual,
     step,
@@ -255,6 +256,17 @@ class TestAttended:
         trial.decide.attended = False
 
         assert trial.cast(heard_cast, NoComponents()) == Mode(attended=False)
+
+    # As under `--unattended`, a step that asks anyway is refused, not answered.
+    @staticmethod
+    def test_an_unattended_trial_refuses_what_is_asked_anyway(trial: Trial) -> None:
+        trial.decide.attended = False
+        trial.shell.replies(when="*", exit_code=1, always=True)
+        trial.decide.answers(answer=True)
+
+        with pytest.raises(UnattendedPromptError, match="hand it to the agent"):
+            trial.walk(gates, Attempt(budget=1))
+        assert trial.decide.prompts == ["red — hand it to the agent?"]
 
 
 class TestScriptedOutput:

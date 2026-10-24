@@ -79,7 +79,8 @@ nothing changes.
 A step can also ask first: `attended()` from `vekna.lexicon` is false under the
 flag, so a ritual can skip the work a question would have approved and say so.
 A cast carried on with `--continue` stays unattended whether or not the flag
-is typed again.
+is typed again, and the flag on `--continue` makes an attended cast
+unattended. A cast it queues is unattended too.
 
 ### `vekna cast --help`
 
