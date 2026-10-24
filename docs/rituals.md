@@ -209,7 +209,7 @@ in for every component its enqueuer left unset.
 `rituals show` prints a configured component with its value and file:
 
 ```text
-  --base-branch <str>  = main (.vekna.toml)
+  --base-branch <str>  = main (/home/me/work/app/.vekna.toml)
 ```
 
 A key the ritual does not take fails the cast, naming the file, the ritual and
