@@ -32,7 +32,7 @@ _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
     from vekna.folio.shell import shell
-    from vekna.lexicon import Done, ritual, step
+    from vekna.lexicon import Done, attended, ritual, step
 
 
     class State(BaseModel):
@@ -73,11 +73,22 @@ _RITUALS = textwrap.dedent("""
         said = components.word + " " + components.name
         Path("said.log").write_text(said)
         return Done(Report(said=said))
+
+
+    @ritual("mode")
+    async def mode(_: State) -> Done[Report]:
+        Path("mode.log").write_text(str(attended()))
+        return Done(Report(said="heard"))
     """)
 
 
 def _journalled(
-    project: Path, runs: Path, cast_id: str, *, ritual: str = "job"
+    project: Path,
+    runs: Path,
+    cast_id: str,
+    *,
+    ritual: str = "job",
+    unattended: bool = False,
 ) -> None:
     journal = Journal(runs)
     journal.record(
@@ -88,6 +99,7 @@ def _journalled(
             ritual=ritual,
             components={"left": 1},
             started_at=_WHEN,
+            unattended=unattended,
         )
     )
 
@@ -243,6 +255,23 @@ class TestResume:
         assert main(["--resume", "q1"]) == 0
 
         assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    # Carried on without the flag, an unattended cast is unattended still:
+    # what its steps skipped the first time they skip again.
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("recorded", "typed", "said"),
+        [(True, [], "False"), (False, ["--unattended"], "False"), (False, [], "True")],
+    )
+    def test_a_resumed_cast_keeps_its_mode(
+        project: Path, tmp_path: Path, *, recorded: bool, typed: list[str], said: str
+    ):
+        _journalled(
+            project, tmp_path / "runs", "c1", ritual="mode", unattended=recorded
+        )
+
+        assert main([*typed, "--resume", "c1"]) == 0
+        assert (project / "mode.log").read_text() == said
 
     @staticmethod
     def test_a_rite_that_finished_is_not_run_again(project: Path, tmp_path: Path):
