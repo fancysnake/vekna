@@ -370,7 +370,8 @@ class TestReading:
         recent = journal.recent(limit=5)
 
         assert [run_cast_id(run) for run in recent] == ["c1", "c0"]
-        assert not isinstance(recent[1], DamagedRun)
+        assert not isinstance(record := recent[1], DamagedRun)
+        assert record.hello.started_at.tzinfo is UTC
 
     # Written before a hello carried its repository: the run still reads, and
     # still resumes, grouped by the tree it ran in.

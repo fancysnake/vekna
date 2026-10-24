@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC
 from pathlib import Path
 
 from ._pacts import (
@@ -146,11 +147,20 @@ def events_log(root: Path, cast_id: str) -> Path:
 # No record is None: a cast that ran with no daemon listening leaves none. A
 # record that will not parse is the caller's to answer for — the listing shows
 # it as damaged, a resume says which file it was.
+# A `started_at` need not carry a zone: the field is a plain `datetime`, so a
+# `run.json` written by hand or by something that is not this daemon can land
+# without one. Read as UTC, the zone this daemon's own writer records in, so
+# every reader — the journal's sort, `vekna log`'s local time — agrees. The
+# alternative, calling such a record damaged, has `prune` deleting a run that
+# resumes perfectly well.
 def read_record(root: Path, cast_id: str) -> RunRecord | None:
     path = run_file(root, cast_id)
     if not path.is_file():
         return None
-    return RunRecord.model_validate_json(path.read_text())
+    record = RunRecord.model_validate_json(path.read_text())
+    if record.hello.started_at.tzinfo is None:
+        record.hello.started_at = record.hello.started_at.replace(tzinfo=UTC)
+    return record
 
 
 def read_events(root: Path, cast_id: str) -> Iterator[WireMessage]:
