@@ -5,10 +5,9 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from vekna.folio.shell import shell
-from vekna.lexicon import Done, RitualError, ritual, step
+from vekna.lexicon import Done, ritual, step
 
-from .shared import Bound, said
+from .shared import Bound, ran
 
 
 class Nap(BaseModel):
@@ -37,8 +36,5 @@ def nap(components: Nap) -> Asleep:
 async def sleep(state: Asleep) -> Asleep | Done[Slept]:
     if state.left <= 0:
         return Done(Slept(naps=state.slept))
-    result = await shell(f"sleep {state.seconds}")
-    if result.exit_code:
-        msg = f"nap {state.slept + 1} failed: {said(result)}"
-        raise RitualError(msg)
+    await ran(f"sleep {state.seconds}", doing=f"nap {state.slept + 1}")
     return Asleep(left=state.left - 1, slept=state.slept + 1, seconds=state.seconds)

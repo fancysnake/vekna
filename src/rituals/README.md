@@ -10,6 +10,8 @@ vekna cast triage --link <url>
 vekna cast nap [--naps N] [--seconds N]
 vekna cast tree [--dirty true]
 vekna cast sweep [--base-branch <ref>] [--max-prs N]
+vekna cast ci_watch --pull-request N [--fixes N] [--patience N]
+vekna cast pr_fix --pull-request N --checks <text> [--remote <name>]
 ```
 
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
@@ -30,17 +32,20 @@ vekna cast sweep [--base-branch <ref>] [--max-prs N]
   branch; `--dirty true` leaves an untracked file, so the tree is left
   blocked. Start it with `c` from the dashboard: a cast typed in a shell runs
   where it was typed.
-- [`sweep`](sweep.py) is the factory in three rituals. `sweep` lists the open
-  pull requests against the base branch and queues one `ci_watch` for each,
-  then ends. `ci_watch` reads that pull request's CI under a timeout; when CI
-  is red it waits on a `pr_fix` and gives up its process slot while it waits.
-  `pr_fix` is the only one with `worktree=True`: it checks the branch out in
-  a leased tree, has an allowlisted agent fix it, and asks you before it
-  pushes. Forks are never queued: their branches are strangers' code. The
-  repository's base branch and push remote come from `[defaults.*]` in
-  `.vekna.toml`. A failed fix cast, a timeout or a broken `gh` each end in a
-  `Failure` step that reports why. Needs the daemon: start it from the
-  dashboard, and attach to a `pr_fix` to answer its push.
+- [`sweep`](sweep.py) is the factory in three rituals. It lists the open pull
+  requests against the base branch, queues one `ci_watch` for each, and ends.
+  Forks are not queued. The base branch comes from `[defaults.sweep]` in
+  `.vekna.toml`. Needs the daemon: start it from the dashboard.
+- [`ci_watch`](ci_watch.py) reads one pull request's CI under a timeout. When
+  CI is red it waits on a `pr_fix`, giving up its process slot while it
+  waits, then reads CI again. A fix not pushed ends it with the reason; a
+  failed fix cast, a timeout or a broken `gh` end in a `Failure` step that
+  reports why.
+- [`pr_fix`](pr_fix.py) is the only one with `worktree=True`. It refuses a
+  fork, whose branch is a stranger's code, then checks the branch out in a
+  leased tree, has an allowlisted agent fix it, and asks you before it
+  pushes. The push remote comes from `[defaults.pr_fix]`. Attach to it to
+  answer the push.
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for
@@ -60,7 +65,7 @@ Task copies the contextvar the runtime hangs them from.
 One module per ritual, and its models, steps, helpers and prompt text stay
 together in it — the prompts at the top, since a block of prose between two
 steps hides what the steps do. [`shared.py`](shared.py) holds what more than
-one ritual uses, which is one type and one helper.
+one ritual uses.
 
 `__init__.py` is empty and stays that way — the engine sweeps every submodule,
 so nothing needs re-exporting to be found.
