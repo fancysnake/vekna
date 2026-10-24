@@ -35,7 +35,8 @@ vekna cast sweep [--base-branch <ref>] [--max-prs N]
   then ends. `ci_watch` reads that pull request's CI under a timeout; when CI
   is red it waits on a `pr_fix` and gives up its process slot while it waits.
   `pr_fix` is the only one with `worktree=True`: it checks the branch out in
-  a leased tree, has an agent fix it, and asks you before it pushes. The
+  a leased tree, has an allowlisted agent fix it, and asks you before it
+  pushes. Forks are never queued: their branches are strangers' code. The
   repository's base branch and push remote come from `[defaults.*]` in
   `.vekna.toml`. A failed fix cast, a timeout or a broken `gh` each end in a
   `Failure` step that reports why. Needs the daemon: start it from the
