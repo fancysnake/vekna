@@ -493,17 +493,21 @@ _CHECKED = textwrap.dedent("""
     """)
 
 
-def _global_config(tmp_path, monkeypatch, text):
-    config = tmp_path / "home" / ".config" / "vekna"
-    config.mkdir(parents=True)
-    (config / "config.toml").write_text(text)
+@pytest.fixture
+def _home(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
+def _global_config(tmp_path, text):
+    config = tmp_path / "home" / ".config" / "vekna"
+    config.mkdir(parents=True)
+    (config / "config.toml").write_text(text)
+
+
+@pytest.mark.usefixtures("_home")
 class TestCastDefaults:
     @staticmethod
     def test_the_repo_answers_a_required_component(tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "rituals.py").write_text(_CHECKED)
         (tmp_path / ".vekna.toml").write_text(
             '[defaults.pr_check]\nbase_branch = "main"\nmax_prs = 3\n'
@@ -520,7 +524,6 @@ class TestCastDefaults:
 
     @staticmethod
     def test_a_flag_beats_the_config(tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "rituals.py").write_text(_CHECKED)
         (tmp_path / ".vekna.toml").write_text(
             '[defaults.pr_check]\nbase_branch = "main"\n'
@@ -537,9 +540,7 @@ class TestCastDefaults:
     @staticmethod
     def test_the_project_overrides_the_global_key_by_key(tmp_path, monkeypatch, capsys):
         _global_config(
-            tmp_path,
-            monkeypatch,
-            '[defaults.pr_check]\nbase_branch = "main"\nmax_prs = 5\n',
+            tmp_path, '[defaults.pr_check]\nbase_branch = "main"\nmax_prs = 5\n'
         )
         project = tmp_path / "project"
         project.mkdir()
@@ -556,7 +557,6 @@ class TestCastDefaults:
 
     @staticmethod
     def test_a_misspelt_key_fails_naming_the_file(tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "rituals.py").write_text(_CHECKED)
         (tmp_path / ".vekna.toml").write_text(
             '[defaults.pr_check]\nbase_brnach = "main"\n'
@@ -571,9 +571,7 @@ class TestCastDefaults:
 
     @staticmethod
     def test_a_ritual_not_installed_here_is_not_an_error(tmp_path, monkeypatch):
-        _global_config(
-            tmp_path, monkeypatch, '[defaults.elsewhere]\nbase_brnach = "main"\n'
-        )
+        _global_config(tmp_path, '[defaults.elsewhere]\nbase_brnach = "main"\n')
         project = tmp_path / "project"
         project.mkdir()
         (project / "rituals.py").write_text(_CHECKED)

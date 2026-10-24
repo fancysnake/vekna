@@ -823,7 +823,7 @@ class TestRitualsShowDefaults:
 
         out = capsys.readouterr().out
         assert exit_code == 0
-        assert "  --start <int>  = 3 (.vekna.toml)\n" in out
+        assert f"  --start <int>  = 3 ({tmp_path / '.vekna.toml'})\n" in out
         assert "  --label <str>  (optional)\n" in out
 
     @staticmethod

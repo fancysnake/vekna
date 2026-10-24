@@ -28,6 +28,7 @@ from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
 from ._links.unattended import UnattendedChannel
+from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
     CAST_QUEUE,
@@ -155,11 +156,6 @@ def _config_files(cwd: Path) -> list[Path]:
     return found
 
 
-class _Default(NamedTuple):
-    value: JsonValue
-    source: Path
-
-
 class _Library(NamedTuple):
     compendium: Compendium
     # What an empty compendium should say. The walk that discovered nothing is
@@ -169,9 +165,7 @@ class _Library(NamedTuple):
     # Each configured module that did not import. Its warning is already on
     # stderr; what `list` still owes it is the exit code.
     skipped: tuple[str, ...]
-    # Per ritual, per key, with the file that said it: merged in precedence
-    # order, so a project key overrides its global twin and spares the rest.
-    defaults: dict[str, dict[str, _Default]]
+    defaults: Defaults
 
 
 # A module is somebody else's package: one that is not installed here must not
@@ -206,7 +200,6 @@ def _build_library(cwd: Path) -> _Library:
     # Ordered as well as unique: a tome's namespace is its own, so loading them
     # after every file reorders nothing that can collide.
     tomes: dict[Tome, None] = {}
-    defaults: dict[str, dict[str, _Default]] = {}
 
     def load_source(path: Path) -> None:
         # Resolved so `..`, symlinks and a config-relative spelling of the
@@ -220,12 +213,8 @@ def _build_library(cwd: Path) -> _Library:
     discovered = _find_rituals_source(cwd)
     if discovered.source is not None:
         load_source(discovered.source)
-    for config in _config_files(cwd):
-        read = read_config(config)
-        for name, table in read.defaults.items():
-            defaults.setdefault(name, {}).update(
-                (key, _Default(value, config)) for key, value in table.items()
-            )
+    configs = [(path, read_config(path)) for path in _config_files(cwd)]
+    for config, read in configs:
         rituals = read.rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
         # found by walking parents, and a global one is shared by every
@@ -262,32 +251,8 @@ def _build_library(cwd: Path) -> _Library:
         compendium,
         _no_rituals(None if loaded else discovered.near_miss),
         tuple(skipped),
-        defaults,
+        Defaults(configs),
     )
-
-
-# A key the ritual does not take would be dropped by its model, and the operator
-# would watch a ritual ignore a default they believe they set.
-def _defaults_of(library: _Library, the_ritual: Ritual) -> dict[str, _Default]:
-    found = library.defaults.get(the_ritual.name, {})
-    for key, default in found.items():
-        if key not in the_ritual.components.model_fields:
-            msg = (
-                f"{default.source}: [defaults.{the_ritual.name}] sets {key!r},"
-                f" which {the_ritual.name} does not take"
-            )
-            raise RitualDefinitionError(msg)
-    return found
-
-
-def _components(
-    *, library: _Library, the_ritual: Ritual, given: Mapping[str, JsonValue]
-) -> BaseModel:
-    values: dict[str, JsonValue] = {
-        key: default.value for key, default in _defaults_of(library, the_ritual).items()
-    }
-    values.update(given)
-    return the_ritual.components.model_validate(values)
 
 
 def _component_options(ritual: Ritual) -> str:
@@ -343,20 +308,20 @@ def _shown(value: JsonValue) -> str:
 
 # A required field the config answers is no longer the operator's to type, so
 # it prints the answer and where it came from rather than reading as owed.
-def _component_lines(the_ritual: Ritual, defaults: dict[str, _Default]) -> list[str]:
+def _component_lines(the_ritual: Ritual, defaults: Mapping[str, Default]) -> list[str]:
     if not (flags := component_flags(the_ritual.components)):
         return ["  (none)"]
     lines: list[str] = []
     for name, type_name, required in flags:
         flag = f"  --{name.replace('_', '-')} <{type_name}>"
         if (default := defaults.get(name)) is not None:
-            lines.append(f"{flag}  = {_shown(default.value)} ({default.source.name})")
+            lines.append(f"{flag}  = {_shown(default.value)} ({default.source})")
         else:
             lines.append(flag + ("" if required else "  (optional)"))
     return lines
 
 
-def _show_text(the_ritual: Ritual, defaults: dict[str, _Default]) -> str:
+def _show_text(the_ritual: Ritual, defaults: Mapping[str, Default]) -> str:
     graph = step_graph(the_ritual)
     lines = [
         the_ritual.name,
@@ -375,7 +340,7 @@ def _show_text(the_ritual: Ritual, defaults: dict[str, _Default]) -> str:
 def _show(library: _Library, name: str) -> int:
     try:
         the_ritual = library.compendium.ritual(name)
-        text = _show_text(the_ritual, _defaults_of(library, the_ritual))
+        text = _show_text(the_ritual, library.defaults.of(the_ritual))
     except RitualDefinitionError as error:
         sys.stderr.write(f"{error}\n")
         return 2
@@ -457,9 +422,6 @@ class _Plan(NamedTuple):
     enqueued_by: str | None = None
 
 
-# The record holds the components as the CLI already validated them once, so
-# they are validated again against the same model rather than re-derived into
-# flags and parsed back out.
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
@@ -469,18 +431,18 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     if resumption.record.status == "queued":
         # Nobody typed a queued cast's components: whoever queued it named what
         # it meant, and this repo's defaults answer the rest.
-        components = _components(
-            library=library, the_ritual=the_ritual, given=hello.components
-        )
         return _Plan(
             the_ritual,
-            components,
+            library.defaults.components(the_ritual, hello.components),
             unattended,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
             compendium=compendium,
             enqueued_by=hello.enqueued_by,
         )
+    # The record holds the components as the CLI already validated them once,
+    # so they are validated again against the same model rather than
+    # re-derived into flags and parsed back out.
     return _Plan(
         ritual=the_ritual,
         components=the_ritual.components.model_validate(hello.components),
@@ -508,7 +470,7 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
     the_ritual = library.compendium.ritual(name)
     return _Plan(
         the_ritual,
-        _components(library=library, the_ritual=the_ritual, given=parse_flags(flags)),
+        library.defaults.components(the_ritual, parse_flags(flags)),
         unattended,
         compendium=library.compendium,
     )

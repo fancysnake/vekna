@@ -32,6 +32,15 @@ class DamagedRun:
 
 Run = RunRecord | DamagedRun
 
+
+def run_cast_id(run: Run) -> str:
+    return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
+
+
+def run_started(run: Run) -> datetime:
+    return run.seen_at if isinstance(run, DamagedRun) else run.hello.started_at
+
+
 # The tail of a rite's output, not all of it. The journal has the whole stream
 # and a surface only ever paints a screenful, so a cast that streams for an hour
 # costs the same as one that just started.
