@@ -8,8 +8,9 @@ from pydantic import BaseModel
 
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.coding_claude import ClaudeOptions
-from vekna.folio.shell import shell
-from vekna.lexicon import Done, File, GitRef, RitualError, Text, ritual, step
+from vekna.lexicon import Done, File, GitRef, Text, ritual, step
+
+from .shared import ran
 
 _REVIEW_SYSTEM = """\
 You are reviewing a diff on this repository, and only what the diff changes.
@@ -79,13 +80,11 @@ async def collect(request: ReviewRequest) -> Diff | Done[Review]:
     # forcing what follows to be read as a revision.
     # stream=False: a diff is bulk, not progress. It reaches the agent in the
     # next step either way.
-    result = await shell(
+    result = await ran(
         f"git diff --end-of-options {shlex.quote(request.base)}...HEAD{scope}",
+        doing=f"git diff against {request.base!r}",
         stream=False,
     )
-    if result.exit_code:
-        msg = f"git diff against {request.base!r} failed: {result.stderr.strip()}"
-        raise RitualError(msg)
     # Nothing changed is an answer, and not one worth paying an agent for.
     if not result.stdout.strip():
         return Done(Review(base=request.base, verdict="ship", findings=[]))

@@ -72,7 +72,7 @@ class TestReadLink:
     ) -> None:
         trial.shell.replies(when="gh issue view*", exit_code=1, stderr="not found\n")
 
-        with pytest.raises(RitualError, match="gh could not read"):
+        with pytest.raises(RitualError, match="failed: not found"):
             trial.walk(read_link, Triage(link=AnyUrl(_ISSUE)))
 
 

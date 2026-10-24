@@ -41,3 +41,12 @@ coverage = "mise run test:py:cov:diff"
 # only `fullcheck` needs naming.
 [cabinet.agent]
 may_not_run = ["mise run fullcheck"]
+
+# Components that are this repository's answer rather than a run's. A flag
+# still wins. `pr_fix` is queued by `ci_watch`, which leaves `remote` unset so
+# this table answers it, for the same ssh reason `[cabinet] remote` gives.
+[defaults.sweep]
+base_branch = "main"
+
+[defaults.pr_fix]
+remote = "https-origin"

@@ -8,8 +8,9 @@ from pydantic import BaseModel
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.coding_claude import ClaudeOptions
 from vekna.folio.flow import decide
-from vekna.folio.shell import shell
 from vekna.lexicon import Done, RitualError, Url, ritual, step
+
+from .shared import fenced, ran
 
 # The issue body is written by whoever opened it, which on a public repository
 # is anyone. It is evidence, not instruction: fenced and named as untrusted so
@@ -33,11 +34,7 @@ work; this is a reading. Read only inside this repository.
 
 Give a one-sentence headline too. It is the only part I read before deciding
 what to do with this, so make that sentence carry the decision.
-
---- BEGIN UNTRUSTED ISSUE DATA ---
 """
-
-_END_ISSUE = "\n--- END UNTRUSTED ISSUE DATA ---\n"
 
 _ACT_ON = """\
 You are acting on the triage below. Work in a branch, keep the change small
@@ -111,10 +108,9 @@ def triage(components: Triage) -> Triage:
 
 @step
 async def read_link(request: Triage) -> Fetched:
-    result = await shell(_gh_view(request.link), stream=False)
-    if result.exit_code:
-        msg = f"gh could not read {request.link}: {result.stderr.strip()}"
-        raise RitualError(msg)
+    result = await ran(
+        _gh_view(request.link), doing=f"reading {request.link}", stream=False
+    )
     return Fetched(link=str(request.link), body=result.stdout)
 
 
@@ -123,7 +119,7 @@ async def size_up(fetched: Fetched) -> Verdict:
     # Read-only, and it does read: the agent judges what the issue touches by
     # opening the code, not by guessing from the title.
     reading = await coding(
-        f"{_READ_ISSUE}{fetched.body}{_END_ISSUE}",
+        _READ_ISSUE + fenced("ISSUE", fetched.body),
         output=Reading,
         opts=CodingOpts(
             focus_options=ClaudeOptions(

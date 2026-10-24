@@ -62,7 +62,7 @@ class TestDefaults:
             defaults.of(GREET)
 
     @staticmethod
-    def test_a_ritual_nobody_set_defaults_for_gets_none():
+    def test_a_ritual_no_config_names_has_no_defaults():
         defaults = Defaults([])
 
         assert defaults.of(GREET) == {}
