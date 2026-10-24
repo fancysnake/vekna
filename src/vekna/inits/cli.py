@@ -3,6 +3,8 @@ import contextlib
 import importlib
 import os
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -11,10 +13,12 @@ from click import Group
 
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing
+from vekna.gates.cli.tui import VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.links.terminal import Terminal
+from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
 from vekna.wire import (
@@ -206,50 +210,102 @@ _rituals.add_command(_rituals_list)
 _rituals.add_command(_rituals_show)
 
 
+# A window's line to the daemon, summoning it when none is listening, and what
+# the window has to say about how it got one.
+@dataclass(frozen=True, kw_only=True)
+class _Line:
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
+    note: str
+
+    def send(self, message: WireMessage) -> None:
+        self.writer.write(encode_frame(message))
+
+    async def close(self) -> None:
+        self.writer.close()
+        with contextlib.suppress(OSError):
+            await self.writer.wait_closed()
+
+
+async def _opened(*, debug: bool) -> _Line:
+    path = default_socket_path()
+    note = ""
+    if not await alive(path):
+        await summon(path=path, debug=debug)
+        note = _STARTED
+    elif debug:
+        note = _DEBUG_LATE
+    reader, writer = await attach(path)
+    writer.write(encode_frame(SurfaceHello()))
+    return _Line(reader=reader, writer=writer, note=note)
+
+
+# What a daemon sends a surface is what it heard from its casts, and the
+# refusal of a cast this window asked for. Returns once the daemon has gone.
+async def _listen(
+    line: _Line, *, hub: Hub, say: Callable[[str], None], changed: Callable[[], None]
+) -> None:
+    async for message in read_frames(line.reader):
+        if isinstance(message, CastRefused):
+            say(message.reason)
+        elif not isinstance(message, (SurfaceHello, StopRequested, CastRequested)):
+            hub.apply(message)
+            changed()
+
+
 # Every `vekna` is a window on the daemon, summoning it when none is listening:
 # it is replayed every live cast and paints the project it was opened in. It
 # journals nothing — the daemon that owns the socket owns the record — and `q`
 # leaves the daemon running.
 async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
-    path = default_socket_path()
     hub = Hub()
-    writers: list[asyncio.StreamWriter] = []
-
-    def send(message: WireMessage) -> None:
-        for writer in writers:
-            writer.write(encode_frame(message))
-
+    line = await _opened(debug=debug)
     dashboard = Dashboard(
         casts=hub,
         screen=screen if screen is not None else Terminal(),
         project=await project_of(Path.cwd()),
         root=str(Path.cwd()),
-        send=send,
+        send=line.send,
     )
-    if not await alive(path):
-        await summon(path=path, debug=debug)
-        dashboard.say(_STARTED)
-    elif debug:
-        dashboard.say(_DEBUG_LATE)
-    reader, writer = await attach(path)
-    writer.write(encode_frame(SurfaceHello()))
-    writers.append(writer)
+    if line.note:
+        dashboard.say(line.note)
 
-    # What a daemon sends a surface is what it heard from its casts, and the
-    # refusal of a cast this window asked for.
     async def listen() -> None:
-        async for message in read_frames(reader):
-            if isinstance(message, CastRefused):
-                dashboard.say(message.reason)
-            elif not isinstance(message, (SurfaceHello, StopRequested, CastRequested)):
-                hub.apply(message)
-                dashboard.changed()
+        await _listen(line, hub=hub, say=dashboard.say, changed=dashboard.changed)
         dashboard.stop(note=_DAEMON_ENDED)
 
     await dashboard.run(alongside=[asyncio.create_task(listen())])
-    writer.close()
-    with contextlib.suppress(OSError):
-        await writer.wait_closed()
+    await line.close()
+    return 0
+
+
+# The same window in Textual: the daemon's casts in a table, the one under the
+# cursor beside it, prompts in a dialog. Its line to the daemon and its replay
+# are the line view's; only the painting differs.
+async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
+    hub = Hub()
+    line = await _opened(debug=debug)
+    app = VeknaApp(
+        casts=hub,
+        project=await project_of(Path.cwd()),
+        root=str(Path.cwd()),
+        send=line.send,
+        branch_of=branch_of,
+    )
+
+    async def listen() -> None:
+        await _listen(line, hub=hub, say=app.say, changed=app.changed)
+        app.exit(message=_DAEMON_ENDED)
+
+    listening = asyncio.create_task(listen())
+    if line.note:
+        app.call_later(app.say, line.note)
+    try:
+        await app.run_async(headless=headless)
+    finally:
+        listening.cancel()
+        await asyncio.gather(listening, return_exceptions=True)
+        await line.close()
     return 0
 
 
@@ -284,10 +340,19 @@ def init_command() -> Group:
         is_flag=True,
         help="Log every event the daemon processes to ~/.local/state/vekna/debug.log.",
     )
-    def vekna(*, debug: bool = False) -> None:
+    @click.option(
+        "--no-tui",
+        "no_tui",
+        is_flag=True,
+        help="The line view: repainted whole, read a line at a time.",
+    )
+    def vekna(*, debug: bool = False, no_tui: bool = False) -> None:
         ctx = click.get_current_context()
         if ctx.invoked_subcommand is None:
-            raise SystemExit(asyncio.run(window(debug=debug)))
+            # Textual needs a terminal to draw on; anything else gets lines.
+            drawn = not no_tui and os.isatty(0) and os.isatty(1)
+            view = tui_window if drawn else window
+            raise SystemExit(asyncio.run(view(debug=debug)))
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)

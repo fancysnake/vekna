@@ -94,12 +94,12 @@ def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
 
 # A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
 # repository's name is what an operator calls it either way.
-def _named(project: str) -> str:
+def named(project: str) -> str:
     where = PurePath(project)
     return where.parent.name if where.name == ".git" else where.name
 
 
-def _word(view: CastView) -> str:
+def word(view: CastView) -> str:
     if view.status == "running":
         if view.waiting:
             return "waiting"
@@ -148,14 +148,14 @@ def _ended_at(view: CastView) -> datetime | None:
     return max(stamps) if stamps else None
 
 
-def _elapsed(view: CastView, now: datetime) -> str:
+def elapsed(view: CastView, now: datetime) -> str:
     live = view.status in {"running", "queued"}
     if (until := now if live else _ended_at(view)) is None:
         return "—"
     return _clock((until - view.hello.started_at).total_seconds())
 
 
-def _steps_done(view: CastView) -> int:
+def steps_done(view: CastView) -> int:
     return sum(
         1
         for rite in view.rites.values()
@@ -177,7 +177,7 @@ def _innermost(view: CastView, category: str) -> RiteView | None:
 # one needs restarting, so it shows the command that does it; a running one is
 # read to see whether it is stuck, so it shows the step, what the step is doing,
 # and how long that has been true. A cast that ended cleanly needs nothing.
-def _now(view: CastView, now: datetime) -> str:
+def now_doing(view: CastView, now: datetime) -> str:
     if view.waiting:
         return next(iter(view.waiting.values())).request.prompt
     if view.on_children:
@@ -199,14 +199,14 @@ def _line(index: int, view: CastView, now: datetime) -> str:
     return (
         f" {index:>2}  {view.hello.cast_id[:_ID]:<{_ID}}"
         f"  {_fit(view.hello.ritual, _RITUAL)}"
-        f"  {_fit(_named(view.hello.project), _PROJECT)}"
-        f"  {_word(view):<{_STATUS}}  {_elapsed(view, now):>7}"
-        f"  {_steps_done(view):>5}  {_fit(_now(view, now), _NOW)}".rstrip()
+        f"  {_fit(named(view.hello.project), _PROJECT)}"
+        f"  {word(view):<{_STATUS}}  {elapsed(view, now):>7}"
+        f"  {steps_done(view):>5}  {_fit(now_doing(view, now), _NOW)}".rstrip()
     )
 
 
-def _counted(casts: Sequence[CastView]) -> str:
-    tally = Counter(_word(view) for view in casts)
+def counted(casts: Sequence[CastView]) -> str:
+    tally = Counter(word(view) for view in casts)
     return " · ".join(f"{tally[word]} {word}" for word in _TALLY if tally[word])
 
 
@@ -251,7 +251,7 @@ def _depth(rite: RiteView, view: CastView) -> int:
     return depth
 
 
-def _rite_lines(view: CastView) -> list[str]:
+def _rite_lines(view: CastView, tail: int) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
@@ -260,7 +260,7 @@ def _rite_lines(view: CastView) -> list[str]:
         said = "" if rite.error is None else f"  — {rite.error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":
-            lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
+            lines += [f" {pad}    {line}" for line in list(rite.deltas)[-tail:]]
     return lines
 
 
@@ -278,10 +278,10 @@ def _carried(hello: CastHello) -> str:
 
 # What the prompt will take. One run by hand is reading its own terminal too,
 # and an answer from here takes it over.
-def _how(view: CastView, request: DecideRequested) -> str:
+def how(view: CastView, request: DecideRequested) -> str:
     allowed = allowed_answers(options=request.options, free=request.free)
-    how = "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
-    return how if view.hello.wired else f"{how}; {_TAKES_OVER}"
+    takes = "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
+    return takes if view.hello.wired else f"{takes}; {_TAKES_OVER}"
 
 
 def _waiting_lines(view: CastView) -> list[str]:
@@ -290,7 +290,7 @@ def _waiting_lines(view: CastView) -> list[str]:
     return [
         "",
         *(
-            f" {_WAITING} {request.prompt}   ({_how(view, request)})"
+            f" {_WAITING} {request.prompt}   ({how(view, request)})"
             for request in (prompt.request for prompt in view.waiting.values())
         ),
     ]
@@ -306,16 +306,18 @@ def _detail_lines(view: CastView) -> list[str]:
     return ["", *(f" {line}" for line in lines)] if lines else []
 
 
-def _drilled(view: CastView, now: datetime) -> list[str]:
+# `tail` is how much of a running rite's output shows: a frame repainted whole
+# keeps it short, a pane that scrolls can afford all the view holds.
+def drilled(view: CastView, now: datetime, *, tail: int = _DELTA_TAIL) -> list[str]:
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
-        f"  {_word(view)}  {_elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
+        f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
         f"{_carried(view.hello)}"
     )
     return [
         header,
         "",
-        *_rite_lines(view),
+        *_rite_lines(view, tail),
         *_waiting_lines(view),
         *_detail_lines(view),
         "",
@@ -373,11 +375,11 @@ def paint(
     at = now if now is not None else datetime.now(UTC)
     found = [view for view in listed if view.hello.cast_id == focus]
     if focus is not None and found:
-        body = _drilled(found[0], at)
+        body = drilled(found[0], at)
         keys = _ANSWER_KEYS if found[0].waiting else _CAST_KEYS
     else:
-        where = _EVERY if project is None else _named(project)
-        body = [f"vekna — {_counted(listed)}  ({where})", *_listing(listed, at)]
+        where = _EVERY if project is None else named(project)
+        body = [f"vekna — {counted(listed)}  ({where})", *_listing(listed, at)]
         keys = _LIST_KEYS.format(scope=_TO_PROJECT if project is None else _TO_GLOBAL)
     lines = [*body, f" {note}" if note else "", f" {keys}"]
     return _HOME + "\n".join(lines) + "\n"

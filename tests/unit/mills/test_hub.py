@@ -796,7 +796,7 @@ class TestClaims:
         assert [route.reason for route in routed[-3:]] == [
             "no such prompt",
             None,
-            "a surface lets go of a claim by leaving",
+            "the claim is not this surface's",
         ]
 
     @staticmethod
@@ -843,3 +843,17 @@ class TestClaims:
         hub.attach_surface(late)
 
         assert late.sent[2:5] == [_asked(), _claim(), GrimoireEnd(cast_id="c1")]
+
+    @staticmethod
+    def test_the_claimer_lets_go_by_saying_so():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window = _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(window, _claim())
+
+        hub.claim(window, _claim(None))
+
+        assert hub.casts["c1"].waiting["q1"].claim_id is None
+        assert peer.sent == [_claim(), _claim(None)]

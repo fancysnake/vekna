@@ -13,7 +13,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from vekna.inits.cli import init_command, window
+from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
@@ -327,6 +327,18 @@ class TestPeers:
 
         await _eventually(lambda: keys.painted("the daemon ended"))
         assert await peer == 0
+        assert await host == 0
+
+    # The Textual window ends the same way, rather than drawing a table nobody
+    # will ever change again.
+    @staticmethod
+    async def test_the_drawn_window_ends_with_the_daemon(socket_path: Path):
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log) as host:
+            peer = asyncio.create_task(tui_window(headless=True))
+            await _eventually(lambda: log.exists() and "attached" in log.read_text())
+
+        assert await asyncio.wait_for(peer, timeout=10) == 0
         assert await host == 0
 
     @staticmethod

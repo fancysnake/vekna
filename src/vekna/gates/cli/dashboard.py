@@ -50,6 +50,18 @@ class _Scope:
         return None if self.every else self.home
 
 
+CAST_USAGE = "c <ritual> [--flag value ...]"
+
+
+# What `c` typed asks the daemon for. Raises `ValueError` on a line that names no
+# ritual or a flag with no value.
+def cast_request(typed: str, *, root: str) -> CastRequested:
+    ritual, *flags = shlex.split(typed)
+    return CastRequested(
+        project_root=root, ritual=ritual, components=parse_flags(flags)
+    )
+
+
 # What the operator does with the view, and nothing about where the events came
 # from: it reads casts and paints a screen, each through a protocol.
 class Dashboard:
@@ -178,17 +190,12 @@ class Dashboard:
     # shows as that cast failing.
     def _cast(self, typed: str) -> None:
         try:
-            ritual, *flags = shlex.split(typed)
-            components = parse_flags(flags)
+            request = cast_request(typed, root=self._scope.root)
         except ValueError as error:
-            self._note = f"c <ritual> [--flag value ...] — {error}"
+            self._note = f"{CAST_USAGE} — {error}"
             return
-        self._send(
-            CastRequested(
-                project_root=self._scope.root, ritual=ritual, components=components
-            )
-        )
-        self._note = f"asked for {ritual}"
+        self._send(request)
+        self._note = f"asked for {request.ritual}"
 
     # The oldest open prompt of the cast in view, checked here by the rule the
     # cast checks it by, so a typo is said at once rather than ignored there.

@@ -180,7 +180,7 @@ class Hub(CastBoard, Routes):
         if view is None or claimed.request_id not in view.waiting:
             self._drop(claimed, reason=_NO_PROMPT)
         elif claimed.claim_id is None:
-            self._drop(claimed, reason="a surface lets go of a claim by leaving")
+            self._release(surface, claimed)
         else:
             self._prune()
             self._claims[claimed.request_id] = (claimed.cast_id, surface)
@@ -196,6 +196,15 @@ class Hub(CastBoard, Routes):
             and (prompt := view.waiting.get(request_id)) is not None
             and prompt.claim_id is not None
         }
+
+    # Only the holder lets go: a claim it did not make is somebody else's.
+    def _release(self, surface: Surface, claimed: DecideClaimed) -> None:
+        held = self._claims.get(claimed.request_id)
+        if held is None or held[1] is not surface:
+            self._drop(claimed, reason="the claim is not this surface's")
+            return
+        del self._claims[claimed.request_id]
+        self._claimed(claimed)
 
     def _claimed(self, claimed: DecideClaimed) -> None:
         self.apply(claimed)

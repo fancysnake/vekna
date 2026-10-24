@@ -91,9 +91,6 @@
     <text x="16" y="70" class="s">runs at once, still counts a slot</text>
   </g>
 
-  <path class="arrow" d="M300,318 C335,318 345,380 398,390"/>
-  <path class="arrow" d="M300,430 L398,430"/>
-  <path class="arrow dash" d="M300,542 C420,560 560,560 640,545"/>
 
   <!-- Daemon -->
   <rect class="daemon" x="340" y="240" width="680" height="630" rx="16"/>
@@ -135,17 +132,17 @@
     <circle class="slot-on" cx="56" cy="92" r="9"/>
     <circle class="slot-on" cx="82" cy="92" r="9"/>
     <circle class="slot-off" cx="108" cy="92" r="9"/>
-    <text x="124" y="96" class="xs mono">processes=4</text>
-    <text x="16" y="134" class="s">worktrees · if the ritual</text>
-    <text x="16" y="150" class="s">says <tspan class="mono" style="fill: var(--verd)">worktree=True</tspan></text>
-    <use href="#tree" x="30" y="174" style="fill: var(--verd)"/>
-    <use href="#tree" x="56" y="174" style="fill: none; stroke: var(--verd); stroke-width: 1.5"/>
-    <text x="124" y="178" class="xs mono">worktrees=2</text>
-    <line x1="16" y1="204" x2="184" y2="204" class="lane"/>
-    <text x="16" y="226" class="s">both released when the</text>
-    <text x="16" y="242" class="s">cast ends, however it ends;</text>
-    <text x="16" y="258" class="s">the slot alone, earlier, while</text>
-    <text x="16" y="274" class="s">it awaits a child</text>
+    <text x="126" y="96" class="xs">3 of 4</text>
+    <text x="16" y="128" class="s">worktrees · if the ritual</text>
+    <text x="16" y="144" class="s">says <tspan class="mono" style="fill: var(--verd)">worktree=True</tspan></text>
+    <use href="#tree" x="30" y="168" style="fill: var(--verd)"/>
+    <use href="#tree" x="56" y="168" style="fill: none; stroke: var(--verd); stroke-width: 1.5"/>
+    <text x="74" y="172" class="xs">1 of 2</text>
+    <line x1="16" y1="196" x2="184" y2="196" class="lane"/>
+    <text x="16" y="218" class="s">both released when the</text>
+    <text x="16" y="234" class="s">cast ends, however it ends;</text>
+    <text x="16" y="250" class="s">the slot alone, earlier, while</text>
+    <text x="16" y="266" class="s">it awaits a child</text>
   </g>
 
   <path class="arrow" d="M800,460 L826,460"/>
@@ -161,11 +158,17 @@
     <line x1="14" y1="134" x2="134" y2="134" class="lane"/>
     <text x="14" y="158" class="s">fills components</text>
     <text x="14" y="176" class="s">nobody typed from</text>
-    <text x="14" y="194" class="code mono" font-size="11">[defaults.&lt;ritual&gt;]</text>
-    <line x1="14" y1="216" x2="134" y2="216" class="lane"/>
-    <text x="14" y="240" class="s">loads no ritual,</text>
-    <text x="14" y="258" class="s">imports no lexicon</text>
+    <text x="14" y="194" class="code mono">[defaults.</text>
+    <text x="14" y="210" class="code mono">  &lt;ritual&gt;]</text>
+    <line x1="14" y1="226" x2="134" y2="226" class="lane"/>
+    <text x="14" y="248" class="s">loads no ritual,</text>
+    <text x="14" y="266" class="s">imports no lexicon</text>
   </g>
+
+  <path class="arrow" d="M300,318 C335,318 345,380 382,390"/>
+  <path class="arrow" d="M300,430 L382,430"/>
+  <path class="arrow dash" d="M300,542 C330,611 400,611 470,611 L700,611 L700,605"/>
+  <text x="480" y="634" class="xs">skips the queue</text>
 
   <!-- Hub -->
   <g transform="translate(364,640)">
@@ -391,8 +394,8 @@
     <text x="856" y="40" class="s">defaults per repo</text>
     <path class="arrow" d="M1026,26 L1048,26"/>
     <rect class="card" x="1050" width="270" height="52" rx="10" style="stroke-dasharray: 5 4"/>
-    <text x="1066" y="22" class="b" font-weight="700">cabinet#29</text>
-    <text x="1066" y="40" class="s">a sweep as one cast per pull request</text>
+    <text x="1066" y="22" class="b" font-weight="700">1.0.0</text>
+    <text x="1066" y="40" class="s">the release · #133</text>
   </g>
   <text x="40" y="1580" class="xs">Not planned: pooled cast processes · anything across machines · concurrent steps in one cast · a tree reset by the daemon</text>
 </svg>

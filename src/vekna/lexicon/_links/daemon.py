@@ -389,19 +389,16 @@ async def _first_answer(awaited: _Awaited, ask: Callable[[], Awaitable[str]]) ->
     awaited.changed.clear()
     flipped = asyncio.ensure_future(awaited.changed.wait())
     local = None if awaited.claimed else asyncio.ensure_future(ask())
+    # Each wakes this round; a callback left on the answer after it is spent
+    # settles a future already settled, which does nothing.
     woken: asyncio.Future[None] = asyncio.get_running_loop().create_future()
-
-    def wake(_: object) -> None:
-        _settle(woken)
-
-    awaited.future.add_done_callback(wake)
-    flipped.add_done_callback(wake)
+    awaited.future.add_done_callback(lambda _: _settle(woken))
+    flipped.add_done_callback(lambda _: _settle(woken))
     if local is not None:
-        local.add_done_callback(wake)
+        local.add_done_callback(lambda _: _settle(woken))
     try:
         await woken
     finally:
-        awaited.future.remove_done_callback(wake)
         flipped.cancel()
         if local is not None:
             local.cancel()

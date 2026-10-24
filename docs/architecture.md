@@ -104,6 +104,7 @@ submodules cooperate.
     cli/
       screen.py   # painting: the cast list, one cast drilled into, `casts`
       dashboard.py # what the keys do — over the two protocols, nothing else
+      tui.py      # the Textual window: table, pane, take-over dialog
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/
@@ -121,9 +122,11 @@ lexicon/
     graph.py     # AST step-graph reader for `rituals show`
     ledger.py    # what an interrupted cast already did, for `--resume`
     defaults.py  # [defaults.<ritual>] merged across configs, checked, overlaid
+    follow.py    # Lineage: which casts a cast set going, and if they ended
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
     unattended.py  # UnattendedChannel, which refuses every decide
+    follow.py      # Follower: a hand cast streaming and asking for its own
     daemon.py      # the wire client, the grimoire→wire projection, the
                    # channel that tees a prompt onto it
     resume.py      # reading a journal back for `--resume`
