@@ -14,6 +14,7 @@ from vekna.wire import (
     AwaitWithdrawn,
     CastGoodbye,
     CastHello,
+    CastQueued,
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
@@ -738,6 +739,51 @@ def _said(circle: Circle, hub: Hub, message: AwaitRequested | AwaitWithdrawn) ->
     circle.wake()
 
 
+# Each child whose record was read, in order.
+class _Records:
+    def __init__(self, **records: RunRecord) -> None:
+        self.records = records
+        self.asked: list[str] = []
+
+    def __call__(self, child: str) -> RunRecord | None:
+        self.asked.append(child)
+        return self.records.get(child)
+
+
+class TestAwaitsReads:
+    @staticmethod
+    @pytest.mark.parametrize("status", ["queued", "running"])
+    def test_a_child_the_view_has_not_seen_end_is_not_read_from_disk(status: str):
+        hub = Hub()
+        records = _Records()
+        awaits = Awaits(hub=hub, records=records)
+        _running(hub, "parent")
+        hub.apply(_hello("child"))
+        if status == "queued":
+            hub.apply(CastQueued(cast_id="child"))
+        hub.apply(_awaits("parent", "child"))
+
+        assert not awaits.due()
+        assert hub.casts["child"].status == status
+        assert not records.asked
+
+    @staticmethod
+    def test_an_ending_found_is_read_once():
+        hub = Hub()
+        records = _Records(child=RunRecord(hello=_hello("child"), status="ok"))
+        awaits = Awaits(hub=hub, records=records)
+        _running(hub, "parent")
+        hub.apply(_awaits("parent", "child"))
+
+        first, again = awaits.due(), awaits.due()
+
+        ended = AwaitEnded(
+            cast_id="parent", request_id="w1", child="child", status="ok"
+        )
+        assert first == again == [ended]
+        assert records.asked == ["child"]
+
+
 @pytest.mark.asyncio
 class TestAwaits:
     @staticmethod
@@ -944,6 +990,44 @@ class TestAwaits:
     @staticmethod
     async def test_a_child_whose_record_says_running_is_still_awaited():
         record = RunRecord(hello=_hello("child"), status="running")
+        circle, hub, _ = _circle(_Limits(processes=1), records={"child": record})
+        peer = _running(hub, "parent")
+
+        _said(circle, hub, _awaits("parent", "child"))
+
+        assert not peer.sent
+
+    # A cast run by hand took the slot while the parent was parked: the parent
+    # waits for it, holding its answer, as any queued cast would.
+    @staticmethod
+    async def test_a_parent_comes_back_only_once_its_project_has_a_slot():
+        limits = _Limits(processes=1)
+        circle, hub, spawn = _circle(limits)
+        peer = _running(hub, "parent")
+        circle.enqueue(_hello("child"))
+        _said(circle, hub, _awaits("parent", "child"))
+        await _settled()
+        _running(hub, "other")
+        hub.apply(_hello("child"))
+        hub.apply(CastGoodbye(cast_id="child", status="ok"))
+        spawn.exit("child")
+        await _settled()
+        held = list(peer.sent)
+
+        hub.apply(CastGoodbye(cast_id="other", status="ok"))
+        circle.wake()
+
+        assert not held
+        assert peer.sent == [
+            AwaitEnded(cast_id="parent", request_id="w1", child="child", status="ok")
+        ]
+        assert set(limits.asked) == {"/proj"}
+
+    # After a restart the child may not have been queued again yet: its record
+    # says queued, and that is not an ending either.
+    @staticmethod
+    async def test_a_child_whose_record_says_queued_is_still_awaited():
+        record = RunRecord(hello=_hello("child"), status="queued")
         circle, hub, _ = _circle(_Limits(processes=1), records={"child": record})
         peer = _running(hub, "parent")
 

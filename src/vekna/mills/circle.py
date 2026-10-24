@@ -312,7 +312,7 @@ class Circle:
             try:
                 ran = await self._leasing.run(hello)
             finally:
-                self._launching.pop(cast_id, None)
+                del self._launching[cast_id]
         except Exception as error:
             self._failed(cast_id, str(error))
             self._start()

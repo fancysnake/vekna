@@ -323,7 +323,7 @@ def _update_wait(
         case DecideResolved() | DecideWithdrawn():
             if view.waiting.pop(message.request_id, None) is None:
                 return _NO_PROMPT
-        case AwaitEnded() | AwaitWithdrawn():
+        case _:
             if view.on_children.pop(message.request_id, None) is None:
                 return _NO_AWAIT
     return None

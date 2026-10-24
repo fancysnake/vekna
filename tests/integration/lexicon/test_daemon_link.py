@@ -49,6 +49,8 @@ from vekna.wire import (
     EnqueueRefused,
     EnqueueRequested,
     WireMessage,
+    encode_frame,
+    read_frames,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -903,6 +905,38 @@ class TestQueue:
         with pytest.raises(NoDaemonError, match="went away before"):
             await asyncio.wait_for(enqueuing, timeout=2)
         await link.close(status="ok")
+
+    # The answer and the frame that ends the link arrive in one read, so the
+    # link is gone before the enqueue wakes: queued is what the daemon said.
+    @staticmethod
+    async def test_a_daemon_gone_right_after_it_answers_leaves_the_cast_queued(
+        socket_path: Path,
+    ):
+        async def answer_then_garble(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            async for asked in read_frames(reader):
+                if isinstance(asked, EnqueueRequested):
+                    accepted = EnqueueAccepted(
+                        cast_id=_CAST, request_id=asked.request_id
+                    )
+                    writer.write(encode_frame(accepted) + b"not a frame\n")
+                    await writer.drain()
+                    break
+            await reader.read()
+            writer.close()
+
+        server = await asyncio.start_unix_server(
+            answer_then_garble, path=str(socket_path)
+        )
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+
+        await asyncio.wait_for(link.enqueue(_hello()), timeout=2)
+
+        assert not link.attached
+        await link.close(status="ok")
+        server.close()
 
     @staticmethod
     async def test_an_await_returns_how_the_child_ended(socket_path: Path):

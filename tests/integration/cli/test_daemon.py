@@ -1084,6 +1084,43 @@ class TestQueue:
         left = _run_of(runs, "count")
         assert (left.status, left.result) == ("ok", {"n": 5})
 
+    # Queued when the daemon stopped, spawned before it did: the process is the
+    # one to finish it, so the next daemon does not start it twice. The fresh
+    # one queued after it is what says the queue has been run.
+    @staticmethod
+    async def test_a_cast_left_queued_but_already_spawned_is_not_run_again(
+        socket_path: Path, queue_rituals: Path
+    ):
+        runs = queue_rituals / "runs"
+        journal = Journal(runs)
+        for index, (cast_id, ritual) in enumerate(
+            (("held", "nap"), ("fresh", "count"))
+        ):
+            journal.record(
+                CastHello(
+                    cast_id=cast_id,
+                    project_root=str(queue_rituals),
+                    project=str(queue_rituals),
+                    ritual=ritual,
+                    components={"n": 5},
+                    started_at=_WHEN + timedelta(minutes=index),
+                    wired=True,
+                )
+            )
+            journal.record(CastQueued(cast_id=cast_id))
+        mark = runs / "held" / "spawned.json"
+        spawned = (
+            f'{{"cast_id":"held","pid":{os.getpid()},'
+            f'"project":"{queue_rituals}","tree":null}}'
+        )
+        mark.write_text(spawned)
+
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(runs, "count"))
+
+        assert _run_of(runs, "nap").status == "queued"
+        assert mark.read_text() == spawned
+
     @staticmethod
     async def test_an_enqueue_naming_no_tree_is_refused(socket_path: Path):
         child = _hello("c2")
