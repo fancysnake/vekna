@@ -2,8 +2,9 @@ import asyncio
 import contextlib
 import importlib
 import itertools
+import json
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
@@ -27,6 +28,7 @@ from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
 from ._links.unattended import UnattendedChannel
+from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
     CAST_QUEUE,
@@ -163,6 +165,7 @@ class _Library(NamedTuple):
     # Each configured module that did not import. Its warning is already on
     # stderr; what `list` still owes it is the exit code.
     skipped: tuple[str, ...]
+    defaults: Defaults
 
 
 # A module is somebody else's package: one that is not installed here must not
@@ -210,8 +213,9 @@ def _build_library(cwd: Path) -> _Library:
     discovered = _find_rituals_source(cwd)
     if discovered.source is not None:
         load_source(discovered.source)
-    for config in _config_files(cwd):
-        rituals = read_config(config).rituals
+    configs = [(path, read_config(path)) for path in _config_files(cwd)]
+    for config, read in configs:
+        rituals = read.rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
         # found by walking parents, and a global one is shared by every
         # directory — resolving against the cwd would mean a different file
@@ -247,6 +251,7 @@ def _build_library(cwd: Path) -> _Library:
         compendium,
         _no_rituals(None if loaded else discovered.near_miss),
         tuple(skipped),
+        Defaults(configs),
     )
 
 
@@ -297,17 +302,26 @@ def _list_text(library: _Library) -> str:
     )
 
 
-def _component_lines(the_ritual: Ritual) -> list[str]:
+def _shown(value: JsonValue) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+# A required field the config answers is no longer the operator's to type, so
+# it prints the answer and where it came from rather than reading as owed.
+def _component_lines(the_ritual: Ritual, defaults: Mapping[str, Default]) -> list[str]:
     if not (flags := component_flags(the_ritual.components)):
         return ["  (none)"]
-    return [
-        f"  --{name.replace('_', '-')} <{type_name}>"
-        + ("" if required else "  (optional)")
-        for name, type_name, required in flags
-    ]
+    lines: list[str] = []
+    for name, type_name, required in flags:
+        flag = f"  --{name.replace('_', '-')} <{type_name}>"
+        if (default := defaults.get(name)) is not None:
+            lines.append(f"{flag}  = {_shown(default.value)} ({default.source})")
+        else:
+            lines.append(flag + ("" if required else "  (optional)"))
+    return lines
 
 
-def _show_text(the_ritual: Ritual) -> str:
+def _show_text(the_ritual: Ritual, defaults: Mapping[str, Default]) -> str:
     graph = step_graph(the_ritual)
     lines = [
         the_ritual.name,
@@ -315,7 +329,7 @@ def _show_text(the_ritual: Ritual) -> str:
         *(["worktree: yes"] if the_ritual.worktree else []),
         "",
         "components:",
-        *_component_lines(the_ritual),
+        *_component_lines(the_ritual, defaults),
         "",
         "steps:",
         *(f"  {label} → {', '.join(targets) or '?'}" for label, targets in graph),
@@ -326,10 +340,11 @@ def _show_text(the_ritual: Ritual) -> str:
 def _show(library: _Library, name: str) -> int:
     try:
         the_ritual = library.compendium.ritual(name)
+        text = _show_text(the_ritual, library.defaults.of(the_ritual))
     except RitualDefinitionError as error:
         sys.stderr.write(f"{error}\n")
         return 2
-    sys.stdout.write(_show_text(the_ritual))
+    sys.stdout.write(text)
     return 0
 
 
@@ -407,28 +422,30 @@ class _Plan(NamedTuple):
     enqueued_by: str | None = None
 
 
-# The record holds the components as the CLI already validated them once, so
-# they are validated again against the same model rather than re-derived into
-# flags and parsed back out.
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
-    compendium = _build_library(Path.cwd()).compendium
+    library = _build_library(Path.cwd())
+    compendium = library.compendium
     the_ritual = compendium.ritual(hello.ritual)
-    components = the_ritual.components.model_validate(hello.components)
     if resumption.record.status == "queued":
+        # Nobody typed a queued cast's components: whoever queued it named what
+        # it meant, and this repo's defaults answer the rest.
         return _Plan(
             the_ritual,
-            components,
+            library.defaults.components(the_ritual, hello.components),
             unattended,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
             compendium=compendium,
             enqueued_by=hello.enqueued_by,
         )
+    # The record holds the components as the CLI already validated them once,
+    # so they are validated again against the same model rather than
+    # re-derived into flags and parsed back out.
     return _Plan(
         ritual=the_ritual,
-        components=components,
+        components=the_ritual.components.model_validate(hello.components),
         unattended=unattended,
         ledger=Ledger.from_resumption(resumption),
         resumed_from=cast_id,
@@ -449,13 +466,13 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
         return _resume(wanted[0], unattended=unattended)
-    compendium = _build_library(Path.cwd()).compendium
-    the_ritual = compendium.ritual(name)
+    library = _build_library(Path.cwd())
+    the_ritual = library.compendium.ritual(name)
     return _Plan(
         the_ritual,
-        the_ritual.components.model_validate(parse_flags(flags)),
+        library.defaults.components(the_ritual, parse_flags(flags)),
         unattended,
-        compendium=compendium,
+        compendium=library.compendium,
     )
 
 

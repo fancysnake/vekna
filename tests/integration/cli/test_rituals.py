@@ -807,3 +807,32 @@ class TestRitualsUsage:
         assert exit_code == _USAGE_EXIT
         assert "no ritual named 'cuontdown'" in err
         assert "countdown, ping" in err
+
+
+@pytest.mark.usefixtures("_home")
+class TestRitualsShowDefaults:
+    @staticmethod
+    def test_a_configured_component_shows_its_value_and_source(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text("[defaults.countdown]\nstart = 3\n")
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert f"  --start <int>  = 3 ({tmp_path / '.vekna.toml'})\n" in out
+        assert "  --label <str>  (optional)\n" in out
+
+    @staticmethod
+    def test_a_misspelt_key_is_a_usage_error(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text("[defaults.countdown]\nstrat = 3\n")
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        assert exit_code == _USAGE_EXIT
+        assert "'strat'" in capsys.readouterr().err

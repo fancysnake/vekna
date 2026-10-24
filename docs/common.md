@@ -323,6 +323,10 @@ complaint — `[rituals]` rejects unknown keys, since a misspelt one would load
 nothing and leave the next cast to fail with `no ritual named ...`. Tables
 vekna does not know yet are left alone.
 
+**Component defaults** are the operator's, per ritual: `[defaults.pr_check]
+base_branch = "main"`. Per key, flag → project → global. A key the ritual does
+not take fails the cast; a ritual not installed here is ignored.
+
 ## Standalone mode
 
 A cast without a daemon: structured events to stdout, stdin prompts for

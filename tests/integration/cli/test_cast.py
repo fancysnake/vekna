@@ -473,3 +473,108 @@ class TestUnattended:
 
         assert exit_code == _USAGE_EXIT
         assert "vekna cast --unattended" in capsys.readouterr().err
+
+
+_CHECKED = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, ritual
+
+
+    class Check(BaseModel):
+        pull_request: int
+        base_branch: str
+        max_prs: int = 1
+
+
+    @ritual("pr_check")
+    async def pr_check(components: Check) -> Done[Check]:
+        return Done(components)
+    """)
+
+
+@pytest.fixture
+def _home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+
+def _global_config(tmp_path, text):
+    config = tmp_path / "home" / ".config" / "vekna"
+    config.mkdir(parents=True)
+    (config / "config.toml").write_text(text)
+
+
+@pytest.mark.usefixtures("_home")
+class TestCastDefaults:
+    @staticmethod
+    def test_the_repo_answers_a_required_component(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        (tmp_path / ".vekna.toml").write_text(
+            '[defaults.pr_check]\nbase_branch = "main"\nmax_prs = 3\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["pr_check", "--pull-request", "7"])
+
+        assert exit_code == 0
+        assert (
+            'result: {"pull_request":7,"base_branch":"main","max_prs":3}'
+            in capsys.readouterr().out
+        )
+
+    @staticmethod
+    def test_a_flag_beats_the_config(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        (tmp_path / ".vekna.toml").write_text(
+            '[defaults.pr_check]\nbase_branch = "main"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(
+            ["pr_check", "--pull-request", "7", "--base-branch", "release"]
+        )
+
+        assert exit_code == 0
+        assert '"base_branch":"release"' in capsys.readouterr().out
+
+    @staticmethod
+    def test_the_project_overrides_the_global_key_by_key(tmp_path, monkeypatch, capsys):
+        _global_config(
+            tmp_path, '[defaults.pr_check]\nbase_branch = "main"\nmax_prs = 5\n'
+        )
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "rituals.py").write_text(_CHECKED)
+        (project / ".vekna.toml").write_text(
+            '[defaults.pr_check]\nbase_branch = "master"\n'
+        )
+        monkeypatch.chdir(project)
+
+        exit_code = main(["pr_check", "--pull-request", "7"])
+
+        assert exit_code == 0
+        assert '"base_branch":"master","max_prs":5' in capsys.readouterr().out
+
+    @staticmethod
+    def test_a_misspelt_key_fails_naming_the_file(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        (tmp_path / ".vekna.toml").write_text(
+            '[defaults.pr_check]\nbase_brnach = "main"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["pr_check", "--pull-request", "7"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert ".vekna.toml: [defaults.pr_check] sets 'base_brnach'" in err
+
+    @staticmethod
+    def test_a_ritual_not_installed_here_is_not_an_error(tmp_path, monkeypatch):
+        _global_config(tmp_path, '[defaults.elsewhere]\nbase_brnach = "main"\n')
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "rituals.py").write_text(_CHECKED)
+        monkeypatch.chdir(project)
+
+        assert main(["pr_check", "--pull-request", "7", "--base-branch", "x"]) == 0

@@ -120,6 +120,7 @@ lexicon/
     dispatch.py  # @step/@ritual/@medium and signature reflection
     graph.py     # AST step-graph reader for `rituals show`
     ledger.py    # what an interrupted cast already did, for `--resume`
+    defaults.py  # [defaults.<ritual>] merged across configs, checked, overlaid
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
     unattended.py  # UnattendedChannel, which refuses every decide

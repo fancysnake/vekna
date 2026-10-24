@@ -187,6 +187,36 @@ rest still load. Asking for a ritual that is not there repeats why each skipped
 module failed, and `rituals list` exits 1 while any is skipped. A broken file,
 or a broken discovered `rituals.py`/`rituals/`, still stops the command.
 
+## Component defaults
+
+A component whose answer belongs to the repository rather than the run — the
+base branch, `main` here and `master` there — goes in the config, one table per
+ritual:
+
+```toml
+[defaults.pr_check]
+base_branch = "main"
+max_prs = 3
+
+[defaults."mycompany:review"]   # a tome's ritual, quoted for the colon
+depth = 2
+```
+
+Per key, a flag wins, then the project `.vekna.toml`, then the global config.
+TOML values arrive typed. A queued cast takes the defaults of the repo it runs
+in for every component its enqueuer left unset.
+
+`rituals show` prints a configured component with its value and file:
+
+```text
+  --base-branch <str>  = main (/home/me/work/app/.vekna.toml)
+```
+
+A key the ritual does not take fails the cast, naming the file, the ritual and
+the key. A table for a ritual not installed here is ignored, so a global config
+can hold defaults for tomes some projects lack. Secrets stay out: `.vekna.toml`
+is committed, so pass a credential as a flag.
+
 ## Tomes: rituals you install
 
 A **tome** is a ritual library published as a package. `modules` names something

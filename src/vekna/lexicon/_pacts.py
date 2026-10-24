@@ -398,8 +398,12 @@ class RitualsConfig(BaseModel):
     modules: Annotated[list[Tome], BeforeValidator(_spelt_tomes)] = []
 
 
+# `defaults` is open by construction: its keys are ritual names, and a name no
+# ritual here registers belongs to a tome installed elsewhere. What a table sets
+# is checked at cast time, against the ritual it names.
 class Config(BaseModel):
     rituals: RitualsConfig = RitualsConfig()
+    defaults: dict[str, dict[str, JsonValue]] = {}
 
 
 class StringOutput(BaseModel):

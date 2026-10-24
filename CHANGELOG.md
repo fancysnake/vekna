@@ -26,6 +26,11 @@ when.
 - **The dashboard shows `on child`** and the cast awaited, and a queued cast
   names the cast that queued it.
 - **`CastGoodbye` and `run.json` carry the cast's result.**
+- **`[defaults.<ritual>]`** in `.vekna.toml` or the user config answers
+  components per repository. A flag still wins; a queued cast takes the defaults
+  where it runs; `rituals show` prints each value and its file; a key the ritual
+  does not take fails the cast.
+  ([#94](https://github.com/fancysnake/vekna/issues/94))
 
 ### Changed
 

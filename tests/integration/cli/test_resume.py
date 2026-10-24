@@ -61,6 +61,18 @@ _RITUALS = textwrap.dedent("""
     @ritual("tree_job", worktree=True)
     async def tree_job(components: State) -> State:
         return State(left=components.left)
+
+
+    class Greeting(BaseModel):
+        name: str
+        word: str = "hello"
+
+
+    @ritual("greet")
+    async def greet(components: Greeting) -> Done[Report]:
+        said = components.word + " " + components.name
+        Path("said.log").write_text(said)
+        return Done(Report(said=said))
     """)
 
 
@@ -78,6 +90,22 @@ def _journalled(
             started_at=_WHEN,
         )
     )
+
+
+# As `enqueue` records it: the keys its caller set, and none it left unset.
+def _queued_greeting(project: Path, runs: Path, components: dict[str, str]) -> None:
+    journal = Journal(runs)
+    journal.record(
+        CastHello(
+            cast_id="q1",
+            project_root=str(project),
+            project=str(project),
+            ritual="greet",
+            components=components,
+            started_at=_WHEN,
+        )
+    )
+    journal.record(CastQueued(cast_id="q1"))
 
 
 def _rite(
@@ -136,6 +164,27 @@ class TestResume:
         assert main(["--resume", "q1"]) == 0
 
         assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
+    # Whoever queued it named what it meant; the repo's defaults answer the rest.
+    @staticmethod
+    def test_a_queued_record_takes_the_repos_defaults(project: Path, tmp_path: Path):
+        (project / ".vekna.toml").write_text('[defaults.greet]\nword = "hi"\n')
+        _queued_greeting(project, tmp_path / "runs", {"name": "q"})
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "said.log").read_text() == "hi q"
+
+    @staticmethod
+    def test_what_the_enqueuer_named_beats_the_repos_default(
+        project: Path, tmp_path: Path
+    ):
+        (project / ".vekna.toml").write_text('[defaults.greet]\nword = "hi"\n')
+        _queued_greeting(project, tmp_path / "runs", {"name": "q", "word": "hey"})
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "said.log").read_text() == "hey q"
 
     # Only the cast knows its ritual wants a tree, so a spawned one without a
     # lease says so before it does anything, and the daemon queues it again.
