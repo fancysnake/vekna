@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from vekna.links.journal import Journal
-from vekna.pacts.casts import DamagedRun, Run
+from vekna.pacts.casts import DamagedRun, run_cast_id
 from vekna.wire import CastGoodbye, CastHello, CastQueued, RiteDelta
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -23,13 +23,6 @@ def _no_appends(log: Path) -> None:
 def _appends_again(log: Path) -> None:
     log.rmdir()
     log.touch()
-
-
-def _ids(runs: list[Run]) -> list[str]:
-    return [
-        run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
-        for run in runs
-    ]
 
 
 def _hello(cast_id: str = "c1", *, started_at: datetime = _WHEN) -> CastHello:
@@ -354,7 +347,7 @@ class TestReading:
         recent = journal.recent(limit=5)
 
         assert journal.read("c1") is None
-        assert _ids(recent) == ["c1", "c0"]
+        assert [run_cast_id(run) for run in recent] == ["c1", "c0"]
         assert isinstance(recent[0], DamagedRun)
         assert recent[0].seen_at > _WHEN
 
@@ -372,7 +365,7 @@ class TestReading:
         (tmp_path / "c1" / "run.json").write_bytes(b'{"hello": {"cast_i\xff')
 
         assert journal.read("c1") is None
-        assert _ids(journal.recent(limit=5)) == ["c1", "c0"]
+        assert [run_cast_id(run) for run in journal.recent(limit=5)] == ["c1", "c0"]
         journal.prune(keep=0)
         assert not list(tmp_path.iterdir())
 
@@ -385,7 +378,7 @@ class TestReading:
 
         recent = journal.recent(limit=5)
 
-        assert _ids(recent) == ["c1"]
+        assert [run_cast_id(run) for run in recent] == ["c1"]
         assert isinstance(recent[0], DamagedRun)
         journal.prune(keep=0)
         assert not list(tmp_path.iterdir())
@@ -404,8 +397,9 @@ class TestReading:
 
         recent = journal.recent(limit=5)
 
-        assert _ids(recent) == ["c1", "c0"]
-        assert not isinstance(recent[1], DamagedRun)
+        assert [run_cast_id(run) for run in recent] == ["c1", "c0"]
+        assert not isinstance(record := recent[1], DamagedRun)
+        assert record.hello.started_at.tzinfo is UTC
 
     # Written before a hello carried its repository: the run still reads, and
     # still resumes, grouped by the tree it ran in.
@@ -441,7 +435,7 @@ class TestReading:
 
         monkeypatch.setattr(Path, "stat", stat)
 
-        assert _ids(journal.recent(limit=5)) == ["c0"]
+        assert [run_cast_id(run) for run in journal.recent(limit=5)] == ["c0"]
 
 
 class TestPruning:
