@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import os
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Sequence
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -28,44 +28,32 @@ class Spawner:
 
     async def __call__(self, hello: CastHello, tree: str | None) -> Exited:
         log = run_file(self._runs, hello.cast_id).parent / _LOG
-        mark = log.with_name(_SPAWNED)
         try:
             await asyncio.to_thread(log.parent.mkdir, parents=True, exist_ok=True)
-            code = await self._waited(hello, tree=tree, log=log, mark=mark)
+            with log.open("ab") as out:
+                process = await asyncio.create_subprocess_exec(
+                    *self._command,
+                    _RESUME,
+                    hello.cast_id,
+                    cwd=hello.project_root if tree is None else tree,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=out,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
+            async with _marked(
+                mark=log.with_name(_SPAWNED),
+                spawned=Spawned(
+                    cast_id=hello.cast_id,
+                    pid=process.pid,
+                    project=hello.project,
+                    tree=tree,
+                ),
+                process=process,
+            ):
+                code = await process.wait()
         except OSError as error:
             return Exited(code=None, said=str(error))
-        # A mark left behind only costs a look at a pid that is gone.
-        with contextlib.suppress(OSError):
-            await asyncio.to_thread(mark.unlink, missing_ok=True)
         return Exited(code=code, said=await asyncio.to_thread(_last_line, log))
-
-    async def _waited(
-        self, hello: CastHello, *, tree: str | None, log: Path, mark: Path
-    ) -> int:
-        with log.open("ab") as out:
-            process = await asyncio.create_subprocess_exec(
-                *self._command,
-                _RESUME,
-                hello.cast_id,
-                cwd=hello.project_root if tree is None else tree,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=out,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            spawned = Spawned(
-                cast_id=hello.cast_id, pid=process.pid, project=hello.project, tree=tree
-            )
-            try:
-                await asyncio.to_thread(
-                    mark.write_bytes, _SPAWNED_ADAPTER.dump_json(spawned)
-                )
-            except OSError:
-                # Unmarked, it is a cast the next daemon could lease a tree from
-                # under, so it does not run at all.
-                process.kill()
-                await process.wait()
-                raise
-            return await process.wait()
 
     # Read once, before the daemon spawns anything of its own. A mark whose
     # process is gone, or that will not read back, is cleared on the way.
@@ -78,7 +66,7 @@ class Spawner:
                 spawned = _SPAWNED_ADAPTER.validate_json(mark.read_bytes())
             except (OSError, ValueError):
                 spawned = None
-            if spawned is not None and alive(spawned.pid):
+            if spawned is not None and pid_alive(spawned.pid):
                 left.append(spawned)
             else:
                 with contextlib.suppress(OSError):
@@ -86,13 +74,41 @@ class Spawner:
         return left
 
 
+# Removed only once the wait ends cleanly: a daemon cancelled mid-wait leaves
+# the mark, and with it the cast, behind.
+@contextlib.asynccontextmanager
+async def _marked(
+    *, mark: Path, spawned: Spawned, process: asyncio.subprocess.Process
+) -> AsyncGenerator[None]:
+    try:
+        await asyncio.to_thread(mark.write_bytes, _SPAWNED_ADAPTER.dump_json(spawned))
+    except OSError:
+        # Unmarked, it is a cast the next daemon could lease a tree from under,
+        # so it does not run at all.
+        process.kill()
+        await process.wait()
+        raise
+    waited = False
+    try:
+        yield
+        waited = True
+    finally:
+        # A mark left behind only costs a look at a pid that is gone.
+        if waited:
+            with contextlib.suppress(OSError):
+                await asyncio.to_thread(mark.unlink, missing_ok=True)
+
+
 # shortcut: a pid reused by another process reads as the cast still running,
 # holding its slot and tree until that process ends; a start time beside the
 # pid would tell them apart.
-def alive(pid: int) -> bool:
+def pid_alive(pid: int) -> bool:
+    # Zero and below name a process group, not a process.
+    if pid <= 0:
+        return False
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+    except (ProcessLookupError, OverflowError):
         return False
     except PermissionError:
         return True

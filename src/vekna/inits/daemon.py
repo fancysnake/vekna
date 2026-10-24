@@ -14,10 +14,9 @@ from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
-from vekna.links.spawner import Spawner
-from vekna.links.spawner import alive as alive_pid
+from vekna.links.spawner import Spawner, pid_alive
 from vekna.links.worktrees import GitTrees
-from vekna.mills.circle import Circle, CodingPool, Leasing, LiveCasts
+from vekna.mills.circle import Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Routes, Surface
@@ -120,15 +119,15 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     spawner = Spawner(command=_CAST_COMMAND, runs=default_runs_root())
     if spawned := await asyncio.to_thread(spawner.left_behind):
         _logged(f"holding {len(spawned)} cast(s) left running until they reattach")
-    live = LiveCasts(casts=hub, spawned=spawned, alive=alive_pid)
+    left = LeftBehind(casts=hub, spawned=spawned, alive=pid_alive)
     leasing = Leasing(
-        live=live,
+        left=left,
         say=_logged,
         spawn=spawner,
         trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
     )
-    circle = Circle(live=live, apply=hub.apply, leasing=leasing, limits=limits)
+    circle = Circle(hub=hub, left=left, leasing=leasing, limits=limits)
     pool = CodingPool(tell=hub.tell, limits=limits)
     server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
     _logged(f"listening on {path}")

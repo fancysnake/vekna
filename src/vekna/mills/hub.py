@@ -3,7 +3,7 @@ from typing import assert_never
 
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, CastView, RiteView
+from vekna.pacts.casts import CastBoard, CastView, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
     CastGoodbye,
@@ -74,7 +74,7 @@ def _unjournalled(_: CastMessage) -> None:
 # an hour of scrollback.
 # ponytail: one hub, no locking — the socket server drives it from a single
 # event loop. Per-cast locking is the upgrade if it ever runs threaded.
-class Hub(Casts, Routes):
+class Hub(CastBoard, Routes):
     def __init__(
         self,
         *,

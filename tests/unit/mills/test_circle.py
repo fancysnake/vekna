@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from vekna.mills.circle import Circle, CodingPool, Leasing, LiveCasts
+from vekna.mills.circle import Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.hub import Hub
 from vekna.pacts.circle import Exited, Limits, Spawned, TreeError, Trees
 from vekna.pacts.routing import Surface
@@ -143,15 +143,15 @@ def _circle(
     alive: Callable[[int], bool] = lambda _: False,
 ) -> tuple[Circle, Hub, _Spawn]:
     hub, spawn = Hub(), _Spawn()
-    live = LiveCasts(casts=hub, spawned=left or [], alive=alive)
+    behind = LeftBehind(casts=hub, spawned=left or [], alive=alive)
     leasing = Leasing(
-        live=live,
+        left=behind,
         say=([] if said is None else said).append,
         spawn=spawn,
         trees=trees or _Trees(),
         limits=limits,
     )
-    circle = Circle(live=live, apply=hub.apply, leasing=leasing, limits=limits)
+    circle = Circle(hub=hub, left=behind, leasing=leasing, limits=limits)
     return circle, hub, spawn
 
 

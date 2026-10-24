@@ -2,13 +2,12 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from vekna.pacts.casts import Casts, CastView
+from vekna.pacts.casts import CastBoard, Casts, CastView
 from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, TreeError, Trees
 from vekna.wire import (
     NEEDS_TREE,
     CastGoodbye,
     CastHello,
-    CastMessage,
     CastQueued,
     CodingSlotGranted,
     CodingSlotReleased,
@@ -26,13 +25,13 @@ class _Ran:
     blocked: TreeBlocked | None = None
 
 
-# The casts running now: those in a view, and those a stopped daemon left
-# running, which the view does not have until they reattach. A left one holds
-# its slot and its tree until then, or until its process is gone.
+# The casts a stopped daemon left running, which the views do not have until
+# they reattach. Each holds its slot and its tree until then, or until its
+# process is gone.
 # shortcut: a cast that dies before it reattaches wakes no queued cast, which
 # waits for the next cast to end; a timer would wake it once #141 persists the
 # queue.
-class LiveCasts:
+class LeftBehind:
     def __init__(
         self, *, casts: Casts, spawned: list[Spawned], alive: Callable[[int], bool]
     ) -> None:
@@ -40,8 +39,9 @@ class LiveCasts:
         self._spawned = spawned
         self._alive = alive
 
-    # Every tree a running cast stands in. A view's `project_root` is the tree:
-    # a leased cast says hello from where it was spawned.
+    # Every tree a running cast stands in, whether a view says so or it was left
+    # behind. A view's `project_root` is the tree: a leased cast says hello from
+    # where it was spawned. A tree leased to a cast not running yet is Leasing's.
     def trees(self) -> set[str]:
         return {
             view.hello.project_root
@@ -49,21 +49,8 @@ class LiveCasts:
             if view.status == "running"
         } | {spawned.tree for spawned in self._live() if spawned.tree is not None}
 
-    # Every running cast of the project, and those of `launching` there that
-    # have not said hello yet.
-    def running(self, project: str, *, launching: set[str]) -> int:
-        in_views = sum(
-            1
-            for cast_id, view in self._casts.casts.items()
-            if view.hello.project == project
-            and (view.status == "running" or cast_id in launching)
-        )
-        return in_views + sum(
-            1 for spawned in self._live() if spawned.project == project
-        )
-
-    def view(self, cast_id: str) -> CastView | None:
-        return self._casts.casts.get(cast_id)
+    def count(self, project: str) -> int:
+        return sum(1 for spawned in self._live() if spawned.project == project)
 
     # Dropped for good once either is true, since neither comes back: a view
     # stays in the hub, and a pid that is gone and reused is somebody else's.
@@ -84,13 +71,13 @@ class Leasing:
     def __init__(
         self,
         *,
-        live: LiveCasts,
+        left: LeftBehind,
         say: Callable[[str], None],
         spawn: Spawn,
         trees: Trees,
         limits: Limits,
     ) -> None:
-        self._live = live
+        self._left = left
         self._say = say
         self._spawn = spawn
         self._trees = trees
@@ -138,7 +125,7 @@ class Leasing:
             tree = await self._trees.lease(
                 project_root=root,
                 project=hello.project,
-                held=self._live.trees()
+                held=self._left.trees()
                 | {held for held in self._needs_tree.values() if held is not None},
                 count=self._limits.worktrees(root),
             )
@@ -159,17 +146,12 @@ class Leasing:
 # back at start is the queue's (#141).
 class Circle:
     def __init__(
-        self,
-        *,
-        live: LiveCasts,
-        apply: Callable[[CastMessage], None],
-        leasing: Leasing,
-        limits: Limits,
+        self, *, hub: CastBoard, left: LeftBehind, leasing: Leasing, limits: Limits
     ) -> None:
-        self._apply = apply
+        self._hub = hub
+        self._left = left
         self._leasing = leasing
         self._limits = limits
-        self._live = live
         self._queue: list[str] = []
         # Spawned and not yet exited. A cast between its spawn and its hello is
         # still `queued` in the view, and has to hold its slot all the same.
@@ -177,8 +159,8 @@ class Circle:
         self._tasks: set[asyncio.Task[None]] = set()
 
     def enqueue(self, hello: CastHello) -> None:
-        self._apply(hello)
-        self._apply(CastQueued(cast_id=hello.cast_id))
+        self._hub.apply(hello)
+        self._hub.apply(CastQueued(cast_id=hello.cast_id))
         self._queue.append(hello.cast_id)
         self._start()
 
@@ -188,14 +170,21 @@ class Circle:
 
     def _start(self) -> None:
         for cast_id in list(self._queue):
-            view = self._live.view(cast_id)
+            view = self._hub.casts.get(cast_id)
             if view is None or view.status != "queued":
                 self._queue.remove(cast_id)
-            elif self._live.running(
-                view.hello.project, launching=self._launching
-            ) < self._limits.processes(view.hello.project_root):
+            elif self._busy(view) < self._limits.processes(view.hello.project_root):
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
+
+    def _busy(self, queued: CastView) -> int:
+        project = queued.hello.project
+        return sum(
+            1
+            for cast_id, view in self._hub.casts.items()
+            if view.hello.project == project
+            and (view.status == "running" or cast_id in self._launching)
+        ) + self._left.count(project)
 
     def _launch(self, hello: CastHello) -> None:
         self._launching.add(hello.cast_id)
@@ -221,14 +210,14 @@ class Circle:
             self._queue.insert(0, cast_id)
             return
         if ran.blocked is not None:
-            self._apply(ran.blocked)
+            self._hub.apply(ran.blocked)
         self._failed(cast_id, _why(ran.exited))
         self._start()
 
     def _failed(self, cast_id: str, detail: str) -> None:
-        view = self._live.view(cast_id)
+        view = self._hub.casts.get(cast_id)
         if view is not None and view.status == "queued":
-            self._apply(CastGoodbye(cast_id=cast_id, status="error", detail=detail))
+            self._hub.apply(CastGoodbye(cast_id=cast_id, status="error", detail=detail))
 
 
 # How many agent sessions run at once across every cast on the account, granted

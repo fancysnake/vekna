@@ -1,6 +1,8 @@
 import asyncio
 import os
+import signal
 import sys
+import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -61,12 +63,17 @@ class TestSpawner:
     async def test_a_running_cast_is_left_behind_until_it_exits(tmp_path: Path):
         runs, tree = tmp_path / "runs", tmp_path / "tree"
         tree.mkdir()
-        reads = (
-            "import os;from vekna.links.spawner import Spawner;"
-            f"left=Spawner(command=[],runs=__import__('pathlib').Path({str(runs)!r}))"
-            ".left_behind();print(left[0].pid==os.getpid(),left[0].tree)"
-        )
-        spawn = Spawner(command=[sys.executable, "-c", reads], runs=runs)
+        reads = textwrap.dedent("""
+            import os
+            import sys
+            from pathlib import Path
+
+            from vekna.links.spawner import Spawner
+
+            left = Spawner(command=[], runs=Path(sys.argv[1])).left_behind()
+            print(left[0].pid == os.getpid(), left[0].tree)
+            """)
+        spawn = Spawner(command=[sys.executable, "-c", reads, str(runs)], runs=runs)
 
         exited = await spawn(_hello(tmp_path), str(tree))
 
@@ -96,6 +103,51 @@ class TestSpawner:
 
         assert left == [Spawned(cast_id="c1", pid=os.getpid(), project="p", tree=None)]
         assert not dead.exists()
+
+    # Zero would ask after the daemon's own process group, and a pid past the
+    # platform's range will not reach the kernel at all.
+    @pytest.mark.parametrize("pid", [0, -1, 2**64])
+    @staticmethod
+    async def test_a_pid_no_cast_can_have_is_not_left_behind(tmp_path: Path, pid: int):
+        mark = tmp_path / "runs" / "c1" / "spawned.json"
+        mark.parent.mkdir(parents=True)
+        mark.write_text(f'{{"cast_id":"c1","pid":{pid},"project":"p","tree":null}}')
+
+        left = Spawner(command=[], runs=tmp_path / "runs").left_behind()
+
+        assert not left
+        assert not mark.exists()
+
+    # A daemon stopping cancels its wait; the cast it was waiting on runs on.
+    @staticmethod
+    async def test_a_cancelled_wait_leaves_the_cast_behind(tmp_path: Path):
+        runs = tmp_path / "runs"
+        mark = runs / "c1" / "spawned.json"
+        sleeps = "import time;time.sleep(60)"
+        spawn = Spawner(command=[sys.executable, "-c", sleeps], runs=runs)
+
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(1):
+                await spawn(_hello(tmp_path), None)
+
+        left = Spawner(command=[], runs=runs).left_behind()
+        os.kill(left[0].pid, signal.SIGKILL)
+        assert [spawned.cast_id for spawned in left] == ["c1"]
+        assert mark.exists()
+
+    # A mark that is a directory refuses the write, for root as much as anyone.
+    @staticmethod
+    async def test_a_cast_that_cannot_be_marked_does_not_run(tmp_path: Path):
+        runs = tmp_path / "runs"
+        (runs / "c1" / "spawned.json").mkdir(parents=True)
+        sleeps = "import time;time.sleep(60)"
+        spawn = Spawner(command=[sys.executable, "-c", sleeps], runs=runs)
+
+        async with asyncio.timeout(10):
+            exited = await spawn(_hello(tmp_path), None)
+
+        assert exited.code is None
+        assert "spawned.json" in exited.said
 
     @staticmethod
     async def test_a_torn_mark_is_cleared(tmp_path: Path):

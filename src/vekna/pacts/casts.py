@@ -5,6 +5,7 @@ from typing import Literal, Protocol
 
 from vekna.wire import (
     CastHello,
+    CastMessage,
     CastStatus,
     DecideRequested,
     RiteEndStatus,
@@ -80,3 +81,9 @@ class CastView:
 class Casts(Protocol):
     @property
     def casts(self) -> dict[str, CastView]: ...
+
+
+# What the circle keeps casts in: it reads their views, and writes the records
+# of the casts it queues and of those that end before their hello.
+class CastBoard(Casts, Protocol):
+    def apply(self, message: CastMessage) -> None: ...
