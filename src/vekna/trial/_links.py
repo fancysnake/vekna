@@ -134,6 +134,9 @@ class DecideDouble(Channel):
     def __init__(self, script: ScriptProtocol[str]) -> None:
         self._script = script
         self.asked: list[Asked] = []
+        # What `attended()` answers in the trial: false stands in for a cast
+        # run with `--unattended`, and what is asked anyway is still answered.
+        self.attended = True
 
     # Keyword-only, and `True` rather than `"yes"` because that is what the
     # medium hands the ritual back. A bare `answers(True)` would be a boolean

@@ -35,6 +35,9 @@ class CastHello(BaseModel):
     # Spawned by the daemon, so its prompts are answered over the wire. A cast
     # run by hand answers on its own terminal and nowhere else.
     wired: bool = False
+    # Cast with `--unattended`: every `decide` refused. Kept so a cast carried
+    # on later is unattended still, whatever the carrying-on command says.
+    unattended: bool = False
     # The cast whose `enqueue` made this one. What a sweep spawned is a query
     # over the journal, not a list anybody keeps.
     enqueued_by: str | None = None

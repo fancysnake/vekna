@@ -425,6 +425,10 @@ class _Plan(NamedTuple):
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
+    # Unattended once is unattended for good: a step that skipped a question
+    # the first time round must skip it again, or the record stops lining up
+    # with what the replay asks of it.
+    unattended = unattended or hello.unattended
     library = _build_library(Path.cwd())
     compendium = library.compendium
     the_ritual = compendium.ritual(hello.ritual)
@@ -492,6 +496,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         started_at=datetime.now(tz=UTC),
         resumed_from=plan.resumed_from,
         wired=plan.wired,
+        unattended=plan.unattended,
         enqueued_by=plan.enqueued_by,
     )
 

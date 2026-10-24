@@ -76,6 +76,11 @@ nobody reads. The error raises inside the step, so a ritual can route it to a
 recovery step (see [Rituals](rituals.md#when-a-step-fails)). Without the flag
 nothing changes.
 
+A step can also ask first: `attended()` from `vekna.lexicon` is false under the
+flag, so a ritual can skip the work a question would have approved and say so.
+A cast carried on with `--continue` stays unattended whether or not the flag
+is typed again.
+
 ### `vekna cast --help`
 
 Lists the rituals it can find from here, each with its options. If the source
