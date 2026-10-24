@@ -148,12 +148,7 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         if record.hello.cast_id not in running:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
-    cutter = Cutter(
-        casts=hub,
-        pid_of=lambda cast_id: asyncio.to_thread(spawner.pid_of, cast_id),
-        kill=signal_pid,
-        say=_logged,
-    )
+    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_logged)
     routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
     server = await serve(path=path, routes=routes)
     _logged(f"listening on {path}")
@@ -311,11 +306,10 @@ class _Daemon(Routes):
         self._hub.claim(surface, claimed)
 
     # Asked over the wire, then made to if it does not listen.
-    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
-        self._hub.cancel(surface, cancel)
-        task = asyncio.create_task(self._cutter.cut(cancel.cast_id))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> bool:
+        if forwarded := self._hub.cancel(surface, cancel):
+            self._cutter.cut(cancel.cast_id)
+        return forwarded
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

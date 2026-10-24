@@ -1,3 +1,5 @@
+import asyncio
+import itertools
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -25,8 +27,9 @@ from vekna.wire import (
     allowed_answers,
 )
 
-from .dashboard import CAST_USAGE, cast_request
-from .screen import carried, clock, counted, elapsed, named, ordered, scoped, word
+from .cast_text import carried, clock, counted, elapsed, named, word
+from .commands import request_cast, send_answer
+from .screen import ordered, scoped
 
 _ID = 8
 # The list is a narrow column beside the cast it opens: a name that does not
@@ -61,8 +64,8 @@ _WAITING_LOOK = "bold yellow"
 
 
 def _where(root: str) -> str:
-    home = str(Path.home())
-    return f"~{root[len(home):]}" if root.startswith(home) else root
+    path, home = Path(root), Path.home()
+    return str(Path("~", path.relative_to(home))) if path.is_relative_to(home) else root
 
 
 def _first(text: str) -> str:
@@ -136,22 +139,28 @@ class AnswerScreen(ModalScreen[str | None]):
         self._label = label
         self._request = request
         allowed = allowed_answers(options=request.options, free=request.free)
-        self._choices = list(allowed or request.options or [])
         self._free = allowed is None
+        # Each button's answer, so a press is looked up rather than parsed.
+        self._choices = {
+            Button(escape(choice), id=f"choice-{index}"): choice
+            for index, choice in enumerate(allowed or request.options or [])
+        }
+
+    @property
+    def request_id(self) -> str:
+        return self._request.request_id
 
     @override
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Static(f"{self._label}\n\n{self._request.prompt}", markup=False)
             with Horizontal(id="options"):
-                for index, choice in enumerate(self._choices):
-                    yield Button(escape(choice), id=f"choice-{index}")
+                yield from self._choices
             if self._free:
                 yield Input(placeholder="answer in your own words", id="free")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        index = int((event.button.id or "choice-0").removeprefix("choice-"))
-        self.dismiss(self._choices[index])
+        self.dismiss(self._choices[event.button])
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
@@ -170,11 +179,11 @@ class _Scope:
     every: bool = False
 
 
-# The claims this window made, and the prompt its dialog is answering.
+# The claims this window made, and the dialog answering one of them.
 @dataclass
 class _Claims:
     mine: set[str] = field(default_factory=set)
-    answering: str | None = None
+    dialog: AnswerScreen | None = None
 
 
 # The shape of the rite tree last drawn, and a node per rite in it.
@@ -366,11 +375,16 @@ class VeknaApp(App[None]):
             return
         view, request = found
         self._claim(request)
-        self._view.claims.answering = request.request_id
-        label = f"{view.hello.ritual} {view.hello.cast_id[:_ID]}"
+        dialog = AnswerScreen(
+            label=f"{view.hello.ritual} {view.hello.cast_id[:_ID]}", request=request
+        )
+        self._view.claims.dialog = dialog
 
+        # A dialog closed because its prompt went has nothing to send.
         def answered(answer: str | None) -> None:
-            self._view.claims.answering = None
+            if self._view.claims.dialog is not dialog:
+                return
+            self._view.claims.dialog = None
             if answer is None:
                 self._send(
                     DecideClaimed(
@@ -382,7 +396,7 @@ class VeknaApp(App[None]):
             else:
                 self._resolve(request, answer)
 
-        self.push_screen(AnswerScreen(label=label, request=request), answered)
+        self.push_screen(dialog, answered)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         typed = event.value.strip()
@@ -394,7 +408,9 @@ class VeknaApp(App[None]):
         elif typed.lower() == "t":
             self.action_take()
         elif typed.lower().startswith("c "):
-            self._cast(typed[2:])
+            self.say(
+                request_cast(typed=typed[2:], root=self._scope.root, send=self._send)
+            )
         elif typed.lower().startswith("a "):
             self._answer(typed[2:].strip())
         elif typed:
@@ -412,26 +428,15 @@ class VeknaApp(App[None]):
         self._view.rite = event.node.data
         self.changed()
 
-    def _cast(self, typed: str) -> None:
-        try:
-            request = cast_request(typed, root=self._scope.root)
-        except ValueError as error:
-            self.say(f"{CAST_USAGE} — {error}")
-            return
-        self._send(request)
-        self.say(f"asked for {request.ritual}")
-
-    def _answer(self, answer: str) -> None:
+    def _answer(self, typed: str) -> None:
         if (found := self._waiting()) is None:
             self.say(_NOTHING_WAITING)
             return
         _, request = found
-        allowed = allowed_answers(options=request.options, free=request.free)
-        if allowed is not None and answer not in allowed:
-            self.say(f"{answer!r} is not one of {', '.join(allowed)}")
-            return
-        self._claim(request)
-        self._resolve(request, answer)
+        if (
+            refused := send_answer(request=request, typed=typed, send=self._send)
+        ) is not None:
+            self.say(refused)
 
     def _focused(self) -> CastView | None:
         if self._view.focus is None:
@@ -475,8 +480,8 @@ class VeknaApp(App[None]):
             if view.status in {"running", "queued"}
             or view.hello.project_root not in self._view.branches
         }
-        for root in roots:
-            self._view.branches[root] = await self._branch_of(root)
+        found = await asyncio.gather(*(self._branch_of(root) for root in roots))
+        self._view.branches.update(zip(roots, found, strict=True))
         self.changed()
 
     def _repaint(self) -> None:
@@ -639,14 +644,15 @@ class VeknaApp(App[None]):
         return said[-1] if said else None
 
     # A prompt answered or withdrawn while its dialog is up closes the dialog:
-    # nobody is waiting on what it would send.
+    # nobody is waiting on what it would send. Whatever is open over it, the
+    # command palette, goes with it, or `dismiss` would pop that instead.
     def _close_answered(self) -> None:
-        if self._view.claims.answering is None:
+        if (dialog := self._view.claims.dialog) is None or any(
+            dialog.request_id in view.waiting for view in self._casts.casts.values()
+        ):
             return
-        still = any(
-            self._view.claims.answering in view.waiting
-            for view in self._casts.casts.values()
-        )
-        if not still:
-            self._view.claims.answering = None
-            self.pop_screen()
+        self._view.claims.dialog = None
+        # A `while` in disguise: pylint's `while_used` bans the statement.
+        for _ in itertools.takewhile(lambda _: not dialog.is_active, itertools.count()):
+            self.screen.dismiss()
+        dialog.dismiss(None)

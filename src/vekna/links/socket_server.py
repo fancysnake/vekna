@@ -8,7 +8,6 @@ from vekna.wire import (
     CastCancelRequested,
     CastGoodbye,
     CastMessage,
-    CastRefused,
     CastRequested,
     DecideClaimed,
     DecideResolved,
@@ -127,9 +126,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
             elif isinstance(opened, StopRequested):
                 stopping.set()
             # A request is a surface's to make, after it has said it is one.
-            elif opened is not None and not isinstance(
-                opened, (CastRequested, CastRefused, CastCancelRequested)
-            ):
+            elif isinstance(opened, CastMessage):
                 await _as_cast(
                     opened,
                     cast_frames(frames),

@@ -80,8 +80,9 @@ class _Daemon(Routes):
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         self.prompted.append((surface, claimed))
 
-    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> bool:
         self.prompted.append((surface, cancel))
+        return True
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self.peers[cast_id] = peer

@@ -13,6 +13,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from vekna.lexicon._pacts import (
     AskFn,
+    CastCancelledError,
     CastEnded,
     CastQueueProtocol,
     Channel,
@@ -60,6 +61,7 @@ _T = TypeVar("_T")
 _REATTACH_SECONDS = 2.0
 _NO_QUEUE = "the queue needs a daemon — run `vekna` to start one"
 _GONE_MID_ENQUEUE = "the daemon went away before it said the cast was queued"
+_CANCELLED = "cancelled from a window"
 _COMPONENTS: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 
@@ -103,7 +105,6 @@ class DaemonLink:
         self._watcher: asyncio.Task[None] | None = None
         self._closed = False
         self._pending = _Pending()
-        self._cancelled = False
 
     @property
     def hello(self) -> CastHello:
@@ -114,19 +115,26 @@ class DaemonLink:
         return self._writer is not None
 
     # `work` in a task of its own, which a surface asking for this cast to end
-    # cancels.
+    # cancels, and which then ends as `CastCancelledError`. Only while it runs:
+    # a cancel heard after has nothing to cut.
     async def cancellable(self, work: Coroutine[None, None, _T]) -> _T:
         running = asyncio.create_task(work)
+        asked = False
 
         def cancel() -> None:
+            nonlocal asked
+            asked = True
             running.cancel()
 
         self._pending.cancel = cancel
-        return await running
-
-    @property
-    def cancelled(self) -> bool:
-        return self._cancelled
+        try:
+            return await running
+        except asyncio.CancelledError:
+            if asked:
+                raise CastCancelledError(_CANCELLED) from None
+            raise
+        finally:
+            self._pending.cancel = None
 
     def send(self, message: WireMessage) -> None:
         if (writer := self._writer) is not None:
@@ -205,28 +213,16 @@ class DaemonLink:
         await self._shut(writer)
 
     # The answer to `request`, from whichever surface gives one the prompt
-    # allows. Sent as well as awaited here, so a prompt is never on the wire
-    # without somebody listening for what comes back.
-    async def answer(self, request: DecideRequested) -> str:
-        awaited = self._awaiting(request)
-        try:
-            return await awaited.future
-        finally:
-            self._pending.answers.pop(request.request_id, None)
-
-    # A prompt this cast's own terminal answers, until a surface claims it: then
-    # the terminal stops taking answers and the surface's comes over the wire,
-    # and a claim let go hands it back to the terminal, asked again.
-    async def answer_here(
-        self, request: DecideRequested, *, ask: Callable[[], Awaitable[str]]
+    # allows, or from `ask`, this cast's own terminal, until a surface claims
+    # it: then the terminal stops taking answers, and a claim let go hands it
+    # back, asked again. Sent as well as awaited here, so a prompt is never on
+    # the wire without somebody listening for what comes back.
+    async def answer(
+        self,
+        request: DecideRequested,
+        *,
+        ask: Callable[[], Awaitable[str]] | None = None,
     ) -> str:
-        awaited = self._awaiting(request)
-        try:
-            return await _first_answer(awaited, ask)
-        finally:
-            self._pending.answers.pop(request.request_id, None)
-
-    def _awaiting(self, request: DecideRequested) -> "_Awaited":
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         awaited = _Awaited(
             request=request,
@@ -235,7 +231,10 @@ class DaemonLink:
         )
         self._pending.answers[request.request_id] = awaited
         self.send(request)
-        return awaited
+        try:
+            return await (future if ask is None else _first_answer(awaited, ask))
+        finally:
+            self._pending.answers.pop(request.request_id, None)
 
     # Held for as long as the block runs. With no daemon there is nobody to
     # share with, so there is no limit to wait on.
@@ -330,7 +329,6 @@ class DaemonLink:
             isinstance(message, CastCancelRequested)
             and (cancel := self._pending.cancel) is not None
         ):
-            self._cancelled = True
             cancel()
         elif (
             isinstance(message, AwaitEnded)
@@ -413,22 +411,16 @@ async def _first_answer(awaited: _Awaited, ask: Callable[[], Awaitable[str]]) ->
     awaited.changed.clear()
     flipped = asyncio.ensure_future(awaited.changed.wait())
     local = None if awaited.claimed else asyncio.ensure_future(ask())
-    # Each wakes this round; a callback left on the answer after it is spent
-    # settles a future already settled, which does nothing.
-    woken: asyncio.Future[None] = asyncio.get_running_loop().create_future()
-    awaited.future.add_done_callback(lambda _: _settle(woken))
-    flipped.add_done_callback(lambda _: _settle(woken))
+    # The round's own, cancelled when it ends; the answer outlives the round.
+    ours: list[asyncio.Future[str] | asyncio.Future[Literal[True]]] = [flipped]
     if local is not None:
-        local.add_done_callback(lambda _: _settle(woken))
+        ours.append(local)
     try:
-        await woken
+        await asyncio.wait([awaited.future, *ours], return_when=asyncio.FIRST_COMPLETED)
     finally:
-        flipped.cancel()
-        if local is not None:
-            local.cancel()
-        await asyncio.gather(
-            flipped, *([] if local is None else [local]), return_exceptions=True
-        )
+        for task in ours:
+            task.cancel()
+        await asyncio.gather(*ours, return_exceptions=True)
     if awaited.future.done():
         return awaited.future.result()
     if local is not None and local.done() and not local.cancelled():
@@ -512,13 +504,13 @@ class TeeChannel(Channel):
         self._open[request.request_id] = request
         try:
             inner = self._inner
-            answer = await (
-                self._link.answer(request)
-                if inner is None
-                else self._link.answer_here(
-                    request,
-                    ask=lambda: inner.decide(prompt=prompt, options=options, free=free),
-                )
+            answer = await self._link.answer(
+                request,
+                ask=(
+                    None
+                    if inner is None
+                    else lambda: inner.decide(prompt=prompt, options=options, free=free)
+                ),
             )
         except BaseException:
             self._link.send(
@@ -545,7 +537,7 @@ class LinkQueue(CastQueueProtocol):
         *,
         link: DaemonLink,
         ritual: Callable[[str], Ritual],
-        queued: Callable[[str], None] = lambda _: None,
+        queued: Callable[[str], None],
     ) -> None:
         self._link = link
         self._ritual = ritual

@@ -102,6 +102,8 @@ submodules cooperate.
     debug_log.py      # --debug's file
   gates/
     cli/
+      cast_text.py # a cast in words — status, clock, tally — for both views
+      commands.py # what `c` and `a` send, and what either view says after
       screen.py   # painting: the cast list, one cast drilled into, `casts`
       dashboard.py # what the keys do — over the two protocols, nothing else
       tui.py      # the Textual window: table, pane, take-over dialog

@@ -16,6 +16,7 @@ from vekna.lexicon._links.daemon import (
 )
 from vekna.lexicon._pacts import (
     AskFn,
+    CastCancelledError,
     CastEnded,
     CodingCall,
     CodingFocusProtocol,
@@ -607,9 +608,30 @@ class TestCancelledOverTheWire:
 
         daemon.hub.cancel(_NOBODY, CastCancelRequested(cast_id=_CAST))
 
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(CastCancelledError, match="cancelled from a window"):
             await asyncio.wait_for(work, timeout=2)
-        assert link.cancelled
+        await link.close(status="error", detail="cancelled")
+        await daemon.stop()
+
+    # A cancel heard once the work is over has nothing to cut, and must not
+    # turn the next Ctrl-C into a cancel from a window.
+    @staticmethod
+    async def test_a_late_cancel_leaves_ctrl_c_as_itself(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
+        await link.attach()
+        await link.cancellable(asyncio.sleep(0))
+        await _eventually(lambda: _CAST in daemon.hub.casts)
+        daemon.hub.cancel(_NOBODY, CastCancelRequested(cast_id=_CAST))
+        await asyncio.sleep(0.1)
+        work = asyncio.create_task(link.cancellable(asyncio.Event().wait()))
+        await asyncio.sleep(0)
+
+        work.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await work
         await link.close(status="error", detail="cancelled")
         await daemon.stop()
 
@@ -879,7 +901,8 @@ class TestQueue:
         socket_path: Path,
     ):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, ritual=_nap)
+        queued: list[str] = []
+        queue = LinkQueue(link=link, ritual=_nap, queued=queued.append)
 
         enqueuing = asyncio.create_task(
             queue.enqueue(ritual="nap", components=_Nap(minutes=5))
@@ -889,6 +912,7 @@ class TestQueue:
         hub.tell(_CAST, EnqueueAccepted(cast_id=_CAST, request_id=asked.request_id))
 
         assert await asyncio.wait_for(enqueuing, timeout=2) == asked.hello.cast_id
+        assert queued == [asked.hello.cast_id]
         child = asked.hello
         # `snore` left unset stays unsaid, for the defaults where the child runs.
         assert (child.ritual, child.components) == ("tome:nap", {"minutes": 5})
@@ -900,7 +924,8 @@ class TestQueue:
     @staticmethod
     async def test_a_refusal_says_why(socket_path: Path):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, ritual=_nap)
+        queued: list[str] = []
+        queue = LinkQueue(link=link, ritual=_nap, queued=queued.append)
 
         enqueuing = asyncio.create_task(
             queue.enqueue(ritual="nap", components=_Nap(minutes=5))
@@ -914,6 +939,7 @@ class TestQueue:
 
         with pytest.raises(RitualError, match="not queued: gone"):
             await asyncio.wait_for(enqueuing, timeout=2)
+        assert not queued
         await link.close(status="ok")
         await daemon.stop()
 
@@ -922,12 +948,14 @@ class TestQueue:
         socket_path: Path,
     ):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, ritual=_nap)
+        queued: list[str] = []
+        queue = LinkQueue(link=link, ritual=_nap, queued=queued.append)
 
         with pytest.raises(MediumBoundaryError, match="tome:nap takes _Nap, not"):
             await queue.enqueue(ritual="nap", components=NoComponents())
 
         assert not [m for m in hub.heard if isinstance(m, EnqueueRequested)]
+        assert not queued
         await link.close(status="ok")
         await daemon.stop()
 
@@ -1073,7 +1101,8 @@ class TestQueue:
     @staticmethod
     async def test_the_queue_hands_the_medium_how_the_child_ended(socket_path: Path):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, ritual=_nap)
+        queued: list[str] = []
+        queue = LinkQueue(link=link, ritual=_nap, queued=queued.append)
 
         awaiting = asyncio.create_task(queue.await_end("c2"))
         await _eventually(lambda: bool(hub.heard))
@@ -1092,6 +1121,7 @@ class TestQueue:
         assert await asyncio.wait_for(awaiting, timeout=2) == CastEnded(
             status="error", detail="red", result=None
         )
+        assert not queued
         await link.close(status="ok")
         await daemon.stop()
 

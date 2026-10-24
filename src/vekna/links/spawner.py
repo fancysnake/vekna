@@ -55,15 +55,6 @@ class Spawner:
             return Exited(code=None, said=str(error))
         return Exited(code=code, said=await asyncio.to_thread(_last_line, log))
 
-    # The pid it was spawned as, by this daemon or one before it, while the
-    # mark says it is still running.
-    def pid_of(self, cast_id: str) -> int | None:
-        mark = run_file(self._runs, cast_id).parent / _SPAWNED
-        try:
-            return _SPAWNED_ADAPTER.validate_json(mark.read_bytes()).pid
-        except (OSError, ValueError):
-            return None
-
     # Read once, before the daemon spawns anything of its own. A mark whose
     # process is gone, or that will not read back, is cleared on the way.
     def left_behind(self) -> list[Spawned]:

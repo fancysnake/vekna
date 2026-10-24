@@ -237,6 +237,12 @@ class CastFailedError(RitualError):
     pass
 
 
+# This cast's work, cut because a surface asked it to end. Not a
+# `CancelledError`, which is Ctrl-C's and goes on being one.
+class CastCancelledError(RitualError):
+    pass
+
+
 class StepBudgetExceededError(RitualError):
     pass
 

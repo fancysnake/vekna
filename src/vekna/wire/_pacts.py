@@ -33,7 +33,7 @@ class CastHello(BaseModel):
     started_at: datetime
     resumed_from: str | None = None
     # Spawned by the daemon, so its prompts are answered over the wire. A cast
-    # run by hand answers on its own terminal and nowhere else.
+    # run by hand asks on its own terminal too.
     wired: bool = False
     # The cast whose `enqueue` made this one. What a sweep spawned is a query
     # over the journal, not a list anybody keeps.
@@ -83,7 +83,8 @@ class CastRequested(BaseModel):
 
 
 # Said back to the surface that asked, and to nobody else: a request the daemon
-# would not queue is that operator's to hear about.
+# would not queue, or a cancel it could not pass on, is that operator's to hear
+# about.
 class CastRefused(BaseModel):
     kind: Literal["cast_refused"] = "cast_refused"
     reason: str
@@ -245,9 +246,9 @@ class DecideWithdrawn(BaseModel):
     request_id: str
 
 
-# Who answers a prompt. Unclaimed, a cast typed by hand answers its own on its
-# terminal, and a spawned cast's is answered by the terminal following it or by
-# any surface. A surface claims a prompt to take it over: every other answerer
+# Who answers a prompt. Unclaimed, whichever answers first: the terminal of a
+# cast typed by hand, the terminal following a spawned one, or any surface. A
+# surface claims a prompt to take it over: every other answerer
 # stops taking answers for it until the claim lets go, which `claim_id` None
 # says — the claiming surface went away. The id is how a surface tells its own
 # claim from somebody else's.

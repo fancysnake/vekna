@@ -22,10 +22,8 @@ from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
 from vekna.wire import (
-    CastCancelRequested,
+    CastMessage,
     CastRefused,
-    CastRequested,
-    StopRequested,
     SurfaceHello,
     WireMessage,
     default_runs_root,
@@ -241,6 +239,7 @@ async def _opened(*, debug: bool) -> _Line:
     return _Line(reader=reader, writer=writer, note=note)
 
 
+# refusal of what this window asked for. Returns once the daemon has gone.
 # What a daemon sends a surface is what it heard from its casts, and the
 # refusal of a cast this window asked for. Returns once the daemon has gone.
 async def _listen(
@@ -249,9 +248,7 @@ async def _listen(
     async for message in read_frames(line.reader):
         if isinstance(message, CastRefused):
             say(message.reason)
-        elif not isinstance(
-            message, (SurfaceHello, StopRequested, CastRequested, CastCancelRequested)
-        ):
+        elif isinstance(message, CastMessage):
             hub.apply(message)
             changed()
 

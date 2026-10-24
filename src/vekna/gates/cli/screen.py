@@ -1,10 +1,10 @@
-from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from pathlib import PurePath
 
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
-from vekna.wire import CastHello, DecideRequested, RunRecord, allowed_answers
+from vekna.wire import DecideRequested, RunRecord, allowed_answers
+
+from .cast_text import carried, clock, counted, elapsed, named, word
 
 _CAST_GLYPH = {
     "queued": "…",
@@ -37,26 +37,6 @@ _DELTA_TAIL = 12
 # else is on screen; the finished ones fill what is left, and `vekna log` has
 # the rest.
 _SHOWN = 12
-# The word, not the glyph: the list is read across a row of casts, and "aborted"
-# says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
-# where the tree shape carries the rest of the meaning.
-_WORD = {
-    "queued": "queued",
-    "running": "running",
-    "ok": "done",
-    "error": "failed",
-    "disconnected": "aborted",
-}
-_TALLY = (
-    "running",
-    "waiting",
-    "on child",
-    "recovering",
-    "queued",
-    "done",
-    "failed",
-    "aborted",
-)
 _STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
@@ -66,8 +46,6 @@ _HEAD = (
     f"  #  {'cast':<{_ID}}  {'ritual':<{_RITUAL}}  {'project':<{_PROJECT}}"
     f"  {'status':<{_STATUS}}  {'elapsed':>7}  steps  now"
 )
-_MINUTE = 60
-_HOUR = 3600
 
 
 # Whoever is blocked on a human first, then what is still going, then what is
@@ -92,36 +70,6 @@ def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
     return [view for view in casts if view.hello.project == project]
 
 
-# A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
-# repository's name is what an operator calls it either way.
-def named(project: str) -> str:
-    where = PurePath(project)
-    return where.parent.name if where.name == ".git" else where.name
-
-
-def word(view: CastView) -> str:
-    if view.status == "running":
-        if view.waiting:
-            return "waiting"
-        if view.on_children:
-            return "on child"
-        if _recovering(view):
-            return "recovering"
-    return _WORD[view.status]
-
-
-# Still running though its last finished step raised: a step took the failure
-# and the cast went on. Not a status of its own on the wire — the rites already
-# say it.
-def _recovering(view: CastView) -> bool:
-    finished = [
-        rite
-        for rite in view.rites.values()
-        if rite.started.category == "step" and rite.status != "running"
-    ]
-    return bool(finished) and finished[-1].status == "error"
-
-
 # Text a ritual wrote reaches a column — a prompt, a step's name — so every one
 # of them is cut to its width. Left whole, one long name pushes the columns of
 # its own row sideways and the listing stops being a table.
@@ -130,32 +78,7 @@ def _fit(text: str, width: int) -> str:
     return (f"{line[: width - 1]}…" if len(line) > width else line).ljust(width)
 
 
-def clock(seconds: float) -> str:
-    whole = max(0, int(seconds))
-    if whole < _MINUTE:
-        return f"{whole}s"
-    if whole < _HOUR:
-        return f"{whole // _MINUTE}m{whole % _MINUTE:02d}s"
-    return f"{whole // _HOUR}h{whole % _HOUR // _MINUTE:02d}m"
-
-
-# A cast that has ended stops counting, and `CastGoodbye` carries no time of its
-# own: the last rite to finish is when it ended, to within the moment it took to
-# say so. Derived rather than stamped on arrival, because a peer surface is
-# replayed a cast that ended before it attached and would stamp its own clock.
-def _ended_at(view: CastView) -> datetime | None:
-    stamps = [rite.finished_at for rite in view.rites.values() if rite.finished_at]
-    return max(stamps) if stamps else None
-
-
-def elapsed(view: CastView, now: datetime) -> str:
-    live = view.status in {"running", "queued"}
-    if (until := now if live else _ended_at(view)) is None:
-        return "—"
-    return clock((until - view.hello.started_at).total_seconds())
-
-
-def steps_done(view: CastView) -> int:
+def _steps_done(view: CastView) -> int:
     return sum(
         1
         for rite in view.rites.values()
@@ -177,7 +100,7 @@ def _innermost(view: CastView, category: str) -> RiteView | None:
 # one needs restarting, so it shows the command that does it; a running one is
 # read to see whether it is stuck, so it shows the step, what the step is doing,
 # and how long that has been true. A cast that ended cleanly needs nothing.
-def now_doing(view: CastView, now: datetime) -> str:
+def _now(view: CastView, now: datetime) -> str:
     if view.waiting:
         return next(iter(view.waiting.values())).request.prompt
     if view.on_children:
@@ -201,13 +124,8 @@ def _line(index: int, view: CastView, now: datetime) -> str:
         f"  {_fit(view.hello.ritual, _RITUAL)}"
         f"  {_fit(named(view.hello.project), _PROJECT)}"
         f"  {word(view):<{_STATUS}}  {elapsed(view, now):>7}"
-        f"  {steps_done(view):>5}  {_fit(now_doing(view, now), _NOW)}".rstrip()
+        f"  {_steps_done(view):>5}  {_fit(_now(view, now), _NOW)}".rstrip()
     )
-
-
-def counted(casts: Sequence[CastView]) -> str:
-    tally = Counter(word(view) for view in casts)
-    return " · ".join(f"{tally[word]} {word}" for word in _TALLY if tally[word])
 
 
 # Every running cast is on screen whatever else is: they are what the view is
@@ -251,7 +169,7 @@ def _depth(rite: RiteView, view: CastView) -> int:
     return depth
 
 
-def _rite_lines(view: CastView, tail: int) -> list[str]:
+def _rite_lines(view: CastView) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
@@ -260,25 +178,13 @@ def _rite_lines(view: CastView, tail: int) -> list[str]:
         said = "" if rite.error is None else f"  — {rite.error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")
         if rite.status == "running":
-            lines += [f" {pad}    {line}" for line in list(rite.deltas)[-tail:]]
+            lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
     return lines
-
-
-# A resumed cast is a cast of its own with an id of its own, so what would
-# otherwise read as the same ritual run twice says which cast it carries on
-# from — cut to eight, the form `vekna cast --continue` takes.
-def carried(hello: CastHello) -> str:
-    said = (
-        "" if hello.resumed_from is None else f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
-    )
-    if hello.enqueued_by is not None:
-        said += f"  queued by {hello.enqueued_by[:_ID]}"
-    return said
 
 
 # What the prompt will take. One run by hand is reading its own terminal too,
 # and an answer from here takes it over.
-def how(view: CastView, request: DecideRequested) -> str:
+def _how(view: CastView, request: DecideRequested) -> str:
     allowed = allowed_answers(options=request.options, free=request.free)
     takes = "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
     return takes if view.hello.wired else f"{takes}; {_TAKES_OVER}"
@@ -290,7 +196,7 @@ def _waiting_lines(view: CastView) -> list[str]:
     return [
         "",
         *(
-            f" {_WAITING} {request.prompt}   ({how(view, request)})"
+            f" {_WAITING} {request.prompt}   ({_how(view, request)})"
             for request in (prompt.request for prompt in view.waiting.values())
         ),
     ]
@@ -306,9 +212,7 @@ def _detail_lines(view: CastView) -> list[str]:
     return ["", *(f" {line}" for line in lines)] if lines else []
 
 
-# `tail` is how much of a running rite's output shows: a frame repainted whole
-# keeps it short, a pane that scrolls can afford all the view holds.
-def drilled(view: CastView, now: datetime, *, tail: int = _DELTA_TAIL) -> list[str]:
+def _drilled(view: CastView, now: datetime) -> list[str]:
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
         f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
@@ -317,7 +221,7 @@ def drilled(view: CastView, now: datetime, *, tail: int = _DELTA_TAIL) -> list[s
     return [
         header,
         "",
-        *_rite_lines(view, tail),
+        *_rite_lines(view),
         *_waiting_lines(view),
         *_detail_lines(view),
         "",
@@ -375,7 +279,7 @@ def paint(
     at = now if now is not None else datetime.now(UTC)
     found = [view for view in listed if view.hello.cast_id == focus]
     if focus is not None and found:
-        body = drilled(found[0], at)
+        body = _drilled(found[0], at)
         keys = _ANSWER_KEYS if found[0].waiting else _CAST_KEYS
     else:
         where = _EVERY if project is None else named(project)

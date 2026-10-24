@@ -122,6 +122,26 @@ class TestListing:
             rows = _cells(app)
         assert [row[1] for row in rows] == ["sweep", "└ pr_fix", "ci_watch"]
 
+    # A sibling of home shares its prefix as a string, not as a path.
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("root", "shown"),
+        [("/home/u/x", "~/x"), ("/home/u", "~"), ("/home/u2/x", "/home/u2/x")],
+    )
+    async def test_a_tree_under_home_is_said_from_home(
+        monkeypatch: pytest.MonkeyPatch, root: str, shown: str
+    ):
+        monkeypatch.setenv("HOME", "/home/u")
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch", root=root))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            head = _text(app, "#head")
+        assert head.endswith(f"— · {shown}")
+
     @staticmethod
     async def test_the_cast_under_the_cursor_shows_its_rites_as_a_tree():
         hub = Hub()
@@ -268,7 +288,8 @@ class TestTakingOver:
     async def test_a_prompt_answered_elsewhere_closes_its_dialog():
         hub = Hub()
         _asking(hub)
-        app = _app(hub, [])
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
@@ -279,9 +300,34 @@ class TestTakingOver:
             await pilot.pause(_PAINTED)
 
             assert not isinstance(app.screen, AnswerScreen)
+        assert sent == [_claim_then(sent)]
+
+    # The palette is a screen of its own: closing whatever is on top would
+    # close it and leave the dialog up for a prompt that has gone.
+    @staticmethod
+    async def test_a_dialog_under_the_palette_still_closes_when_its_prompt_goes():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("t")
+            await pilot.pause()
+            app.action_command_palette()
+            await pilot.pause()
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            stack = app.screen_stack
+        assert not any(isinstance(screen, AnswerScreen) for screen in stack)
+        assert len(stack) == 1
+        assert sent == [_claim_then(sent)]
 
     @staticmethod
-    async def test_a_answers_with_a_claim_and_refuses_what_is_not_offered():
+    async def test_a_answers_without_a_claim_and_refuses_what_is_not_offered():
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
@@ -296,11 +342,7 @@ class TestTakingOver:
             await pilot.pause()
 
         assert refused == "'maybe' is not one of yes, no"
-        claim = _claim_then(sent)
-        assert sent == [
-            claim,
-            DecideResolved(cast_id="c1", request_id="q1", answer="yes"),
-        ]
+        assert sent == [DecideResolved(cast_id="c1", request_id="q1", answer="yes")]
 
     @staticmethod
     async def test_with_nothing_waiting_t_says_so():

@@ -1,22 +1,20 @@
 import asyncio
 import signal
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 
 from vekna.pacts.casts import Casts
 
 _ID = 8
-# Signal 0 is no signal: sending it asks whether the pid is there to send to.
-_PROBE = 0
 # Past the shell medium's own grace for reaping what it started, so a cast
 # ending itself is not cut short of it.
 GRACE_SECONDS = 10.0
 
 
 # What a cancel the cast does not act on comes to. It is asked over the wire
-# first; one that is still running a grace later — too old to read the ask, or
-# stuck where a cancel never lands — is sent SIGINT, the Ctrl-C every cast
-# obeys, and one that outlives that is killed. Only while its view still says
-# it is running, so a pid the cast let go of is never signalled.
+# first; one that is still running a grace later — stuck where a cancel never
+# lands — is sent SIGINT, the Ctrl-C every cast obeys, and one that outlives
+# that is killed. Only while its view still says it is running, so a pid the
+# cast let go of is never signalled.
 # shortcut: a pid reused inside the grace is signalled as the cast; a start
 # time beside the pid would tell them apart.
 class Cutter:
@@ -24,26 +22,30 @@ class Cutter:
         self,
         *,
         casts: Casts,
-        pid_of: Callable[[str], Awaitable[int | None]],
+        alive: Callable[[int], bool],
         kill: Callable[[int, int], bool],
         say: Callable[[str], None],
         grace: float = GRACE_SECONDS,
     ) -> None:
         self._casts = casts
-        self._pid_of = pid_of
+        self._alive = alive
         self._kill = kill
         self._say = say
         self._grace = grace
+        self._cutting: dict[str, asyncio.Task[None]] = {}
 
-    async def cut(self, cast_id: str) -> None:
+    # One cut per cast however often it is asked for: a second SIGINT is what
+    # turns a cast's graceful Ctrl-C into an abort.
+    def cut(self, cast_id: str) -> asyncio.Task[None]:
+        if (task := self._cutting.get(cast_id)) is None:
+            task = self._cutting[cast_id] = asyncio.create_task(self._cut(cast_id))
+            task.add_done_callback(lambda _: self._cutting.pop(cast_id, None))
+        return task
+
+    async def _cut(self, cast_id: str) -> None:
         if (view := self._casts.casts.get(cast_id)) is None:
             return
-        pid = (
-            view.hello.pid
-            if view.hello.pid is not None
-            else await self._pid_of(cast_id)
-        )
-        if pid is None:
+        if (pid := view.hello.pid) is None:
             self._say(
                 f"cast {cast_id[:_ID]} has no pid to signal: stop it at its terminal"
             )
@@ -60,4 +62,4 @@ class Cutter:
 
     def _running(self, cast_id: str, pid: int) -> bool:
         view = self._casts.casts.get(cast_id)
-        return view is not None and view.status == "running" and self._kill(pid, _PROBE)
+        return view is not None and view.status == "running" and self._alive(pid)

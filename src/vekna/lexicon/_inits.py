@@ -77,7 +77,6 @@ _FOLLOWING = "following the casts this one queued — Ctrl-C leaves them running
 _LEFT = "left them running — `vekna` shows them\n"
 _DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
-_CANCELLED = "cancelled from a window"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -531,24 +530,20 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
-# Where a cast's word goes: the daemon, the terminal, and the queue its
-# `enqueue` and `await_cast` reach.
-class _Outs(NamedTuple):
-    link: DaemonLink
-    renderer: StandaloneRenderer
-    queue: LinkQueue
-
-
 # Every way a cast can end goes through one notify: an `except` per error type
 # would leave whatever it does not name — the AttributeError a step raises —
 # silent, which is the walked-away-from-the-terminal case the notification
 # exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *, plan: _Plan, grimoire: Grimoire, channel: Channel, outs: _Outs
+    *,
+    plan: _Plan,
+    grimoire: Grimoire,
+    channel: Channel,
+    link: DaemonLink,
+    renderer: StandaloneRenderer,
 ) -> int:
-    link, renderer = outs.link, outs.renderer
     try:
-        with _throttled(link), CAST_QUEUE.scope(outs.queue):
+        with _throttled(link):
             result = await link.cancellable(
                 run_cast(
                     ritual=plan.ritual,
@@ -558,14 +553,6 @@ async def _cast(
                     ledger=plan.ledger,
                 )
             )
-    # Cut from a window the way Ctrl-C cuts it, and still a goodbye: the daemon
-    # hears why it ended instead of a dropped connection it would offer to
-    # resume.
-    except asyncio.CancelledError:
-        if not link.cancelled:
-            raise
-        sys.stderr.write(f"cast failed: {_CANCELLED}\n")
-        code, detail = 1, _CANCELLED
     except FocusMissingError as error:
         sys.stderr.write(f"{error}\n")
         code, detail = 2, str(error)
@@ -631,18 +618,17 @@ async def _run(plan: _Plan) -> int:
     lineage = Lineage(cast_id)
     follower = await _follower(plan=plan, link=link, lineage=lineage, ask=renderer)
     try:
-        code = await _cast(
-            plan=plan,
-            grimoire=grimoire,
-            channel=channel,
-            outs=_Outs(
+        # The queue the cast's `enqueue` and `await_cast` reach.
+        with CAST_QUEUE.scope(
+            LinkQueue(link=link, ritual=plan.compendium.ritual, queued=lineage.expect)
+        ):
+            code = await _cast(
+                plan=plan,
+                grimoire=grimoire,
+                channel=channel,
                 link=link,
                 renderer=renderer,
-                queue=LinkQueue(
-                    link=link, ritual=plan.compendium.ritual, queued=lineage.expect
-                ),
-            ),
-        )
+            )
     finally:
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):

@@ -24,21 +24,21 @@ def _hello(pid: int | None) -> CastHello:
 
 
 # The process side of a cut: which pids are alive, what was sent to them, and
-# what the cutter said. A signal stops the pid it is sent to only when told to.
+# what the cutter said. A signal stops the pid it is sent to only when told to,
+# and reaches it at all only when the pid is this daemon's to signal.
 class _Processes:
-    def __init__(self, *, stops_on: set[int] | None = None) -> None:
+    def __init__(
+        self, *, stops_on: set[int] | None = None, permitted: bool = True
+    ) -> None:
         self.alive: set[int] = {41, 42}
         self.sent: list[tuple[int, int]] = []
         self.said: list[str] = []
         self._stops_on = stops_on or set()
-        self.marks: dict[str, int] = {}
-
-    async def pid_of(self, cast_id: str) -> int | None:
-        return self.marks.get(cast_id)
+        self._permitted = permitted
 
     def kill(self, pid: int, signum: int) -> bool:
-        if signum == 0:
-            return pid in self.alive
+        if not self._permitted:
+            return False
         self.sent.append((pid, signum))
         if signum in self._stops_on:
             self.alive.discard(pid)
@@ -46,7 +46,11 @@ class _Processes:
 
     def cutter(self, hub: Hub) -> Cutter:
         return Cutter(
-            casts=hub, pid_of=self.pid_of, kill=self.kill, say=self.said.append, grace=0
+            casts=hub,
+            alive=self.alive.__contains__,
+            kill=self.kill,
+            say=self.said.append,
+            grace=0,
         )
 
 
@@ -76,6 +80,19 @@ class TestCutting:
         assert processes.said == ["cast c1 still running: sent SIGINT to 42"]
 
     @staticmethod
+    async def test_a_cut_asked_twice_signals_once():
+        hub = Hub()
+        hub.apply(_hello(pid=42))
+        processes = _Processes()
+        cutter = processes.cutter(hub)
+
+        first, second = cutter.cut("c1"), cutter.cut("c1")
+        await first
+
+        assert first is second
+        assert processes.sent == [(42, signal.SIGINT), (42, signal.SIGKILL)]
+
+    @staticmethod
     async def test_one_that_outlives_ctrl_c_is_killed():
         hub = Hub()
         hub.apply(_hello(pid=42))
@@ -85,16 +102,20 @@ class TestCutting:
 
         assert processes.sent == [(42, signal.SIGINT), (42, signal.SIGKILL)]
 
+    # A pid this daemon may not signal is still a running cast, not a dead one.
     @staticmethod
-    async def test_a_cast_too_old_to_say_its_pid_is_found_by_its_mark():
+    async def test_a_live_pid_that_will_not_take_a_signal_is_said_as_such():
         hub = Hub()
-        hub.apply(_hello(pid=None))
-        processes = _Processes(stops_on={signal.SIGINT})
-        processes.marks["c1"] = 41
+        hub.apply(_hello(pid=42))
+        processes = _Processes(permitted=False)
 
         await processes.cutter(hub).cut("c1")
 
-        assert processes.sent == [(41, signal.SIGINT)]
+        assert not processes.sent
+        assert processes.said == [
+            "cast c1 still running: could not send SIGINT to 42",
+            "cast c1 still running: could not send SIGKILL to 42",
+        ]
 
     @staticmethod
     async def test_with_no_pid_anywhere_it_says_so():
