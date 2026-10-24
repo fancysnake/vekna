@@ -221,7 +221,7 @@ class Hub(CastBoard, Routes):
             yield GrimoireBegin(cast_id=view.hello.cast_id)
             yield from _replay_rites(view)
             yield from view.waiting.values()
-            yield from view.awaiting.values()
+            yield from view.on_children.values()
             yield GrimoireEnd(cast_id=view.hello.cast_id)
             if view.status == "queued":
                 yield CastQueued(cast_id=view.hello.cast_id)
@@ -250,7 +250,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             # about to say again, so it goes before the replay rebuilds it.
             view.rites.clear()
             view.waiting.clear()
-            view.awaiting.clear()
+            view.on_children.clear()
         case GrimoireEnd():
             pass
         case CastQueued():
@@ -273,7 +273,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             view.detail = message.detail
             # A cast that is gone is not still asking, nor awaiting.
             view.waiting.clear()
-            view.awaiting.clear()
+            view.on_children.clear()
         case TreeBlocked():
             # Said after the cast is gone, and nothing else about it changes.
             view.blocked = message
@@ -319,12 +319,12 @@ def _update_wait(
         case DecideRequested():
             view.waiting[message.request_id] = message
         case AwaitRequested():
-            view.awaiting[message.request_id] = message
+            view.on_children[message.request_id] = message
         case DecideResolved() | DecideWithdrawn():
             if view.waiting.pop(message.request_id, None) is None:
                 return _NO_PROMPT
         case AwaitEnded() | AwaitWithdrawn():
-            if view.awaiting.pop(message.request_id, None) is None:
+            if view.on_children.pop(message.request_id, None) is None:
                 return _NO_AWAIT
     return None
 

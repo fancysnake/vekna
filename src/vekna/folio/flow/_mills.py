@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Literal, TypeVar, overload
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, ValidationError
 
 from vekna.lexicon import (
     CAST_QUEUE,
@@ -120,8 +120,8 @@ async def await_cast(
     if output is None:
         return result
     try:
-        return TypeAdapter(output).validate_python(result)
-    except ValueError as error:
+        return output.model_validate(result)
+    except ValidationError as error:
         msg = f"cast {cast_id} returned what does not validate as {output!r}: {error}"
         raise RitualError(msg) from error
 

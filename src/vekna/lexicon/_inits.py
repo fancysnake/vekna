@@ -389,6 +389,8 @@ class _Plan(NamedTuple):
     ritual: Ritual
     components: BaseModel
     unattended: bool
+    # What `enqueue` resolves a ritual's name against.
+    compendium: Compendium
     # What the interrupted cast already did, and which cast that was. Both None
     # for a cast that is starting rather than carrying one on.
     ledger: Ledger | None = None
@@ -401,8 +403,6 @@ class _Plan(NamedTuple):
     # Run somewhere other than the tree it was asked from, which only the tree
     # the daemon leased for it is: its first spawn is always where it was asked.
     leased: bool = False
-    # What `enqueue` resolves a ritual's name against; none for a `--prompt`.
-    compendium: Compendium | None = None
     # The cast that queued this one, kept on the hello its own run says.
     enqueued_by: str | None = None
 
@@ -438,7 +438,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
 
 def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
     if (prompt := _prompt_text(argv)) is not None:
-        return _Plan(_prompt_ritual(prompt), NoComponents(), unattended)
+        return _Plan(_prompt_ritual(prompt), NoComponents(), unattended, Compendium([]))
     name, *flags = argv
     # Both spellings, because `--prompt` takes both: `--resume=c1` otherwise
     # reached the compendium and came back as "no ritual named '--resume=c1'",
@@ -514,12 +514,7 @@ async def _cast(
     renderer: StandaloneRenderer,
 ) -> int:
     try:
-        queue = LinkQueue(
-            link=link,
-            parent=link.hello,
-            # A `--prompt` cast has no rituals, so whatever it names is no ritual.
-            ritual=(plan.compendium or Compendium([])).ritual,
-        )
+        queue = LinkQueue(link=link, ritual=plan.compendium.ritual)
         with _throttled(link), CAST_QUEUE.scope(queue):
             result = await run_cast(
                 ritual=plan.ritual,

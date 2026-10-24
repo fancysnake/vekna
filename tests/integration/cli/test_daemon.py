@@ -1106,6 +1106,41 @@ class TestQueue:
             reason="/home/someone/proj is not a directory",
         )
 
+    # Whatever the enqueue raises, the asking cast is answered rather than left
+    # waiting for a reply that never comes.
+    @staticmethod
+    async def test_an_enqueue_that_raises_is_refused_and_logged(
+        socket_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        child = _hello("c2")
+        denied = PermissionError(13, "Permission denied", child.project_root)
+        is_dir = Path.is_dir
+
+        def unreadable(path: Path) -> bool:
+            if str(path) == child.project_root:
+                raise denied
+            return is_dir(path)
+
+        monkeypatch.setattr(Path, "is_dir", unreadable)
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            frames = aiter(read_frames(reader))
+            for message in (
+                _hello(),
+                EnqueueRequested(cast_id="c1", request_id="q1", hello=child),
+            ):
+                writer.write(encode_frame(message))
+            await writer.drain()
+            async with asyncio.timeout(5):
+                answer = await anext(frames)
+            writer.close()
+
+        reason = f"could not queue {child.ritual}: {denied}"
+        assert answer == EnqueueRefused(cast_id="c1", request_id="q1", reason=reason)
+        assert reason in capsys.readouterr().err
+
     @staticmethod
     async def test_a_withdrawn_await_shows_the_cast_running_again(socket_path: Path):
         keys = _Keys()
@@ -1116,7 +1151,7 @@ class TestQueue:
                 _hello(),
                 AwaitRequested(cast_id="c1", request_id="w1", child="c1"),
             )
-            await _eventually(lambda: keys.painted("awaiting c1"))
+            await _eventually(lambda: keys.painted("on c1"))
 
             writer.write(encode_frame(AwaitWithdrawn(cast_id="c1", request_id="w1")))
             await writer.drain()

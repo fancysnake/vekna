@@ -50,7 +50,7 @@ _WORD = {
 _TALLY = (
     "running",
     "waiting",
-    "awaiting",
+    "on child",
     "recovering",
     "queued",
     "done",
@@ -103,8 +103,8 @@ def _word(view: CastView) -> str:
     if view.status == "running":
         if view.waiting:
             return "waiting"
-        if view.awaiting:
-            return "awaiting"
+        if view.on_children:
+            return "on child"
         if _recovering(view):
             return "recovering"
     return _WORD[view.status]
@@ -180,9 +180,9 @@ def _innermost(view: CastView, category: str) -> RiteView | None:
 def _now(view: CastView, now: datetime) -> str:
     if view.waiting:
         return next(iter(view.waiting.values())).prompt
-    if view.awaiting:
-        return "awaiting " + ", ".join(
-            request.child[:_ID] for request in view.awaiting.values()
+    if view.on_children:
+        return "on " + ", ".join(
+            request.child[:_ID] for request in view.on_children.values()
         )
     if view.status == "disconnected":
         return f"vekna cast --continue {view.hello.cast_id[:_ID]}"

@@ -832,7 +832,7 @@ class TestQueue:
         socket_path: Path,
     ):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+        queue = LinkQueue(link=link, ritual=_nap)
 
         enqueuing = asyncio.create_task(
             queue.enqueue(ritual="nap", components=_Nap(minutes=5))
@@ -852,7 +852,7 @@ class TestQueue:
     @staticmethod
     async def test_a_refusal_says_why(socket_path: Path):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+        queue = LinkQueue(link=link, ritual=_nap)
 
         enqueuing = asyncio.create_task(
             queue.enqueue(ritual="nap", components=_Nap(minutes=5))
@@ -874,7 +874,7 @@ class TestQueue:
         socket_path: Path,
     ):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+        queue = LinkQueue(link=link, ritual=_nap)
 
         with pytest.raises(MediumBoundaryError, match="tome:nap takes _Nap, not"):
             await queue.enqueue(ritual="nap", components=NoComponents())
@@ -993,7 +993,7 @@ class TestQueue:
     @staticmethod
     async def test_the_queue_hands_the_medium_how_the_child_ended(socket_path: Path):
         hub, daemon, link = await _attached(socket_path)
-        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+        queue = LinkQueue(link=link, ritual=_nap)
 
         awaiting = asyncio.create_task(queue.await_end("c2"))
         await _eventually(lambda: bool(hub.heard))

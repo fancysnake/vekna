@@ -232,28 +232,23 @@ class _Daemon(Routes):
         elif isinstance(message, CodingSlotReleased):
             self._pool.released(message)
         elif isinstance(message, EnqueueRequested):
-            self._spawn_task(self._enqueued(message))
+            self._settled(
+                self._enqueued(message),
+                ritual=message.hello.ritual,
+                refuse=lambda reason: self._refuse(message, reason),
+            )
         else:
             self._hub.apply(message)
             if isinstance(message, CastGoodbye):
                 self._pool.ended(message.cast_id)
-                self._circle.ended(message.cast_id)
-            elif isinstance(message, AwaitRequested):
-                self._circle.wait_on(message)
-            elif isinstance(message, AwaitWithdrawn):
-                self._circle.withdrawn(message)
+            if isinstance(message, (CastGoodbye, AwaitRequested, AwaitWithdrawn)):
+                self._circle.wake()
 
     # The hello is the enqueuing cast's; all that is checked here is that the
     # tree it names is still there to spawn in.
     async def _enqueued(self, request: EnqueueRequested) -> None:
-        root = request.hello.project_root
-        if not await asyncio.to_thread(Path(root).is_dir):
-            refused = EnqueueRefused(
-                cast_id=request.cast_id,
-                request_id=request.request_id,
-                reason=f"{root} is not a directory",
-            )
-            self._hub.tell(request.cast_id, refused)
+        if (reason := await _missing(request.hello.project_root)) is not None:
+            self._refuse(request, reason)
             return
         self._circle.enqueue(request.hello)
         accepted = EnqueueAccepted(
@@ -261,11 +256,34 @@ class _Daemon(Routes):
         )
         self._hub.tell(request.cast_id, accepted)
 
-    def _spawn_task(self, work: Coroutine[None, None, None]) -> asyncio.Task[None]:
+    def _refuse(self, request: EnqueueRequested, reason: str) -> None:
+        refused = EnqueueRefused(
+            cast_id=request.cast_id, request_id=request.request_id, reason=reason
+        )
+        self._hub.tell(request.cast_id, refused)
+
+    # A task of its own, so the read loop the request came in on is not held
+    # up. Whatever it raises is logged and refused to whoever asked, who would
+    # otherwise wait on an answer that never comes.
+    def _settled(
+        self,
+        work: Coroutine[None, None, None],
+        *,
+        ritual: str,
+        refuse: Callable[[str], None],
+    ) -> None:
         task = asyncio.create_task(work)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        return task
+
+        def settled(done: asyncio.Task[None]) -> None:
+            if done.cancelled() or (error := done.exception()) is None:
+                return
+            reason = f"could not queue {ritual}: {error}"
+            _logged(reason)
+            refuse(reason)
+
+        task.add_done_callback(settled)
 
     def attach_surface(self, surface: Surface) -> None:
         self._hub.attach_surface(surface)
@@ -282,25 +300,19 @@ class _Daemon(Routes):
     def close_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.close_cast(cast_id, peer)
 
-    # Resolving the project asks git, so the queueing is a task of its own
-    # rather than a wait inside the surface's read loop.
+    # Resolving the project asks git, so it is not done in the read loop.
     def request(self, surface: Surface, request: CastRequested) -> None:
-        task = self._spawn_task(self._queued(surface, request))
-
-        def settled(done: asyncio.Task[None]) -> None:
-            if done.cancelled() or (error := done.exception()) is None:
-                return
-            reason = f"could not queue {request.ritual}: {error}"
-            _logged(reason)
-            surface.send(CastRefused(reason=reason))
-
-        task.add_done_callback(settled)
+        self._settled(
+            self._queued(surface, request),
+            ritual=request.ritual,
+            refuse=lambda reason: surface.send(CastRefused(reason=reason)),
+        )
 
     async def _queued(self, surface: Surface, request: CastRequested) -> None:
-        root = Path(request.project_root)
-        if not await asyncio.to_thread(root.is_dir):
-            surface.send(CastRefused(reason=f"{root} is not a directory"))
+        if (reason := await _missing(request.project_root)) is not None:
+            surface.send(CastRefused(reason=reason))
             return
+        root = Path(request.project_root)
         self._circle.enqueue(
             CastHello(
                 cast_id=uuid4().hex,
@@ -312,3 +324,11 @@ class _Daemon(Routes):
                 wired=True,
             )
         )
+
+
+# Why a cast cannot be queued in `root`, or `None` once it can: the tree has to
+# be there to spawn in.
+async def _missing(root: str) -> str | None:
+    if await asyncio.to_thread(Path(root).is_dir):
+        return None
+    return f"{root} is not a directory"

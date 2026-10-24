@@ -23,7 +23,7 @@ when.
   when=...)`, `fails(detail)`, and records `.enqueued`.
 - **Queued casts outlive the daemon.** The next one runs what was left queued,
   and `prune` keeps them.
-- **The dashboard shows `awaiting`** and the cast awaited, and a queued cast
+- **The dashboard shows `on child`** and the cast awaited, and a queued cast
   names the cast that queued it.
 - **`CastGoodbye` and `run.json` carry the cast's result.**
 

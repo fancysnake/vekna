@@ -541,7 +541,7 @@ class TestAwaiting:
         late = _Surface()
         hub.attach_surface(late)
 
-        assert hub.casts["c1"].awaiting == {"w1": awaited}
+        assert hub.casts["c1"].on_children == {"w1": awaited}
         assert late.sent == [
             _hello(),
             GrimoireBegin(cast_id="c1"),
@@ -559,7 +559,7 @@ class TestAwaiting:
         hub.apply(AwaitEnded(cast_id="c1", request_id="w1", child="c2", status="ok"))
         hub.apply(AwaitWithdrawn(cast_id="c1", request_id="w2"))
 
-        assert hub.casts["c1"].awaiting == {}
+        assert hub.casts["c1"].on_children == {}
 
     @staticmethod
     def test_ending_an_await_never_made_is_dropped():
@@ -579,7 +579,7 @@ class TestAwaiting:
 
         hub.apply(CastGoodbye(cast_id="c1", status="error"))
 
-        assert hub.casts["c1"].awaiting == {}
+        assert hub.casts["c1"].on_children == {}
 
     @staticmethod
     def test_an_enqueue_is_the_circle_s_and_not_the_view_s():

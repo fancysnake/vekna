@@ -50,22 +50,22 @@ class TreeError(Exception):
     pass
 
 
+# No tree to lease while some are held: `held` is those of the lease's `held`
+# that stand in a tree of the pool, never empty.
+@dataclass(frozen=True, kw_only=True)
+class Full:
+    held: frozenset[str]
+
+
 # A project's pooled worktrees, read off git each time rather than remembered.
 # `held` is every tree a live cast stands in, which only the daemon knows.
 class Trees(Protocol):
-    # A free tree, or a new one while the pool is under `count`; `None` while
+    # A free tree, or a new one while the pool is under `count`; `Full` while
     # one is held, as it frees when its cast ends. Raises `TreeError`, also
-    # when every tree is blocked or `stuck` — held by a cast awaiting one that
-    # waits for a tree — since nothing would free one.
+    # when every tree is blocked, since nothing would free one.
     async def lease(
-        self,
-        *,
-        project_root: str,
-        project: str,
-        held: set[str],
-        stuck: set[str],
-        count: int,
-    ) -> str | None: ...
+        self, *, project_root: str, project: str, held: set[str], count: int
+    ) -> str | Full: ...
 
     # Once per tree, not per lease. Raises `TreeError`.
     async def prepare(self, tree: str, command: str | None) -> None: ...

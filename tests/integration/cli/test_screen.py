@@ -224,14 +224,14 @@ class TestTheList:
     @staticmethod
     def test_an_awaiting_cast_says_which_cast_it_awaits():
         sweep = _running("sweep", ago=30)
-        sweep.awaiting["w1"] = AwaitRequested(
+        sweep.on_children["w1"] = AwaitRequested(
             cast_id="sweep", request_id="w1", child="c9abcdef99"
         )
 
         row = _row(paint(listed=[sweep], focus=None, project=None, now=_WHEN), "sweep")
 
-        assert "awaiting" in row
-        assert "awaiting c9abcdef" in row
+        assert "on child" in row
+        assert "on c9abcdef" in row
 
     # An aborted cast is the one worth carrying on with, and the id is what
     # carries it on — so the row is the command, not a status to go look up.

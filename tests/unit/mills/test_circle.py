@@ -5,7 +5,7 @@ import pytest
 
 from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.hub import Hub
-from vekna.pacts.circle import Exited, Limits, Spawned, TreeError, Trees
+from vekna.pacts.circle import Exited, Full, Limits, Spawned, TreeError, Trees
 from vekna.pacts.routing import Surface
 from vekna.wire import (
     NEEDS_TREE,
@@ -59,10 +59,15 @@ class _Spawn:
         self.spawned: list[str] = []
         self.trees: list[str | None] = []
         self._exits: dict[str, asyncio.Future[Exited]] = {}
+        # What the next spawn raises, as the mark it writes may.
+        self.raising: OSError | None = None
 
     async def __call__(self, hello: CastHello, tree: str | None) -> Exited:
         self.spawned.append(hello.cast_id)
         self.trees.append(tree)
+        if (error := self.raising) is not None:
+            self.raising = None
+            raise error
         future = asyncio.get_running_loop().create_future()
         self._exits[hello.cast_id] = future
         return await future
@@ -85,39 +90,29 @@ class _Trees(Trees):
         self.preparing: asyncio.Future[None] | None = None
 
     async def lease(
-        self,
-        *,
-        project_root: str,
-        project: str,
-        held: set[str],
-        stuck: set[str],
-        count: int,
-    ) -> str | None:
+        self, *, project_root: str, project: str, held: set[str], count: int
+    ) -> str | Full:
         self.leases.append(
             {
                 "project_root": project_root,
                 "project": project,
                 "held": held,
-                "stuck": stuck,
                 "count": count,
             }
         )
-        if not self.free and stuck and held <= stuck:
-            msg = "every tree is held by a cast awaiting one that needs a tree"
-            raise TreeError(msg)
         if self.leasing is not None:
             await self.leasing
-        return self.free.pop(0) if self.free else None
+        if self.free:
+            return self.free.pop(0)
+        if not held:
+            msg = "every tree is blocked"
+            raise TreeError(msg)
+        return Full(held=frozenset(held))
 
     async def prepare(self, tree: str, command: str | None) -> None:
         self.prepared.append((tree, command))
-        if self.preparing is None:
-            return
-        try:
+        if self.preparing is not None:
             await self.preparing
-        except TreeError:
-            self.free.append(tree)
-            raise
 
     async def release(self, tree: str) -> str | None:
         self.released.append(tree)
@@ -289,7 +284,7 @@ class TestProcesses:
         assert not spawn.spawned
 
         hub.apply(CastGoodbye(cast_id="by-hand", status="ok"))
-        circle.ended("by-hand")
+        circle.wake()
         await _settled()
         assert spawn.spawned == ["c1"]
 
@@ -304,7 +299,7 @@ class TestProcesses:
 
         hub.apply(_hello("before"))
         hub.apply(CastGoodbye(cast_id="before", status="ok"))
-        circle.ended("before")
+        circle.wake()
         await _settled()
         assert spawn.spawned == ["c1"]
         assert alive.asked == [7]
@@ -316,7 +311,7 @@ class TestProcesses:
         circle.enqueue(_hello("c2"))
         await _settled()
         hub.apply(CastGoodbye(cast_id="c2", status="error", detail="cancelled"))
-        circle.ended("c2")
+        circle.wake()
         hub.apply(_hello("c1"))
         hub.apply(CastGoodbye(cast_id="c1", status="ok"))
 
@@ -394,7 +389,6 @@ class TestTrees:
                 "project_root": "/proj",
                 "project": "/proj/.git",
                 "held": set(),
-                "stuck": set(),
                 "count": 3,
             }
         ]
@@ -528,6 +522,22 @@ class TestTrees:
         assert not trees.preparing.done()
         assert trees.released == ["/pool/1"]
         trees.preparing.set_result(None)
+
+    # The cast never ran, so nothing holds its tree or its slot.
+    @staticmethod
+    async def test_a_spawn_that_raises_fails_the_cast_and_frees_tree_and_slot():
+        trees = _Trees("/pool/1")
+        circle, hub, spawn = _circle(_Limits(processes=1), trees)
+        spawn.raising = OSError("mark not written")
+        circle.enqueue(_hello("c1", worktree=True))
+        circle.enqueue(_hello("c2", worktree=True))
+        await _settled()
+
+        assert hub.casts["c1"].status == "error"
+        assert hub.casts["c1"].detail == "mark not written"
+        assert trees.released == ["/pool/1"]
+        assert spawn.spawned == ["c1", "c2"]
+        assert spawn.trees == ["/pool/1", "/pool/1"]
 
     @staticmethod
     async def test_a_tree_left_dirty_is_reported_against_its_cast():
@@ -722,6 +732,12 @@ def _running(hub: Hub, cast_id: str, *, root: str = "/proj") -> _Peer:
     return peer
 
 
+# What the daemon does with what a cast says of an await: the hub has it first.
+def _said(circle: Circle, hub: Hub, message: AwaitRequested | AwaitWithdrawn) -> None:
+    hub.apply(message)
+    circle.wake()
+
+
 @pytest.mark.asyncio
 class TestAwaits:
     @staticmethod
@@ -732,11 +748,11 @@ class TestAwaits:
         await _settled()
         assert not spawn.spawned
 
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
 
         assert spawn.spawned == ["child"]
-        assert hub.casts["parent"].awaiting == {}
+        assert list(hub.casts["parent"].on_children) == ["w1"]
 
     @staticmethod
     async def test_the_parent_comes_back_ahead_of_the_queue_with_the_result():
@@ -745,12 +761,11 @@ class TestAwaits:
         peer = _running(hub, "parent")
         circle.enqueue(_hello("child"))
         circle.enqueue(_hello("later"))
-        hub.apply(_awaits("parent", "child"))
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
         hub.apply(_hello("child"))
         hub.apply(CastGoodbye(cast_id="child", status="ok", result={"n": 1}))
-        circle.ended("child")
+        circle.wake()
 
         spawn.exit("child")
         await _settled()
@@ -763,7 +778,7 @@ class TestAwaits:
             result={"n": 1},
         )
         assert peer.sent == [ended]
-        assert hub.casts["parent"].awaiting == {}
+        assert hub.casts["parent"].on_children == {}
         assert spawn.spawned == ["child"]
         assert hub.casts["later"].status == "queued"
 
@@ -773,7 +788,7 @@ class TestAwaits:
         circle, hub, _ = _circle(_Limits(processes=1), records={"child": record})
         peer = _running(hub, "parent")
 
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
 
         assert peer.sent == [
             AwaitEnded(
@@ -790,7 +805,7 @@ class TestAwaits:
         circle, hub, _ = _circle(_Limits(processes=1))
         peer = _running(hub, "parent")
 
-        circle.wait_on(_awaits("parent", "ghost"))
+        _said(circle, hub, _awaits("parent", "ghost"))
 
         assert peer.sent == [
             AwaitEnded(
@@ -809,15 +824,15 @@ class TestAwaits:
         circle, hub, spawn = _circle(_Limits(processes=1), records={"child": record})
         peer = _running(hub, "parent")
         circle.enqueue(_hello("child"))
-        circle.wait_on(_awaits("parent", "child"))
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
         hub.apply(_hello("child"))
         hub.apply(CastGoodbye(cast_id="child", status="ok"))
         spawn.exit("child")
         await _settled()
 
-        circle.ended("child")
+        circle.wake()
 
         assert len(peer.sent) == 1
 
@@ -826,10 +841,10 @@ class TestAwaits:
         circle, hub, spawn = _circle(_Limits(processes=1))
         _running(hub, "parent")
         circle.enqueue(_hello("child"))
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
 
-        circle.withdrawn(AwaitWithdrawn(cast_id="parent", request_id="w1"))
+        _said(circle, hub, AwaitWithdrawn(cast_id="parent", request_id="w1"))
         circle.enqueue(_hello("later"))
         await _settled()
 
@@ -841,16 +856,16 @@ class TestAwaits:
         circle, hub, spawn = _circle(_Limits(processes=1))
         peer = _running(hub, "parent")
         circle.enqueue(_hello("child"))
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
         hub.apply(CastGoodbye(cast_id="parent", status="error"))
-        circle.ended("parent")
+        circle.wake()
         hub.apply(_hello("child"))
         hub.apply(CastGoodbye(cast_id="child", status="ok"))
         spawn.exit("child")
         await _settled()
 
-        circle.ended("child")
+        circle.wake()
 
         assert spawn.spawned == ["child"]
         assert not peer.sent
@@ -870,7 +885,7 @@ class TestAwaits:
         circle, hub, spawn = _circle(_Limits(processes=1))
         peer = _running(hub, "parent")
         circle.enqueue(_hello("child"))
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         await _settled()
 
         spawn.exit("child", code=2, said="no ritual named 'nap'")
@@ -898,17 +913,17 @@ class TestAwaits:
         for parent, child in (("a", "a1"), ("b", "b1")):
             circle.enqueue(_hello(child, worktree=True))
             await _settled()
-            circle.wait_on(_awaits(parent, child, request_id=parent))
+            _said(circle, hub, _awaits(parent, child, request_id=parent))
             await _settled()
 
-        assert {"/pool/1", "/pool/2"} in [lease["stuck"] for lease in trees.leases]
         assert sorted(hub.casts[child].status for child in ("a1", "b1")) == [
             "error",
             "queued",
         ]
         failed = next(hub.casts[c] for c in ("a1", "b1") if hub.casts[c].detail)
         assert failed.detail == (
-            "every tree is held by a cast awaiting one that needs a tree"
+            "every tree is blocked or held by a cast awaiting one that needs a tree:"
+            " /pool/1, /pool/2"
         )
         assert not spawn.spawned
 
@@ -917,7 +932,7 @@ class TestAwaits:
     async def test_an_await_from_a_cast_nobody_knows_is_dropped():
         circle, hub, spawn = _circle(_Limits(processes=1))
 
-        circle.wait_on(_awaits("stranger", "ghost"))
+        _said(circle, hub, _awaits("stranger", "ghost"))
         circle.enqueue(_hello("later"))
         await _settled()
 
@@ -932,14 +947,36 @@ class TestAwaits:
         circle, hub, _ = _circle(_Limits(processes=1), records={"child": record})
         peer = _running(hub, "parent")
 
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
 
         assert not peer.sent
 
-    # The parent began awaiting while its child's lease was out: that lease saw
-    # nothing stuck, so the child looks again rather than waiting on a release.
+    # The goodbye's record could not be written, so the record still says
+    # running: the view has ended all the same.
     @staticmethod
-    async def test_an_await_that_lands_mid_lease_gets_the_child_another_look():
+    async def test_a_child_whose_view_ended_is_not_awaited_on_a_stale_record():
+        record = RunRecord(hello=_hello("child"), status="running")
+        circle, hub, _ = _circle(_Limits(processes=1), records={"child": record})
+        peer = _running(hub, "parent")
+        hub.apply(_hello("child"))
+        hub.apply(CastGoodbye(cast_id="child", status="error", detail="boom"))
+
+        _said(circle, hub, _awaits("parent", "child"))
+
+        assert peer.sent == [
+            AwaitEnded(
+                cast_id="parent",
+                request_id="w1",
+                child="child",
+                status="error",
+                detail="boom",
+            )
+        ]
+
+    # The parent began awaiting while its child's lease was out: what is stuck
+    # is read once the lease is back, so the child fails rather than waits.
+    @staticmethod
+    async def test_an_await_that_lands_mid_lease_counts():
         trees = _Trees()
         trees.leasing = asyncio.get_running_loop().create_future()
         circle, hub, _ = _circle(_Limits(processes=4), trees)
@@ -947,9 +984,13 @@ class TestAwaits:
         circle.enqueue(_hello("child", worktree=True))
         await _settled()
 
-        circle.wait_on(_awaits("parent", "child"))
+        _said(circle, hub, _awaits("parent", "child"))
         trees.leasing.set_result(None)
         await _settled()
 
-        assert [lease["stuck"] for lease in trees.leases] == [set(), {"/pool/1"}]
+        assert len(trees.leases) == 1
         assert hub.casts["child"].status == "error"
+        assert hub.casts["child"].detail == (
+            "every tree is blocked or held by a cast awaiting one that needs a tree:"
+            " /pool/1"
+        )

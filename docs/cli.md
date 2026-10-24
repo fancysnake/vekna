@@ -228,7 +228,7 @@ running there is nobody to share with, and nothing waits. Both are read again
 for every cast, so an edit counts from the next one. A `[circle]` that does not
 validate is noted in `daemon.log`, and the defaults stand.
 
-A cast that a ritual's `await_cast` blocks shows `awaiting` and the id it waits
+A cast that a ritual's `await_cast` blocks shows `on child` and the id it waits
 on, and holds no slot until that cast ends. A cast queued by another names it
 in the drilled view: `queued by <id>`. What is queued survives `vekna stop`:
 the next daemon runs it.

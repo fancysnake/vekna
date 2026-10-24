@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Literal
 
@@ -11,7 +11,6 @@ from vekna.wire import (
     NEEDS_TREE,
     AwaitEnded,
     AwaitRequested,
-    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CastQueued,
@@ -56,6 +55,15 @@ class LeftBehind:
             if view.status == "running"
         } | {spawned.tree for spawned in self._live() if spawned.tree is not None}
 
+    # The trees of the running casts that await any of `children`, off the
+    # views, which hold each await until it is answered.
+    def awaiting(self, children: set[str]) -> set[str]:
+        return {
+            view.hello.project_root
+            for view in self._casts.casts.values()
+            if any(request.child in children for request in view.on_children.values())
+        }
+
     def count(self, project: str) -> int:
         return sum(1 for spawned in self._live() if spawned.project == project)
 
@@ -68,6 +76,67 @@ class LeftBehind:
             if spawned.cast_id not in self._casts.casts and self._alive(spawned.pid)
         ]
         return self._spawned
+
+
+# Every cast blocked on another, read off the views: a parent's `on_children`
+# holds each request until it is answered or withdrawn, or the parent ends. A
+# parent with any holds no process slot.
+class Awaits:
+    def __init__(
+        self, *, hub: CastBoard, records: Callable[[str], RunRecord | None]
+    ) -> None:
+        self._hub = hub
+        # How a cast ended, off the journal: this daemon may never have seen it.
+        self._records = records
+        # Each ending found, by request: an ending never changes, and finding it
+        # reads the disk.
+        self._ended: dict[str, AwaitEnded] = {}
+
+    # The answers to the requests whose child has ended, due once the parent's
+    # slot frees.
+    def due(self) -> list[AwaitEnded]:
+        ended: dict[str, AwaitEnded] = {}
+        for request in self._requests():
+            reply = self._ended.get(request.request_id) or self._ending(request)
+            if reply is not None:
+                ended[request.request_id] = reply
+        self._ended = ended
+        return list(ended.values())
+
+    def parked(self) -> set[str]:
+        return {
+            cast_id for cast_id, view in self._hub.casts.items() if view.on_children
+        }
+
+    def _requests(self) -> Iterator[AwaitRequested]:
+        for view in self._hub.casts.values():
+            yield from view.on_children.values()
+
+    # How the child ended, or `None` while it has not. The view says it first:
+    # a goodbye whose record could not be written leaves the record running.
+    # The result is the record's alone, once it says the same ending. A child
+    # nobody has heard of ended before it began, as far as the parent can ever
+    # learn.
+    def _ending(self, request: AwaitRequested) -> AwaitEnded | None:
+        child = request.child
+        view = self._hub.casts.get(child)
+        if view is not None and view.status in {"queued", "running"}:
+            return None
+        record = self._records(child)
+        if view is not None:
+            status, detail = view.status, view.detail
+        elif record is not None:
+            status, detail = record.status, record.detail
+        else:
+            return _ended(request, status="error", detail=f"no cast {child}")
+        result = (
+            record.result if record is not None and record.status == status else None
+        )
+        match status:
+            case "queued" | "running":
+                return None
+            case _:
+                return _ended(request, status=status, detail=detail, result=result)
 
 
 # Spawns a cast, and once it has said its ritual runs in a worktree, spawns it
@@ -100,142 +169,67 @@ class Leasing:
         self._locks: dict[str, asyncio.Lock] = {}
 
     # `None` when the cast needs a tree and none is free. Raises `TreeError`.
-    # `parked` is each awaited cast with the tree its awaiting parent holds.
     # A cast enqueued by another says its need on its hello and is never probed.
-    async def run(self, hello: CastHello, parked: dict[str, str]) -> _Ran | None:
+    # However its turn ends, short of waiting for a tree, the cast gives back
+    # its entry and whatever tree it leased.
+    async def run(self, hello: CastHello) -> _Ran | None:
         if (cast_id := hello.cast_id) not in self._needs_tree:
             if not hello.worktree:
                 exited = await self._spawn(hello, None)
                 if exited.code != NEEDS_TREE:
                     return _Ran(exited=exited)
             self._needs_tree[cast_id] = None
+        tree: str | None = None
         try:
-            tree = await self._lease(hello, parked)
-        except TreeError:
-            del self._needs_tree[cast_id]
-            raise
-        if tree is None:
-            return None
-        try:
+            if (tree := await self._lease(hello)) is None:
+                return None
             await self._trees.prepare(tree, self._limits.prepare(hello.project_root))
-        except TreeError:
-            async with self._lock(hello.project):
-                del self._needs_tree[cast_id]
+            exited = await self._spawn(hello, tree)
+        except BaseException:
+            await self._release(hello, tree)
             raise
-        exited = await self._spawn(hello, tree)
-        async with self._lock(hello.project):
-            reason = await self._trees.release(tree)
-            del self._needs_tree[cast_id]
-        if reason is None:
+        if (reason := await self._release(hello, tree)) is None:
             return _Ran(exited=exited)
-        # The operator's to clean, so said where the daemon says things whether
-        # or not a window is open.
-        self._say(f"{tree} is blocked after cast {cast_id}: {reason}")
         blocked = TreeBlocked(cast_id=cast_id, path=tree, reason=reason)
         return _Ran(exited=exited, blocked=blocked)
 
     # A tree is stuck when the cast holding it awaits one that is itself waiting
-    # for a tree: neither ends until the other runs.
-    async def _lease(self, hello: CastHello, parked: dict[str, str]) -> str | None:
+    # for a tree: neither ends until the other runs. Read once the lease is
+    # back, so an await that landed while it ran counts.
+    async def _lease(self, hello: CastHello) -> str | None:
         root = hello.project_root
-        waiting = {cast for cast, tree in self._needs_tree.items() if tree is None}
         async with self._lock(hello.project):
-            tree = await self._trees.lease(
+            found = await self._trees.lease(
                 project_root=root,
                 project=hello.project,
                 held=self._left.trees()
                 | {held for held in self._needs_tree.values() if held is not None},
-                stuck={tree for child, tree in parked.items() if child in waiting},
                 count=self._limits.worktrees(root),
             )
-            if tree is not None:
-                self._needs_tree[hello.cast_id] = tree
-            return tree
+            if isinstance(found, str):
+                self._needs_tree[hello.cast_id] = found
+                return found
+            waiting = {cast for cast, tree in self._needs_tree.items() if tree is None}
+            if found.held <= self._left.awaiting(waiting):
+                msg = (
+                    "every tree is blocked or held by a cast awaiting one that needs a"
+                    f" tree: {', '.join(sorted(found.held))}"
+                )
+                raise TreeError(msg)
+            return None
+
+    # The operator's to clean, so a blocked tree is said where the daemon says
+    # things whether or not a window is open.
+    async def _release(self, hello: CastHello, tree: str | None) -> str | None:
+        async with self._lock(hello.project):
+            reason = None if tree is None else await self._trees.release(tree)
+            del self._needs_tree[hello.cast_id]
+        if reason is not None:
+            self._say(f"{tree} is blocked after cast {hello.cast_id}: {reason}")
+        return reason
 
     def _lock(self, project: str) -> asyncio.Lock:
         return self._locks.setdefault(project, asyncio.Lock())
-
-
-# Every cast blocked on another, by request: those whose child has not ended,
-# and the answers to those whose child has, due once the parent's slot frees.
-# A parent with either holds no process slot.
-class Awaits:
-    def __init__(
-        self, *, hub: CastBoard, records: Callable[[str], RunRecord | None]
-    ) -> None:
-        self._hub = hub
-        # How a cast ended, off the journal: this daemon may never have seen it.
-        self._records = records
-        self._waiting: dict[str, AwaitRequested] = {}
-        self._due: dict[str, AwaitEnded] = {}
-
-    # Said again on every reattach, so a request already held is not news.
-    def requested(self, request: AwaitRequested) -> None:
-        request_id = request.request_id
-        if request_id in self._waiting or request_id in self._due:
-            return
-        if (reply := self._ending(request)) is None:
-            self._waiting[request_id] = request
-        else:
-            self._due[request_id] = reply
-
-    def withdrawn(self, withdrawn: AwaitWithdrawn) -> None:
-        self._waiting.pop(withdrawn.request_id, None)
-        self._due.pop(withdrawn.request_id, None)
-
-    # What the cast awaited is dropped, and whatever awaited it is due.
-    def ended(self, cast_id: str) -> None:
-        for request_id, request in list(self._waiting.items()):
-            if request.cast_id == cast_id:
-                del self._waiting[request_id]
-            elif request.child == cast_id and (reply := self._ending(request)):
-                del self._waiting[request_id]
-                self._due[request_id] = reply
-        self._due = {
-            request_id: reply
-            for request_id, reply in self._due.items()
-            if reply.cast_id != cast_id
-        }
-
-    def due(self) -> list[AwaitEnded]:
-        return list(self._due.values())
-
-    def answered(self, reply: AwaitEnded) -> None:
-        self._due.pop(reply.request_id, None)
-
-    def parked(self) -> set[str]:
-        return {request.cast_id for request in self._waiting.values()} | {
-            reply.cast_id for reply in self._due.values()
-        }
-
-    # Each awaited cast, with the tree its parent stands in.
-    def trees(self) -> dict[str, str]:
-        return {
-            request.child: parent.hello.project_root
-            for request in self._waiting.values()
-            if (parent := self._hub.casts.get(request.cast_id)) is not None
-        }
-
-    # How the child ended, or `None` while it has not. The record says it with
-    # the result; a view whose record could not be written says it without.
-    # A child nobody has heard of ended before it began, as far as the parent
-    # can ever learn.
-    def _ending(self, request: AwaitRequested) -> AwaitEnded | None:
-        child = request.child
-        view = self._hub.casts.get(child)
-        if view is not None and view.status in {"queued", "running"}:
-            return None
-        if (record := self._records(child)) is not None:
-            status, detail, result = record.status, record.detail, record.result
-        elif view is not None:
-            status, detail, result = view.status, view.detail, None
-        else:
-            return _ended(request, status="error", detail=f"no cast {child}")
-        match status:
-            case "queued" | "running":
-                return None
-            case _:
-                return _ended(request, status=status, detail=detail, result=result)
 
 
 # The daemon's scheduler. A project runs as many casts at once as its
@@ -269,29 +263,19 @@ class Circle:
         self._queue.append(hello.cast_id)
         self._start()
 
-    # A cast that ended freed its slot, so the queue gets another look, and
-    # whatever awaited it can carry on.
-    def ended(self, cast_id: str) -> None:
-        self._awaits.ended(cast_id)
-        self._start()
-
-    def wait_on(self, request: AwaitRequested) -> None:
-        self._awaits.requested(request)
-        self._start()
-
-    def withdrawn(self, withdrawn: AwaitWithdrawn) -> None:
-        self._awaits.withdrawn(withdrawn)
+    # Told once the hub has the news, of whatever may let a cast run: one that
+    # ended freed its slot, and whatever awaited it can carry on; one that
+    # began awaiting gave its slot up, and may have stuck every tree; one that
+    # stopped awaiting took its slot back.
+    def wake(self) -> None:
         self._start()
 
     # A parent comes back before anything queued starts: it was running first,
     # and a child it waited on may be the reason the queue is full.
     def _start(self) -> None:
         for reply in self._awaits.due():
-            parent = self._hub.casts.get(reply.cast_id)
-            if parent is None or parent.status != "running":
-                self._awaits.answered(reply)
-            elif self._busy(parent) < self._limits.processes(parent.hello.project_root):
-                self._awaits.answered(reply)
+            parent = self._hub.casts[reply.cast_id]
+            if self._busy(parent) < self._limits.processes(parent.hello.project_root):
                 self._hub.apply(reply)
                 # A parent that is not attached says its await again on reattach.
                 self._hub.tell(reply.cast_id, reply)
@@ -320,37 +304,35 @@ class Circle:
 
     # A cast still queued once its process has gone never said hello, so its
     # goodbye is the daemon's to write, with whatever the process last said.
+    # Only a `TreeError` is expected; anything else fails the cast all the same,
+    # and is raised on for the loop to report.
     async def _run(self, hello: CastHello) -> None:
         cast_id = hello.cast_id
-        parked = self._awaits.trees()
         try:
-            ran = await self._leasing.run(hello, parked)
-        except TreeError as error:
-            self._launching.pop(cast_id, None)
+            try:
+                ran = await self._leasing.run(hello)
+            finally:
+                self._launching.pop(cast_id, None)
+        except Exception as error:
             self._failed(cast_id, str(error))
             self._start()
-            return
-        self._launching.pop(cast_id, None)
+            if isinstance(error, TreeError):
+                return
+            raise
         if ran is None:
-            # Back in line, and another look only if a cast began awaiting while
-            # the lease ran, since that may have stuck every tree. Otherwise the
-            # release that frees a tree is what starts the queue again.
+            # Back in line: the release that frees a tree, or an await that
+            # sticks every tree, is what starts the queue again.
             self._queue.insert(0, cast_id)
-            if self._awaits.trees() != parked:
-                self._start()
             return
         if ran.blocked is not None:
             self._hub.apply(ran.blocked)
         self._failed(cast_id, _why(ran.exited))
         self._start()
 
-    # Written here rather than heard from the cast, so whatever awaits it is
-    # told here too.
     def _failed(self, cast_id: str, detail: str) -> None:
         view = self._hub.casts.get(cast_id)
         if view is not None and view.status == "queued":
             self._hub.apply(CastGoodbye(cast_id=cast_id, status="error", detail=detail))
-            self._awaits.ended(cast_id)
 
 
 # How many agent sessions run at once across every cast on the account, granted

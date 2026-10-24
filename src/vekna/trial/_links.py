@@ -174,7 +174,8 @@ class DecideDouble(Channel):
 # Stands where the daemon's queue stands. Enqueueing needs no script, since a
 # real queue takes any cast; awaiting one does, matched on the ritual's name.
 # What a child returns is a model, dumped the way the wire carries it, so the
-# medium's own `output=` validation still runs.
+# medium's own `output=` validation still runs. Components are copied at the
+# enqueue, as the real queue serialises them there.
 class QueueDouble(CastQueueProtocol):
     def __init__(self, script: ScriptProtocol[CastEnded]) -> None:
         self._script = script
@@ -212,7 +213,11 @@ class QueueDouble(CastQueueProtocol):
     async def enqueue(self, *, ritual: str, components: BaseModel) -> str:
         cast_id = f"c{len(self.enqueued) + 1}"
         self.enqueued.append(
-            Enqueued(cast_id=cast_id, ritual=ritual, components=components)
+            Enqueued(
+                cast_id=cast_id,
+                ritual=ritual,
+                components=components.model_copy(deep=True),
+            )
         )
         return cast_id
 

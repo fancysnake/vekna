@@ -76,7 +76,7 @@ class CastView:
     waiting: dict[str, DecideRequested] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no
     # process slot.
-    awaiting: dict[str, AwaitRequested] = field(default_factory=dict)
+    on_children: dict[str, AwaitRequested] = field(default_factory=dict)
     # The pooled tree it left unparkable, if it did.
     blocked: TreeBlocked | None = None
 

@@ -325,6 +325,16 @@ class TestQueueDouble:
             asyncio.run(_queue().await_end("c1"))
 
     @staticmethod
+    def test_the_caller_s_components_are_no_longer_theirs_to_change():
+        double = _queue()
+        components = Judgement(verdict="a")
+
+        asyncio.run(double.enqueue(ritual="fix", components=components))
+        components.verdict = "b"
+
+        assert double.enqueued[0].components == Judgement(verdict="a")
+
+    @staticmethod
     def test_an_await_nobody_scripted_is_refused():
         double = _queue()
 

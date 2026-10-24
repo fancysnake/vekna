@@ -435,11 +435,8 @@ class TeeChannel(Channel):
 # name is resolved first, so what is queued is a name meaning one ritual from
 # anywhere, and the child runs in the tree this cast was asked from.
 class LinkQueue(CastQueueProtocol):
-    def __init__(
-        self, *, link: DaemonLink, parent: CastHello, ritual: Callable[[str], Ritual]
-    ) -> None:
+    def __init__(self, *, link: DaemonLink, ritual: Callable[[str], Ritual]) -> None:
         self._link = link
-        self._parent = parent
         self._ritual = ritual
 
     async def enqueue(self, *, ritual: str, components: BaseModel) -> str:
@@ -450,7 +447,7 @@ class LinkQueue(CastQueueProtocol):
                 f" not {type(components).__name__}"
             )
             raise MediumBoundaryError(msg)
-        parent = self._parent
+        parent = self._link.hello
         hello = CastHello(
             cast_id=uuid4().hex,
             project_root=parent.project_root,
