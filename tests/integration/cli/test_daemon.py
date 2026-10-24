@@ -19,16 +19,22 @@ from vekna.links.socket_server import alive, attach
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
+    CastQueued,
     CastRefused,
     CastRequested,
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
     DecideRequested,
+    EnqueueRefused,
+    EnqueueRequested,
     RiteFinished,
     RiteStarted,
+    RunRecord,
     StopRequested,
     SurfaceHello,
     WireMessage,
@@ -966,3 +972,228 @@ class TestWorktrees:
 
         assert (_pool_tree(repo) / "left.txt").read_text() == "mine"
         assert "is blocked after cast" in capsys.readouterr().err
+
+
+_QUEUE_RITUALS = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.folio.flow import await_cast
+    from vekna.lexicon import Done, NoComponents, ritual, step
+
+
+    class Count(BaseModel):
+        n: int
+
+
+    class Counted(BaseModel):
+        n: int
+
+
+    class Sweep(BaseModel):
+        pass
+
+
+    @ritual("count")
+    async def count(components: Count) -> Done[Counted]:
+        return Done(Counted(n=components.n))
+
+
+    @step
+    async def sweep(_: Sweep) -> Done[Counted]:
+        return Done(await await_cast("count", Count(n=3), output=Counted))
+
+
+    @ritual("sweep")
+    async def sweeper(_: NoComponents) -> Sweep:
+        return Sweep()
+    """)
+
+
+def _finished(runs: Path, ritual: str) -> bool:
+    return any(
+        not isinstance(run, DamagedRun)
+        and run.hello.ritual == ritual
+        and run.status not in {"queued", "running"}
+        for run in Journal(runs).recent(limit=10)
+    )
+
+
+def _run_of(runs: Path, ritual: str) -> RunRecord:
+    [found] = [
+        run
+        for run in Journal(runs).recent(limit=10)
+        if not isinstance(run, DamagedRun) and run.hello.ritual == ritual
+    ]
+    return found
+
+
+@pytest.fixture(name="queue_rituals")
+def _queue_rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    project = socket_path.parent
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(project / "config"))
+    (project / "rituals.py").write_text(_QUEUE_RITUALS)
+    return project
+
+
+@pytest.mark.asyncio
+class TestQueue:
+    # One slot: the sweep gives it up to the child it awaits, or neither runs.
+    @staticmethod
+    async def test_an_awaited_child_runs_in_the_slot_its_parent_gave_up(
+        socket_path: Path, queue_rituals: Path
+    ):
+        (queue_rituals / ".vekna.toml").write_text("[circle]\nprocesses = 1\n")
+        runs = queue_rituals / "runs"
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c sweep")
+            await _spawned(lambda: _finished(runs, "sweep"))
+            keys.press("q")
+            await peer
+
+        sweep, count = _run_of(runs, "sweep"), _run_of(runs, "count")
+        assert (sweep.status, sweep.result) == ("ok", {"n": 3})
+        assert (count.status, count.result) == ("ok", {"n": 3})
+        assert count.hello.enqueued_by == sweep.hello.cast_id
+        assert count.hello.components == {"n": 3}
+
+    # What a stopped daemon left queued, the next one runs.
+    @staticmethod
+    async def test_a_cast_left_queued_is_run_by_the_next_daemon(
+        socket_path: Path, queue_rituals: Path
+    ):
+        runs = queue_rituals / "runs"
+        journal = Journal(runs)
+        journal.record(
+            CastHello(
+                cast_id="left",
+                project_root=str(queue_rituals),
+                project=str(queue_rituals),
+                ritual="count",
+                components={"n": 5},
+                started_at=_WHEN,
+                wired=True,
+            )
+        )
+        journal.record(CastQueued(cast_id="left"))
+
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(runs, "count"))
+
+        left = _run_of(runs, "count")
+        assert (left.status, left.result) == ("ok", {"n": 5})
+
+    # Queued when the daemon stopped, spawned before it did: the process is the
+    # one to finish it, so the next daemon does not start it twice. The fresh
+    # one queued after it is what says the queue has been run.
+    @staticmethod
+    async def test_a_cast_left_queued_but_already_spawned_is_not_run_again(
+        socket_path: Path, queue_rituals: Path
+    ):
+        runs = queue_rituals / "runs"
+        journal = Journal(runs)
+        for index, (cast_id, ritual) in enumerate(
+            (("held", "nap"), ("fresh", "count"))
+        ):
+            journal.record(
+                CastHello(
+                    cast_id=cast_id,
+                    project_root=str(queue_rituals),
+                    project=str(queue_rituals),
+                    ritual=ritual,
+                    components={"n": 5},
+                    started_at=_WHEN + timedelta(minutes=index),
+                    wired=True,
+                )
+            )
+            journal.record(CastQueued(cast_id=cast_id))
+        mark = runs / "held" / "spawned.json"
+        spawned = (
+            f'{{"cast_id":"held","pid":{os.getpid()},'
+            f'"project":"{queue_rituals}","tree":null}}'
+        )
+        mark.write_text(spawned)
+
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(runs, "count"))
+
+        assert _run_of(runs, "nap").status == "queued"
+        assert mark.read_text() == spawned
+
+    @staticmethod
+    async def test_an_enqueue_naming_no_tree_is_refused(socket_path: Path):
+        child = _hello("c2")
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            frames = aiter(read_frames(reader))
+            for message in (
+                _hello(),
+                EnqueueRequested(cast_id="c1", request_id="q1", hello=child),
+            ):
+                writer.write(encode_frame(message))
+            await writer.drain()
+            async with asyncio.timeout(5):
+                answer = await anext(frames)
+            writer.close()
+
+        assert answer == EnqueueRefused(
+            cast_id="c1",
+            request_id="q1",
+            reason="/home/someone/proj is not a directory",
+        )
+
+    # Whatever the enqueue raises, the asking cast is answered rather than left
+    # waiting for a reply that never comes.
+    @staticmethod
+    async def test_an_enqueue_that_raises_is_refused_and_logged(
+        socket_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        child = _hello("c2")
+        denied = PermissionError(13, "Permission denied", child.project_root)
+        is_dir = Path.is_dir
+
+        def unreadable(path: Path) -> bool:
+            if str(path) == child.project_root:
+                raise denied
+            return is_dir(path)
+
+        monkeypatch.setattr(Path, "is_dir", unreadable)
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            frames = aiter(read_frames(reader))
+            for message in (
+                _hello(),
+                EnqueueRequested(cast_id="c1", request_id="q1", hello=child),
+            ):
+                writer.write(encode_frame(message))
+            await writer.drain()
+            async with asyncio.timeout(5):
+                answer = await anext(frames)
+            writer.close()
+
+        reason = f"could not queue {child.ritual}: {denied}"
+        assert answer == EnqueueRefused(cast_id="c1", request_id="q1", reason=reason)
+        assert reason in capsys.readouterr().err
+
+    @staticmethod
+    async def test_a_withdrawn_await_shows_the_cast_running_again(socket_path: Path):
+        keys = _Keys()
+        async with _served(socket_path):
+            peer = asyncio.create_task(window(screen=keys))
+            writer = await _say(
+                socket_path,
+                _hello(),
+                AwaitRequested(cast_id="c1", request_id="w1", child="c1"),
+            )
+            await _eventually(lambda: keys.painted("on c1"))
+
+            writer.write(encode_frame(AwaitWithdrawn(cast_id="c1", request_id="w1")))
+            await writer.drain()
+
+            await _eventually(lambda: keys.showing("1 running"))
+            writer.close()
+            keys.press("q")
+            await peer

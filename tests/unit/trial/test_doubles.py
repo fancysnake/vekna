@@ -6,13 +6,20 @@ from pydantic import BaseModel
 
 from vekna.lexicon._pacts import (
     AskFn,
+    CastEnded,
     CodingCall,
     FocusReply,
     GateFn,
     ShellCall,
     ShellReply,
 )
-from vekna.trial import CodingDouble, DecideDouble, ShellDouble, TrialScriptError
+from vekna.trial import (
+    CodingDouble,
+    DecideDouble,
+    QueueDouble,
+    ShellDouble,
+    TrialScriptError,
+)
 from vekna.trial._mills import Script
 
 
@@ -287,3 +294,54 @@ class TestDecideDouble:
         options.append("burn it down")
 
         assert double.asked[0].options == ("fix", "stop")
+
+
+def _queue() -> QueueDouble:
+    return QueueDouble(Script(kind="await_cast"))
+
+
+class TestQueueDouble:
+    @staticmethod
+    def test_a_scripted_ending_is_matched_on_the_ritual_s_name():
+        double = _queue()
+        double.fails("red", when="fix")
+        double.returns(Judgement(verdict="ok"), when="review")
+
+        async def run() -> tuple[CastEnded, CastEnded]:
+            fix = await double.enqueue(ritual="fix", components=Judgement(verdict="a"))
+            review = await double.enqueue(
+                ritual="review", components=Judgement(verdict="b")
+            )
+            return await double.await_end(review), await double.await_end(fix)
+
+        assert asyncio.run(run()) == (
+            CastEnded(status="ok", detail=None, result={"verdict": "ok"}),
+            CastEnded(status="error", detail="red", result=None),
+        )
+
+    @staticmethod
+    def test_awaiting_a_cast_never_enqueued_is_refused():
+        with pytest.raises(TrialScriptError, match="no cast c1 was enqueued"):
+            asyncio.run(_queue().await_end("c1"))
+
+    @staticmethod
+    def test_the_caller_s_components_are_no_longer_theirs_to_change():
+        double = _queue()
+        components = Judgement(verdict="a")
+
+        asyncio.run(double.enqueue(ritual="fix", components=components))
+        components.verdict = "b"
+
+        assert double.enqueued[0].components == Judgement(verdict="a")
+
+    @staticmethod
+    def test_an_await_nobody_scripted_is_refused():
+        double = _queue()
+
+        async def run() -> CastEnded:
+            return await double.await_end(
+                await double.enqueue(ritual="fix", components=Judgement(verdict="a"))
+            )
+
+        with pytest.raises(TrialScriptError):
+            asyncio.run(run())

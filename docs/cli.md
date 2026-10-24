@@ -228,6 +228,11 @@ running there is nobody to share with, and nothing waits. Both are read again
 for every cast, so an edit counts from the next one. A `[circle]` that does not
 validate is noted in `daemon.log`, and the defaults stand.
 
+A cast that a ritual's `await_cast` blocks shows `on child` and the id it waits
+on, and holds no slot until that cast ends. A cast queued by another names it
+in the drilled view: `queued by <id>`. What is queued survives `vekna stop`:
+the next daemon runs it.
+
 ### Worktrees
 
 A ritual declared `@ritual("fix", worktree=True)` runs in a pooled worktree
@@ -257,7 +262,9 @@ say which tree and why. It joins the pool again once it is clean. Gitignored
 files are not changes, so whatever `prepare` builds must be gitignored, or
 every tree reads dirty. Past the pool, a cast waits queued for a tree while
 another cast holds one; once every tree is blocked and none is held, nothing
-would free one, so the cast fails and names the blocked trees.
+would free one, so the cast fails and names the blocked trees. A cast also fails
+when every tree that is not blocked belongs to a cast awaiting one that waits
+for a tree: neither would ever end.
 
 A tree holds only what git tracks. A `.vekna.toml` or `rituals.py` kept out of
 git is not there, and a cast in the tree will not find its rituals. A

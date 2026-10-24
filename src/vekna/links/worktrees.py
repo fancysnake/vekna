@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 from pathlib import Path
 
-from vekna.pacts.circle import TreeError, Trees
+from vekna.pacts.circle import Full, TreeError, Trees
 
 _PARKING = "vekna/wt-"
 _PREPARED = ".prepared"
@@ -31,7 +31,7 @@ class GitTrees(Trees):
 
     async def lease(
         self, *, project_root: str, project: str, held: set[str], count: int
-    ) -> str | None:
+    ) -> str | Full:
         try:
             home = await asyncio.to_thread(_home, self._root, project)
         except OSError as error:
@@ -59,8 +59,8 @@ class GitTrees(Trees):
                 "HEAD",
             )
             return str(tree)
-        if len(blocked) < len(pool):
-            return None
+        if holding := frozenset(taken[tree] for tree in pool.values() if tree in taken):
+            return Full(held=holding)
         msg = f"every tree is blocked: {', '.join(blocked)}"
         raise TreeError(msg)
 
@@ -111,8 +111,9 @@ def _home(root: Path, project: str) -> Path:
     return home.resolve()
 
 
-def _resolved(paths: set[str]) -> set[Path]:
-    return {Path(path).resolve() for path in paths}
+# Each path as the caller said it, by where it resolves to.
+def _resolved(paths: set[str]) -> dict[Path, str]:
+    return {Path(path).resolve(): path for path in paths}
 
 
 async def _pool(project_root: str, home: Path) -> dict[int, Path]:

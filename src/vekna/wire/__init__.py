@@ -14,6 +14,10 @@ from ._links import (
 )
 from ._pacts import (
     NEEDS_TREE,
+    AwaitEnded,
+    AwaitMessage,
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -29,6 +33,10 @@ from ._pacts import (
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
+    EnqueueAccepted,
+    EnqueueMessage,
+    EnqueueRefused,
+    EnqueueRequested,
     GrimoireBegin,
     GrimoireEnd,
     LockAcquireRequested,
@@ -52,6 +60,10 @@ from ._toml import TomlValue, read_toml
 
 __all__ = [
     "NEEDS_TREE",
+    "AwaitEnded",
+    "AwaitMessage",
+    "AwaitRequested",
+    "AwaitWithdrawn",
     "CastGoodbye",
     "CastHello",
     "CastMessage",
@@ -67,6 +79,10 @@ __all__ = [
     "DecideRequested",
     "DecideResolved",
     "DecideWithdrawn",
+    "EnqueueAccepted",
+    "EnqueueMessage",
+    "EnqueueRefused",
+    "EnqueueRequested",
     "GrimoireBegin",
     "GrimoireEnd",
     "LockAcquireRequested",

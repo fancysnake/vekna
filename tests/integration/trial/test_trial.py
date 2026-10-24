@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from collections.abc import Callable
 
 import pytest
@@ -346,6 +347,17 @@ class TestOnlyInsideTheBlock:
 
         with pytest.raises(TrialError, match="only inside its `with` block"):
             closed.cast(babysit, Attempt(budget=0))
+
+    # An exit stack that took the trial without entering it still exits it.
+    @staticmethod
+    def test_exiting_a_trial_never_entered_is_harmless() -> None:
+        outside = Trial()
+
+        with contextlib.ExitStack() as stack:
+            stack.push(outside)
+
+        with pytest.raises(TrialError, match="only inside its `with` block"):
+            outside.walk(one_gate, Once())
 
 
 class _AuthorsOwnFocus(ShellFocusProtocol):

@@ -3,23 +3,35 @@ import contextlib
 import itertools
 import sys
 from collections.abc import AsyncGenerator, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from pydantic import BaseModel, JsonValue, TypeAdapter
+
 from vekna.lexicon._pacts import (
     AskFn,
+    CastEnded,
+    CastQueueProtocol,
     Channel,
     CodingCall,
     CodingFocusProtocol,
     FocusReply,
     GateFn,
+    MediumBoundaryError,
+    NoDaemonError,
     RiteBegan,
     RiteEvent,
     RiteStreamed,
+    Ritual,
+    RitualError,
 )
 from vekna.wire import (
+    AwaitEnded,
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CodingSlotGranted,
@@ -28,6 +40,9 @@ from vekna.wire import (
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
+    EnqueueAccepted,
+    EnqueueRefused,
+    EnqueueRequested,
     GrimoireBegin,
     GrimoireEnd,
     RiteDelta,
@@ -40,6 +55,9 @@ from vekna.wire import (
 )
 
 _REATTACH_SECONDS = 2.0
+_NO_QUEUE = "the queue needs a daemon — run `vekna` to start one"
+_GONE_MID_ENQUEUE = "the daemon went away before it said the cast was queued"
+_COMPONENTS: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 
 def to_wire(event: RiteEvent, *, cast_id: str) -> WireMessage:
@@ -81,8 +99,11 @@ class DaemonLink:
         self._writer: asyncio.StreamWriter | None = None
         self._watcher: asyncio.Task[None] | None = None
         self._closed = False
-        self._answers: dict[str, _Awaited] = {}
-        self._slots: dict[str, _Slot] = {}
+        self._pending = _Pending()
+
+    @property
+    def hello(self) -> CastHello:
+        return self._hello
 
     @property
     def attached(self) -> bool:
@@ -114,7 +135,11 @@ class DaemonLink:
         # what follows, so a daemon that started mid-cast is not missing a half.
         self.send(self._hello)
         self.send(GrimoireBegin(cast_id=self._hello.cast_id))
-        for message in (*backlog(), *(slot.request for slot in self._slots.values())):
+        for message in (
+            *backlog(),
+            *(slot.request for slot in self._pending.slots.values()),
+            *(awaited.request for awaited in self._pending.awaits.values()),
+        ):
             self.send(message)
         self.send(GrimoireEnd(cast_id=self._hello.cast_id))
         self._watcher = asyncio.create_task(self._watch(reader))
@@ -138,7 +163,11 @@ class DaemonLink:
     # The probe stops here too: a cast that has said goodbye has nothing left to
     # tell a daemon that turns up afterwards.
     async def close(
-        self, *, status: Literal["ok", "error"], detail: str | None = None
+        self,
+        *,
+        status: Literal["ok", "error"],
+        detail: str | None = None,
+        result: JsonValue | None = None,
     ) -> None:
         self._closed = True
         if (watcher := self._watcher) is not None:
@@ -149,7 +178,9 @@ class DaemonLink:
         if self._writer is None:
             return
         self.send(
-            CastGoodbye(cast_id=self._hello.cast_id, status=status, detail=detail)
+            CastGoodbye(
+                cast_id=self._hello.cast_id, status=status, detail=detail, result=result
+            )
         )
         writer, self._writer = self._writer, None
         await self._shut(writer)
@@ -163,12 +194,12 @@ class DaemonLink:
             future=future,
             allowed=allowed_answers(options=request.options, free=request.free),
         )
-        self._answers[request.request_id] = awaited
+        self._pending.answers[request.request_id] = awaited
         self.send(request)
         try:
             return await awaited.future
         finally:
-            self._answers.pop(request.request_id, None)
+            self._pending.answers.pop(request.request_id, None)
 
     # Held for as long as the block runs. With no daemon there is nobody to
     # share with, so there is no limit to wait on.
@@ -179,7 +210,7 @@ class DaemonLink:
                 cast_id=self._hello.cast_id, request_id=uuid4().hex
             )
         )
-        self._slots[slot.request.request_id] = slot
+        self._pending.slots[slot.request.request_id] = slot
         try:
             if self.attached:
                 slot.granted = asyncio.get_running_loop().create_future()
@@ -187,12 +218,53 @@ class DaemonLink:
                 await slot.granted
             yield
         finally:
-            del self._slots[slot.request.request_id]
+            del self._pending.slots[slot.request.request_id]
             self.send(
                 CodingSlotReleased(
                     cast_id=self._hello.cast_id, request_id=slot.request.request_id
                 )
             )
+
+    # Queued once the daemon says so. A daemon gone before it answers may have
+    # queued it or not, and this cast cannot tell which.
+    async def enqueue(self, hello: CastHello) -> None:
+        if not self.attached:
+            raise NoDaemonError(_NO_QUEUE)
+        request = EnqueueRequested(
+            cast_id=self._hello.cast_id, request_id=uuid4().hex, hello=hello
+        )
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._pending.enqueues[request.request_id] = future
+        self.send(request)
+        try:
+            await future
+        finally:
+            del self._pending.enqueues[request.request_id]
+
+    # Outlives the connection: said again on every reattach, and answered by
+    # whichever daemon is there when the child ends, off its journal if need be.
+    # A wait given up is withdrawn; the child runs on regardless.
+    async def await_end(self, child: str) -> AwaitEnded:
+        if not self.attached:
+            raise NoDaemonError(_NO_QUEUE)
+        request = AwaitRequested(
+            cast_id=self._hello.cast_id, request_id=uuid4().hex, child=child
+        )
+        ended: asyncio.Future[AwaitEnded] = asyncio.get_running_loop().create_future()
+        awaited = _Await(request=request, ended=ended)
+        self._pending.awaits[request.request_id] = awaited
+        self.send(request)
+        try:
+            return await awaited.ended
+        except asyncio.CancelledError:
+            self.send(
+                AwaitWithdrawn(
+                    cast_id=self._hello.cast_id, request_id=request.request_id
+                )
+            )
+            raise
+        finally:
+            del self._pending.awaits[request.request_id]
 
     # A daemon that goes away is as likely to reset the connection as to close
     # it cleanly, and either way this is how the cast finds out. The detach has
@@ -210,16 +282,34 @@ class DaemonLink:
             self._answered(message)
         elif (
             isinstance(message, CodingSlotGranted)
-            and (slot := self._slots.get(message.request_id)) is not None
+            and (slot := self._pending.slots.get(message.request_id)) is not None
             and slot.granted is not None
         ):
             _settle(slot.granted)
+        elif isinstance(message, EnqueueAccepted | EnqueueRefused):
+            self._enqueued(message)
+        elif (
+            isinstance(message, AwaitEnded)
+            and (awaited := self._pending.awaits.get(message.request_id)) is not None
+            and not awaited.ended.done()
+        ):
+            awaited.ended.set_result(message)
+
+    def _enqueued(self, message: EnqueueAccepted | EnqueueRefused) -> None:
+        if (
+            future := self._pending.enqueues.get(message.request_id)
+        ) is None or future.done():
+            return
+        if isinstance(message, EnqueueRefused):
+            future.set_exception(RitualError(f"not queued: {message.reason}"))
+        else:
+            future.set_result(None)
 
     # An answer the prompt does not allow is refused here and the prompt stays
     # open: the dashboard checks before it sends, so this is somebody else
     # writing to the socket, and the cast says so where its output goes.
     def _answered(self, message: DecideResolved) -> None:
-        if (awaited := self._answers.get(message.request_id)) is None:
+        if (awaited := self._pending.answers.get(message.request_id)) is None:
             return
         if awaited.allowed is not None and message.answer not in awaited.allowed:
             sys.stderr.write(
@@ -232,9 +322,12 @@ class DaemonLink:
 
     def _detach(self) -> None:
         self._writer = None
-        for slot in self._slots.values():
+        for slot in self._pending.slots.values():
             if slot.granted is not None:
                 _settle(slot.granted)
+        for future in self._pending.enqueues.values():
+            if not future.done():
+                future.set_exception(NoDaemonError(_GONE_MID_ENQUEUE))
 
     @staticmethod
     async def _shut(writer: asyncio.StreamWriter) -> None:
@@ -257,6 +350,21 @@ class _Awaited:
 class _Slot:
     request: CodingSlotRequested
     granted: asyncio.Future[None] | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class _Await:
+    request: AwaitRequested
+    ended: asyncio.Future[AwaitEnded]
+
+
+# Everything the cast is waiting on the daemon for, by request.
+@dataclass(kw_only=True)
+class _Pending:
+    answers: dict[str, _Awaited] = field(default_factory=dict)
+    slots: dict[str, _Slot] = field(default_factory=dict)
+    enqueues: dict[str, asyncio.Future[None]] = field(default_factory=dict)
+    awaits: dict[str, _Await] = field(default_factory=dict)
 
 
 def _settle(future: asyncio.Future[None]) -> None:
@@ -320,6 +428,43 @@ class TeeChannel(Channel):
             )
         )
         return answer
+
+
+# Where the queue mediums reach the daemon. The child's hello is built here, by
+# the cast that has the ritual and the model: the daemon loads neither. The
+# name is resolved first, so what is queued is a name meaning one ritual from
+# anywhere, and the child runs in the tree this cast was asked from.
+class LinkQueue(CastQueueProtocol):
+    def __init__(self, *, link: DaemonLink, ritual: Callable[[str], Ritual]) -> None:
+        self._link = link
+        self._ritual = ritual
+
+    async def enqueue(self, *, ritual: str, components: BaseModel) -> str:
+        found = self._ritual(ritual)
+        if not isinstance(components, found.components):
+            msg = (
+                f"{found.name} takes {found.components.__name__},"
+                f" not {type(components).__name__}"
+            )
+            raise MediumBoundaryError(msg)
+        parent = self._link.hello
+        hello = CastHello(
+            cast_id=uuid4().hex,
+            project_root=parent.project_root,
+            project=parent.project,
+            ritual=found.name,
+            components=_COMPONENTS.validate_json(components.model_dump_json()),
+            started_at=datetime.now(tz=UTC),
+            wired=True,
+            enqueued_by=parent.cast_id,
+            worktree=found.worktree,
+        )
+        await self._link.enqueue(hello)
+        return hello.cast_id
+
+    async def await_end(self, cast_id: str) -> CastEnded:
+        ended = await self._link.await_end(cast_id)
+        return CastEnded(status=ended.status, detail=ended.detail, result=ended.result)
 
 
 # The coding focus a cast registered, behind the daemon's coding limit: every

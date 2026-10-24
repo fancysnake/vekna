@@ -2,7 +2,17 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
 
+from pydantic import BaseModel
+
 _AnswerT = TypeVar("_AnswerT")
+
+
+# A cast a ritual queued, under the id the double gave it.
+@dataclass(frozen=True, kw_only=True)
+class Enqueued:
+    cast_id: str
+    ritual: str
+    components: BaseModel
 
 
 # What a `decide` call offered, as it was offered. The prompt is what a pattern

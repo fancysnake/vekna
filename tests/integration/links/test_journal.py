@@ -89,6 +89,34 @@ class TestRecording:
         assert record.status == "disconnected"
         assert record.detail == "eof"
 
+    # What a cast awaiting this one is answered with, after a restart too.
+    @staticmethod
+    def test_a_goodbye_records_the_result(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello())
+
+        journal.record(CastGoodbye(cast_id="c1", status="ok", result={"n": 1}))
+
+        record = journal.read("c1")
+        assert record is not None
+        assert record.result == {"n": 1}
+
+    # Oldest first, the order a stopped daemon queued them in.
+    @staticmethod
+    def test_what_is_still_queued_is_listed_oldest_first(tmp_path: Path):
+        journal = Journal(tmp_path)
+        for minute, cast_id in enumerate(("first", "running", "second")):
+            journal.record(
+                _hello(cast_id, started_at=_WHEN + timedelta(minutes=minute))
+            )
+        journal.record(CastQueued(cast_id="second"))
+        journal.record(CastQueued(cast_id="first"))
+
+        assert [record.hello.cast_id for record in journal.queued()] == [
+            "first",
+            "second",
+        ]
+
     # The log now has a hole nothing in the log can show, so the record is where
     # it gets said. The raise goes on, because the daemon reports the failure.
     @staticmethod
@@ -440,6 +468,17 @@ class TestPruning:
         journal.prune(keep=0)
 
         assert [path.name for path in tmp_path.iterdir()] == ["running"]
+
+    # A queued record is the queue itself.
+    @staticmethod
+    def test_a_queued_cast_is_left_alone(tmp_path: Path):
+        journal = Journal(tmp_path)
+        journal.record(_hello("waiting"))
+        journal.record(CastQueued(cast_id="waiting"))
+
+        journal.prune(keep=0)
+
+        assert [path.name for path in tmp_path.iterdir()] == ["waiting"]
 
     # Counted against `keep` like any other run: the newest damaged directory
     # is what the operator is about to look at, and the finished cast behind

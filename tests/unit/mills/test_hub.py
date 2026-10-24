@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Surface
 from vekna.wire import (
+    AwaitEnded,
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -18,6 +21,7 @@ from vekna.wire import (
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
+    EnqueueRequested,
     GrimoireBegin,
     GrimoireEnd,
     LockGranted,
@@ -524,6 +528,72 @@ class TestQueued:
         hub.apply(_hello())
 
         assert hub.casts["c1"].status == "running"
+
+
+class TestAwaiting:
+    @staticmethod
+    def test_an_await_is_held_on_the_parent_and_replayed_inside_its_grimoire():
+        hub = Hub()
+        hub.apply(_hello())
+        awaited = AwaitRequested(cast_id="c1", request_id="w1", child="c2")
+
+        hub.apply(awaited)
+        late = _Surface()
+        hub.attach_surface(late)
+
+        assert hub.casts["c1"].on_children == {"w1": awaited}
+        assert late.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            awaited,
+            GrimoireEnd(cast_id="c1"),
+        ]
+
+    @staticmethod
+    def test_an_ended_or_withdrawn_await_is_let_go():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(AwaitRequested(cast_id="c1", request_id="w1", child="c2"))
+        hub.apply(AwaitRequested(cast_id="c1", request_id="w2", child="c3"))
+
+        hub.apply(AwaitEnded(cast_id="c1", request_id="w1", child="c2", status="ok"))
+        hub.apply(AwaitWithdrawn(cast_id="c1", request_id="w2"))
+
+        assert hub.casts["c1"].on_children == {}
+
+    @staticmethod
+    def test_ending_an_await_never_made_is_dropped():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+        hub.apply(_hello())
+
+        hub.apply(AwaitWithdrawn(cast_id="c1", request_id="w1"))
+
+        assert (seen[-1].action, seen[-1].reason) == ("dropped", "no such await")
+
+    @staticmethod
+    def test_a_cast_that_ends_awaits_nothing():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(AwaitRequested(cast_id="c1", request_id="w1", child="c2"))
+
+        hub.apply(CastGoodbye(cast_id="c1", status="error"))
+
+        assert hub.casts["c1"].on_children == {}
+
+    @staticmethod
+    def test_an_enqueue_is_the_circle_s_and_not_the_view_s():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+        hub.apply(_hello())
+
+        hub.apply(EnqueueRequested(cast_id="c1", request_id="q1", hello=_hello("c2")))
+
+        assert (seen[-1].action, seen[-1].reason) == (
+            "dropped",
+            "the queue is the circle's",
+        )
+        assert "c2" not in hub.casts
 
 
 class TestTreeBlocked:

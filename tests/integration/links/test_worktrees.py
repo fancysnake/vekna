@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from vekna.links.worktrees import GitTrees
-from vekna.pacts.circle import TreeError
+from vekna.pacts.circle import Full, TreeError
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -39,6 +39,7 @@ class _Pool:
     def __init__(self, repo: Path, root: Path) -> None:
         self.repo = repo
         self.trees = GitTrees(root=root)
+        self.full: Full | None = None
 
     async def lease(
         self,
@@ -47,15 +48,17 @@ class _Pool:
         count: int = 2,
         prepare: str | None = None,
     ) -> str | None:
-        tree = await self.trees.lease(
+        found = await self.trees.lease(
             project_root=str(self.repo),
             project=str(self.repo / ".git"),
             held=held or set(),
             count=count,
         )
-        if tree is not None:
-            await self.trees.prepare(tree, prepare)
-        return tree
+        if isinstance(found, Full):
+            self.full = found
+            return None
+        await self.trees.prepare(found, prepare)
+        return found
 
 
 @pytest.fixture(name="pool")
@@ -101,6 +104,19 @@ class TestLease:
         assert first is not None
 
         assert await pool.lease(held={first}, count=1) is None
+        assert pool.full == Full(held=frozenset({first}))
+
+    # Said as the caller said them, and only those that stand in the pool.
+    @staticmethod
+    async def test_a_full_pool_says_which_held_trees_fill_it(pool: _Pool):
+        first = await pool.lease(count=2)
+        assert first is not None
+        second = await pool.lease(held={first}, count=2)
+        assert second is not None
+        unresolved = f"{Path(second).parent}/../{Path(second).parent.name}/2"
+
+        assert await pool.lease(held={first, unresolved, "/elsewhere"}) is None
+        assert pool.full == Full(held=frozenset({first, unresolved}))
 
     # A dead cast left its tree on its own branch; the lease is what parks it.
     @staticmethod

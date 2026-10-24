@@ -193,7 +193,35 @@ class ShellFocusProtocol(Protocol):
     ) -> ShellReply: ...
 
 
+# How an awaited cast ended. The lexicon's own, as `RiteEvent` is: the wire's
+# `AwaitEnded` carries routing a medium has no use for.
+@dataclass(frozen=True, kw_only=True)
+class CastEnded:
+    status: Literal["ok", "error", "disconnected"]
+    detail: str | None
+    result: JsonValue | None
+
+
+# Where `enqueue` and `await_cast` reach the daemon. Behind a slot rather than
+# called straight, so the trial can stand a double there.
+class CastQueueProtocol(Protocol):
+    # The new cast's id, once the daemon has queued it.
+    async def enqueue(self, *, ritual: str, components: BaseModel) -> str: ...
+    async def await_end(self, cast_id: str) -> CastEnded: ...
+
+
 class RitualError(Exception):
+    pass
+
+
+# A queue medium reached by a cast with no daemon. A queue that ran its casts
+# inline would hide the one thing it exists for.
+class NoDaemonError(RitualError):
+    pass
+
+
+# An awaited cast that did not end `ok`.
+class CastFailedError(RitualError):
     pass
 
 

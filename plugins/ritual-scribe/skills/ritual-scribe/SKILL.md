@@ -1,6 +1,6 @@
 ---
 name: ritual-scribe
-description: Write vekna rituals — the Python programs `vekna cast` runs, built from @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide mediums. Invoke whenever asked to write, extend, debug, or review a rituals.py, a @ritual or @step, a vekna medium call, or anything cast by `vekna cast`.
+description: Write vekna rituals — the Python programs `vekna cast` runs, built from @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide/enqueue mediums. Invoke whenever asked to write, extend, debug, or review a rituals.py, a @ritual or @step, a vekna medium call, or anything cast by `vekna cast`.
 ---
 
 # Ritual Scribe
@@ -269,6 +269,26 @@ operator may answer past them, and what comes back is an unconstrained `str`.
 `decide(options=...)` is the closed one — that is why a ritual branching on a
 `Literal` uses it.
 
+### `enqueue` / `await_cast` — start another cast
+
+```python
+from vekna.folio.flow import await_cast, enqueue
+
+cast_id = await enqueue("refresh", Sweep(pull_request=pr))                # proceed
+report = await await_cast("review", Sweep(pull_request=pr), output=Report)  # wait
+```
+
+A sweep fans out: its first step enqueues one cast per item and ends, instead
+of walking a list in its own payload. Parallelism lives between casts; steps
+stay sequential. The name resolves the way `vekna cast` would resolve it, and
+the components must be that ritual's model, or `MediumBoundaryError`.
+
+`await_cast` gives up the parent's process slot until the child ends, keeps its
+tree, and returns the child's result: validated as `output=`, raw JSON without
+it. A child ending `error` or aborted raises `CastFailedError`, routable as
+`Failure[P]`. Both need a daemon (`NoDaemonError` otherwise). On resume the
+enqueue replays its id, so nothing is queued twice.
+
 ---
 
 ## Configuring the agent
@@ -480,6 +500,7 @@ def test_merge_ready_repairs_once_then_goes_green(trial: Trial) -> None:
 | `trial.shell` | `replies(when=…, exit_code=, stdout=, stderr=)` | the command | `.commands`, `.calls` |
 | `trial.coding` | `replies(text_or_model, when=…, uses=[…], asks=[…])` | the prompt | `.prompts`, `.calls`, `.gated`, `.answered` |
 | `trial.decide` | `answers(answer=…, when=…)` | the prompt | `.prompts`, `.asked` |
+| `trial.queue` | `returns(model, when=…)`, `fails(detail, when=…)` — for `await_cast` only; `enqueue` needs none | the ritual name | `.rituals`, `.enqueued` |
 
 Plus `trial.steps`, `trial.deltas`, `trial.events`, `trial.result`.
 
@@ -566,6 +587,8 @@ all.
 | `StandalonePromptError` | three invalid answers to a `decide` prompt, or stdin closed before one was given |
 | `UnattendedPromptError` | a `decide` reached in a cast run with `--unattended` |
 | `RiteTimeoutError` | a `timeout(...)` or `@step(timeout=...)` ran out; the cut rite reads `cancelled` |
+| `CastFailedError` | a cast `await_cast` waited on ended `error` or aborted |
+| `NoDaemonError` | `enqueue` or `await_cast` in a cast with no daemon to queue on |
 
 All descend from `RitualError`.
 

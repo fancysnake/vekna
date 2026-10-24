@@ -1,10 +1,12 @@
 from collections.abc import Callable, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, TypeAdapter
 from typing_extensions import override
 
 from vekna.lexicon._pacts import (
     AskFn,
+    CastEnded,
+    CastQueueProtocol,
     Channel,
     CodingCall,
     CodingFocusProtocol,
@@ -16,10 +18,18 @@ from vekna.lexicon._pacts import (
 )
 from vekna.wire import allowed_answers
 
-from ._pacts import Answer, Asked, CodingAnswer, ScriptProtocol, TrialScriptError
+from ._pacts import (
+    Answer,
+    Asked,
+    CodingAnswer,
+    Enqueued,
+    ScriptProtocol,
+    TrialScriptError,
+)
 
 _YES = "yes"
 _NO = "no"
+_JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 class CodingDouble(CodingFocusProtocol):
@@ -159,3 +169,62 @@ class DecideDouble(Channel):
             return answer
         msg = f"{answer!r} is not one of the offered answers: {list(allowed)}"
         raise TrialScriptError(msg)
+
+
+# Stands where the daemon's queue stands. Enqueueing needs no script, since a
+# real queue takes any cast; awaiting one does, matched on the ritual's name.
+# What a child returns is a model, dumped the way the wire carries it, so the
+# medium's own `output=` validation still runs. Components are copied at the
+# enqueue, as the real queue serialises them there.
+class QueueDouble(CastQueueProtocol):
+    def __init__(self, script: ScriptProtocol[CastEnded]) -> None:
+        self._script = script
+        self.enqueued: list[Enqueued] = []
+
+    def returns(
+        self,
+        result: BaseModel | None = None,
+        *,
+        when: str | None = None,
+        always: bool = False,
+    ) -> None:
+        ended = CastEnded(
+            status="ok",
+            detail=None,
+            result=(
+                None
+                if result is None
+                else _JSON.validate_json(result.model_dump_json())
+            ),
+        )
+        self._script.add(Answer(value=ended, when=when, always=always))
+
+    def fails(
+        self, detail: str, *, when: str | None = None, always: bool = False
+    ) -> None:
+        ended = CastEnded(status="error", detail=detail, result=None)
+        self._script.add(Answer(value=ended, when=when, always=always))
+
+    @property
+    def rituals(self) -> list[str]:
+        return [enqueued.ritual for enqueued in self.enqueued]
+
+    @override
+    async def enqueue(self, *, ritual: str, components: BaseModel) -> str:
+        cast_id = f"c{len(self.enqueued) + 1}"
+        self.enqueued.append(
+            Enqueued(
+                cast_id=cast_id,
+                ritual=ritual,
+                components=components.model_copy(deep=True),
+            )
+        )
+        return cast_id
+
+    @override
+    async def await_end(self, cast_id: str) -> CastEnded:
+        found = next((cast for cast in self.enqueued if cast.cast_id == cast_id), None)
+        if found is None:
+            msg = f"no cast {cast_id} was enqueued"
+            raise TrialScriptError(msg)
+        return self._script.take(found.ritual)
