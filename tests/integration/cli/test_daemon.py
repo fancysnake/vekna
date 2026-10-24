@@ -3,6 +3,7 @@ import contextlib
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
@@ -13,7 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from vekna.inits.cli import init_command, window
-from vekna.inits.daemon import serve_daemon, stop_daemon
+from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.pacts.casts import DamagedRun
@@ -975,7 +976,7 @@ class TestWorktrees:
 _QUEUE_RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.folio.flow import await_cast
+    from vekna.folio.flow import await_cast, enqueue
     from vekna.lexicon import Done, NoComponents, ritual, step
 
 
@@ -1004,6 +1005,21 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("sweep")
     async def sweeper(_: NoComponents) -> Sweep:
         return Sweep()
+
+
+    class Fan(BaseModel):
+        pass
+
+
+    @step
+    async def fan_out(_: Fan) -> Done[Fan]:
+        await enqueue("count", Count(n=1))
+        return Done(Fan())
+
+
+    @ritual("fan")
+    async def fan(_: NoComponents) -> Fan:
+        return Fan()
     """)
 
 
@@ -1025,6 +1041,22 @@ def _run_of(runs: Path, ritual: str) -> RunRecord:
     return found
 
 
+async def _hand_cast(cwd: Path, *args: str) -> tuple[list[str], int | None]:
+    cast = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        CLI_MODULE,
+        "cast",
+        *args,
+        cwd=cwd,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    said, _ = await asyncio.wait_for(cast.communicate(), timeout=60)
+    return said.decode().splitlines(), cast.returncode
+
+
 @pytest.fixture(name="queue_rituals")
 def _queue_rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     project = socket_path.parent
@@ -1035,6 +1067,31 @@ def _queue_rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.mark.asyncio
 class TestQueue:
+    # Typed by hand, a cast that queues another stays for it: what the child
+    # does prints under its name, and the cast ends once the child has.
+    @staticmethod
+    async def test_a_hand_cast_follows_what_it_queued_until_it_ends(
+        socket_path: Path, queue_rituals: Path
+    ):
+        async with _served(socket_path):
+            lines, code = await _hand_cast(queue_rituals, "fan")
+
+        done = [line for line in lines if line.startswith("[count ")]
+        assert code == 0
+        assert done[-1].endswith("✓ done")
+        assert lines.index("result: {}") < lines.index(done[-1])
+
+    @staticmethod
+    async def test_no_follow_ends_with_its_own_steps(
+        socket_path: Path, queue_rituals: Path
+    ):
+        async with _served(socket_path):
+            lines, code = await _hand_cast(queue_rituals, "--no-follow", "fan")
+            await _spawned(lambda: _finished(queue_rituals / "runs", "count"))
+
+        assert code == 0
+        assert not [line for line in lines if line.startswith("[count ")]
+
     # One slot: the sweep gives it up to the child it awaits, or neither runs.
     @staticmethod
     async def test_an_awaited_child_runs_in_the_slot_its_parent_gave_up(

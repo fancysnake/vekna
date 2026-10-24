@@ -1,0 +1,398 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1620" width="1400" height="1620" role="img" aria-labelledby="t d">
+  <title id="t">High Magic: the factory</title>
+  <desc id="d">How vekna runs many casts at once: a per-user daemon holds a circle per project (queue, process slots, worktree pool), spawns casts, pools worktrees, and lets a cast enqueue or await another.</desc>
+  <style>
+    :root {
+      --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+      --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+      --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+        --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+        --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
+      }
+    }
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+    .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+    .lede { font-size: 16px; fill: var(--soft); }
+    .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+    .h3 { font-size: 16px; font-weight: 700; }
+    .b { font-size: 13px; fill: var(--ink); }
+    .s { font-size: 12px; fill: var(--soft); }
+    .xs { font-size: 11px; fill: var(--faint); }
+    .code { font-size: 12px; fill: var(--verd); }
+    .ok { fill: var(--verd); font-weight: 700; }
+    .warn { fill: var(--ox); }
+    .bg { fill: var(--bg); }
+    .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+    .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+    .daemon { fill: none; stroke: var(--moss); stroke-width: 2.2; }
+    .circle { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
+    .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+    .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+    .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+    .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+    .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+    .dash { stroke-dasharray: 5 4; }
+    .slot-on { fill: var(--verd); }
+    .slot-off { fill: none; stroke: var(--verd); stroke-width: 1.6; }
+    .lane { stroke: var(--line); stroke-width: 1; }
+    .bar { fill: var(--verd); }
+    .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .bar-q { fill: var(--line); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+    <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+  </defs>
+
+  <rect class="bg" width="1400" height="1620"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">High Magic · the factory</text>
+  <text x="40" y="94" class="lede">What Reborn did for one cast, done for many. Same vekna, replicated and scaled: casts run side by side</text>
+  <text x="40" y="116" class="lede">across a pool of worktrees, rituals fan work out into a queue, and one window shows the whole of it.</text>
+
+  <g transform="translate(40,140)">
+    <rect class="hot" width="400" height="34" rx="17"/>
+    <text x="200" y="22" class="b" text-anchor="middle">Parallel <tspan font-weight="700">between</tspan> casts · steps stay sequential</text>
+    <rect class="hot" x="420" width="300" height="34" rx="17"/>
+    <text x="570" y="22" class="b" text-anchor="middle">Blast radius: one cast process</text>
+    <rect class="hot" x="740" width="300" height="34" rx="17"/>
+    <text x="890" y="22" class="b" text-anchor="middle">Worktrees pooled, processes not</text>
+  </g>
+
+  <!-- ============ MAIN FLOW ============ -->
+  <text x="40" y="222" class="sec">THE FLOW</text>
+
+  <!-- Who queues -->
+  <text x="40" y="256" class="h3">Who starts a cast</text>
+  <g transform="translate(40,272)">
+    <rect class="card" width="260" height="92" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">The operator</text>
+    <text x="16" y="48" class="code mono">c &lt;ritual&gt; --flag value</text>
+    <text x="16" y="70" class="s">typed in the dashboard</text>
+  </g>
+  <g transform="translate(40,384)">
+    <rect class="card" width="260" height="92" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">A ritual's step</text>
+    <text x="16" y="48" class="code mono">enqueue(ritual, …)</text>
+    <text x="16" y="70" class="s">a sweep fans out one cast per PR</text>
+  </g>
+  <g transform="translate(40,496)">
+    <rect class="card" width="260" height="92" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">By hand, in a terminal</text>
+    <text x="16" y="48" class="code mono">vekna cast &lt;ritual&gt;</text>
+    <text x="16" y="70" class="s">runs at once, still counts a slot</text>
+  </g>
+
+  <path class="arrow" d="M300,318 C335,318 345,380 398,390"/>
+  <path class="arrow" d="M300,430 L398,430"/>
+  <path class="arrow dash" d="M300,542 C420,560 560,560 640,545"/>
+
+  <!-- Daemon -->
+  <rect class="daemon" x="340" y="240" width="680" height="630" rx="16"/>
+  <rect x="360" y="228" width="420" height="24" class="bg"/>
+  <text x="368" y="246" class="h3" style="fill: var(--moss)">daemon · one per user · outlives every window</text>
+
+  <!-- Circle -->
+  <rect class="circle" x="364" y="270" width="632" height="350" rx="14"/>
+  <text x="384" y="298" class="h3">circle</text>
+  <text x="440" y="298" class="s">one per project — a project is its git common dir, so all its worktrees group together</text>
+
+  <!-- Queue -->
+  <g transform="translate(384,318)">
+    <rect class="card" width="180" height="284" rx="10"/>
+    <text x="90" y="26" class="b" font-weight="700" text-anchor="middle">Queue</text>
+    <rect class="hot" x="14" y="44" width="152" height="40" rx="6"/>
+    <text x="24" y="62" class="xs">awaiter, back first</text>
+    <text x="24" y="77" class="b mono" font-size="12">sweep ↑</text>
+    <rect class="tint" x="14" y="92" width="152" height="40" rx="6"/>
+    <text x="24" y="110" class="xs">queued by sweep</text>
+    <text x="24" y="125" class="b mono" font-size="12">fix #31</text>
+    <rect class="tint" x="14" y="140" width="152" height="40" rx="6"/>
+    <text x="24" y="158" class="xs">queued by operator</text>
+    <text x="24" y="173" class="b mono" font-size="12">triage</text>
+    <text x="14" y="212" class="s">entries are run records,</text>
+    <text x="14" y="230" class="s">so the queue survives a</text>
+    <text x="14" y="248" class="s">daemon restart</text>
+  </g>
+
+  <path class="arrow" d="M564,460 L598,460"/>
+
+  <!-- Scheduler -->
+  <g transform="translate(600,318)">
+    <rect class="card" width="200" height="284" rx="10"/>
+    <text x="100" y="26" class="b" font-weight="700" text-anchor="middle">Scheduler</text>
+    <text x="100" y="44" class="xs" text-anchor="middle">spawns when what it needs is free</text>
+    <text x="16" y="74" class="s">process slots · always</text>
+    <circle class="slot-on" cx="30" cy="92" r="9"/>
+    <circle class="slot-on" cx="56" cy="92" r="9"/>
+    <circle class="slot-on" cx="82" cy="92" r="9"/>
+    <circle class="slot-off" cx="108" cy="92" r="9"/>
+    <text x="124" y="96" class="xs mono">processes=4</text>
+    <text x="16" y="134" class="s">worktrees · if the ritual</text>
+    <text x="16" y="150" class="s">says <tspan class="mono" style="fill: var(--verd)">worktree=True</tspan></text>
+    <use href="#tree" x="30" y="174" style="fill: var(--verd)"/>
+    <use href="#tree" x="56" y="174" style="fill: none; stroke: var(--verd); stroke-width: 1.5"/>
+    <text x="124" y="178" class="xs mono">worktrees=2</text>
+    <line x1="16" y1="204" x2="184" y2="204" class="lane"/>
+    <text x="16" y="226" class="s">both released when the</text>
+    <text x="16" y="242" class="s">cast ends, however it ends;</text>
+    <text x="16" y="258" class="s">the slot alone, earlier, while</text>
+    <text x="16" y="274" class="s">it awaits a child</text>
+  </g>
+
+  <path class="arrow" d="M800,460 L826,460"/>
+
+  <!-- Spawner -->
+  <g transform="translate(828,318)">
+    <rect class="card" width="148" height="284" rx="10"/>
+    <text x="74" y="26" class="b" font-weight="700" text-anchor="middle">Spawner</text>
+    <text x="14" y="58" class="s">starts a</text>
+    <text x="14" y="76" class="code mono">vekna cast</text>
+    <text x="14" y="94" class="s">subprocess, cwd =</text>
+    <text x="14" y="112" class="s">its leased tree</text>
+    <line x1="14" y1="134" x2="134" y2="134" class="lane"/>
+    <text x="14" y="158" class="s">fills components</text>
+    <text x="14" y="176" class="s">nobody typed from</text>
+    <text x="14" y="194" class="code mono" font-size="11">[defaults.&lt;ritual&gt;]</text>
+    <line x1="14" y1="216" x2="134" y2="216" class="lane"/>
+    <text x="14" y="240" class="s">loads no ritual,</text>
+    <text x="14" y="258" class="s">imports no lexicon</text>
+  </g>
+
+  <!-- Hub -->
+  <g transform="translate(364,640)">
+    <rect class="card" width="632" height="210" rx="12"/>
+    <text x="20" y="30" class="b" font-weight="700">Hub</text>
+    <text x="60" y="30" class="s">every cast of every project on one socket</text>
+    <g transform="translate(20,52)">
+      <rect class="tint" width="186" height="138" rx="8"/>
+      <text x="14" y="24" class="b" font-weight="700">Events in</text>
+      <text x="14" y="46" class="s">rites begin and end,</text>
+      <text x="14" y="64" class="s">ok · error · cancelled;</text>
+      <text x="14" y="82" class="s">a goodbye carries the</text>
+      <text x="14" y="100" class="s">cast's result, saved to</text>
+      <text x="14" y="118" class="code mono">run.json</text>
+    </g>
+    <g transform="translate(222,52)">
+      <rect class="tint" width="186" height="138" rx="8"/>
+      <text x="14" y="24" class="b" font-weight="700">Answers out</text>
+      <text x="14" y="46" class="s">a spawned cast has no</text>
+      <text x="14" y="64" class="s">terminal, so a decide</text>
+      <text x="14" y="82" class="s">is answered over the</text>
+      <text x="14" y="100" class="s">wire from any surface</text>
+      <text x="14" y="118" class="code mono" font-size="11">DecideResolved</text>
+    </g>
+    <g transform="translate(424,52)">
+      <rect class="tint" width="188" height="138" rx="8"/>
+      <text x="14" y="24" class="b" font-weight="700">Agent cap</text>
+      <text x="14" y="46" class="s">caps agent sessions</text>
+      <text x="14" y="64" class="s">across every cast; a</text>
+      <text x="14" y="82" class="code mono">coding</text>
+      <text x="14" y="100" class="s">call past it waits for</text>
+      <text x="14" y="118" class="s">a free session</text>
+    </g>
+  </g>
+
+  <!-- Running casts -->
+  <text x="1060" y="256" class="h3">Casts running</text>
+  <g transform="translate(1060,272)">
+    <rect class="card" width="300" height="76" rx="10"/>
+    <text x="16" y="26" class="b mono" font-weight="700">review</text>
+    <text x="16" y="48" class="s">no tree: reads the CI board</text>
+    <text x="16" y="66" class="xs">slot only</text>
+    <circle class="slot-on" cx="276" cy="22" r="7"/>
+  </g>
+  <g transform="translate(1060,364)">
+    <rect class="card" width="300" height="76" rx="10"/>
+    <text x="16" y="26" class="b mono" font-weight="700">fix #29</text>
+    <text x="16" y="48" class="s">in wt-1, an agent at work</text>
+    <text x="16" y="66" class="xs">slot + tree</text>
+    <circle class="slot-on" cx="252" cy="22" r="7"/>
+    <use href="#tree" x="276" y="24" style="fill: var(--verd)" transform="scale(1)"/>
+  </g>
+  <g transform="translate(1060,456)">
+    <rect class="hot" width="300" height="76" rx="10"/>
+    <text x="16" y="26" class="b mono" font-weight="700">sweep · on child</text>
+    <text x="16" y="48" class="s">awaiting fix #29; gave its slot back</text>
+    <text x="16" y="66" class="xs">slot released, rejoins at queue head</text>
+    <circle class="slot-off" cx="276" cy="22" r="7"/>
+  </g>
+  <g transform="translate(1060,548)">
+    <rect class="card" width="300" height="76" rx="10"/>
+    <text x="16" y="26" class="b mono" font-weight="700">triage</text>
+    <text x="16" y="48" class="s">at a decide, waiting for an answer</text>
+    <text x="16" y="66" class="xs">slot only</text>
+    <circle class="slot-on" cx="276" cy="22" r="7"/>
+  </g>
+
+  <path class="arrow-v" d="M976,400 C1010,400 1020,310 1058,310"/>
+  <path class="arrow-v" d="M976,420 L1058,402"/>
+  <path class="arrow-v" d="M976,440 C1015,460 1020,580 1058,586"/>
+
+  <!-- events back to hub -->
+  <path class="arrow" d="M1110,626 C1110,700 1060,730 998,730"/>
+  <text x="1120" y="676" class="xs">wire frames</text>
+
+  <!-- Surfaces -->
+  <text x="1060" y="760" class="h3">Surfaces</text>
+  <g transform="translate(1060,774)">
+    <rect class="card" width="300" height="96" rx="10"/>
+    <text x="16" y="24" class="b">bare <tspan class="mono" style="fill: var(--verd)">vekna</tspan> = the project's dashboard</text>
+    <text x="16" y="44" class="s">casts · queue · slots · trees, live</text>
+    <text x="16" y="64" class="s"><tspan class="mono" style="fill: var(--verd)">g</tspan> every project · <tspan class="mono" style="fill: var(--verd)">a &lt;answer&gt;</tspan> a prompt</text>
+    <text x="16" y="84" class="s">every window is a peer</text>
+  </g>
+  <path class="arrow" d="M998,790 L1058,808" style="marker-start: url(#a)"/>
+
+  <!-- ============ MECHANISMS ============ -->
+  <text x="40" y="932" class="sec">THE MECHANISMS</text>
+
+  <!-- Panel 1: worktree lifecycle -->
+  <g transform="translate(40,950)">
+    <rect class="card" width="420" height="470" rx="14"/>
+    <text x="22" y="34" class="h3">A worktree's life</text>
+    <text x="22" y="56" class="s">pooled per project, sized by <tspan class="mono" style="fill: var(--verd)">[circle] worktrees</tspan></text>
+
+    <rect class="tint" x="22" y="80" width="150" height="40" rx="8"/>
+    <text x="97" y="105" class="b" text-anchor="middle">created</text>
+    <path class="arrow" d="M172,100 L218,100"/>
+    <rect class="tint" x="220" y="80" width="178" height="40" rx="8"/>
+    <text x="309" y="98" class="b" text-anchor="middle"><tspan class="mono" style="fill: var(--verd)">prepare</tspan> runs once</text>
+    <text x="309" y="113" class="xs" text-anchor="middle">e.g. mise install</text>
+    <path class="arrow" d="M309,120 C309,150 180,140 140,166"/>
+
+    <rect class="hot" x="40" y="168" width="200" height="40" rx="8"/>
+    <text x="140" y="193" class="b" text-anchor="middle" font-weight="700">free in the pool</text>
+    <path class="arrow" d="M140,208 L140,236"/>
+    <rect class="tint" x="40" y="238" width="200" height="40" rx="8"/>
+    <text x="140" y="263" class="b" text-anchor="middle">leased before spawn</text>
+    <path class="arrow" d="M140,278 L140,306"/>
+    <rect class="tint" x="40" y="308" width="200" height="40" rx="8"/>
+    <text x="140" y="333" class="b" text-anchor="middle">the cast works in it</text>
+    <path class="arrow" d="M140,348 L140,376"/>
+    <rect class="tint" x="40" y="378" width="200" height="40" rx="8"/>
+    <text x="140" y="396" class="b" text-anchor="middle">parked on a branch</text>
+    <text x="140" y="411" class="xs mono" text-anchor="middle">vekna/wt-&lt;n&gt;</text>
+
+    <path class="arrow" d="M240,398 L270,398"/>
+    <polygon points="310,372 350,398 310,424 270,398" class="tint"/>
+    <text x="310" y="402" class="s" text-anchor="middle">clean?</text>
+    <path class="arrow-v" d="M310,372 L310,188 L242,188"/>
+    <text x="318" y="290" class="ok" font-size="12">yes, back</text>
+    <text x="318" y="306" class="ok" font-size="12">to the pool</text>
+    <path class="arrow-x" d="M310,424 L310,432"/>
+    <text x="320" y="432" class="warn" font-size="12">no</text>
+    <rect class="bad" x="40" y="434" width="362" height="26" rx="8"/>
+    <text x="54" y="451" class="xs warn">dirty or mid-merge → TreeBlocked, out of the pool until clean</text>
+  </g>
+
+  <!-- Panel 2: enqueue / await -->
+  <g transform="translate(490,950)">
+    <rect class="card" width="420" height="470" rx="14"/>
+    <text x="22" y="34" class="h3">enqueue or await</text>
+    <text x="22" y="56" class="s">a step decides where it carries on and where it waits</text>
+
+    <rect class="tint" x="22" y="76" width="376" height="58" rx="8"/>
+    <text x="36" y="98" class="code mono">enqueue(…)</text>
+    <text x="140" y="98" class="s">queue another cast, carry on</text>
+    <text x="36" y="120" class="code mono">await_cast(…)</text>
+    <text x="140" y="120" class="s">wait for its result, as <tspan class="mono" style="fill: var(--verd)">output=</tspan></text>
+
+    <!-- timeline -->
+    <text x="22" y="170" class="xs">time →</text>
+    <text x="22" y="204" class="b mono" font-size="12">parent</text>
+    <line x1="88" y1="200" x2="400" y2="200" class="lane"/>
+    <rect class="bar" x="90" y="190" width="70" height="20" rx="4"/>
+    <rect class="bar-wait" x="162" y="190" width="150" height="20" rx="4"/>
+    <text x="237" y="186" class="xs" text-anchor="middle">on child · no slot</text>
+    <rect class="bar" x="314" y="190" width="84" height="20" rx="4"/>
+
+    <text x="22" y="264" class="b mono" font-size="12">child</text>
+    <line x1="88" y1="260" x2="400" y2="260" class="lane"/>
+    <rect class="bar-q" x="162" y="250" width="40" height="20" rx="4"/>
+    <text x="182" y="285" class="xs" text-anchor="middle">queued</text>
+    <rect class="bar" x="204" y="250" width="106" height="20" rx="4"/>
+    <text x="257" y="285" class="xs" text-anchor="middle">runs in the freed slot</text>
+
+    <path class="arrow" d="M162,212 L176,248"/>
+    <path class="arrow-v" d="M310,250 L322,214"/>
+    <text x="330" y="236" class="xs" style="fill: var(--verd)">result</text>
+
+    <line x1="22" y1="306" x2="398" y2="306" class="lane"/>
+    <text x="22" y="330" class="b">• the parent comes back <tspan font-weight="700">ahead of the queue</tspan></text>
+    <text x="22" y="352" class="b">• its tree stays leased while it waits</text>
+    <text x="22" y="374" class="b">• a child that fails → <tspan class="mono warn">CastFailedError</tspan></text>
+    <text x="22" y="396" class="b">• no daemon → <tspan class="mono warn">NoDaemonError</tspan></text>
+    <rect class="bad" x="22" y="412" width="376" height="42" rx="8"/>
+    <text x="36" y="430" class="xs warn">deadlock guard: a lease fails, not waits, when every free</text>
+    <text x="36" y="446" class="xs warn">tree is held by a cast awaiting one that needs a tree</text>
+  </g>
+
+  <!-- Panel 3: what lasts -->
+  <g transform="translate(940,950)">
+    <rect class="card" width="420" height="470" rx="14"/>
+    <text x="22" y="34" class="h3">What outlives what</text>
+    <text x="22" y="56" class="s">the window is a view; the daemon is the place</text>
+
+    <g transform="translate(22,82)">
+      <rect class="tint" width="376" height="62" rx="8"/>
+      <text x="14" y="24" class="b">first bare <tspan class="mono" style="fill: var(--verd)">vekna</tspan> starts the daemon detached</text>
+      <text x="14" y="46" class="s"><tspan class="mono" style="fill: var(--verd)">q</tspan> closes the window only · <tspan class="mono" style="fill: var(--verd)">vekna stop</tspan> ends the daemon</text>
+    </g>
+    <g transform="translate(22,158)">
+      <rect class="tint" width="376" height="62" rx="8"/>
+      <text x="14" y="24" class="b">running casts carry on without it</text>
+      <text x="14" y="46" class="s">and rejoin the next daemon, keeping their slot and tree</text>
+    </g>
+    <g transform="translate(22,234)">
+      <rect class="tint" width="376" height="62" rx="8"/>
+      <text x="14" y="24" class="b">queued casts wait it out</text>
+      <text x="14" y="46" class="s">the next daemon runs what was left queued</text>
+    </g>
+
+    <text x="22" y="330" class="s">the numbers, per project or user-wide:</text>
+    <rect class="tint" x="22" y="342" width="376" height="112" rx="8"/>
+    <text x="38" y="368" class="code mono" style="fill: var(--sigil)">[circle]</text>
+    <text x="38" y="388" class="code mono">processes = 4</text>
+    <text x="38" y="408" class="code mono">worktrees = 2</text>
+    <text x="38" y="428" class="code mono">prepare   = "mise install &amp;&amp; …"</text>
+    <text x="38" y="446" class="xs">in .vekna.toml or the user config</text>
+  </g>
+
+  <!-- ============ PATH ============ -->
+  <text x="40" y="1468" class="sec">THE PATH  ·  epic #142</text>
+  <g transform="translate(40,1484)">
+    <rect class="hot" width="186" height="52" rx="10"/>
+    <text x="16" y="22" class="b" font-weight="700">#138 ✓</text>
+    <text x="16" y="40" class="s">daemon + dashboard</text>
+    <path class="arrow" d="M186,26 L208,26"/>
+    <rect class="hot" x="210" width="186" height="52" rx="10"/>
+    <text x="226" y="22" class="b" font-weight="700">#139 ✓</text>
+    <text x="226" y="40" class="s">the daemon spawns</text>
+    <path class="arrow" d="M396,26 L418,26"/>
+    <rect class="hot" x="420" width="186" height="52" rx="10"/>
+    <text x="436" y="22" class="b" font-weight="700">#140 ✓</text>
+    <text x="436" y="40" class="s">worktree pool</text>
+    <path class="arrow" d="M606,26 L628,26"/>
+    <rect class="hot" x="630" width="186" height="52" rx="10"/>
+    <text x="646" y="22" class="b" font-weight="700">#141 ✓</text>
+    <text x="646" y="40" class="s">enqueue · await_cast</text>
+    <path class="arrow" d="M816,26 L838,26"/>
+    <rect class="hot" x="840" width="186" height="52" rx="10"/>
+    <text x="856" y="22" class="b" font-weight="700">#94 ✓</text>
+    <text x="856" y="40" class="s">defaults per repo</text>
+    <path class="arrow" d="M1026,26 L1048,26"/>
+    <rect class="card" x="1050" width="270" height="52" rx="10" style="stroke-dasharray: 5 4"/>
+    <text x="1066" y="22" class="b" font-weight="700">cabinet#29</text>
+    <text x="1066" y="40" class="s">a sweep as one cast per pull request</text>
+  </g>
+  <text x="40" y="1580" class="xs">Not planned: pooled cast processes · anything across machines · concurrent steps in one cast · a tree reset by the daemon</text>
+</svg>

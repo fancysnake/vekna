@@ -517,9 +517,18 @@ class TeeChannel(Channel):
 # name is resolved first, so what is queued is a name meaning one ritual from
 # anywhere, and the child runs in the tree this cast was asked from.
 class LinkQueue(CastQueueProtocol):
-    def __init__(self, *, link: DaemonLink, ritual: Callable[[str], Ritual]) -> None:
+    def __init__(
+        self,
+        *,
+        link: DaemonLink,
+        ritual: Callable[[str], Ritual],
+        queued: Callable[[str], None] = lambda _: None,
+    ) -> None:
         self._link = link
         self._ritual = ritual
+        # Told each id the daemon took, which is what a following terminal waits
+        # for before it can call the casts this one set going finished.
+        self._queued = queued
 
     async def enqueue(self, *, ritual: str, components: BaseModel) -> str:
         found = self._ritual(ritual)
@@ -544,6 +553,7 @@ class LinkQueue(CastQueueProtocol):
             worktree=found.worktree,
         )
         await self._link.enqueue(hello)
+        self._queued(hello.cast_id)
         return hello.cast_id
 
     async def await_end(self, cast_id: str) -> CastEnded:

@@ -24,6 +24,7 @@ from vekna.wire import (
 )
 
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
+from ._links.follow import Follower
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
@@ -39,6 +40,7 @@ from ._mills.engine import (
     prompt_runner,
     run_cast,
 )
+from ._mills.follow import Lineage
 from ._mills.graph import check_exits, step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
@@ -66,7 +68,13 @@ _UNATTENDED_FLAG = "--unattended"
 # Runtime-only, like `--resume`: the daemon spawns a cast with it, and a cast
 # with it has no terminal to ask on.
 _WIRED_FLAG = "--wired"
-_LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG})
+# A cast typed by hand stays at its terminal for the casts it queued, until
+# they end; this lets it go once its own steps have.
+_NO_FOLLOW_FLAG = "--no-follow"
+_LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG, _NO_FOLLOW_FLAG})
+_FOLLOWING = "following the casts this one queued — Ctrl-C leaves them running\n"
+_LEFT = "left them running — `vekna` shows them\n"
+_DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
@@ -420,6 +428,8 @@ class _Plan(NamedTuple):
     leased: bool = False
     # The cast that queued this one, kept on the hello its own run says.
     enqueued_by: str | None = None
+    # Stay for the casts it queued once its own steps end.
+    follow: bool = True
 
 
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
@@ -518,21 +528,24 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
+# Where a cast's word goes: the daemon, the terminal, and the queue its
+# `enqueue` and `await_cast` reach.
+class _Outs(NamedTuple):
+    link: DaemonLink
+    renderer: StandaloneRenderer
+    queue: LinkQueue
+
+
 # Every way a cast can end goes through one notify: an `except` per error type
 # would leave whatever it does not name — the AttributeError a step raises —
 # silent, which is the walked-away-from-the-terminal case the notification
 # exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *,
-    plan: _Plan,
-    grimoire: Grimoire,
-    channel: Channel,
-    link: DaemonLink,
-    renderer: StandaloneRenderer,
+    *, plan: _Plan, grimoire: Grimoire, channel: Channel, outs: _Outs
 ) -> int:
+    link, renderer = outs.link, outs.renderer
     try:
-        queue = LinkQueue(link=link, ritual=plan.compendium.ritual)
-        with _throttled(link), CAST_QUEUE.scope(queue):
+        with _throttled(link), CAST_QUEUE.scope(outs.queue):
             result = await run_cast(
                 ritual=plan.ritual,
                 components=plan.components,
@@ -602,14 +615,66 @@ async def _run(plan: _Plan) -> int:
 
     await link.attach(backlog=backlog)
     watcher = asyncio.create_task(link.keep_attached(backlog))
+    lineage = Lineage(cast_id)
+    follower = await _follower(plan=plan, link=link, lineage=lineage, ask=renderer)
     try:
-        return await _cast(
-            plan=plan, grimoire=grimoire, channel=channel, link=link, renderer=renderer
+        code = await _cast(
+            plan=plan,
+            grimoire=grimoire,
+            channel=channel,
+            outs=_Outs(
+                link=link,
+                renderer=renderer,
+                queue=LinkQueue(
+                    link=link, ritual=plan.compendium.ritual, queued=lineage.expect
+                ),
+            ),
         )
     finally:
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await watcher
+    if follower is None:
+        return code
+    try:
+        return await _followed(code, follower=follower, lineage=lineage)
+    finally:
+        await follower.close()
+
+
+# Only a cast typed by hand with a daemon to hear from follows: a spawned one has
+# no terminal, and with no daemon it can have queued nothing.
+async def _follower(
+    *, plan: _Plan, link: DaemonLink, lineage: Lineage, ask: StandaloneRenderer
+) -> Follower | None:
+    if plan.wired or not plan.follow or not link.attached:
+        return None
+    follower = Follower(
+        socket_path=default_socket_path(),
+        lineage=lineage,
+        out=sys.stdout,
+        ask=None if plan.unattended else ask,
+    )
+    return follower if await follower.attach() else None
+
+
+# The worst of how this cast and the ones it queued ended. Ctrl-C while
+# following leaves them running and keeps this cast's own code: they are the
+# daemon's now, and nothing about them has gone wrong.
+async def _followed(code: int, *, follower: Follower, lineage: Lineage) -> int:
+    if not lineage.settled:
+        sys.stdout.write(_FOLLOWING)
+    try:
+        settled = await follower.until_settled()
+    except asyncio.CancelledError:
+        sys.stdout.write(_LEFT)
+        return code
+    if code:
+        return code
+    if not settled:
+        sys.stderr.write(_DAEMON_WENT)
+        return 1
+    return 1 if lineage.failed else 0
 
 
 # Only a queued first run asks: a cast typed by hand runs where it was typed, and
@@ -638,7 +703,7 @@ async def _drive(argv: list[str]) -> int:
     _load_folios()
     try:
         plan = _resolve_cast(argv, unattended=unattended)._replace(
-            wired=_WIRED_FLAG in leading
+            wired=_WIRED_FLAG in leading, follow=_NO_FOLLOW_FLAG not in leading
         )
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")

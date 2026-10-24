@@ -42,6 +42,7 @@ _CAST_CONTEXT: dict[str, bool] = {
 _RUNTIME = "vekna.lexicon._inits"
 _RESUME = "--resume"
 _UNATTENDED = "--unattended"
+_NO_FOLLOW = "--no-follow"
 _RECENT = 20
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
@@ -84,16 +85,26 @@ def _runtime() -> _Runtime:
     is_flag=True,
     help="Refuse every decide: the cast is not watched, so a question is a hang.",
 )
+@click.option(
+    "--no-follow",
+    "no_follow",
+    is_flag=True,
+    help="End with the cast's own steps rather than with the casts it queued.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
 def _cast(
     *,
     ritual_args: tuple[str, ...],
     continued: str | None = None,
     unattended: bool = False,
+    no_follow: bool = False,
 ) -> None:
+    flags = [
+        *([_UNATTENDED] if unattended else []),
+        *([_NO_FOLLOW] if no_follow else []),
+    ]
     if continued is not None:
-        raise SystemExit(_continue(continued, unattended=unattended))
-    flags = [_UNATTENDED] if unattended else []
+        raise SystemExit(_continue(continued, flags=flags))
     raise SystemExit(_runtime().main([*flags, *ritual_args]))
 
 
@@ -133,8 +144,7 @@ def _rituals() -> None:
     pass
 
 
-async def _spawn_cast(cast_id: str, *, cwd: str, unattended: bool) -> int:
-    flags = [_UNATTENDED] if unattended else []
+async def _spawn_cast(cast_id: str, *, cwd: str, flags: list[str]) -> int:
     process = await asyncio.create_subprocess_exec(
         sys.executable, "-m", CLI_MODULE, "cast", *flags, _RESUME, cast_id, cwd=cwd
     )
@@ -157,7 +167,7 @@ def _log() -> None:
 # that needs what is in it.
 # The child is handed `_RESUME`, which is the runtime's own flag and skips this
 # layer: reaching `--continue` again is how it would spawn itself forever.
-def _continue(cast_id: str, *, unattended: bool) -> int:
+def _continue(cast_id: str, *, flags: list[str]) -> int:
     journal = Journal(default_runs_root())
     # What `vekna log` and the aborted row print is the id cut short, so what
     # comes back here is a prefix rather than the directory's own name.
@@ -189,9 +199,7 @@ def _continue(cast_id: str, *, unattended: bool) -> int:
         raise click.ClickException(message)
     # The child is handed the whole id: it reads the journal by directory name,
     # and a prefix is this layer's convenience, not the runtime's.
-    return asyncio.run(
-        _spawn_cast(record.hello.cast_id, cwd=root, unattended=unattended)
-    )
+    return asyncio.run(_spawn_cast(record.hello.cast_id, cwd=root, flags=flags))
 
 
 _rituals.add_command(_rituals_list)
