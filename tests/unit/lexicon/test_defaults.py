@@ -60,3 +60,9 @@ class TestDefaults:
 
         with pytest.raises(RitualDefinitionError, match=r"\.vekna\.toml.*'shout'"):
             defaults.of(GREET)
+
+    @staticmethod
+    def test_a_ritual_nobody_set_defaults_for_gets_none():
+        defaults = Defaults([])
+
+        assert defaults.of(GREET) == {}
