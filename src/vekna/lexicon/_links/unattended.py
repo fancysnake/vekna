@@ -9,6 +9,8 @@ from vekna.lexicon._pacts import Channel, UnattendedPromptError
 # refused where it is asked, naming it, rather than dying at the third empty
 # line of a stdin nobody writes to.
 class UnattendedChannel(Channel):
+    attended = False
+
     @override
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False

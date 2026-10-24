@@ -12,10 +12,12 @@ from vekna.folio.shell import ShellResult, shell
 from vekna.lexicon import (
     SHELL_FOCUS,
     Done,
+    NoComponents,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
     StepBoundaryError,
+    attended,
     ritual,
     step,
 )
@@ -217,6 +219,42 @@ class TestWalk:
     ) -> None:
         with pytest.raises(StepBoundaryError, match=r"expected .*Attempt"):
             trial.walk(gates, Failure(budget=1, said="nope"))
+
+
+class Heard(BaseModel):
+    pass
+
+
+class Mode(BaseModel):
+    attended: bool
+
+
+@step
+def heard(_: Heard) -> Done[Mode]:
+    return Done(Mode(attended=attended()))
+
+
+@ritual("heard")
+def heard_cast(_: NoComponents) -> Heard:
+    return Heard()
+
+
+class TestAttended:
+    @staticmethod
+    def test_a_trial_is_attended_unless_told_otherwise(trial: Trial) -> None:
+        assert trial.walk(heard, Heard()) == Done(Mode(attended=True))
+
+    @staticmethod
+    def test_a_walk_can_stand_in_for_an_unattended_cast(trial: Trial) -> None:
+        trial.decide.attended = False
+
+        assert trial.walk(heard, Heard()) == Done(Mode(attended=False))
+
+    @staticmethod
+    def test_a_cast_can_stand_in_for_an_unattended_cast(trial: Trial) -> None:
+        trial.decide.attended = False
+
+        assert trial.cast(heard_cast, NoComponents()) == Mode(attended=False)
 
 
 class TestScriptedOutput:

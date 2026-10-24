@@ -453,6 +453,22 @@ class TestCastNotify:
         assert "\x1b]777" not in capsys.readouterr().out
 
 
+_MODE = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, NoComponents, attended, ritual
+
+
+    class Mode(BaseModel):
+        attended: bool
+
+
+    @ritual("mode")
+    async def mode(_: NoComponents) -> Done[Mode]:
+        return Done(Mode(attended=attended()))
+    """)
+
+
 class TestUnattended:
     @staticmethod
     def test_a_decide_fails_at_the_boundary_naming_its_prompt(
@@ -466,6 +482,20 @@ class TestUnattended:
         assert exit_code == _CAST_FAILED_EXIT
         err = capsys.readouterr().err
         assert "cast failed: unattended cast refused to ask: merge #74 now?" in err
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("leading", "said"), [([], "true"), (["--unattended"], "false")]
+    )
+    def test_a_ritual_can_ask_whether_anybody_is_there(
+        tmp_path, monkeypatch, capsys, leading, said
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_MODE)
+        monkeypatch.chdir(tmp_path)
+
+        assert main([*leading, "mode"]) == 0
+        assert f'result: {{"attended":{said}}}' in capsys.readouterr().out
 
     @staticmethod
     def test_the_flag_alone_is_a_usage_error(capsys):

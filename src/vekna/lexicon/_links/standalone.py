@@ -114,6 +114,9 @@ class _Rite:
 # surface that *can* re-render — the TUI — wants the opposite and will say so
 # itself; that decision belongs to the sink, not here.
 class StandaloneRenderer:
+    # The terminal is somebody: what reaches it is asked of whoever cast it.
+    attended = True
+
     def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin

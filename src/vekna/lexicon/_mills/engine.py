@@ -386,6 +386,13 @@ def replayed() -> JsonValue | None:
     return current_rite().replay
 
 
+# Whether the cast has somebody to ask. For a ritual that would rather not
+# ask at all than have its question refused: a step that skips the work
+# `decide` would have approved, and says so, instead of failing on it.
+def attended() -> bool:
+    return current_rite().channel.attended
+
+
 _current_rite: ContextVar[RiteContext | None] = ContextVar(
     "vekna_current_rite", default=None
 )
