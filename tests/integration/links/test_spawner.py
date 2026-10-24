@@ -118,6 +118,29 @@ class TestSpawner:
         assert not left
         assert not mark.exists()
 
+    # Another user's process is still running; only root may signal it, so the
+    # refusal is faked rather than left to whoever runs the test.
+    @staticmethod
+    async def test_a_cast_it_may_not_signal_is_left_behind(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        mark = tmp_path / "runs" / "c1" / "spawned.json"
+        mark.parent.mkdir(parents=True)
+        mark.write_text('{"cast_id":"c1","pid":4242,"project":"p","tree":null}')
+        signalled: list[tuple[int, int]] = []
+
+        def kill(pid: int, sig: int) -> None:
+            signalled.append((pid, sig))
+            raise PermissionError(1, "Operation not permitted")
+
+        monkeypatch.setattr(os, "kill", kill)
+
+        left = Spawner(command=[], runs=tmp_path / "runs").left_behind()
+
+        assert left == [Spawned(cast_id="c1", pid=4242, project="p", tree=None)]
+        assert signalled == [(4242, 0)]
+        assert mark.exists()
+
     # A daemon stopping cancels its wait; the cast it was waiting on runs on.
     @staticmethod
     async def test_a_cancelled_wait_leaves_the_cast_behind(tmp_path: Path):
