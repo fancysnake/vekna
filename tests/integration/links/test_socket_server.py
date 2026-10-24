@@ -13,6 +13,7 @@ from vekna.wire import (
     CastHello,
     CastMessage,
     CastRequested,
+    DecideClaimed,
     DecideResolved,
     RiteDelta,
     StopRequested,
@@ -52,7 +53,8 @@ class _Daemon(Routes):
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
         self.requests: list[CastRequested] = []
-        self.answers: list[DecideResolved] = []
+        # What surfaces said about prompts, and which surface said it.
+        self.prompted: list[tuple[Surface, DecideClaimed | DecideResolved]] = []
         self.peers: dict[str, Surface] = {}
         self.closed: list[str] = []
 
@@ -69,8 +71,11 @@ class _Daemon(Routes):
         del surface
         self.requests.append(request)
 
-    def answer(self, resolved: DecideResolved) -> None:
-        self.answers.append(resolved)
+    def answer(self, surface: Surface, resolved: DecideResolved) -> None:
+        self.prompted.append((surface, resolved))
+
+    def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
+        self.prompted.append((surface, claimed))
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self.peers[cast_id] = peer
@@ -242,6 +247,26 @@ class TestUncleanExits:
         await _settle()
 
         assert daemon.messages[-1] == CastGoodbye(cast_id="c1", status="ok")
+        await server.close()
+
+    @staticmethod
+    async def test_a_surface_claims_and_answers_as_itself(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        claimed = DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+        resolved = DecideResolved(cast_id="c1", request_id="q1", answer="yes")
+        writer.write(encode_frame(SurfaceHello()))
+        writer.write(encode_frame(claimed))
+        writer.write(encode_frame(resolved))
+        await writer.drain()
+        await _settle()
+
+        writer.close()
+        await _settle()
+
+        surface = daemon.attached[0]
+        assert daemon.prompted == [(surface, claimed), (surface, resolved)]
         await server.close()
 
     @staticmethod

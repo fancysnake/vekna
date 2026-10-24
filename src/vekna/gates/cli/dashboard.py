@@ -4,11 +4,13 @@ import itertools
 import shlex
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from uuid import uuid4
 
 from vekna.pacts.casts import Casts, CastView
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastRequested,
+    DecideClaimed,
     DecideResolved,
     WireMessage,
     allowed_answers,
@@ -199,14 +201,18 @@ class Dashboard:
         if view is None or not view.waiting:
             self._note = "nothing to answer — open a waiting cast first"
             return
-        if not view.hello.wired:
-            self._note = "this cast was run by hand — answer it on its own terminal"
-            return
-        request = next(iter(view.waiting.values()))
+        request = next(iter(view.waiting.values())).request
         allowed = allowed_answers(options=request.options, free=request.free)
         if allowed is not None and answer not in allowed:
             self._note = f"{answer!r} is not one of {', '.join(allowed)}"
             return
+        self._send(
+            DecideClaimed(
+                cast_id=request.cast_id,
+                request_id=request.request_id,
+                claim_id=uuid4().hex,
+            )
+        )
         self._send(
             DecideResolved(
                 cast_id=request.cast_id, request_id=request.request_id, answer=answer

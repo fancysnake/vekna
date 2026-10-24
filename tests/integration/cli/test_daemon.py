@@ -216,9 +216,7 @@ class TestTheView:
             await _eventually(lambda: keys.painted("waiting"))
             await _eventually(lambda: keys.painted("allow Bash?"))
             keys.press("1")
-            await _eventually(
-                lambda: keys.painted("answer it where the cast was started")
-            )
+            await _eventually(lambda: keys.painted("answering here takes it over"))
             keys.press("q")
 
             await peer

@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import itertools
 import sys
-from collections.abc import AsyncGenerator, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +37,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -189,17 +190,34 @@ class DaemonLink:
     # allows. Sent as well as awaited here, so a prompt is never on the wire
     # without somebody listening for what comes back.
     async def answer(self, request: DecideRequested) -> str:
+        awaited = self._awaiting(request)
+        try:
+            return await awaited.future
+        finally:
+            self._pending.answers.pop(request.request_id, None)
+
+    # A prompt this cast's own terminal answers, until a surface claims it: then
+    # the terminal stops taking answers and the surface's comes over the wire,
+    # and a claim let go hands it back to the terminal, asked again.
+    async def answer_here(
+        self, request: DecideRequested, *, ask: Callable[[], Awaitable[str]]
+    ) -> str:
+        awaited = self._awaiting(request)
+        try:
+            return await _first_answer(awaited, ask)
+        finally:
+            self._pending.answers.pop(request.request_id, None)
+
+    def _awaiting(self, request: DecideRequested) -> "_Awaited":
         future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
         awaited = _Awaited(
+            request=request,
             future=future,
             allowed=allowed_answers(options=request.options, free=request.free),
         )
         self._pending.answers[request.request_id] = awaited
         self.send(request)
-        try:
-            return await awaited.future
-        finally:
-            self._pending.answers.pop(request.request_id, None)
+        return awaited
 
     # Held for as long as the block runs. With no daemon there is nobody to
     # share with, so there is no limit to wait on.
@@ -280,6 +298,8 @@ class DaemonLink:
     def _heard(self, message: WireMessage) -> None:
         if isinstance(message, DecideResolved):
             self._answered(message)
+        elif isinstance(message, DecideClaimed):
+            self._claimed(message)
         elif (
             isinstance(message, CodingSlotGranted)
             and (slot := self._pending.slots.get(message.request_id)) is not None
@@ -320,8 +340,15 @@ class DaemonLink:
         if not awaited.future.done():
             awaited.future.set_result(message.answer)
 
+    def _claimed(self, message: DecideClaimed) -> None:
+        if (awaited := self._pending.answers.get(message.request_id)) is not None:
+            awaited.claim(claimed=message.claim_id is not None)
+
     def _detach(self) -> None:
         self._writer = None
+        # A claim is the daemon's; with it gone, the terminal answers again.
+        for awaited in self._pending.answers.values():
+            awaited.claim(claimed=False)
         for slot in self._pending.slots.values():
             if slot.granted is not None:
                 _settle(slot.granted)
@@ -338,10 +365,60 @@ class DaemonLink:
             await writer.wait_closed()
 
 
-@dataclass(frozen=True, kw_only=True)
+# `changed` is set whenever `claimed` flips, which is what a terminal still
+# asking waits on beside its own answer.
+@dataclass(kw_only=True)
 class _Awaited:
+    request: DecideRequested
     future: asyncio.Future[str]
     allowed: tuple[str, ...] | None
+    claimed: bool = False
+    changed: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def claim(self, *, claimed: bool) -> None:
+        if claimed != self.claimed:
+            self.claimed = claimed
+            self.changed.set()
+
+
+# Whichever answers first: the terminal while nobody has claimed the prompt, or
+# a surface over the wire. A flip of the claim ends the round and starts the
+# next, so the terminal stops reading the moment it is taken over and asks again
+# once it is handed back.
+async def _first_answer(awaited: _Awaited, ask: Callable[[], Awaitable[str]]) -> str:
+    awaited.changed.clear()
+    flipped = asyncio.ensure_future(awaited.changed.wait())
+    local = None if awaited.claimed else asyncio.ensure_future(ask())
+    woken: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+    def wake(_: object) -> None:
+        _settle(woken)
+
+    awaited.future.add_done_callback(wake)
+    flipped.add_done_callback(wake)
+    if local is not None:
+        local.add_done_callback(wake)
+    try:
+        await woken
+    finally:
+        awaited.future.remove_done_callback(wake)
+        flipped.cancel()
+        if local is not None:
+            local.cancel()
+        await asyncio.gather(
+            flipped, *([] if local is None else [local]), return_exceptions=True
+        )
+    if awaited.future.done():
+        return awaited.future.result()
+    if local is not None and local.done() and not local.cancelled():
+        return local.result()
+    _say_where(awaited)
+    return await _first_answer(awaited, ask)
+
+
+def _say_where(awaited: _Awaited) -> None:
+    where = "the dashboard has it" if awaited.claimed else "back to this terminal"
+    sys.stderr.write(f"{where}: {awaited.request.prompt}\n")
 
 
 # A coding slot this cast holds or is waiting for. `granted` is what the wait is
@@ -375,8 +452,9 @@ def _settle(future: asyncio.Future[None]) -> None:
 # A cast run by hand keeps its prompt where it is: this asks whatever the cast
 # would have asked anyway — the standalone renderer, one stdin — and tells the
 # daemon a prompt is open on either side of the wait, so a surface can raise a
-# waiting cast and then stop raising it. A spawned cast has no stdin, so with no
-# `inner` the answer comes over the wire from a surface instead.
+# waiting cast and then stop raising it, or claim it and answer it there. A
+# spawned cast has no stdin, so with no `inner` the answer comes over the wire
+# from a surface instead.
 class TeeChannel(Channel):
     def __init__(
         self,
@@ -410,11 +488,15 @@ class TeeChannel(Channel):
         )
         self._open[request.request_id] = request
         try:
-            if (inner := self._inner) is None:
-                answer = await self._link.answer(request)
-            else:
-                self._link.send(request)
-                answer = await inner.decide(prompt=prompt, options=options, free=free)
+            inner = self._inner
+            answer = await (
+                self._link.answer(request)
+                if inner is None
+                else self._link.answer_here(
+                    request,
+                    ask=lambda: inner.decide(prompt=prompt, options=options, free=free),
+                )
+            )
         except BaseException:
             self._link.send(
                 DecideWithdrawn(cast_id=self._cast_id, request_id=request.request_id)

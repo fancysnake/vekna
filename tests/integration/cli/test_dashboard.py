@@ -10,6 +10,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastRequested,
+    DecideClaimed,
     DecideRequested,
     DecideResolved,
     WireMessage,
@@ -244,6 +245,18 @@ class TestCasting:
         assert any("--seconds is missing a value" in frame for frame in keys.frames)
 
 
+# The claim id is minted fresh for every answer, so it is read back off what was
+# sent; everything else about the two messages is fixed.
+def _claimed_and_answered(sent: list[WireMessage], *, answer: str) -> list[WireMessage]:
+    claim = sent[0]
+    assert isinstance(claim, DecideClaimed)
+    assert claim.claim_id
+    return [
+        DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim.claim_id),
+        DecideResolved(cast_id="c1", request_id="q1", answer=answer),
+    ]
+
+
 @pytest.mark.asyncio
 class TestAnswering:
     @staticmethod
@@ -254,7 +267,7 @@ class TestAnswering:
 
         await asyncio.wait_for(dashboard.run(), timeout=2)
 
-        assert sent == [DecideResolved(cast_id="c1", request_id="q1", answer="go")]
+        assert sent == _claimed_and_answered(sent, answer="go")
         assert any("a go|stop" in frame for frame in keys.frames)
 
     @staticmethod
@@ -269,15 +282,15 @@ class TestAnswering:
         assert any("'maybe' is not one of go, stop" in frame for frame in keys.frames)
 
     @staticmethod
-    async def test_a_cast_run_by_hand_is_answered_on_its_own_terminal():
+    async def test_answering_a_cast_run_by_hand_takes_it_over_from_its_terminal():
         hub = Hub()
         _asking(hub, wired=False)
         dashboard, keys, sent = _sending(hub, "1", "a go", "q")
 
         await asyncio.wait_for(dashboard.run(), timeout=2)
 
-        assert not sent
-        assert any("answer it on its own terminal" in frame for frame in keys.frames)
+        assert sent == _claimed_and_answered(sent, answer="go")
+        assert any("answering here takes it over" in frame for frame in keys.frames)
 
     @staticmethod
     async def test_with_no_cast_in_view_there_is_nothing_to_answer():

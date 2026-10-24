@@ -18,6 +18,7 @@ from vekna.wire import (
     CastRefused,
     CastRequested,
     CodingSlotRequested,
+    DecideClaimed,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -60,7 +61,7 @@ class _Unknown(BaseModel):
     cast_id: str
 
 
-def _hello(cast_id: str = "c1") -> CastHello:
+def _hello(cast_id: str = "c1", *, wired: bool = False) -> CastHello:
     return CastHello(
         cast_id=cast_id,
         project_root="/proj",
@@ -68,6 +69,7 @@ def _hello(cast_id: str = "c1") -> CastHello:
         ritual="fix_demo",
         components={"bound": 3},
         started_at=_WHEN,
+        wired=wired,
     )
 
 
@@ -169,7 +171,7 @@ class TestPrompts:
         held = dict(hub.casts["c1"].waiting)
         hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
 
-        assert held["q1"].prompt == "ok?"
+        assert held["q1"].request == _asked()
         assert hub.casts["c1"].waiting == {}
 
     @staticmethod
@@ -620,13 +622,13 @@ class TestPeers:
     def test_an_answer_to_an_open_prompt_goes_to_the_cast_and_not_the_view():
         routed: list[Routed] = []
         hub = Hub(on_routed=routed.append)
-        hub.apply(_hello())
+        hub.apply(_hello(wired=True))
         hub.apply(_asked())
         peer = _Surface()
         hub.open_cast("c1", peer)
         answer = DecideResolved(cast_id="c1", request_id="q1", answer="yes")
 
-        hub.answer(answer)
+        hub.answer(_Surface(), answer)
 
         assert peer.sent == [answer]
         assert "q1" in hub.casts["c1"].waiting
@@ -638,11 +640,13 @@ class TestPeers:
     def test_an_answer_to_no_open_prompt_goes_nowhere():
         routed: list[Routed] = []
         hub = Hub(on_routed=routed.append)
-        hub.apply(_hello())
+        hub.apply(_hello(wired=True))
         peer = _Surface()
         hub.open_cast("c1", peer)
 
-        hub.answer(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+        hub.answer(
+            _Surface(), DecideResolved(cast_id="c1", request_id="q1", answer="yes")
+        )
 
         assert not peer.sent
         assert routed[-1] == Routed(
@@ -656,10 +660,12 @@ class TestPeers:
     def test_an_answer_for_a_cast_with_no_connection_is_dropped():
         routed: list[Routed] = []
         hub = Hub(on_routed=routed.append)
-        hub.apply(_hello())
+        hub.apply(_hello(wired=True))
         hub.apply(_asked())
 
-        hub.answer(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+        hub.answer(
+            _Surface(), DecideResolved(cast_id="c1", request_id="q1", answer="yes")
+        )
 
         assert routed[-1].reason == "the cast is not connected"
 
@@ -717,3 +723,123 @@ class TestPeers:
         hub.apply(CodingSlotRequested(cast_id="c1", request_id="s1"))
 
         assert routed[-1].reason == "coding slots are the circle's"
+
+
+def _claim(claim_id: str | None = "k1") -> DecideClaimed:
+    return DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim_id)
+
+
+def _yes() -> DecideResolved:
+    return DecideResolved(cast_id="c1", request_id="q1", answer="yes")
+
+
+class TestClaims:
+    @staticmethod
+    def test_a_hand_cast_s_prompt_is_its_terminal_s_until_claimed():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+
+        hub.answer(_Surface(), _yes())
+
+        assert not peer.sent
+        assert routed[-1].reason == (
+            "the cast answers it on its own terminal until a surface claims it"
+        )
+
+    @staticmethod
+    def test_a_claim_reaches_the_cast_and_every_surface_and_the_claimer_answers():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window, other = _Surface(), _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.attach_surface(other)
+        other.sent.clear()
+
+        hub.claim(window, _claim())
+        hub.answer(window, _yes())
+
+        assert peer.sent == [_claim(), _yes()]
+        assert other.sent == [_claim()]
+        assert hub.casts["c1"].waiting["q1"].claim_id == "k1"
+
+    @staticmethod
+    def test_a_claimed_prompt_refuses_everybody_else_s_answer():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello(wired=True))
+        hub.apply(_asked())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(_Surface(), _claim())
+
+        hub.answer(_Surface(), _yes())
+
+        assert peer.sent == [_claim()]
+        assert routed[-1].reason == "another surface has claimed the prompt"
+
+    @staticmethod
+    def test_a_claim_on_no_open_prompt_or_with_no_id_is_dropped():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.claim(_Surface(), _claim())
+        hub.apply(_asked())
+
+        hub.claim(_Surface(), _claim(None))
+
+        assert hub.casts["c1"].waiting["q1"].claim_id is None
+        assert [route.reason for route in routed[-3:]] == [
+            "no such prompt",
+            None,
+            "a surface lets go of a claim by leaving",
+        ]
+
+    @staticmethod
+    def test_the_claimer_leaving_lets_go_of_its_claims_and_says_so():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window, other = _Surface(), _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.attach_surface(window)
+        hub.attach_surface(other)
+        hub.claim(window, _claim())
+        other.sent.clear()
+
+        hub.detach_surface(window)
+
+        assert hub.casts["c1"].waiting["q1"].claim_id is None
+        assert peer.sent == [_claim(), _claim(None)]
+        assert other.sent == [_claim(None)]
+
+    @staticmethod
+    def test_a_claim_ends_with_its_prompt_and_is_not_let_go_after():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window = _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(window, _claim())
+
+        hub.apply(_yes())
+        hub.detach_surface(window)
+
+        assert not hub.casts["c1"].waiting
+        assert peer.sent == [_claim()]
+
+    @staticmethod
+    def test_a_late_surface_hears_the_claim_after_the_prompt():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        hub.claim(_Surface(), _claim())
+        late = _Surface()
+
+        hub.attach_surface(late)
+
+        assert late.sent[2:5] == [_asked(), _claim(), GrimoireEnd(cast_id="c1")]

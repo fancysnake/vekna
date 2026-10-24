@@ -30,6 +30,7 @@ from vekna.wire import (
     CastRequested,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideResolved,
     EnqueueAccepted,
     EnqueueRefused,
@@ -291,8 +292,11 @@ class _Daemon(Routes):
     def detach_surface(self, surface: Surface) -> None:
         self._hub.detach_surface(surface)
 
-    def answer(self, resolved: DecideResolved) -> None:
-        self._hub.answer(resolved)
+    def answer(self, surface: Surface, resolved: DecideResolved) -> None:
+        self._hub.answer(surface, resolved)
+
+    def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
+        self._hub.claim(surface, claimed)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

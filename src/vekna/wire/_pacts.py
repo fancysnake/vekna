@@ -242,6 +242,19 @@ class DecideWithdrawn(BaseModel):
     request_id: str
 
 
+# Who answers a prompt. Unclaimed, a cast typed by hand answers its own on its
+# terminal, and a spawned cast's is answered by the terminal following it or by
+# any surface. A surface claims a prompt to take it over: every other answerer
+# stops taking answers for it until the claim lets go, which `claim_id` None
+# says — the claiming surface went away. The id is how a surface tells its own
+# claim from somebody else's.
+class DecideClaimed(BaseModel):
+    kind: Literal["decide_claimed"] = "decide_claimed"
+    cast_id: str
+    request_id: str
+    claim_id: str | None
+
+
 # --- locks ---
 
 
@@ -321,6 +334,7 @@ CastUpdate = (
     | DecideRequested
     | DecideResolved
     | DecideWithdrawn
+    | DecideClaimed
     | LockAcquireRequested
     | LockGranted
     | LockDenied

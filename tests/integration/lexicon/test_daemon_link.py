@@ -34,6 +34,7 @@ from vekna.lexicon._pacts import (
 )
 from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
+from vekna.pacts.routing import Surface
 from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
@@ -44,6 +45,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideResolved,
     EnqueueAccepted,
     EnqueueRefused,
@@ -60,7 +62,7 @@ _TICK = 0.01
 _HeardT = TypeVar("_HeardT")
 
 
-def _hello() -> CastHello:
+def _hello(*, wired: bool = False) -> CastHello:
     return CastHello(
         cast_id=_CAST,
         project_root="/proj",
@@ -68,6 +70,7 @@ def _hello() -> CastHello:
         ritual="fix_demo",
         components={"bound": 3},
         started_at=_WHEN,
+        wired=wired,
     )
 
 
@@ -112,7 +115,7 @@ def _watchers() -> list[asyncio.Task[None]]:
 
 def _waiting(daemon: "_Daemon") -> list[WireMessage]:
     view = daemon.hub.casts.get(_CAST)
-    return [] if view is None else list(view.waiting.values())
+    return [] if view is None else [prompt.request for prompt in view.waiting.values()]
 
 
 class _Daemon:
@@ -134,14 +137,31 @@ class _Renderer:
         self.answer = answer
         self.asked: list[str] = []
         self.released = asyncio.Event()
+        self.cancelled = 0
 
     async def decide(
         self, *, prompt: str, options: object = None, free: bool = False
     ) -> str:
         del options, free
         self.asked.append(prompt)
-        await self.released.wait()
+        try:
+            await self.released.wait()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
         return self.answer
+
+
+# A surface the hub can tell apart from another: what a claim is held by.
+class _Window(Surface):
+    def __init__(self) -> None:
+        self.sent: list[WireMessage] = []
+
+    def send(self, message: WireMessage) -> None:
+        self.sent.append(message)
+
+
+_NOBODY = _Window()
 
 
 @pytest.fixture(name="socket_path")
@@ -480,14 +500,15 @@ class TestAnsweredOverTheWire:
     async def test_a_spawned_cast_takes_the_answer_a_surface_sends(socket_path: Path):
         daemon = _Daemon()
         await daemon.start(socket_path)
-        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
         asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
         await _eventually(lambda: bool(_waiting(daemon)))
 
         daemon.hub.answer(
-            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="go")
+            _NOBODY,
+            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="go"),
         )
 
         assert await asyncio.wait_for(asking, timeout=2) == "go"
@@ -501,7 +522,7 @@ class TestAnsweredOverTheWire:
     ):
         daemon = _Daemon()
         await daemon.start(socket_path)
-        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
         asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
@@ -509,13 +530,14 @@ class TestAnsweredOverTheWire:
         request_id = _asked_id(daemon)
 
         daemon.hub.answer(
-            DecideResolved(cast_id=_CAST, request_id=request_id, answer="maybe")
+            _NOBODY,
+            DecideResolved(cast_id=_CAST, request_id=request_id, answer="maybe"),
         )
         await _settle()
         assert not asking.done()
 
         daemon.hub.answer(
-            DecideResolved(cast_id=_CAST, request_id=request_id, answer="stop")
+            _NOBODY, DecideResolved(cast_id=_CAST, request_id=request_id, answer="stop")
         )
         assert await asyncio.wait_for(asking, timeout=2) == "stop"
         await link.close(status="ok")
@@ -525,7 +547,7 @@ class TestAnsweredOverTheWire:
     async def test_an_answer_to_a_prompt_never_asked_is_dropped(socket_path: Path):
         daemon = _Daemon()
         await daemon.start(socket_path)
-        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
         asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
@@ -538,7 +560,8 @@ class TestAnsweredOverTheWire:
         assert not asking.done()
 
         daemon.hub.answer(
-            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="stop")
+            _NOBODY,
+            DecideResolved(cast_id=_CAST, request_id=_asked_id(daemon), answer="stop"),
         )
         assert await asyncio.wait_for(asking, timeout=2) == "stop"
         await link.close(status="ok")
@@ -552,7 +575,7 @@ class TestAnsweredOverTheWire:
     ):
         daemon = _Daemon()
         await daemon.start(socket_path)
-        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
         asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
@@ -1050,3 +1073,85 @@ class TestQueue:
         )
         await link.close(status="ok")
         await daemon.stop()
+
+
+@pytest.mark.asyncio
+class TestClaimed:
+    @staticmethod
+    async def test_a_claim_stops_the_terminal_and_the_claimer_answers(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Renderer()
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        request_id = _asked_id(daemon)
+        window = _Window()
+
+        daemon.hub.claim(
+            window, DecideClaimed(cast_id=_CAST, request_id=request_id, claim_id="k1")
+        )
+        await _eventually(lambda: renderer.cancelled == 1)
+        daemon.hub.answer(
+            window, DecideResolved(cast_id=_CAST, request_id=request_id, answer="no")
+        )
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        assert renderer.asked == ["go?"]
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_the_claimer_leaving_hands_the_prompt_back_to_the_terminal(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Renderer(answer="yes")
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        window = _Window()
+        daemon.hub.claim(
+            window,
+            DecideClaimed(cast_id=_CAST, request_id=_asked_id(daemon), claim_id="k1"),
+        )
+        await _eventually(lambda: renderer.cancelled == 1)
+
+        daemon.hub.detach_surface(window)
+        await _eventually(lambda: renderer.asked == ["go?", "go?"])
+        renderer.released.set()
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        assert renderer.asked == ["go?", "go?"]
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_the_daemon_going_hands_a_claimed_prompt_back(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Renderer(answer="no")
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        await _eventually(lambda: bool(_waiting(daemon)))
+        daemon.hub.claim(
+            _Window(),
+            DecideClaimed(cast_id=_CAST, request_id=_asked_id(daemon), claim_id="k1"),
+        )
+        await _eventually(lambda: renderer.cancelled == 1)
+
+        await daemon.stop()
+        await _eventually(lambda: renderer.asked == ["go?", "go?"])
+        renderer.released.set()
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        await link.close(status="ok")

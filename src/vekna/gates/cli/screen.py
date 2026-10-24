@@ -30,7 +30,7 @@ _TO_PROJECT = "p this project"
 _EVERY = "all projects"
 _CAST_KEYS = "b back · q quit"
 _ANSWER_KEYS = "a <answer> · b back · q quit"
-_ANSWER_HERE = "answer it where the cast was started"
+_TAKES_OVER = "asked on its own terminal — answering here takes it over"
 _DELTA_TAIL = 12
 # A daemon left up holds every cast it has ever heard, and what an operator
 # came to look at is the ones still going. Every running cast shows whatever
@@ -179,7 +179,7 @@ def _innermost(view: CastView, category: str) -> RiteView | None:
 # and how long that has been true. A cast that ended cleanly needs nothing.
 def _now(view: CastView, now: datetime) -> str:
     if view.waiting:
-        return next(iter(view.waiting.values())).prompt
+        return next(iter(view.waiting.values())).request.prompt
     if view.on_children:
         return "on " + ", ".join(
             request.child[:_ID] for request in view.on_children.values()
@@ -276,13 +276,12 @@ def _carried(hello: CastHello) -> str:
     return carried
 
 
-# A spawned cast is answered from here, and says what it will take; one run by
-# hand is reading its own terminal and nothing else.
+# What the prompt will take. One run by hand is reading its own terminal too,
+# and an answer from here takes it over.
 def _how(view: CastView, request: DecideRequested) -> str:
-    if not view.hello.wired:
-        return _ANSWER_HERE
     allowed = allowed_answers(options=request.options, free=request.free)
-    return "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
+    how = "a <anything>" if allowed is None else f"a {'|'.join(allowed)}"
+    return how if view.hello.wired else f"{how}; {_TAKES_OVER}"
 
 
 def _waiting_lines(view: CastView) -> list[str]:
@@ -292,7 +291,7 @@ def _waiting_lines(view: CastView) -> list[str]:
         "",
         *(
             f" {_WAITING} {request.prompt}   ({_how(view, request)})"
-            for request in view.waiting.values()
+            for request in (prompt.request for prompt in view.waiting.values())
         ),
     ]
 
@@ -375,7 +374,7 @@ def paint(
     found = [view for view in listed if view.hello.cast_id == focus]
     if focus is not None and found:
         body = _drilled(found[0], at)
-        keys = _ANSWER_KEYS if found[0].hello.wired and found[0].waiting else _CAST_KEYS
+        keys = _ANSWER_KEYS if found[0].waiting else _CAST_KEYS
     else:
         where = _EVERY if project is None else _named(project)
         body = [f"vekna — {_counted(listed)}  ({where})", *_listing(listed, at)]
