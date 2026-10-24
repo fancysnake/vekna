@@ -9,6 +9,7 @@ vekna cast merge_ready [--bound N]
 vekna cast triage --link <url>
 vekna cast nap [--naps N] [--seconds N]
 vekna cast tree [--dirty true]
+vekna cast sweep [--base-branch <ref>] [--max-prs N]
 ```
 
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
@@ -29,6 +30,17 @@ vekna cast tree [--dirty true]
   branch; `--dirty true` leaves an untracked file, so the tree is left
   blocked. Start it with `c` from the dashboard: a cast typed in a shell runs
   where it was typed.
+- [`sweep`](sweep.py) is the factory in three rituals. `sweep` lists the open
+  pull requests against the base branch and queues one `ci_watch` for each,
+  then ends. `ci_watch` reads that pull request's CI under a timeout; when CI
+  is red it waits on a `pr_fix` and gives up its process slot while it waits.
+  `pr_fix` is the only one with `worktree=True`: it checks the branch out in
+  a leased tree, has an allowlisted agent fix it, and asks you before it
+  pushes. Forks are never queued: their branches are strangers' code. The
+  repository's base branch and push remote come from `[defaults.*]` in
+  `.vekna.toml`. A failed fix cast, a timeout or a broken `gh` each end in a
+  `Failure` step that reports why. Needs the daemon: start it from the
+  dashboard, and attach to a `pr_fix` to answer its push.
 
 Every one of them holds to the same bargain. The agent works permissively
 inside its step — it edits files and runs commands without stopping for
