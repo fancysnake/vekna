@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from rituals.sweep import (
@@ -5,7 +7,6 @@ from rituals.sweep import (
     CiFix,
     CiWatch,
     Fixed,
-    Listing,
     Queued,
     Sweep,
     Swept,
@@ -18,10 +19,7 @@ from rituals.sweep import (
 from vekna.lexicon import Done, RitualError
 from vekna.trial import Trial
 
-_LIST = (
-    "gh pr list --base main --limit 10 --json number,isCrossRepository"
-    " --jq '.[] | select(.isCrossRepository | not) | .number'"
-)
+_LIST = "gh pr list --base main --limit 1000 --json number,isCrossRepository"
 _CHECKS = "gh pr checks 7 --watch"
 _CHECKOUT = "gh pr checkout 7"
 _DIFF = "git diff --end-of-options main...HEAD"
@@ -30,12 +28,19 @@ _PUSH = "git push --end-of-options origin HEAD"
 _PUSH_IT = "push the fix to #7?"
 
 
+def _listed(*numbers: int, forks: tuple[int, ...] = ()) -> str:
+    return json.dumps(
+        [{"number": n, "isCrossRepository": False} for n in numbers]
+        + [{"number": n, "isCrossRepository": True} for n in forks]
+    )
+
+
 class TestSweep:
     @staticmethod
     def test_queues_one_watch_per_pull_request(trial: Trial) -> None:
-        trial.shell.replies(when="gh pr list *", exit_code=0, stdout="7\n9\n")
+        trial.shell.replies(when="gh pr list *", exit_code=0, stdout=_listed(7, 9))
 
-        transition = trial.walk(fan_out, Listing(base_branch="main", max_prs=10))
+        transition = trial.walk(fan_out, Sweep(base_branch="main"))
 
         assert transition == Done(
             Swept(
@@ -53,11 +58,35 @@ class TestSweep:
         assert trial.queue.rituals == ["ci_watch", "ci_watch"]
 
     @staticmethod
+    def test_a_fork_is_not_queued(trial: Trial) -> None:
+        trial.shell.replies(
+            when="gh pr list *", exit_code=0, stdout=_listed(7, forks=(8,))
+        )
+
+        transition = trial.walk(fan_out, Sweep(base_branch="main"))
+
+        assert transition == Done(Swept(queued=[Queued(pull_request=7, cast_id="c1")]))
+        assert [cast.components for cast in trial.queue.enqueued] == [
+            CiWatch(pull_request=7, base_branch="main")
+        ]
+
+    @staticmethod
+    def test_forks_do_not_use_up_max_prs(trial: Trial) -> None:
+        trial.shell.replies(
+            when="gh pr list *", exit_code=0, stdout=_listed(7, 9, forks=(8,))
+        )
+
+        transition = trial.walk(fan_out, Sweep(base_branch="main", max_prs=1))
+
+        assert transition == Done(Swept(queued=[Queued(pull_request=7, cast_id="c1")]))
+        assert trial.shell.commands == [_LIST]
+
+    @staticmethod
     def test_a_failed_listing_queues_nothing(trial: Trial) -> None:
         trial.shell.replies(when="gh pr list *", exit_code=1, stderr="not a repo")
 
         with pytest.raises(RitualError, match="not a repo"):
-            trial.walk(fan_out, Listing(base_branch="main", max_prs=10))
+            trial.walk(fan_out, Sweep(base_branch="main"))
 
         assert trial.queue.enqueued == []
 
@@ -69,7 +98,7 @@ class TestCiWatch:
 
         result = trial.cast(ci_watch, CiWatch(pull_request=7, base_branch="main"))
 
-        assert result == Watched(pull_request=7, green=True, why="green")
+        assert result == Watched(pull_request=7, outcome="green")
         assert trial.queue.enqueued == []
 
     @staticmethod
@@ -80,7 +109,7 @@ class TestCiWatch:
 
         result = trial.cast(ci_watch, CiWatch(pull_request=7, base_branch="main"))
 
-        assert result == Watched(pull_request=7, green=True, why="green")
+        assert result == Watched(pull_request=7, outcome="green")
         assert trial.steps == ["watch", "fix", "watch"]
         (child,) = trial.queue.enqueued
         assert child.components == CiFix(
@@ -97,7 +126,7 @@ class TestCiWatch:
             ci_watch, CiWatch(pull_request=7, base_branch="main", fixes=0)
         )
 
-        assert result == Watched(pull_request=7, green=False, why="out of fixes")
+        assert result == Watched(pull_request=7, outcome="out of fixes")
         assert trial.queue.enqueued == []
 
     @staticmethod
@@ -107,7 +136,7 @@ class TestCiWatch:
 
         result = trial.cast(ci_watch, CiWatch(pull_request=7, base_branch="main"))
 
-        assert result == Watched(pull_request=7, green=False, why="fix not pushed")
+        assert result == Watched(pull_request=7, outcome="fix not pushed")
 
     @staticmethod
     def test_a_failed_fix_cast_is_the_verdict(trial: Trial) -> None:
@@ -117,7 +146,7 @@ class TestCiWatch:
         result = trial.cast(ci_watch, CiWatch(pull_request=7, base_branch="main"))
 
         assert result == Watched(
-            pull_request=7, green=False, why="cast c1 ended error: no tree"
+            pull_request=7, outcome="failed", detail="cast c1 ended error: no tree"
         )
         assert trial.steps == ["watch", "fix", "fix_failed"]
 
@@ -127,8 +156,8 @@ class TestCiWatch:
 
         result = trial.cast(ci_watch, CiWatch(pull_request=7, base_branch="main"))
 
-        assert result.green is False
-        assert "auth required" in result.why
+        assert result.outcome == "failed"
+        assert "auth required" in result.detail
         assert trial.steps == ["watch", "gave_up"]
 
 
@@ -208,7 +237,7 @@ class TestPrFix:
 class TestSweepCast:
     @staticmethod
     def test_sweep_lists_against_the_base_it_was_given(trial: Trial) -> None:
-        trial.shell.replies(when="gh pr list *", exit_code=0, stdout="")
+        trial.shell.replies(when="gh pr list *", exit_code=0, stdout=_listed())
 
         result = trial.cast(sweep, Sweep(base_branch="main"))
 

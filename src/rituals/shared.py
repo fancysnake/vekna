@@ -17,3 +17,13 @@ Bound = Annotated[int, Field(ge=0)]
 def said(result: ShellResult) -> str:
     joined = "\n".join(part for part in (result.stdout, result.stderr) if part.strip())
     return joined or f"the command exited with code {result.exit_code}"
+
+
+# Untrusted text reaches an agent only inside a fence that opens and closes in
+# one place, so a prompt cannot leave one half of the pair behind.
+def fenced(label: str, data: str) -> str:
+    return (
+        f"\n--- BEGIN UNTRUSTED {label} DATA ---\n"
+        f"{data}"
+        f"\n--- END UNTRUSTED {label} DATA ---\n"
+    )
