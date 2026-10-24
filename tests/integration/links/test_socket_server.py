@@ -9,6 +9,7 @@ import pytest
 from vekna.links.socket_server import Serving, alive, attach, serve
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -53,8 +54,10 @@ class _Daemon(Routes):
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
         self.requests: list[CastRequested] = []
-        # What surfaces said about prompts, and which surface said it.
-        self.prompted: list[tuple[Surface, DecideClaimed | DecideResolved]] = []
+        # What surfaces said about prompts and casts, and which surface said it.
+        self.prompted: list[
+            tuple[Surface, DecideClaimed | DecideResolved | CastCancelRequested]
+        ] = []
         self.peers: dict[str, Surface] = {}
         self.closed: list[str] = []
 
@@ -76,6 +79,9 @@ class _Daemon(Routes):
 
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         self.prompted.append((surface, claimed))
+
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+        self.prompted.append((surface, cancel))
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self.peers[cast_id] = peer
@@ -267,6 +273,23 @@ class TestUncleanExits:
 
         surface = daemon.attached[0]
         assert daemon.prompted == [(surface, claimed), (surface, resolved)]
+        await server.close()
+
+    @staticmethod
+    async def test_a_surface_cancels_a_cast_as_itself(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        _, writer = await attach(socket_path)
+        cancel = CastCancelRequested(cast_id="c1")
+        writer.write(encode_frame(SurfaceHello()))
+        writer.write(encode_frame(cancel))
+        await writer.drain()
+        await _settle()
+
+        writer.close()
+        await _settle()
+
+        assert daemon.prompted == [(daemon.attached[0], cancel)]
         await server.close()
 
     @staticmethod

@@ -2,11 +2,11 @@ import asyncio
 import contextlib
 import itertools
 import sys
-from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
@@ -32,6 +32,7 @@ from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CodingSlotGranted,
@@ -55,6 +56,7 @@ from vekna.wire import (
     read_frames,
 )
 
+_T = TypeVar("_T")
 _REATTACH_SECONDS = 2.0
 _NO_QUEUE = "the queue needs a daemon — run `vekna` to start one"
 _GONE_MID_ENQUEUE = "the daemon went away before it said the cast was queued"
@@ -101,6 +103,7 @@ class DaemonLink:
         self._watcher: asyncio.Task[None] | None = None
         self._closed = False
         self._pending = _Pending()
+        self._cancelled = False
 
     @property
     def hello(self) -> CastHello:
@@ -109,6 +112,21 @@ class DaemonLink:
     @property
     def attached(self) -> bool:
         return self._writer is not None
+
+    # `work` in a task of its own, which a surface asking for this cast to end
+    # cancels.
+    async def cancellable(self, work: Coroutine[None, None, _T]) -> _T:
+        running = asyncio.create_task(work)
+
+        def cancel() -> None:
+            running.cancel()
+
+        self._pending.cancel = cancel
+        return await running
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled
 
     def send(self, message: WireMessage) -> None:
         if (writer := self._writer) is not None:
@@ -309,6 +327,12 @@ class DaemonLink:
         elif isinstance(message, EnqueueAccepted | EnqueueRefused):
             self._enqueued(message)
         elif (
+            isinstance(message, CastCancelRequested)
+            and (cancel := self._pending.cancel) is not None
+        ):
+            self._cancelled = True
+            cancel()
+        elif (
             isinstance(message, AwaitEnded)
             and (awaited := self._pending.awaits.get(message.request_id)) is not None
             and not awaited.ended.done()
@@ -439,6 +463,8 @@ class _Pending:
     slots: dict[str, _Slot] = field(default_factory=dict)
     enqueues: dict[str, asyncio.Future[None]] = field(default_factory=dict)
     awaits: dict[str, _Await] = field(default_factory=dict)
+    # What a surface asking for the cast to end runs.
+    cancel: Callable[[], None] | None = None
 
 
 def _settle(future: asyncio.Future[None]) -> None:

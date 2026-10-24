@@ -22,6 +22,7 @@ from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    CastCancelRequested,
     CastRefused,
     CastRequested,
     StopRequested,
@@ -248,7 +249,9 @@ async def _listen(
     async for message in read_frames(line.reader):
         if isinstance(message, CastRefused):
             say(message.reason)
-        elif not isinstance(message, (SurfaceHello, StopRequested, CastRequested)):
+        elif not isinstance(
+            message, (SurfaceHello, StopRequested, CastRequested, CastCancelRequested)
+        ):
             hub.apply(message)
             changed()
 

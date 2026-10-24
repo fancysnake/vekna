@@ -95,6 +95,9 @@ target-version = ['py311']
 
 [tool.deptry]
 known_first_party = ["vekna"]
+# Textual draws with rich and installs it; its `Text` is what Textual widgets
+# take as styled cell and node labels.
+per_rule_ignores = { DEP003 = ["rich"] }
 
 # MUTMUT
 

@@ -130,7 +130,7 @@ def _fit(text: str, width: int) -> str:
     return (f"{line[: width - 1]}…" if len(line) > width else line).ljust(width)
 
 
-def _clock(seconds: float) -> str:
+def clock(seconds: float) -> str:
     whole = max(0, int(seconds))
     if whole < _MINUTE:
         return f"{whole}s"
@@ -152,7 +152,7 @@ def elapsed(view: CastView, now: datetime) -> str:
     live = view.status in {"running", "queued"}
     if (until := now if live else _ended_at(view)) is None:
         return "—"
-    return _clock((until - view.hello.started_at).total_seconds())
+    return clock((until - view.hello.started_at).total_seconds())
 
 
 def steps_done(view: CastView) -> int:
@@ -192,7 +192,7 @@ def now_doing(view: CastView, now: datetime) -> str:
     doing = (
         f"{step.started.name} · {medium.started.name}" if medium else step.started.name
     )
-    return f"{doing}  {_clock((now - step.started.started_at).total_seconds())}"
+    return f"{doing}  {clock((now - step.started.started_at).total_seconds())}"
 
 
 def _line(index: int, view: CastView, now: datetime) -> str:
@@ -267,13 +267,13 @@ def _rite_lines(view: CastView, tail: int) -> list[str]:
 # A resumed cast is a cast of its own with an id of its own, so what would
 # otherwise read as the same ritual run twice says which cast it carries on
 # from — cut to eight, the form `vekna cast --continue` takes.
-def _carried(hello: CastHello) -> str:
-    carried = (
+def carried(hello: CastHello) -> str:
+    said = (
         "" if hello.resumed_from is None else f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
     )
     if hello.enqueued_by is not None:
-        carried += f"  queued by {hello.enqueued_by[:_ID]}"
-    return carried
+        said += f"  queued by {hello.enqueued_by[:_ID]}"
+    return said
 
 
 # What the prompt will take. One run by hand is reading its own terminal too,
@@ -312,7 +312,7 @@ def drilled(view: CastView, now: datetime, *, tail: int = _DELTA_TAIL) -> list[s
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
         f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
-        f"{_carried(view.hello)}"
+        f"{carried(view.hello)}"
     )
     return [
         header,
@@ -348,7 +348,7 @@ def _row(record: Run) -> str:
         f"{record.hello.cast_id[:_ID]}  {_CAST_GLYPH[record.status]}"
         f"  {record.hello.ritual:<16}"
         f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
-        f"  {record.hello.project_root}{_carried(record.hello)}{_lost(record)}\n"
+        f"  {record.hello.project_root}{carried(record.hello)}{_lost(record)}\n"
     )
 
 

@@ -9,6 +9,7 @@ from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -44,6 +45,7 @@ _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
 _NO_PEER = "the cast is not connected"
+_NOT_RUNNING = "no such running cast"
 _SLOTS_ELSEWHERE = "coding slots are the circle's"
 _QUEUE_ELSEWHERE = "the queue is the circle's"
 _NO_AWAIT = "no such await"
@@ -174,6 +176,19 @@ class Hub(CastBoard, Routes):
         else:
             self._say(kind=resolved.kind, cast_id=resolved.cast_id, action="applied")
 
+    # Forwarded, not applied: the cast cancels itself and says so in its
+    # goodbye. One not running has nothing to cancel, and one that is not
+    # connected cannot be told.
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+        del surface
+        view = self._casts.get(cancel.cast_id)
+        if view is None or view.status != "running":
+            self._drop(cancel, reason=_NOT_RUNNING)
+        elif not self.tell(cancel.cast_id, cancel):
+            self._drop(cancel, reason=_NO_PEER)
+        else:
+            self._say(kind=cancel.kind, cast_id=cancel.cast_id, action="applied")
+
     # Told to every surface and to the cast, so whoever was answering it stops.
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         view = self._casts.get(claimed.cast_id)
@@ -259,7 +274,7 @@ class Hub(CastBoard, Routes):
                 self.detach_surface(surface)
                 self._drop(message, reason=f"surface gone: {error}")
 
-    def _drop(self, message: CastMessage, *, reason: str) -> None:
+    def _drop(self, message: CastMessage | CastCancelRequested, *, reason: str) -> None:
         self._say(
             kind=message.kind, cast_id=message.cast_id, action="dropped", reason=reason
         )

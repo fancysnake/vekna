@@ -11,6 +11,7 @@ from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -668,6 +669,41 @@ class TestPeers:
         )
 
         assert routed[-1].reason == "the cast is not connected"
+
+    @staticmethod
+    def test_a_cancel_goes_to_a_running_cast_s_connection():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello(wired=True))
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+        cancel = CastCancelRequested(cast_id="c1")
+
+        hub.cancel(_Surface(), cancel)
+
+        assert peer.sent == [cancel]
+        assert routed[-1] == Routed(
+            kind="cast_cancel_requested", cast_id="c1", action="applied"
+        )
+
+    @staticmethod
+    def test_a_cancel_for_a_cast_that_ended_goes_nowhere():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello(wired=True))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+
+        hub.cancel(_Surface(), CastCancelRequested(cast_id="c1"))
+
+        assert not peer.sent
+        assert routed[-1] == Routed(
+            kind="cast_cancel_requested",
+            cast_id="c1",
+            action="dropped",
+            reason="no such running cast",
+        )
 
     # A cast that reattached is on its new connection before the old one has
     # finished closing.

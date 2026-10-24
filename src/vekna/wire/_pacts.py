@@ -41,6 +41,9 @@ class CastHello(BaseModel):
     # Said by the enqueuing cast, which has the ritual: the daemon leases a tree
     # before the first spawn instead of learning the need from `NEEDS_TREE`.
     worktree: bool = False
+    # The process saying it, which is what the daemon signals when a cancel
+    # asked over the wire is not acted on.
+    pid: int | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -360,7 +363,16 @@ Opening = SurfaceHello | StopRequested
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused
 
-WireMessage = CastMessage | Opening | Request
+
+# A surface asking for a running cast to end, passed on by the daemon down the
+# cast's own connection. The cast cancels itself, so its rites end cancelled and
+# it says goodbye like any cast that failed, rather than vanishing mid-write.
+class CastCancelRequested(BaseModel):
+    kind: Literal["cast_cancel_requested"] = "cast_cancel_requested"
+    cast_id: str
+
+
+WireMessage = CastMessage | Opening | Request | CastCancelRequested
 
 
 # --- the record on disk ---

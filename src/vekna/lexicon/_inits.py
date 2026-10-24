@@ -3,6 +3,7 @@ import contextlib
 import importlib
 import itertools
 import json
+import os
 import sys
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
@@ -76,6 +77,7 @@ _FOLLOWING = "following the casts this one queued — Ctrl-C leaves them running
 _LEFT = "left them running — `vekna` shows them\n"
 _DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
+_CANCELLED = "cancelled from a window"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory)"
 )
@@ -503,6 +505,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         resumed_from=plan.resumed_from,
         wired=plan.wired,
         enqueued_by=plan.enqueued_by,
+        pid=os.getpid(),
     )
 
 
@@ -546,13 +549,23 @@ async def _cast(
     link, renderer = outs.link, outs.renderer
     try:
         with _throttled(link), CAST_QUEUE.scope(outs.queue):
-            result = await run_cast(
-                ritual=plan.ritual,
-                components=plan.components,
-                grimoire=grimoire,
-                channel=channel,
-                ledger=plan.ledger,
+            result = await link.cancellable(
+                run_cast(
+                    ritual=plan.ritual,
+                    components=plan.components,
+                    grimoire=grimoire,
+                    channel=channel,
+                    ledger=plan.ledger,
+                )
             )
+    # Cut from a window the way Ctrl-C cuts it, and still a goodbye: the daemon
+    # hears why it ended instead of a dropped connection it would offer to
+    # resume.
+    except asyncio.CancelledError:
+        if not link.cancelled:
+            raise
+        sys.stderr.write(f"cast failed: {_CANCELLED}\n")
+        code, detail = 1, _CANCELLED
     except FocusMissingError as error:
         sys.stderr.write(f"{error}\n")
         code, detail = 2, str(error)

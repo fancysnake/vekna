@@ -5,6 +5,7 @@ from pathlib import Path
 
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    CastCancelRequested,
     CastGoodbye,
     CastMessage,
     CastRefused,
@@ -127,7 +128,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 stopping.set()
             # A request is a surface's to make, after it has said it is one.
             elif opened is not None and not isinstance(
-                opened, CastRequested | CastRefused
+                opened, (CastRequested, CastRefused, CastCancelRequested)
             ):
                 await _as_cast(
                     opened,
@@ -163,9 +164,9 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is fanned out to, and says three things back: start a cast, claim
-# a prompt, and answer one. Anything else it sends is read past, to notice the
-# disconnect.
+# A surface is fanned out to, and says four things back: start a cast, claim
+# a prompt, answer one, and cancel a cast. Anything else it sends is read past,
+# to notice the disconnect.
 async def _as_surface(
     frames: AsyncIterator[WireMessage], surface: Surface, *, routes: Routes
 ) -> None:
@@ -179,6 +180,8 @@ async def _as_surface(
                     routes.answer(surface, message)
                 elif isinstance(message, DecideClaimed):
                     routes.claim(surface, message)
+                elif isinstance(message, CastCancelRequested):
+                    routes.cancel(surface, message)
     finally:
         routes.detach_surface(surface)
 

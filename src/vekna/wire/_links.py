@@ -6,6 +6,7 @@ from datetime import UTC
 from pathlib import Path
 
 from ._pacts import (
+    CastCancelRequested,
     CastMessage,
     CastRefused,
     CastRequested,
@@ -40,7 +41,14 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
 async def cast_frames(frames: AsyncIterator[WireMessage]) -> AsyncIterator[CastMessage]:
     async for message in frames:
         if not isinstance(
-            message, (SurfaceHello, StopRequested, CastRequested, CastRefused)
+            message,
+            (
+                SurfaceHello,
+                StopRequested,
+                CastRequested,
+                CastRefused,
+                CastCancelRequested,
+            ),
         ):
             yield message
 

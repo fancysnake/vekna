@@ -39,6 +39,7 @@ from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -590,6 +591,26 @@ class TestAnsweredOverTheWire:
 
         assert await asyncio.wait_for(asking, timeout=2) == "go"
         await link.close(status="ok")
+        await daemon.stop()
+
+
+@pytest.mark.asyncio
+class TestCancelledOverTheWire:
+    @staticmethod
+    async def test_a_cancel_a_surface_sends_cuts_the_cast_s_work(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
+        await link.attach()
+        work = asyncio.create_task(link.cancellable(asyncio.Event().wait()))
+        await _eventually(lambda: _CAST in daemon.hub.casts)
+
+        daemon.hub.cancel(_NOBODY, CastCancelRequested(cast_id=_CAST))
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(work, timeout=2)
+        assert link.cancelled
+        await link.close(status="error", detail="cancelled")
         await daemon.stop()
 
 
