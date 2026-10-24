@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Literal, TextIO
 
 from vekna.lexicon._pacts import (
+    Channel,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -113,7 +114,7 @@ class _Rite:
 # did, which is every rite in a ritual that holds nothing concurrently. A
 # surface that *can* re-render — the TUI — wants the opposite and will say so
 # itself; that decision belongs to the sink, not here.
-class StandaloneRenderer:
+class StandaloneRenderer(Channel):
     def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
         self._out: TextIO = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin

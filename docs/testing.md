@@ -62,6 +62,10 @@ call and what the script still held. An invented `exit_code=0` would send the
 ritual down a branch nobody wrote and report the run as a pass, which is worse
 than no test at all.
 
+A trial is attended, the way a plain cast is. `trial.decide.attended = False`
+is the cast run with `--unattended`: `attended()` answers false, and a `decide`
+the ritual asks anyway raises `UnattendedPromptError`, scripted answer or not.
+
 ## Assert on what the doubles recorded
 
 `trial.shell.commands`, `trial.coding.prompts`, `trial.coding.gated`,

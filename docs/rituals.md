@@ -106,7 +106,14 @@ def report(failure: Failure[Item]) -> Done[Summary]:
 
 `vekna cast --unattended` turns every `decide` into an
 `UnattendedPromptError` raised inside the step, so a ritual meant for cron can
-route it like any other failure.
+route it like any other failure. Or it can ask before asking: `attended()` is
+false in such a cast.
+
+```python
+if not attended():
+    emit_delta(f"{len(threads)} threads wait for you")
+    return Done(summary)
+```
 
 ## Components become flags
 

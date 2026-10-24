@@ -15,6 +15,7 @@ from vekna.lexicon._pacts import (
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
+    UnattendedPromptError,
 )
 from vekna.wire import allowed_answers
 
@@ -153,6 +154,10 @@ class DecideDouble(Channel):
     ) -> str:
         offered = None if options is None else tuple(options)
         self.asked.append(Asked(prompt=prompt, options=offered, free=free))
+        # `attended = False` stands in for `--unattended`, which refuses this.
+        if not self.attended:
+            msg = f"unattended cast refused to ask: {prompt}"
+            raise UnattendedPromptError(msg)
         answer = self._script.take(prompt)
         return self._offered(answer=answer, options=offered, free=free)
 

@@ -13,6 +13,12 @@ when.
 
 ### Added
 
+- **`attended()`** in `vekna.lexicon`: false in a cast run with `--unattended`,
+  so a step can skip what a `decide` would have approved instead of failing on
+  it. An unattended cast stays unattended through `--continue`, `--unattended`
+  on `--continue` makes an attended one unattended, and a cast it queues is
+  unattended too. `trial.decide.attended = False` stands in for the flag in a
+  test, refusing every `decide` as the flag does.
 - **`enqueue` and `await_cast`** in `vekna.folio.flow`. A step queues another
   cast and carries on, or waits for its result, validated as `output=`. A
   waiting cast gives up its process slot until the child ends, and comes back
