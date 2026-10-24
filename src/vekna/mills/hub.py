@@ -6,6 +6,9 @@ from typing_extensions import override
 from vekna.pacts.casts import CastBoard, CastView, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
+    AwaitEnded,
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -19,6 +22,9 @@ from vekna.wire import (
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
+    EnqueueAccepted,
+    EnqueueRefused,
+    EnqueueRequested,
     GrimoireBegin,
     GrimoireEnd,
     LockAcquireRequested,
@@ -38,10 +44,13 @@ _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
 _NO_PEER = "the cast is not connected"
 _SLOTS_ELSEWHERE = "coding slots are the circle's"
+_QUEUE_ELSEWHERE = "the queue is the circle's"
+_NO_AWAIT = "no such await"
 _STARTS_NOTHING = "this daemon starts no casts"
 _LOCKS = (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
 _SLOTS = (CodingSlotRequested, CodingSlotGranted, CodingSlotReleased)
-_ELSEWHERE = (*_LOCKS, *_SLOTS)
+_ENQUEUES = (EnqueueRequested, EnqueueAccepted, EnqueueRefused)
+_ELSEWHERE = (*_LOCKS, *_SLOTS, *_ENQUEUES)
 # What a view is made of: every update but the ones above.
 _Viewed = (
     CastGoodbye
@@ -55,6 +64,9 @@ _Viewed = (
     | DecideResolved
     | DecideWithdrawn
     | TreeBlocked
+    | AwaitRequested
+    | AwaitEnded
+    | AwaitWithdrawn
 )
 
 
@@ -209,6 +221,7 @@ class Hub(CastBoard, Routes):
             yield GrimoireBegin(cast_id=view.hello.cast_id)
             yield from _replay_rites(view)
             yield from view.waiting.values()
+            yield from view.awaiting.values()
             yield GrimoireEnd(cast_id=view.hello.cast_id)
             if view.status == "queued":
                 yield CastQueued(cast_id=view.hello.cast_id)
@@ -237,6 +250,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             # about to say again, so it goes before the replay rebuilds it.
             view.rites.clear()
             view.waiting.clear()
+            view.awaiting.clear()
         case GrimoireEnd():
             pass
         case CastQueued():
@@ -245,13 +259,21 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             view.rites[message.rite_id] = RiteView(started=message)
         case RiteDelta() | RiteFinished():
             refused = _update_rite(view, message)
-        case DecideRequested() | DecideResolved() | DecideWithdrawn():
-            refused = _update_decide(view, message)
+        case (
+            DecideRequested()
+            | DecideResolved()
+            | DecideWithdrawn()
+            | AwaitRequested()
+            | AwaitEnded()
+            | AwaitWithdrawn()
+        ):
+            refused = _update_wait(view, message)
         case CastGoodbye():
             view.status = message.status
             view.detail = message.detail
-            # A cast that is gone is not still asking.
+            # A cast that is gone is not still asking, nor awaiting.
             view.waiting.clear()
+            view.awaiting.clear()
         case TreeBlocked():
             # Said after the cast is gone, and nothing else about it changes.
             view.blocked = message
@@ -269,21 +291,41 @@ def _elsewhere(
         | CodingSlotRequested
         | CodingSlotGranted
         | CodingSlotReleased
+        | EnqueueRequested
+        | EnqueueAccepted
+        | EnqueueRefused
     ),
 ) -> str:
     if isinstance(message, _SLOTS):
         return _SLOTS_ELSEWHERE
+    if isinstance(message, _ENQUEUES):
+        return _QUEUE_ELSEWHERE
     return _LOCKS_LATER
 
 
-def _update_decide(
-    view: CastView, message: DecideRequested | DecideResolved | DecideWithdrawn
+# What a cast is blocked on: a human's answer, or another cast.
+def _update_wait(
+    view: CastView,
+    message: (
+        DecideRequested
+        | DecideResolved
+        | DecideWithdrawn
+        | AwaitRequested
+        | AwaitEnded
+        | AwaitWithdrawn
+    ),
 ) -> str | None:
-    if isinstance(message, DecideRequested):
-        view.waiting[message.request_id] = message
-        return None
-    if view.waiting.pop(message.request_id, None) is None:
-        return _NO_PROMPT
+    match message:
+        case DecideRequested():
+            view.waiting[message.request_id] = message
+        case AwaitRequested():
+            view.awaiting[message.request_id] = message
+        case DecideResolved() | DecideWithdrawn():
+            if view.waiting.pop(message.request_id, None) is None:
+                return _NO_PROMPT
+        case AwaitEnded() | AwaitWithdrawn():
+            if view.awaiting.pop(message.request_id, None) is None:
+                return _NO_AWAIT
     return None
 
 

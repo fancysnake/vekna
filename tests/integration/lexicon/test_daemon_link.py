@@ -2,29 +2,52 @@ import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
 
 import pytest
+from pydantic import BaseModel
 
-from vekna.lexicon._links.daemon import DaemonLink, TeeChannel, ThrottledFocus, to_wire
+from vekna.lexicon._links.daemon import (
+    DaemonLink,
+    LinkQueue,
+    TeeChannel,
+    ThrottledFocus,
+    to_wire,
+)
 from vekna.lexicon._pacts import (
     AskFn,
+    CastEnded,
     CodingCall,
     CodingFocusProtocol,
+    Done,
     FocusReply,
     GateFn,
+    MediumBoundaryError,
+    NoComponents,
+    NoDaemonError,
     RiteBegan,
     RiteEnded,
     RiteStreamed,
+    Ritual,
+    RitualDefinitionError,
+    RitualError,
 )
 from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
 from vekna.wire import (
+    AwaitEnded,
+    AwaitRequested,
+    AwaitWithdrawn,
+    CastGoodbye,
     CastHello,
     CastMessage,
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
     DecideResolved,
+    EnqueueAccepted,
+    EnqueueRefused,
+    EnqueueRequested,
     WireMessage,
 )
 
@@ -32,6 +55,7 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c1"
 _PATIENCE = 200
 _TICK = 0.01
+_HeardT = TypeVar("_HeardT")
 
 
 def _hello() -> CastHello:
@@ -747,3 +771,246 @@ class TestThrottledFocus:
 def _never(question: str, options: Sequence[str] | None) -> Awaitable[str]:
     msg = f"the agent was not meant to ask {question!r} ({options!r})"
     raise AssertionError(msg)
+
+
+class _Queue(Hub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.heard: list[CastMessage] = []
+
+    def apply(self, message: CastMessage) -> None:
+        if isinstance(
+            message, EnqueueRequested | AwaitRequested | AwaitWithdrawn | CastGoodbye
+        ):
+            self.heard.append(message)
+        super().apply(message)
+
+
+class _Nap(BaseModel):
+    minutes: int
+
+
+def _nothing(_: BaseModel) -> Awaitable[Done[None]]:
+    return asyncio.sleep(0, result=Done(None))
+
+
+_NAP = Ritual(
+    name="tome:nap",
+    components=_Nap,
+    run=_nothing,
+    max_steps=1,
+    exits=(),
+    ends=True,
+    worktree=True,
+)
+
+
+def _nap(name: str) -> Ritual:
+    if name != "nap":
+        msg = f"no ritual named {name!r}"
+        raise RitualDefinitionError(msg)
+    return _NAP
+
+
+async def _attached(socket_path: Path) -> tuple[_Queue, _Daemon, DaemonLink]:
+    hub = _Queue()
+    daemon = _Daemon(hub)
+    await daemon.start(socket_path)
+    link = DaemonLink(socket_path=socket_path, hello=_hello())
+    await link.attach()
+    return hub, daemon, link
+
+
+def _first(heard: list[CastMessage], kind: type[_HeardT]) -> _HeardT:
+    return next(message for message in heard if isinstance(message, kind))
+
+
+@pytest.mark.asyncio
+class TestQueue:
+    @staticmethod
+    async def test_a_child_is_queued_by_the_name_that_means_one_ritual(
+        socket_path: Path,
+    ):
+        hub, daemon, link = await _attached(socket_path)
+        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+
+        enqueuing = asyncio.create_task(
+            queue.enqueue(ritual="nap", components=_Nap(minutes=5))
+        )
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, EnqueueRequested)
+        hub.tell(_CAST, EnqueueAccepted(cast_id=_CAST, request_id=asked.request_id))
+
+        assert await asyncio.wait_for(enqueuing, timeout=2) == asked.hello.cast_id
+        child = asked.hello
+        assert (child.ritual, child.components) == ("tome:nap", {"minutes": 5})
+        assert (child.project_root, child.project) == ("/proj", "/proj/.git")
+        assert (child.enqueued_by, child.worktree, child.wired) == (_CAST, True, True)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_a_refusal_says_why(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+
+        enqueuing = asyncio.create_task(
+            queue.enqueue(ritual="nap", components=_Nap(minutes=5))
+        )
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, EnqueueRequested)
+        hub.tell(
+            _CAST,
+            EnqueueRefused(cast_id=_CAST, request_id=asked.request_id, reason="gone"),
+        )
+
+        with pytest.raises(RitualError, match="not queued: gone"):
+            await asyncio.wait_for(enqueuing, timeout=2)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_components_of_another_ritual_are_refused_before_the_wire(
+        socket_path: Path,
+    ):
+        hub, daemon, link = await _attached(socket_path)
+        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+
+        with pytest.raises(MediumBoundaryError, match="tome:nap takes _Nap, not"):
+            await queue.enqueue(ritual="nap", components=NoComponents())
+
+        assert not [m for m in hub.heard if isinstance(m, EnqueueRequested)]
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_with_no_daemon_the_queue_is_refused(socket_path: Path):
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+
+        with pytest.raises(NoDaemonError, match="needs a daemon"):
+            await link.enqueue(_hello())
+        with pytest.raises(NoDaemonError, match="needs a daemon"):
+            await link.await_end("c2")
+
+    @staticmethod
+    async def test_a_daemon_gone_before_it_answers_fails_the_enqueue(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        enqueuing = asyncio.create_task(link.enqueue(_hello()))
+        await _eventually(lambda: bool(hub.heard))
+
+        await daemon.stop()
+
+        with pytest.raises(NoDaemonError, match="went away before"):
+            await asyncio.wait_for(enqueuing, timeout=2)
+        await link.close(status="ok")
+
+    @staticmethod
+    async def test_an_await_returns_how_the_child_ended(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+
+        awaiting = asyncio.create_task(link.await_end("c2"))
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, AwaitRequested)
+        ended = AwaitEnded(
+            cast_id=_CAST,
+            request_id=asked.request_id,
+            child="c2",
+            status="ok",
+            result={"n": 1},
+        )
+        hub.tell(_CAST, ended)
+
+        assert await asyncio.wait_for(awaiting, timeout=2) == ended
+        assert asked.child == "c2"
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_a_cancelled_await_is_withdrawn(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        awaiting = asyncio.create_task(link.await_end("c2"))
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, AwaitRequested)
+
+        awaiting.cancel()
+
+        withdrawn = AwaitWithdrawn(cast_id=_CAST, request_id=asked.request_id)
+        await _eventually(lambda: withdrawn in hub.heard)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # The next daemon answers off its journal.
+    @staticmethod
+    async def test_an_await_outlives_the_daemon_and_is_said_again(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        awaiting = asyncio.create_task(link.await_end("c2"))
+        await _eventually(lambda: bool(hub.heard))
+        await daemon.stop()
+        await _settle()
+        assert not awaiting.done()
+
+        hub = _Queue()
+        daemon = _Daemon(hub)
+        await daemon.start(socket_path)
+        await link.attach()
+
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, AwaitRequested)
+        ended = AwaitEnded(
+            cast_id=_CAST, request_id=asked.request_id, child="c2", status="error"
+        )
+        hub.tell(_CAST, ended)
+        assert await asyncio.wait_for(awaiting, timeout=2) == ended
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_the_goodbye_carries_the_result(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+
+        await link.close(status="ok", result={"n": 1})
+
+        await _eventually(lambda: bool(hub.heard))
+        assert hub.heard == [CastGoodbye(cast_id=_CAST, status="ok", result={"n": 1})]
+        await daemon.stop()
+
+    @staticmethod
+    async def test_an_answer_to_an_enqueue_never_asked_is_dropped(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        enqueuing = asyncio.create_task(link.enqueue(_hello()))
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, EnqueueRequested)
+
+        hub.tell(_CAST, EnqueueAccepted(cast_id=_CAST, request_id="never"))
+        await _settle()
+        assert not enqueuing.done()
+
+        hub.tell(_CAST, EnqueueAccepted(cast_id=_CAST, request_id=asked.request_id))
+        await asyncio.wait_for(enqueuing, timeout=2)
+        await link.close(status="ok")
+        await daemon.stop()
+
+    @staticmethod
+    async def test_the_queue_hands_the_medium_how_the_child_ended(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+        queue = LinkQueue(link=link, parent=_hello(), ritual=_nap)
+
+        awaiting = asyncio.create_task(queue.await_end("c2"))
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, AwaitRequested)
+        hub.tell(
+            _CAST,
+            AwaitEnded(
+                cast_id=_CAST,
+                request_id=asked.request_id,
+                child="c2",
+                status="error",
+                detail="red",
+            ),
+        )
+
+        assert await asyncio.wait_for(awaiting, timeout=2) == CastEnded(
+            status="error", detail="red", result=None
+        )
+        await link.close(status="ok")
+        await daemon.stop()

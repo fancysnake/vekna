@@ -21,6 +21,8 @@ from vekna.wire import (
     run_file,
 )
 
+_KEPT = frozenset({"queued", "running"})
+
 
 # Everything the daemon saw, on disk, keyed by cast. `run.json` is the index —
 # what the cast was and how it ended — and `events.jsonl` is the wire verbatim,
@@ -150,7 +152,8 @@ class Journal:
 
     # Nothing else ever removes a cast, so without this the runs root grows for
     # as long as the machine lives and every `vekna log` pays for all of it.
-    # A cast still running is left alone whatever its age. A directory whose
+    # A cast still running or queued is left alone whatever its age: a queued
+    # record is the queue itself. A directory whose
     # record cannot be read is collected like a finished cast: nothing resumes
     # it, and left alone it was the one thing here that never went away. It is
     # not a hello mid-write, because this runs before the daemon serves.
@@ -167,7 +170,7 @@ class Journal:
     def prune(self, *, keep: int) -> list[str]:
         failed: list[str] = []
         for run in self._newest_first()[keep:]:
-            if not isinstance(run, DamagedRun) and run.status == "running":
+            if not isinstance(run, DamagedRun) and run.status in _KEPT:
                 continue
             directory = run_file(self._root, _cast_id(run)).parent
             try:
@@ -182,6 +185,15 @@ class Journal:
         found = list(self._all())
         found.sort(key=_started, reverse=True)
         return found
+
+    # Oldest first, the order they were queued in: what a daemon that stopped
+    # left waiting is queued again by the next one.
+    def queued(self) -> list[RunRecord]:
+        return [
+            run
+            for run in reversed(self._newest_first())
+            if not isinstance(run, DamagedRun) and run.status == "queued"
+        ]
 
     def _all(self) -> Iterator[Run]:
         if not self._root.is_dir():
@@ -233,6 +245,7 @@ class Journal:
             return
         record.status = goodbye.status
         record.detail = goodbye.detail
+        record.result = goodbye.result
         self._write(record)
 
 

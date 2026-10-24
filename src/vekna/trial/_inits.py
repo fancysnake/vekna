@@ -7,6 +7,7 @@ from typing import Self, TypeVar
 from pydantic import BaseModel
 
 from vekna.lexicon._mills.engine import (
+    CAST_QUEUE,
     CODING_FOCUS,
     SHELL_FOCUS,
     Grimoire,
@@ -17,7 +18,7 @@ from vekna.lexicon._mills.engine import (
 )
 from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
 
-from ._links import CodingDouble, DecideDouble, ShellDouble
+from ._links import CodingDouble, DecideDouble, QueueDouble, ShellDouble
 from ._mills import Recorder, Script
 from ._pacts import TrialError
 
@@ -47,16 +48,19 @@ class Trial:
         self.coding = CodingDouble(Script(kind="coding"))
         self.shell = ShellDouble(Script(kind="shell"))
         self.decide = DecideDouble(Script(kind="decide"))
+        self.queue = QueueDouble(Script(kind="await_cast"))
         self.result: BaseModel | None = None
         self._recorder = Recorder()
-        self._installed = contextlib.ExitStack()
-        self._active = False
+        # Set only inside the `with` block.
+        self._installed: contextlib.ExitStack | None = None
 
     def __enter__(self) -> Self:
-        self._installed.enter_context(steps_scope())
-        self._installed.enter_context(CODING_FOCUS.scope(self.coding))
-        self._installed.enter_context(SHELL_FOCUS.scope(self.shell))
-        self._active = True
+        installed = contextlib.ExitStack()
+        installed.enter_context(steps_scope())
+        installed.enter_context(CODING_FOCUS.scope(self.coding))
+        installed.enter_context(SHELL_FOCUS.scope(self.shell))
+        installed.enter_context(CAST_QUEUE.scope(self.queue))
+        self._installed = installed
         return self
 
     def __exit__(
@@ -65,17 +69,16 @@ class Trial:
         error: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        try:
-            self._installed.close()
-        finally:
-            self._active = False
+        installed, self._installed = self._installed, None
+        if installed is not None:
+            installed.close()
 
     # Outside the block nothing is installed, and `shell()` falls back to its
     # own default — which is bash. A test that forgot the `with` would run the
     # command for real, record nothing on the double, and pass. Refused here
     # rather than discovered by a repository that lost a branch to it.
     def _entered(self) -> None:
-        if not self._active:
+        if self._installed is None:
             msg = "a Trial answers only inside its `with` block"
             raise TrialError(msg)
 

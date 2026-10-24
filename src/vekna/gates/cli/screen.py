@@ -47,7 +47,16 @@ _WORD = {
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = ("running", "waiting", "recovering", "queued", "done", "failed", "aborted")
+_TALLY = (
+    "running",
+    "waiting",
+    "awaiting",
+    "recovering",
+    "queued",
+    "done",
+    "failed",
+    "aborted",
+)
 _STATUS = len("recovering")
 _ID = 8
 _RITUAL = 15
@@ -94,6 +103,8 @@ def _word(view: CastView) -> str:
     if view.status == "running":
         if view.waiting:
             return "waiting"
+        if view.awaiting:
+            return "awaiting"
         if _recovering(view):
             return "recovering"
     return _WORD[view.status]
@@ -169,6 +180,10 @@ def _innermost(view: CastView, category: str) -> RiteView | None:
 def _now(view: CastView, now: datetime) -> str:
     if view.waiting:
         return next(iter(view.waiting.values())).prompt
+    if view.awaiting:
+        return "awaiting " + ", ".join(
+            request.child[:_ID] for request in view.awaiting.values()
+        )
     if view.status == "disconnected":
         return f"vekna cast --continue {view.hello.cast_id[:_ID]}"
     if (step := _innermost(view, "step")) is None:
@@ -253,9 +268,12 @@ def _rite_lines(view: CastView) -> list[str]:
 # otherwise read as the same ritual run twice says which cast it carries on
 # from — cut to eight, the form `vekna cast --continue` takes.
 def _carried(hello: CastHello) -> str:
-    if hello.resumed_from is None:
-        return ""
-    return f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
+    carried = (
+        "" if hello.resumed_from is None else f"  {_MEDIUM} {hello.resumed_from[:_ID]}"
+    )
+    if hello.enqueued_by is not None:
+        carried += f"  queued by {hello.enqueued_by[:_ID]}"
+    return carried
 
 
 # A spawned cast is answered from here, and says what it will take; one run by

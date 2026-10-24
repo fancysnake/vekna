@@ -44,6 +44,7 @@ class _Pool:
         self,
         *,
         held: set[str] | None = None,
+        stuck: set[str] | None = None,
         count: int = 2,
         prepare: str | None = None,
     ) -> str | None:
@@ -51,6 +52,7 @@ class _Pool:
             project_root=str(self.repo),
             project=str(self.repo / ".git"),
             held=held or set(),
+            stuck=stuck or set(),
             count=count,
         )
         if tree is not None:
@@ -101,6 +103,24 @@ class TestLease:
         assert first is not None
 
         assert await pool.lease(held={first}, count=1) is None
+
+    # Its holder awaits a cast that is waiting for a tree: neither ends.
+    @staticmethod
+    async def test_a_full_pool_held_only_by_stuck_casts_says_so(pool: _Pool):
+        first = await pool.lease(count=1)
+        assert first is not None
+
+        with pytest.raises(TreeError, match=r"held by a cast awaiting .*/1$"):
+            await pool.lease(held={first}, stuck={first}, count=1)
+
+    @staticmethod
+    async def test_one_tree_not_stuck_is_worth_waiting_for(pool: _Pool):
+        first = await pool.lease(count=2)
+        assert first is not None
+        second = await pool.lease(held={first}, count=2)
+        assert second is not None
+
+        assert await pool.lease(held={first, second}, stuck={first}, count=2) is None
 
     # A dead cast left its tree on its own branch; the lease is what parks it.
     @staticmethod

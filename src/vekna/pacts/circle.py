@@ -55,9 +55,16 @@ class TreeError(Exception):
 class Trees(Protocol):
     # A free tree, or a new one while the pool is under `count`; `None` while
     # one is held, as it frees when its cast ends. Raises `TreeError`, also
-    # when every tree is blocked and none held, since nothing would free one.
+    # when every tree is blocked or `stuck` — held by a cast awaiting one that
+    # waits for a tree — since nothing would free one.
     async def lease(
-        self, *, project_root: str, project: str, held: set[str], count: int
+        self,
+        *,
+        project_root: str,
+        project: str,
+        held: set[str],
+        stuck: set[str],
+        count: int,
     ) -> str | None: ...
 
     # Once per tree, not per lease. Raises `TreeError`.

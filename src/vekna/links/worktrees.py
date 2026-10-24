@@ -30,7 +30,13 @@ class GitTrees(Trees):
         self._root = root
 
     async def lease(
-        self, *, project_root: str, project: str, held: set[str], count: int
+        self,
+        *,
+        project_root: str,
+        project: str,
+        held: set[str],
+        stuck: set[str],
+        count: int,
     ) -> str | None:
         try:
             home = await asyncio.to_thread(_home, self._root, project)
@@ -59,8 +65,15 @@ class GitTrees(Trees):
                 "HEAD",
             )
             return str(tree)
-        if len(blocked) < len(pool):
+        holding = {tree for tree in pool.values() if tree in taken}
+        if not holding <= await asyncio.to_thread(_resolved, stuck):
             return None
+        if holding:
+            msg = (
+                "every tree is blocked or held by a cast awaiting one that needs a"
+                f" tree: {', '.join(sorted(str(tree) for tree in holding))}"
+            )
+            raise TreeError(msg)
         msg = f"every tree is blocked: {', '.join(blocked)}"
         raise TreeError(msg)
 

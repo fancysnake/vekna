@@ -35,6 +35,12 @@ class CastHello(BaseModel):
     # Spawned by the daemon, so its prompts are answered over the wire. A cast
     # run by hand answers on its own terminal and nowhere else.
     wired: bool = False
+    # The cast whose `enqueue` made this one. What a sweep spawned is a query
+    # over the journal, not a list anybody keeps.
+    enqueued_by: str | None = None
+    # Said by the enqueuing cast, which has the ritual: the daemon leases a tree
+    # before the first spawn instead of learning the need from `NEEDS_TREE`.
+    worktree: bool = False
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -45,6 +51,9 @@ class CastGoodbye(BaseModel):
     cast_id: str
     status: Literal["ok", "error", "disconnected"]
     detail: str | None = None
+    # The ritual's return model as JSON, for a cast that awaits this one. The
+    # daemon relays it; the awaiting cast validates it, having the lexicon.
+    result: JsonValue | None = None
 
 
 # What a connection opens with is what it is. A cast says `CastHello`; anything
@@ -109,6 +118,64 @@ class GrimoireBegin(BaseModel):
 class GrimoireEnd(BaseModel):
     kind: Literal["grimoire_end"] = "grimoire_end"
     cast_id: str
+
+
+# --- the queue ---
+
+
+# A cast asking the daemon to queue another. The child's hello is whole: the
+# enqueuing cast resolved the ritual and dumped the components, and the daemon,
+# which loads no ritual, only checks the tree is there.
+class EnqueueRequested(BaseModel):
+    kind: Literal["enqueue_requested"] = "enqueue_requested"
+    cast_id: str
+    request_id: str
+    hello: CastHello
+
+
+class EnqueueAccepted(BaseModel):
+    kind: Literal["enqueue_accepted"] = "enqueue_accepted"
+    cast_id: str
+    request_id: str
+
+
+class EnqueueRefused(BaseModel):
+    kind: Literal["enqueue_refused"] = "enqueue_refused"
+    cast_id: str
+    request_id: str
+    reason: str
+
+
+# The cast stops counting against its project's processes until `child` ends,
+# and keeps its tree: its checkout has to be there when it carries on.
+class AwaitRequested(BaseModel):
+    kind: Literal["await_requested"] = "await_requested"
+    cast_id: str
+    request_id: str
+    child: str
+
+
+# Sent once a slot is free again, so a parent coming back never runs its
+# project past `processes`.
+class AwaitEnded(BaseModel):
+    kind: Literal["await_ended"] = "await_ended"
+    cast_id: str
+    request_id: str
+    child: str
+    status: Literal["ok", "error", "disconnected"]
+    detail: str | None = None
+    result: JsonValue | None = None
+
+
+# The wait was cancelled. The child is not: it was queued to be run.
+class AwaitWithdrawn(BaseModel):
+    kind: Literal["await_withdrawn"] = "await_withdrawn"
+    cast_id: str
+    request_id: str
+
+
+EnqueueMessage = EnqueueRequested | EnqueueAccepted | EnqueueRefused
+AwaitMessage = AwaitRequested | AwaitEnded | AwaitWithdrawn
 
 
 # --- rite lifecycle ---
@@ -262,6 +329,12 @@ CastUpdate = (
     | CodingSlotGranted
     | CodingSlotReleased
     | TreeBlocked
+    | EnqueueRequested
+    | EnqueueAccepted
+    | EnqueueRefused
+    | AwaitRequested
+    | AwaitEnded
+    | AwaitWithdrawn
 )
 
 CastMessage = CastHello | CastUpdate
@@ -296,6 +369,7 @@ class RunRecord(BaseModel):
     status: CastStatus = "running"
     detail: str | None = None
     gapped: bool = False
+    result: JsonValue | None = None
 
 
 # --- framing ---

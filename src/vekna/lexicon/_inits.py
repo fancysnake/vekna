@@ -22,13 +22,14 @@ from vekna.wire import (
     project_of,
 )
 
-from ._links.daemon import DaemonLink, TeeChannel, ThrottledFocus, to_wire
+from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer
 from ._links.unattended import UnattendedChannel
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
+    CAST_QUEUE,
     CODING_FOCUS,
     Compendium,
     Grimoire,
@@ -78,6 +79,7 @@ _LOAD_ERRORS = (RitualError, ValueError, ImportError, OSError)
 # Validated rather than dumped: `model_dump()` hands back `dict[str, Any]`, and
 # what the wire carries is JSON.
 _COMPONENTS: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+_RESULT: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 # The lexicon may not import a folio, so each one is loaded by name and asked
 # to register what it offers.
 _FOLIOS = ("vekna.folio.coding", "vekna.folio.coding_claude")
@@ -399,6 +401,10 @@ class _Plan(NamedTuple):
     # Run somewhere other than the tree it was asked from, which only the tree
     # the daemon leased for it is: its first spawn is always where it was asked.
     leased: bool = False
+    # What `enqueue` resolves a ritual's name against; none for a `--prompt`.
+    compendium: Compendium | None = None
+    # The cast that queued this one, kept on the hello its own run says.
+    enqueued_by: str | None = None
 
 
 # The record holds the components as the CLI already validated them once, so
@@ -407,7 +413,8 @@ class _Plan(NamedTuple):
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
-    the_ritual = _build_library(Path.cwd()).compendium.ritual(hello.ritual)
+    compendium = _build_library(Path.cwd()).compendium
+    the_ritual = compendium.ritual(hello.ritual)
     components = the_ritual.components.model_validate(hello.components)
     if resumption.record.status == "queued":
         return _Plan(
@@ -416,6 +423,8 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
             unattended,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
+            compendium=compendium,
+            enqueued_by=hello.enqueued_by,
         )
     return _Plan(
         ritual=the_ritual,
@@ -423,6 +432,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
         unattended=unattended,
         ledger=Ledger.from_resumption(resumption),
         resumed_from=cast_id,
+        compendium=compendium,
     )
 
 
@@ -439,9 +449,13 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
         return _resume(wanted[0], unattended=unattended)
-    the_ritual = _build_library(Path.cwd()).compendium.ritual(name)
+    compendium = _build_library(Path.cwd()).compendium
+    the_ritual = compendium.ritual(name)
     return _Plan(
-        the_ritual, the_ritual.components.model_validate(parse_flags(flags)), unattended
+        the_ritual,
+        the_ritual.components.model_validate(parse_flags(flags)),
+        unattended,
+        compendium=compendium,
     )
 
 
@@ -461,6 +475,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         started_at=datetime.now(tz=UTC),
         resumed_from=plan.resumed_from,
         wired=plan.wired,
+        enqueued_by=plan.enqueued_by,
     )
 
 
@@ -499,7 +514,13 @@ async def _cast(
     renderer: StandaloneRenderer,
 ) -> int:
     try:
-        with _throttled(link):
+        queue = LinkQueue(
+            link=link,
+            parent=link.hello,
+            # A `--prompt` cast has no rituals, so whatever it names is no ritual.
+            ritual=(plan.compendium or Compendium([])).ritual,
+        )
+        with _throttled(link), CAST_QUEUE.scope(queue):
             result = await run_cast(
                 ritual=plan.ritual,
                 components=plan.components,
@@ -519,7 +540,14 @@ async def _cast(
         renderer.notify("failed", f"{plan.ritual.name}: {error}")
         raise
     else:
-        await link.close(status="ok")
+        await link.close(
+            status="ok",
+            result=(
+                None
+                if result is None
+                else _RESULT.validate_json(result.model_dump_json())
+            ),
+        )
         renderer.notify("done", plan.ritual.name)
         sys.stdout.write(f"result: {_rendered(result)}\n")
         return 0

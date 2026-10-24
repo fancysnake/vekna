@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import fcntl
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
@@ -16,11 +16,13 @@ from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive
 from vekna.links.worktrees import GitTrees
-from vekna.mills.circle import Circle, CodingPool, Leasing, LeftBehind
+from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
+    AwaitRequested,
+    AwaitWithdrawn,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -29,6 +31,9 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideResolved,
+    EnqueueAccepted,
+    EnqueueRefused,
+    EnqueueRequested,
     StopRequested,
     default_runs_root,
     default_socket_path,
@@ -127,7 +132,18 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
     )
-    circle = Circle(hub=hub, left=left, leasing=leasing, limits=limits)
+    circle = Circle(
+        hub=hub,
+        left=left,
+        leasing=leasing,
+        limits=limits,
+        awaits=Awaits(hub=hub, records=journal.read),
+    )
+    # What a stopped daemon left waiting, less what it had already spawned.
+    running = {left_over.cast_id for left_over in spawned}
+    for record in await asyncio.to_thread(journal.queued):
+        if record.hello.cast_id not in running:
+            circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
     server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
     _logged(f"listening on {path}")
@@ -215,11 +231,41 @@ class _Daemon(Routes):
             self._pool.requested(message)
         elif isinstance(message, CodingSlotReleased):
             self._pool.released(message)
+        elif isinstance(message, EnqueueRequested):
+            self._spawn_task(self._enqueued(message))
         else:
             self._hub.apply(message)
             if isinstance(message, CastGoodbye):
                 self._pool.ended(message.cast_id)
-                self._circle.ended()
+                self._circle.ended(message.cast_id)
+            elif isinstance(message, AwaitRequested):
+                self._circle.wait_on(message)
+            elif isinstance(message, AwaitWithdrawn):
+                self._circle.withdrawn(message)
+
+    # The hello is the enqueuing cast's; all that is checked here is that the
+    # tree it names is still there to spawn in.
+    async def _enqueued(self, request: EnqueueRequested) -> None:
+        root = request.hello.project_root
+        if not await asyncio.to_thread(Path(root).is_dir):
+            refused = EnqueueRefused(
+                cast_id=request.cast_id,
+                request_id=request.request_id,
+                reason=f"{root} is not a directory",
+            )
+            self._hub.tell(request.cast_id, refused)
+            return
+        self._circle.enqueue(request.hello)
+        accepted = EnqueueAccepted(
+            cast_id=request.cast_id, request_id=request.request_id
+        )
+        self._hub.tell(request.cast_id, accepted)
+
+    def _spawn_task(self, work: Coroutine[None, None, None]) -> asyncio.Task[None]:
+        task = asyncio.create_task(work)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
 
     def attach_surface(self, surface: Surface) -> None:
         self._hub.attach_surface(surface)
@@ -239,9 +285,7 @@ class _Daemon(Routes):
     # Resolving the project asks git, so the queueing is a task of its own
     # rather than a wait inside the surface's read loop.
     def request(self, surface: Surface, request: CastRequested) -> None:
-        task = asyncio.create_task(self._queued(surface, request))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        task = self._spawn_task(self._queued(surface, request))
 
         def settled(done: asyncio.Task[None]) -> None:
             if done.cancelled() or (error := done.exception()) is None:

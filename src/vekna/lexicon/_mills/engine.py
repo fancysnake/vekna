@@ -14,6 +14,7 @@ from pydantic import BaseModel, JsonValue
 from vekna.lexicon._mills._annotations import _failure_of
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
+    CastQueueProtocol,
     Channel,
     CodingFocusProtocol,
     Done,
@@ -308,6 +309,7 @@ _clearers: list[Callable[[], None]] = []
 
 CODING_FOCUS: FocusSlot[CodingFocusProtocol] = FocusSlot("coding")
 SHELL_FOCUS: FocusSlot[ShellFocusProtocol] = FocusSlot("shell")
+CAST_QUEUE: FocusSlot[CastQueueProtocol] = FocusSlot("enqueue")
 
 # A one-shot prompt is the same callable whichever medium offers it, so a name
 # is all it needs to be keyed by.

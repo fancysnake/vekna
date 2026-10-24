@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 from typing import Literal, TypeVar, overload
 
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from vekna.lexicon import (
+    CAST_QUEUE,
+    CastFailedError,
     MediumBoundaryError,
     RitualError,
     allowed_answers,
@@ -77,3 +79,64 @@ async def decide(
     if options is None and not free:
         return answer == "yes"
     return answer
+
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+# The id is recorded, so a resumed cast that enqueued already does not queue
+# the child a second time.
+@medium
+async def enqueue(ritual: str, components: BaseModel) -> str:
+    if (prior := replayed()) is not None:
+        if not isinstance(prior, str):
+            msg = f"the journaled cast id {prior!r} is not text"
+            raise RitualError(msg)
+        cast_id = prior
+    else:
+        cast_id = await CAST_QUEUE.resolve().enqueue(
+            ritual=ritual, components=components
+        )
+    record_result(cast_id)
+    return cast_id
+
+
+# Two mediums and not one: a single rite that replayed its result would skip the
+# enqueue inside it, and every rite after would be numbered off the record. So
+# a cast interrupted mid-wait replays the enqueue and waits on the same child.
+@overload
+async def await_cast(ritual: str, components: BaseModel) -> JsonValue: ...
+@overload
+async def await_cast(
+    ritual: str, components: BaseModel, *, output: type[_ModelT]
+) -> _ModelT: ...
+
+
+async def await_cast(
+    ritual: str, components: BaseModel, *, output: type[BaseModel] | None = None
+) -> JsonValue | BaseModel:
+    cast_id = await enqueue(ritual, components)
+    result = await awaited(cast_id)
+    if output is None:
+        return result
+    try:
+        return TypeAdapter(output).validate_python(result)
+    except ValueError as error:
+        msg = f"cast {cast_id} returned what does not validate as {output!r}: {error}"
+        raise RitualError(msg) from error
+
+
+# Gives up this cast's process slot until the child ends. A child that ended
+# with nothing to say has nothing to replay, and is asked about again.
+@medium
+async def awaited(cast_id: str) -> JsonValue:
+    if (prior := replayed()) is not None:
+        record_result(prior)
+        return prior
+    ended = await CAST_QUEUE.resolve().await_end(cast_id)
+    if ended.status != "ok":
+        reason = f": {ended.detail}" if ended.detail else ""
+        msg = f"cast {cast_id} ended {ended.status}{reason}"
+        raise CastFailedError(msg)
+    record_result(ended.result)
+    return ended.result

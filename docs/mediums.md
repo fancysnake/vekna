@@ -53,6 +53,37 @@ declared was yours, and guessing it is worse than waiting. A cast whose stdin
 has ended stops with `input ended before the question was answered` rather than
 answering for you.
 
+## `enqueue` and `await_cast`
+
+Start another cast from a step. The daemon queues it like one started with `c`,
+and runs it when its project has a free slot (and a tree, for a
+`worktree=True` ritual).
+
+```python
+from vekna.folio.flow import await_cast, enqueue
+
+cast_id = await enqueue("refresh", Sweep(pull_request=74))                # proceed
+report = await await_cast("review", Sweep(pull_request=74), output=Report)  # wait
+```
+
+`enqueue` returns the new cast's id once the daemon has queued it, and the step
+carries on. `await_cast` waits for the cast to end and returns its result:
+validated as `output` when given, the JSON otherwise. A cast that ends `error`
+or `aborted` raises `CastFailedError`, which a step taking `Failure[P]` can
+route. The name is resolved here, as `vekna cast` would resolve it, and the
+components must be that ritual's model.
+
+A waiting cast gives up its process slot until the other ends, so a sweep can
+await a child even with `processes = 1`. It keeps its tree. When the child ends,
+the parent gets the next free slot ahead of anything queued. Cancelling the wait,
+by `timeout` or `race`, leaves the child running.
+
+Both need a daemon: with none, they raise `NoDaemonError` rather than run the
+child inline. A resumed cast does not enqueue again: the id comes back off the
+record, and a wait that was cut short waits on the same child. Queued casts are
+run records, so a daemon that stops leaves them queued and the next one runs
+them.
+
 ## `coding`
 
 ```python

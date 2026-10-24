@@ -11,6 +11,27 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`enqueue` and `await_cast`** in `vekna.folio.flow`. A step queues another
+  cast and carries on, or waits for its result, validated as `output=`. A
+  waiting cast gives up its process slot until the child ends, and comes back
+  ahead of the queue. A child that fails raises `CastFailedError`; with no
+  daemon both raise `NoDaemonError`.
+  ([#141](https://github.com/fancysnake/vekna/issues/141))
+- **`trial.queue`** scripts what an awaited cast returns: `returns(model,
+  when=...)`, `fails(detail)`, and records `.enqueued`.
+- **Queued casts outlive the daemon.** The next one runs what was left queued,
+  and `prune` keeps them.
+- **The dashboard shows `awaiting`** and the cast awaited, and a queued cast
+  names the cast that queued it.
+- **`CastGoodbye` and `run.json` carry the cast's result.**
+
+### Changed
+
+- A worktree lease fails, rather than waits forever, when every tree not
+  blocked is held by a cast awaiting one that needs a tree.
+
 ## [0.14.0] - 2026-10-23
 
 ### Added

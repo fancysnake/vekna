@@ -8,7 +8,14 @@ import pytest
 
 from vekna.gates.cli.screen import listing, ordered, paint
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView
-from vekna.wire import CastHello, DecideRequested, RiteFinished, RiteStarted, RunRecord
+from vekna.wire import (
+    AwaitRequested,
+    CastHello,
+    DecideRequested,
+    RiteFinished,
+    RiteStarted,
+    RunRecord,
+)
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _WIDE_TERMINAL = 120
@@ -213,6 +220,19 @@ class TestTheList:
         assert "merge #74 now?" in listed[0]
         assert "merge_ready" in listed[1]
 
+    # It holds no slot, and what it is blocked on is another cast's row.
+    @staticmethod
+    def test_an_awaiting_cast_says_which_cast_it_awaits():
+        sweep = _running("sweep", ago=30)
+        sweep.awaiting["w1"] = AwaitRequested(
+            cast_id="sweep", request_id="w1", child="c9abcdef99"
+        )
+
+        row = _row(paint(listed=[sweep], focus=None, project=None, now=_WHEN), "sweep")
+
+        assert "awaiting" in row
+        assert "awaiting c9abcdef" in row
+
     # An aborted cast is the one worth carrying on with, and the id is what
     # carries it on — so the row is the command, not a status to go look up.
     @staticmethod
@@ -380,3 +400,15 @@ class TestDrilledIn:
         )
 
         assert "↳ c1abcdef" in painted
+
+    @staticmethod
+    def test_an_enqueued_cast_names_the_one_that_queued_it():
+        child = _hello()
+        child.cast_id = "c2beef0011"
+        child.enqueued_by = "c1abcdef99"
+
+        painted = paint(
+            listed=[CastView(hello=child)], focus="c2beef0011", project=None
+        )
+
+        assert "queued by c1abcdef" in painted
