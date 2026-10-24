@@ -790,6 +790,7 @@ class _Queue(Hub):
 
 class _Nap(BaseModel):
     minutes: int
+    snore: bool = False
 
 
 def _nothing(_: BaseModel) -> Awaitable[Done[None]]:
@@ -845,6 +846,7 @@ class TestQueue:
 
         assert await asyncio.wait_for(enqueuing, timeout=2) == asked.hello.cast_id
         child = asked.hello
+        # `snore` left unset stays unsaid, for the defaults where the child runs.
         assert (child.ritual, child.components) == ("tome:nap", {"minutes": 5})
         assert (child.project_root, child.project) == ("/proj", "/proj/.git")
         assert (child.enqueued_by, child.worktree, child.wired) == (_CAST, True, True)

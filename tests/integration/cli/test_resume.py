@@ -137,6 +137,27 @@ class TestResume:
 
         assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
 
+    # Whoever queued it named what it meant; the repo's defaults answer the rest.
+    @staticmethod
+    def test_a_queued_record_takes_the_repos_defaults(project: Path, tmp_path: Path):
+        runs = tmp_path / "runs"
+        (project / ".vekna.toml").write_text("[defaults.job]\nleft = 1\n")
+        Journal(runs).record(
+            CastHello(
+                cast_id="q1",
+                project_root=str(project),
+                project=str(project),
+                ritual="job",
+                components={},
+                started_at=_WHEN,
+            )
+        )
+        Journal(runs).record(CastQueued(cast_id="q1"))
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+
     # Only the cast knows its ritual wants a tree, so a spawned one without a
     # lease says so before it does anything, and the daemon queues it again.
     @staticmethod

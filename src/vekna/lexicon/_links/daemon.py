@@ -453,7 +453,9 @@ class LinkQueue(CastQueueProtocol):
             project_root=parent.project_root,
             project=parent.project,
             ritual=found.name,
-            components=_COMPONENTS.validate_json(components.model_dump_json()),
+            components=_COMPONENTS.validate_json(
+                components.model_dump_json(exclude_unset=True)
+            ),
             started_at=datetime.now(tz=UTC),
             wired=True,
             enqueued_by=parent.cast_id,
