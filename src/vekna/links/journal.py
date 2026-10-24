@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from stat import S_ISDIR
 
-from vekna.pacts.casts import DamagedRun, Run
+from vekna.pacts.casts import DamagedRun, Run, run_cast_id, run_started
 from vekna.wire import (
     CastGoodbye,
     CastHello,
@@ -169,7 +169,7 @@ class Journal:
         for run in self._newest_first()[keep:]:
             if not isinstance(run, DamagedRun) and run.status == "running":
                 continue
-            directory = run_file(self._root, _cast_id(run)).parent
+            directory = run_file(self._root, run_cast_id(run)).parent
             try:
                 shutil.rmtree(directory)
             except OSError as error:
@@ -180,7 +180,7 @@ class Journal:
 
     def _newest_first(self) -> list[Run]:
         found = list(self._all())
-        found.sort(key=_started, reverse=True)
+        found.sort(key=run_started, reverse=True)
         return found
 
     def _all(self) -> Iterator[Run]:
@@ -234,23 +234,6 @@ class Journal:
         record.status = goodbye.status
         record.detail = goodbye.detail
         self._write(record)
-
-
-def _cast_id(run: Run) -> str:
-    return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
-
-
-# A damaged run's time always carries a zone, and a record's `started_at` need
-# not: the field is a plain `datetime`, so a `run.json` written by hand or by
-# something that is not this daemon can land without one, and sorting the two
-# against each other raises. Read as UTC, which is the zone this daemon's own
-# writer records in — the alternative, calling such a record damaged, has
-# `prune` deleting a run that resumes perfectly well.
-def _started(run: Run) -> datetime:
-    if isinstance(run, DamagedRun):
-        return run.seen_at
-    started = run.hello.started_at
-    return started if started.tzinfo is not None else started.replace(tzinfo=UTC)
 
 
 # Absence is established, not read off a falsy answer: `Path.exists` raises on

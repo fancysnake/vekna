@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 
 from vekna.wire import (
@@ -29,6 +29,24 @@ class DamagedRun:
 
 
 Run = RunRecord | DamagedRun
+
+
+def run_cast_id(run: Run) -> str:
+    return run.cast_id if isinstance(run, DamagedRun) else run.hello.cast_id
+
+
+# A damaged run's time always carries a zone, and a record's `started_at` need
+# not: the field is a plain `datetime`, so a `run.json` written by hand or by
+# something that is not this daemon can land without one, and sorting the two
+# against each other raises. Read as UTC, which is the zone this daemon's own
+# writer records in — the alternative, calling such a record damaged, has
+# `prune` deleting a run that resumes perfectly well.
+def run_started(run: Run) -> datetime:
+    if isinstance(run, DamagedRun):
+        return run.seen_at
+    started = run.hello.started_at
+    return started if started.tzinfo is not None else started.replace(tzinfo=UTC)
+
 
 # The tail of a rite's output, not all of it. The journal has the whole stream
 # and a surface only ever paints a screenful, so a cast that streams for an hour
