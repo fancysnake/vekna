@@ -48,6 +48,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideRequested,
     DecideResolved,
     EnqueueAccepted,
     EnqueueRefused,
@@ -494,6 +495,25 @@ class _Slots(Hub):
 
 def _asked_id(daemon: _Daemon) -> str:
     return _waiting(daemon)[0].request_id
+
+
+# A daemon that meets the first prompt with `frames` in a single write, so the
+# link hears every one of them in the same read.
+async def _replying(
+    socket_path: Path, frames: Callable[[str], Sequence[WireMessage]]
+) -> asyncio.Server:
+    async def reply(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        async for asked in read_frames(reader):
+            if isinstance(asked, DecideRequested):
+                writer.write(
+                    b"".join(encode_frame(f) for f in frames(asked.request_id))
+                )
+                await writer.drain()
+                break
+        await reader.read()
+        writer.close()
+
+    return await asyncio.start_unix_server(reply, path=str(socket_path))
 
 
 @pytest.mark.asyncio
@@ -1206,3 +1226,47 @@ class TestClaimed:
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         await link.close(status="ok")
+
+    @staticmethod
+    async def test_letting_go_of_a_prompt_never_claimed_changes_nothing(
+        socket_path: Path,
+    ):
+        server = await _replying(
+            socket_path,
+            lambda request_id: [
+                DecideClaimed(cast_id=_CAST, request_id=request_id, claim_id=None),
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer="no"),
+            ],
+        )
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Renderer()
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+
+        asking = tee.decide(prompt="go?", options=["yes", "no"])
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        assert renderer.asked == ["go?"]
+        await link.close(status="ok")
+        server.close()
+
+    @staticmethod
+    async def test_a_claim_on_a_prompt_never_asked_is_dropped(socket_path: Path):
+        server = await _replying(
+            socket_path,
+            lambda request_id: [
+                DecideClaimed(cast_id=_CAST, request_id="never", claim_id="k1"),
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer="no"),
+            ],
+        )
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Renderer()
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+
+        asking = tee.decide(prompt="go?", options=["yes", "no"])
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        assert renderer.asked == ["go?"]
+        await link.close(status="ok")
+        server.close()

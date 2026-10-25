@@ -271,6 +271,26 @@ class TestListing:
         assert every == ("1 running  (all projects)", "proj:nap")
         assert home == ("1 running  (proj)", "nap")
 
+    @staticmethod
+    async def test_a_cast_scoped_away_takes_its_rites_with_it():
+        hub = Hub()
+        hub.apply(
+            _hello("c1", "ci_watch").model_copy(update={"project": "/other/.git"})
+        )
+        hub.apply(_rite("r1", "watch"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            every = _rites(app)
+            await pilot.press("p")
+            await pilot.pause(_PAINTED)
+
+            home = _rites(app)
+        assert [line.rsplit("  ", 1)[0] for line in every] == ["▶ watch"]
+        assert not home
+
 
 @pytest.mark.asyncio
 class TestWaiting:
@@ -375,6 +395,23 @@ class TestCommands:
 
             note = _text(app, "#note")
         assert note.startswith("'zap' means nothing here")
+
+    @staticmethod
+    async def test_an_empty_line_says_nothing():
+        sent: list[WireMessage] = []
+        app = _app(Hub(), sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            before = _text(app, "#note")
+            await pilot.press("c", "ctrl+u", "enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+            running = app.is_running
+        assert note == before
+        assert running
+        assert not sent
 
     @staticmethod
     async def test_q_typed_quits():

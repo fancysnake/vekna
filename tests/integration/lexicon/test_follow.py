@@ -220,6 +220,8 @@ class TestFollowing:
         hub.claim(
             _Peer(), DecideClaimed(cast_id="grand0000", request_id="q1", claim_id="k1")
         )
+        hub.apply(GrimoireBegin(cast_id="grand0000"))
+        hub.apply(GrimoireEnd(cast_id="grand0000"))
         hub.apply(CastGoodbye(cast_id="grand0000", status="ok"))
         hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
 
@@ -256,6 +258,7 @@ class TestFollowing:
         )
 
         assert not await follower.attach()
+        await follower.close()
 
 
 @pytest.mark.asyncio
@@ -339,6 +342,61 @@ class TestPrompts:
         )
         await follower.close()
         await server.close()
+
+    @staticmethod
+    async def test_unattended_a_prompt_answered_elsewhere_says_nothing_more(
+        socket_path: Path,
+    ):
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        server = await serve(path=socket_path, routes=hub)
+        lineage = Lineage("root")
+        lineage.expect("child0000")
+        out = io.StringIO()
+        follower = Follower(socket_path=socket_path, lineage=lineage, out=out, ask=None)
+        await follower.attach()
+        await _eventually(lambda: any(r.action == "attached" for r in routed))
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(_asked())
+
+        hub.apply(DecideResolved(cast_id="child0000", request_id="q1", answer="no"))
+        hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
+
+        assert await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert out.getvalue() == (
+            "[ci_watch child000] ⏸ push? — answer it in `vekna`\n"
+            "[ci_watch child000] ✓ done\n"
+        )
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_an_answer_given_after_the_daemon_went_goes_nowhere(
+        socket_path: Path,
+    ):
+        hub = Hub()
+        server = await serve(path=socket_path, routes=hub)
+        asker = _Asker()
+        follower = Follower(
+            socket_path=socket_path,
+            lineage=Lineage("root"),
+            out=io.StringIO(),
+            ask=asker,
+        )
+        await follower.attach()
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(_asked())
+        await _eventually(lambda: bool(asker.asked))
+        await server.close()
+        assert not await asyncio.wait_for(follower.until_settled(), timeout=2)
+
+        asker.released.set()
+        for _ in range(20):
+            await asyncio.sleep(0)
+
+        assert asker.asked == ["[ci_watch child000] push?"]
+        assert asker.cancelled == 0
+        await follower.close()
 
     @staticmethod
     async def test_a_prompt_answered_at_the_cast_is_no_longer_asked_here(

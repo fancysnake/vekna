@@ -396,6 +396,27 @@ class TestPeers:
             cast_writer.close()
         assert "cast c1 has no pid to signal" in capsys.readouterr().err
 
+    @staticmethod
+    async def test_a_cancel_of_no_running_cast_is_refused_and_signals_nothing(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            writer.write(encode_frame(SurfaceHello()))
+            writer.write(encode_frame(CastCancelRequested(cast_id="c1")))
+            await writer.drain()
+
+            async with asyncio.timeout(5):
+                refused = None
+                async for frame in read_frames(reader):
+                    if isinstance(frame, CastRefused):
+                        refused = frame
+                        break
+            writer.close()
+
+        assert refused == CastRefused(reason="not cancelled c1: no such running cast")
+        assert "signal" not in capsys.readouterr().err
+
     # The handshake this end wrote is the one frame kind that cannot come back,
     # and a peer that took it for a cast would paint one that is not there. The
     # daemon on the other end is a stub, because a real one never sends it.
