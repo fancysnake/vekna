@@ -895,6 +895,20 @@ class TestClaims:
         assert other.sent == [_claim(None)]
 
     @staticmethod
+    def test_another_surface_leaving_keeps_the_claim():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window = _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(window, _claim())
+
+        hub.detach_surface(_Surface())
+
+        assert hub.casts["c1"].waiting["q1"].claim_id == "k1"
+        assert peer.sent == [_claim()]
+
+    @staticmethod
     def test_a_claimer_its_own_claim_finds_gone_lets_go_after_the_claim():
         hub = Hub()
         hub.apply(_hello())

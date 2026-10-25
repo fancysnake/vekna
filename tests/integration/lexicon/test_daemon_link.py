@@ -167,6 +167,20 @@ class _Refusing(_Renderer):
         raise StandalonePromptError(msg)
 
 
+# A terminal that answers on its way out of a cancelled ask.
+class _Stubborn(_Renderer):
+    async def decide(
+        self, *, prompt: str, options: object = None, free: bool = False
+    ) -> str:
+        del options, free
+        self.asked.append(prompt)
+        try:
+            await self.released.wait()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+        return self.answer
+
+
 # A surface the hub can tell apart from another: what a claim is held by.
 class _Window(Surface):
     def __init__(self) -> None:
@@ -1300,6 +1314,51 @@ class TestClaimed:
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         assert renderer.asked == ["go?"]
+        await link.close(status="ok")
+        server.close()
+
+    @staticmethod
+    async def test_a_claim_with_no_terminal_says_nothing_was_taken_over(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        server = await _replying(
+            socket_path,
+            lambda request_id: [
+                DecideClaimed(cast_id=_CAST, request_id=request_id, claim_id="k1"),
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer="no"),
+            ],
+        )
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
+
+        asking = tee.decide(prompt="go?", options=["yes", "no"])
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        assert "taken over" not in capsys.readouterr().err
+        await link.close(status="ok")
+        server.close()
+
+    @staticmethod
+    async def test_a_terminal_answering_after_the_wire_did_is_ignored(
+        socket_path: Path,
+    ):
+        server = await _replying(
+            socket_path,
+            lambda request_id: [
+                DecideResolved(cast_id=_CAST, request_id=request_id, answer="no")
+            ],
+        )
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        renderer = _Stubborn(answer="yes")
+        tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
+
+        asking = tee.decide(prompt="go?", options=["yes", "no"])
+
+        assert await asyncio.wait_for(asking, timeout=2) == "no"
+        assert renderer.asked == ["go?"]
+        assert renderer.cancelled == 1
         await link.close(status="ok")
         server.close()
 
