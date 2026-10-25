@@ -49,6 +49,7 @@ _NO_FOLLOW = "--no-follow"
 _RECENT = 20
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
+_VIEW_STOPPED = "the view stopped"
 _STARTED = "started the daemon — q leaves it running, `vekna stop` ends it"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
 
@@ -239,7 +240,6 @@ async def _opened(*, debug: bool) -> _Line:
     return _Line(reader=reader, writer=writer, note=note)
 
 
-# refusal of what this window asked for. Returns once the daemon has gone.
 # What a daemon sends a surface is what it heard from its casts, and the
 # refusal of a cast this window asked for. Returns once the daemon has gone.
 async def _listen(
@@ -297,7 +297,13 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
         await _listen(line, hub=hub, say=app.say, changed=app.changed)
         app.exit(message=_DAEMON_ENDED)
 
+    # A listener that broke leaves a picture nothing will change again.
+    def ended(task: asyncio.Task[None]) -> None:
+        if not task.cancelled() and (error := task.exception()) is not None:
+            app.exit(message=f"{_VIEW_STOPPED}: {error!r}")
+
     listening = asyncio.create_task(listen())
+    listening.add_done_callback(ended)
     if line.note:
         app.call_later(app.say, line.note)
     try:

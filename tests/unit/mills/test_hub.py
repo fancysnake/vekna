@@ -55,6 +55,18 @@ class _Gone(Surface):
         raise BrokenPipeError(32, "Broken pipe")
 
 
+# A viewer that is open until its socket closes, and finds out on the next write.
+class _Closes(Surface):
+    def __init__(self) -> None:
+        self.sent: list[WireMessage] = []
+        self.closed = False
+
+    def send(self, message: WireMessage) -> None:
+        if self.closed:
+            raise BrokenPipeError(32, "Broken pipe")
+        self.sent.append(message)
+
+
 # A wire type the hub was never taught — what a message added to the protocol
 # and not to the match would look like arriving here.
 class _Unknown(BaseModel):
@@ -679,7 +691,7 @@ class TestPeers:
         hub.open_cast("c1", peer)
         cancel = CastCancelRequested(cast_id="c1")
 
-        forwarded = hub.cancel(_Surface(), cancel)
+        forwarded = hub.forward_cancel(_Surface(), cancel)
 
         assert forwarded
         assert peer.sent == [cancel]
@@ -696,7 +708,7 @@ class TestPeers:
         peer, asker = _Surface(), _Surface()
         hub.open_cast("c1", peer)
 
-        forwarded = hub.cancel(asker, CastCancelRequested(cast_id="c1"))
+        forwarded = hub.forward_cancel(asker, CastCancelRequested(cast_id="c1"))
 
         assert not forwarded
         assert not peer.sent
@@ -712,7 +724,7 @@ class TestPeers:
         hub.apply(_hello(wired=True))
         asker = _Surface()
 
-        forwarded = hub.cancel(asker, CastCancelRequested(cast_id="c1"))
+        forwarded = hub.forward_cancel(asker, CastCancelRequested(cast_id="c1"))
 
         assert not forwarded
         assert asker.sent == [
@@ -881,6 +893,43 @@ class TestClaims:
         assert hub.casts["c1"].waiting["q1"].claim_id is None
         assert peer.sent == [_claim(), _claim(None)]
         assert other.sent == [_claim(None)]
+
+    @staticmethod
+    def test_a_claimer_its_own_claim_finds_gone_lets_go_after_the_claim():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer, window, later = _Surface(), _Closes(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.attach_surface(window)
+        hub.attach_surface(later)
+        later.sent.clear()
+        window.closed = True
+
+        hub.claim(window, _claim())
+
+        assert hub.casts["c1"].waiting["q1"].claim_id is None
+        assert peer.sent == [_claim(), _claim(None)]
+        assert later.sent == [_claim(), _claim(None)]
+
+    @staticmethod
+    def test_another_cast_closing_the_same_request_id_keeps_the_claim():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_asked())
+        hub.apply(_hello("c2"))
+        hub.apply(
+            DecideRequested(cast_id="c2", rite_id="r1", request_id="q1", prompt="ok?")
+        )
+        peer, window = _Surface(), _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(window, _claim())
+
+        hub.apply(DecideResolved(cast_id="c2", request_id="q1", answer="yes"))
+        hub.detach_surface(window)
+
+        assert hub.casts["c1"].waiting["q1"].claim_id is None
+        assert peer.sent == [_claim(), _claim(None)]
 
     @staticmethod
     def test_a_claim_ends_with_its_prompt_and_is_not_let_go_after():

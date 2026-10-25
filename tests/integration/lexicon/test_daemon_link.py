@@ -32,6 +32,7 @@ from vekna.lexicon._pacts import (
     Ritual,
     RitualDefinitionError,
     RitualError,
+    StandalonePromptError,
 )
 from vekna.links.socket_server import Serving, serve
 from vekna.mills.hub import Hub
@@ -153,6 +154,17 @@ class _Renderer:
             self.cancelled += 1
             raise
         return self.answer
+
+
+# A terminal that gives up on the prompt, as one does after too many bad tries.
+class _Refusing(_Renderer):
+    async def decide(
+        self, *, prompt: str, options: object = None, free: bool = False
+    ) -> str:
+        del options, free
+        self.asked.append(prompt)
+        msg = "no valid choice provided"
+        raise StandalonePromptError(msg)
 
 
 # A surface the hub can tell apart from another: what a claim is held by.
@@ -1249,6 +1261,24 @@ class TestClaimed:
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         await link.close(status="ok")
+
+    @staticmethod
+    async def test_the_terminal_failing_to_ask_fails_the_prompt(socket_path: Path):
+        daemon = _Daemon()
+        await daemon.start(socket_path)
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+        await link.attach()
+        tee = TeeChannel(
+            inner=_Refusing(), link=link, cast_id=_CAST, rite_id=lambda: None
+        )
+
+        with pytest.raises(StandalonePromptError, match="no valid choice"):
+            await asyncio.wait_for(
+                tee.decide(prompt="go?", options=["yes", "no"]), timeout=2
+            )
+
+        await link.close(status="ok")
+        await daemon.stop()
 
     @staticmethod
     async def test_letting_go_of_a_prompt_never_claimed_changes_nothing(

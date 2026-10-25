@@ -3,8 +3,8 @@ import signal
 from collections.abc import Callable
 
 from vekna.pacts.casts import Casts
+from vekna.wire import SHORT_ID
 
-_ID = 8
 # Past the shell medium's own grace for reaping what it started, so a cast
 # ending itself is not cut short of it.
 GRACE_SECONDS = 10.0
@@ -47,7 +47,8 @@ class Cutter:
             return
         if (pid := view.hello.pid) is None:
             self._say(
-                f"cast {cast_id[:_ID]} has no pid to signal: stop it at its terminal"
+                f"cast {cast_id[:SHORT_ID]} has no pid to signal:"
+                " stop it at its terminal"
             )
             return
         for signum in (signal.SIGINT, signal.SIGKILL):
@@ -57,7 +58,8 @@ class Cutter:
             sent = self._kill(pid, signum)
             said = "sent" if sent else "could not send"
             self._say(
-                f"cast {cast_id[:_ID]} still running: {said} {signum.name} to {pid}"
+                f"cast {cast_id[:SHORT_ID]} still running:"
+                f" {said} {signum.name} to {pid}"
             )
 
     def _running(self, cast_id: str, pid: int) -> bool:

@@ -128,7 +128,8 @@ lexicon/
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
     unattended.py  # UnattendedChannel, which refuses every decide
-    follow.py      # Follower: a hand cast streaming and asking for its own
+    follow.py      # Follower: a hand cast streaming the casts it queued and
+                   # asking their prompts on its own terminal
     daemon.py      # the wire client, the grimoire→wire projection, the
                    # channel that tees a prompt onto it
     resume.py      # reading a journal back for `--resume`

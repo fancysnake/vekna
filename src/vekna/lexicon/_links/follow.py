@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import itertools
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from vekna.lexicon._pacts import (
     StandalonePromptError,
 )
 from vekna.wire import (
+    SHORT_ID,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -34,7 +34,6 @@ from vekna.wire import (
 
 from .standalone import Out, StandaloneRenderer
 
-_ID = 8
 _MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
 
 
@@ -57,7 +56,7 @@ class _Prefixed:
     def flush(self) -> None:
         self._out.flush()
 
-    def isatty(self) -> bool:  # pragma: no cover
+    def isatty(self) -> bool:
         return self._out.isatty()
 
 
@@ -109,7 +108,7 @@ class Follower:
         self._ask = ask
         self._followed: dict[str, _Followed] = {}
         self._prompts = _Prompts()
-        self._changed = asyncio.Event()
+        self._done = asyncio.Event()
 
     async def attach(self) -> bool:
         try:
@@ -122,15 +121,12 @@ class Follower:
         return True
 
     # True once every cast this one set going has ended; False if the daemon
-    # went first, and with it any word of how they end.
+    # went first, and with it any word of how they end. `done` is cleared
+    # first: a set from before the cast queued its last child is stale.
     async def until_settled(self) -> bool:
-        reading = itertools.takewhile(
-            lambda _: not self._lineage.settled and self._wire.writer is not None,
-            itertools.count(),
-        )
-        for _ in reading:
-            self._changed.clear()
-            await self._changed.wait()
+        if not self._lineage.settled and self._wire.writer is not None:
+            self._done.clear()
+            await self._done.wait()
         return self._lineage.settled
 
     async def close(self) -> None:
@@ -150,9 +146,13 @@ class Follower:
             async for message in read_frames(reader):
                 self._lineage.heard(message)
                 self._heard(message)
-                self._changed.set()
+                # Only a cast arriving or ending can settle the lineage.
+                if isinstance(message, CastHello | CastGoodbye) and (
+                    self._lineage.settled
+                ):
+                    self._done.set()
         self._wire.writer = None
-        self._changed.set()
+        self._done.set()
 
     def _heard(self, message: WireMessage) -> None:
         if not isinstance(message, CastMessage) or not self._lineage.descends(
@@ -178,7 +178,7 @@ class Follower:
     def _hello(self, hello: CastHello) -> None:
         if hello.cast_id in self._followed:
             return
-        label = f"{hello.ritual} {hello.cast_id[:_ID]}"
+        label = f"{hello.ritual} {hello.cast_id[:SHORT_ID]}"
         self._followed[hello.cast_id] = _Followed(
             label=label, renderer=StandaloneRenderer(out=_Prefixed(self._out, label))
         )
@@ -263,7 +263,7 @@ class Follower:
 
     def _label(self, request: DecideRequested) -> str:
         followed = self._followed.get(request.cast_id)
-        return f"[{request.cast_id[:_ID] if followed is None else followed.label}]"
+        return f"[{request.cast_id[:SHORT_ID] if followed is None else followed.label}]"
 
     def _say(self, line: str) -> None:
         self._out.write(line + "\n")

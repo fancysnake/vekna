@@ -1,6 +1,8 @@
 import io
 from datetime import UTC, datetime
 
+from typing_extensions import override
+
 from vekna.lexicon._links.follow import _Prefixed
 from vekna.lexicon._mills.follow import Lineage
 from vekna.wire import CastGoodbye, CastHello
@@ -91,6 +93,13 @@ class TestSettled:
         assert not lineage.failed
 
 
+# Output that is a terminal, which a string buffer never is.
+class _Terminal(io.StringIO):
+    @override
+    def isatty(self) -> bool:
+        return True
+
+
 class TestPrefixed:
     @staticmethod
     def test_a_line_written_in_pieces_is_named_once():
@@ -103,3 +112,7 @@ class TestPrefixed:
         assert out.getvalue() == (
             "[ci_watch child000] checks red\n[ci_watch child000] next\n"
         )
+
+    @staticmethod
+    def test_whether_it_is_a_terminal_is_the_terminal_s_answer():
+        assert _Prefixed(_Terminal(), "ci_watch child000").isatty()

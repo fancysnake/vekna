@@ -3,6 +3,11 @@ from collections.abc import Sequence
 _BOOLEAN = ("yes", "no")
 
 
+# How much of a cast id a person reads: enough to tell the casts on screen apart
+# and to type back at `--continue`.
+SHORT_ID = 8
+
+
 # The one reading of a `(options, free)` pair, because every side that meets a
 # prompt needs it: the channel asking, the trial double checking a script, the
 # ledger checking a journal, the dashboard answering for a spawned cast. `None`

@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -19,6 +18,7 @@ from typing_extensions import override
 
 from vekna.pacts.casts import Casts, CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import (
+    SHORT_ID,
     CastCancelRequested,
     DecideClaimed,
     DecideRequested,
@@ -27,11 +27,10 @@ from vekna.wire import (
     allowed_answers,
 )
 
-from .cast_text import carried, clock, counted, elapsed, named, word
+from .cast_text import carried, clock, counted, elapsed, labelled, named, word
 from .commands import request_cast, send_answer
 from .screen import ordered, scoped
 
-_ID = 8
 # The list is a narrow column beside the cast it opens: a name that does not
 # fit is cut rather than pushing the window sideways.
 _NAME = 24
@@ -358,7 +357,7 @@ class VeknaApp(App[None]):
             self._view.arming = None
             self.say("only a running cast can be cancelled")
             return
-        named_cast = f"{view.hello.ritual} {view.hello.cast_id[:_ID]}"
+        named_cast = labelled(view.hello)
         if self._view.arming != view.hello.cast_id:
             self._view.arming = view.hello.cast_id
             self.say(f"x again cancels {named_cast}")
@@ -375,9 +374,7 @@ class VeknaApp(App[None]):
             return
         view, request = found
         self._claim(request)
-        dialog = AnswerScreen(
-            label=f"{view.hello.ritual} {view.hello.cast_id[:_ID]}", request=request
-        )
+        dialog = AnswerScreen(label=labelled(view.hello), request=request)
         self._view.claims.dialog = dialog
 
         # A dialog closed because its prompt went has nothing to send.
@@ -564,7 +561,7 @@ class VeknaApp(App[None]):
         branch = self._view.branches.get(root) or "—"
         status = f"{word(view)}  {elapsed(view, now)}{carried(hello)}"
         lines = [
-            f"{hello.ritual}  {hello.cast_id[:_ID]}  {status}",
+            f"{hello.ritual}  {hello.cast_id[:SHORT_ID]}  {status}",
             f"{branch} · {_where(root)}",
         ]
         if view.blocked is not None:
@@ -652,7 +649,5 @@ class VeknaApp(App[None]):
         ):
             return
         self._view.claims.dialog = None
-        # A `while` in disguise: pylint's `while_used` bans the statement.
-        for _ in itertools.takewhile(lambda _: not dialog.is_active, itertools.count()):
-            self.screen.dismiss()
+        dialog.pop_until_active()
         dialog.dismiss(None)

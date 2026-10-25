@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
-from vekna.wire import DecideRequested, RunRecord, allowed_answers
+from vekna.wire import SHORT_ID, DecideRequested, RunRecord, allowed_answers
 
 from .cast_text import carried, clock, counted, elapsed, named, word
 
@@ -38,12 +38,11 @@ _DELTA_TAIL = 12
 # the rest.
 _SHOWN = 12
 _STATUS = len("recovering")
-_ID = 8
 _RITUAL = 15
 _PROJECT = 10
 _NOW = 44
 _HEAD = (
-    f"  #  {'cast':<{_ID}}  {'ritual':<{_RITUAL}}  {'project':<{_PROJECT}}"
+    f"  #  {'cast':<{SHORT_ID}}  {'ritual':<{_RITUAL}}  {'project':<{_PROJECT}}"
     f"  {'status':<{_STATUS}}  {'elapsed':>7}  steps  now"
 )
 
@@ -105,10 +104,10 @@ def _now(view: CastView, now: datetime) -> str:
         return next(iter(view.waiting.values())).request.prompt
     if view.on_children:
         return "on " + ", ".join(
-            request.child[:_ID] for request in view.on_children.values()
+            request.child[:SHORT_ID] for request in view.on_children.values()
         )
     if view.status == "disconnected":
-        return f"vekna cast --continue {view.hello.cast_id[:_ID]}"
+        return f"vekna cast --continue {view.hello.cast_id[:SHORT_ID]}"
     if (step := _innermost(view, "step")) is None:
         return ""
     medium = _innermost(view, "medium")
@@ -120,7 +119,7 @@ def _now(view: CastView, now: datetime) -> str:
 
 def _line(index: int, view: CastView, now: datetime) -> str:
     return (
-        f" {index:>2}  {view.hello.cast_id[:_ID]:<{_ID}}"
+        f" {index:>2}  {view.hello.cast_id[:SHORT_ID]:<{SHORT_ID}}"
         f"  {_fit(view.hello.ritual, _RITUAL)}"
         f"  {_fit(named(view.hello.project), _PROJECT)}"
         f"  {word(view):<{_STATUS}}  {elapsed(view, now):>7}"
@@ -215,7 +214,7 @@ def _detail_lines(view: CastView) -> list[str]:
 def _drilled(view: CastView, now: datetime) -> list[str]:
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
-        f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:_ID]}"
+        f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:SHORT_ID]}"
         f"{carried(view.hello)}"
     )
     return [
@@ -245,11 +244,11 @@ def listing(records: Sequence[Run]) -> str:
 def _row(record: Run) -> str:
     if isinstance(record, DamagedRun):
         return (
-            f"{record.cast_id[:_ID]}  {_DAMAGED}  {'damaged':<16}"
+            f"{record.cast_id[:SHORT_ID]}  {_DAMAGED}  {'damaged':<16}"
             f"  {record.seen_at.astimezone():%Y-%m-%d %H:%M}\n"
         )
     return (
-        f"{record.hello.cast_id[:_ID]}  {_CAST_GLYPH[record.status]}"
+        f"{record.hello.cast_id[:SHORT_ID]}  {_CAST_GLYPH[record.status]}"
         f"  {record.hello.ritual:<16}"
         f"  {record.hello.started_at.astimezone():%Y-%m-%d %H:%M}"
         f"  {record.hello.project_root}{carried(record.hello)}{_lost(record)}\n"

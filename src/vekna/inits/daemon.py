@@ -306,10 +306,9 @@ class _Daemon(Routes):
         self._hub.claim(surface, claimed)
 
     # Asked over the wire, then made to if it does not listen.
-    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> bool:
-        if forwarded := self._hub.cancel(surface, cancel):
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+        if self._hub.forward_cancel(surface, cancel):
             self._cutter.cut(cancel.cast_id)
-        return forwarded
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

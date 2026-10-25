@@ -228,13 +228,16 @@ class DaemonLink:
             request=request,
             future=future,
             allowed=allowed_answers(options=request.options, free=request.free),
+            ask=ask,
         )
         self._pending.answers[request.request_id] = awaited
         self.send(request)
+        awaited.start()
         try:
-            return await (future if ask is None else _first_answer(awaited, ask))
+            return await future
         finally:
             self._pending.answers.pop(request.request_id, None)
+            await awaited.stopped()
 
     # Held for as long as the block runs. With no daemon there is nobody to
     # share with, so there is no limit to wait on.
@@ -387,51 +390,57 @@ class DaemonLink:
             await writer.wait_closed()
 
 
-# `changed` is set whenever `claimed` flips, which is what a terminal still
-# asking waits on beside its own answer.
+# A prompt in flight, and `ask`, the terminal answering it while no surface has
+# claimed it: a claim cancels the ask, and a claim let go asks again. Whichever
+# answers first, the terminal or a surface over the wire, settles `future`.
 @dataclass(kw_only=True)
 class _Awaited:
     request: DecideRequested
     future: asyncio.Future[str]
     allowed: tuple[str, ...] | None
+    ask: Callable[[], Awaitable[str]] | None = None
+    asking: asyncio.Future[str] | None = None
     claimed: bool = False
-    changed: asyncio.Event = field(default_factory=asyncio.Event)
 
     def claim(self, *, claimed: bool) -> None:
-        if claimed != self.claimed:
-            self.claimed = claimed
-            self.changed.set()
+        if claimed == self.claimed:
+            return
+        self.claimed = claimed
+        if not claimed:
+            self.start()
+            return
+        if self.asking is not None:
+            sys.stderr.write(f"taken over in `vekna`: {self.request.prompt}\n")
+        self._stop()
 
+    def start(self) -> None:
+        if self.ask is None or self.claimed or self.asking is not None:
+            return
+        self.asking = asyncio.ensure_future(self.ask())
+        self.asking.add_done_callback(self._asked)
 
-# Whichever answers first: the terminal while nobody has claimed the prompt, or
-# a surface over the wire. A flip of the claim ends the round and starts the
-# next, so the terminal stops reading the moment it is taken over and asks again
-# once it is handed back.
-async def _first_answer(awaited: _Awaited, ask: Callable[[], Awaitable[str]]) -> str:
-    awaited.changed.clear()
-    flipped = asyncio.ensure_future(awaited.changed.wait())
-    local = None if awaited.claimed else asyncio.ensure_future(ask())
-    # The round's own, cancelled when it ends; the answer outlives the round.
-    ours: list[asyncio.Future[str] | asyncio.Future[Literal[True]]] = [flipped]
-    if local is not None:
-        ours.append(local)
-    try:
-        await asyncio.wait([awaited.future, *ours], return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        for task in ours:
-            task.cancel()
-        await asyncio.gather(*ours, return_exceptions=True)
-    if awaited.future.done():
-        return awaited.future.result()
-    if local is not None and local.done() and not local.cancelled():
-        return local.result()
-    _say_where(awaited)
-    return await _first_answer(awaited, ask)
+    # Waited out, so whatever the cancelled ask says on its way out is said
+    # before the answer moves the cast on.
+    async def stopped(self) -> None:
+        if (asking := self._stop()) is not None:
+            await asyncio.gather(asking, return_exceptions=True)
 
+    def _stop(self) -> asyncio.Future[str] | None:
+        asking, self.asking = self.asking, None
+        if asking is not None:
+            asking.cancel()
+        return asking
 
-def _say_where(awaited: _Awaited) -> None:
-    where = "the dashboard has it" if awaited.claimed else "back to this terminal"
-    sys.stderr.write(f"{where}: {awaited.request.prompt}\n")
+    def _asked(self, asking: asyncio.Future[str]) -> None:
+        if asking.cancelled():
+            return
+        error = asking.exception()
+        if self.future.done():
+            return
+        if error is not None:
+            self.future.set_exception(error)
+        else:
+            self.future.set_result(asking.result())
 
 
 # A coding slot this cast holds or is waiting for. `granted` is what the wait is

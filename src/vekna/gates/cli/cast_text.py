@@ -4,9 +4,8 @@ from datetime import datetime
 from pathlib import PurePath
 
 from vekna.pacts.casts import CastView
-from vekna.wire import CastHello
+from vekna.wire import SHORT_ID, CastHello
 
-_ID = 8
 _RESUMED = "↳"
 _MINUTE = 60
 _HOUR = 3600
@@ -92,13 +91,19 @@ def counted(casts: Sequence[CastView]) -> str:
     return " · ".join(f"{tally[word]} {word}" for word in _TALLY if tally[word])
 
 
+def labelled(hello: CastHello) -> str:
+    return f"{hello.ritual} {hello.cast_id[:SHORT_ID]}"
+
+
 # A resumed cast is a cast of its own with an id of its own, so what would
 # otherwise read as the same ritual run twice says which cast it carries on
 # from — cut to eight, the form `vekna cast --continue` takes.
 def carried(hello: CastHello) -> str:
     said = (
-        "" if hello.resumed_from is None else f"  {_RESUMED} {hello.resumed_from[:_ID]}"
+        ""
+        if hello.resumed_from is None
+        else f"  {_RESUMED} {hello.resumed_from[:SHORT_ID]}"
     )
     if hello.enqueued_by is not None:
-        said += f"  queued by {hello.enqueued_by[:_ID]}"
+        said += f"  queued by {hello.enqueued_by[:SHORT_ID]}"
     return said

@@ -57,11 +57,12 @@ from ._pacts import (
     decode_frame,
     encode_frame,
 )
-from ._specs import allowed_answers, parse_flags
+from ._specs import SHORT_ID, allowed_answers, parse_flags
 from ._toml import TomlValue, read_toml
 
 __all__ = [
     "NEEDS_TREE",
+    "SHORT_ID",
     "AwaitEnded",
     "AwaitMessage",
     "AwaitRequested",

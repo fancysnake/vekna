@@ -255,8 +255,8 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
-| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused only when the directory is not there |
-| `CastKillRequested` | surface → daemon | end a cast. Not built |
+| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
+| `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on

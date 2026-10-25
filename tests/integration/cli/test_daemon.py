@@ -345,6 +345,22 @@ class TestPeers:
         assert await asyncio.wait_for(peer, timeout=10) == 0
         assert await host == 0
 
+    # A line the window cannot read ends it, saying why, rather than leaving a
+    # picture up that nothing will ever change.
+    @staticmethod
+    async def test_the_drawn_window_ends_on_a_frame_it_cannot_read(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        async def garbled(_: asyncio.StreamReader, writer: asyncio.StreamWriter):
+            writer.write(b'{"kind": "nonsense"}\n')
+            await writer.drain()
+
+        server = await asyncio.start_unix_server(garbled, path=str(socket_path))
+
+        assert await asyncio.wait_for(tui_window(headless=True), timeout=10) == 0
+        assert "the view stopped: 1 validation error" in capsys.readouterr().err
+        server.close()
+
     @staticmethod
     async def test_the_drawn_window_opens_with_debug_asked_too_late(socket_path: Path):
         log = socket_path.parent / "debug.log"
