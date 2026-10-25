@@ -1,7 +1,14 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from vekna.wire import CastMessage, CastRequested, DecideResolved, WireMessage
+from vekna.wire import (
+    CastCancelRequested,
+    CastMessage,
+    CastRequested,
+    DecideClaimed,
+    DecideResolved,
+    WireMessage,
+)
 
 
 # Sending is not awaited: a surface owns a queue and a writer task, so a slow
@@ -12,13 +19,16 @@ class Surface(Protocol):
 
 # Everything a connection can bring the daemon, once its first frame has said
 # what it is. A cast is `apply`d and has a peer the daemon can write back to; a
-# surface is attached, and can ask for a cast or answer one.
+# surface is attached, and can ask for a cast, claim a prompt, answer one and
+# cancel a cast — saying whether the cancel went to it.
 class Routes(Protocol):
     def apply(self, message: CastMessage) -> None: ...
     def attach_surface(self, surface: Surface) -> None: ...
     def detach_surface(self, surface: Surface) -> None: ...
     def request(self, surface: Surface, request: CastRequested) -> None: ...
-    def answer(self, resolved: DecideResolved) -> None: ...
+    def answer(self, surface: Surface, resolved: DecideResolved) -> None: ...
+    def claim(self, surface: Surface, claimed: DecideClaimed) -> None: ...
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> bool: ...
     def open_cast(self, cast_id: str, peer: Surface) -> None: ...
     def close_cast(self, cast_id: str, peer: Surface) -> None: ...
 

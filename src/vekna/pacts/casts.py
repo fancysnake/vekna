@@ -71,6 +71,13 @@ class RiteView:
         return None if self.finished is None else self.finished.finished_at
 
 
+# An open prompt, and the claim id of the surface that took it over if one has.
+@dataclass
+class Prompt:
+    request: DecideRequested
+    claim_id: str | None = None
+
+
 # Insertion-ordered, which is the order the rites began — the tree a surface
 # draws is built from each rite's `parent_id` at paint time, so nothing here has
 # to hold a second copy of the shape. `waiting` is the open prompts: the daemon
@@ -82,7 +89,7 @@ class CastView:
     status: CastStatus = "running"
     detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
-    waiting: dict[str, DecideRequested] = field(default_factory=dict)
+    waiting: dict[str, Prompt] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no
     # process slot.
     on_children: dict[str, AwaitRequested] = field(default_factory=dict)
