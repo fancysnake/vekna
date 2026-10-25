@@ -351,9 +351,15 @@ class TestPeers:
     async def test_the_drawn_window_ends_on_a_frame_it_cannot_read(
         socket_path: Path, capsys: pytest.CaptureFixture[str]
     ):
-        async def garbled(_: asyncio.StreamReader, writer: asyncio.StreamWriter):
-            writer.write(b'{"kind": "nonsense"}\n')
-            await writer.drain()
+        # Reads the handshake and holds on until the window hangs up: closing
+        # with it unread resets the connection before the frame is read.
+        async def garbled(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+            with contextlib.suppress(OSError):
+                await reader.readline()
+                writer.write(b'{"kind": "nonsense"}\n')
+                await writer.drain()
+                await reader.read()
+            writer.close()
 
         server = await asyncio.start_unix_server(garbled, path=str(socket_path))
 
