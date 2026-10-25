@@ -3,10 +3,9 @@
 
 from pydantic import BaseModel
 
-from vekna.folio.shell import shell
-from vekna.lexicon import Done, RitualError, ritual, step
+from vekna.lexicon import Done, ritual, step
 
-from .shared import said
+from .shared import ran
 
 # Untracked, so the tree reads dirty after the cast and is left blocked.
 DIRT = "tree.dirt"
@@ -33,13 +32,12 @@ def tree(components: Tree) -> Look:
 
 @step
 async def look(state: Look) -> Done[Stood]:
-    result = await shell("git rev-parse --show-toplevel && git branch --show-current")
-    if result.exit_code:
-        msg = f"reading the tree failed: {said(result)}"
-        raise RitualError(msg)
+    result = await ran(
+        "git rev-parse --show-toplevel && git branch --show-current",
+        doing="reading the tree",
+    )
     # A detached HEAD prints no branch line.
     root, _, branch = result.stdout.rstrip("\n").partition("\n")
-    if state.dirty and (left := await shell(f"echo dirt > {DIRT}")).exit_code:
-        msg = f"leaving {DIRT} failed: {said(left)}"
-        raise RitualError(msg)
+    if state.dirty:
+        await ran(f"echo dirt > {DIRT}", doing=f"leaving {DIRT}")
     return Done(Stood(root=root, branch=branch, dirty=state.dirty))

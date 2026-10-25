@@ -12,6 +12,7 @@ from vekna.lexicon import (
     MediumBoundaryError,
     NoComponents,
     RitualError,
+    attended,
     current_rite,
     emit_delta,
     medium,
@@ -151,6 +152,11 @@ class TestMedium:
     def test_current_rite_outside_cast_raises():
         with pytest.raises(RitualError):
             current_rite()
+
+    @staticmethod
+    def test_attended_outside_cast_raises():
+        with pytest.raises(RitualError):
+            attended()
 
 
 # The call arrives as a dict rather than as `**kwargs` on purpose: a wrong call

@@ -901,11 +901,14 @@ def _nap(name: str) -> Ritual:
     return _NAP
 
 
-async def _attached(socket_path: Path) -> tuple[_Queue, _Daemon, DaemonLink]:
+async def _attached(
+    socket_path: Path, *, unattended: bool = False
+) -> tuple[_Queue, _Daemon, DaemonLink]:
     hub = _Queue()
     daemon = _Daemon(hub)
     await daemon.start(socket_path)
-    link = DaemonLink(socket_path=socket_path, hello=_hello())
+    hello = _hello().model_copy(update={"unattended": unattended})
+    link = DaemonLink(socket_path=socket_path, hello=hello)
     await link.attach()
     return hub, daemon, link
 
@@ -938,6 +941,26 @@ class TestQueue:
         assert (child.ritual, child.components) == ("tome:nap", {"minutes": 5})
         assert (child.project_root, child.project) == ("/proj", "/proj/.git")
         assert (child.enqueued_by, child.worktree, child.wired) == (_CAST, True, True)
+        assert not child.unattended
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # Nobody watches a child of a cast nobody watches: its `decide` would wait
+    # on a surface forever, and the parent awaiting it with it.
+    @staticmethod
+    async def test_a_child_of_an_unattended_cast_is_unattended(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path, unattended=True)
+        queue = LinkQueue(link=link, ritual=_nap, queued=[].append)
+
+        enqueuing = asyncio.create_task(
+            queue.enqueue(ritual="nap", components=_Nap(minutes=5))
+        )
+        await _eventually(lambda: bool(hub.heard))
+        asked = _first(hub.heard, EnqueueRequested)
+        hub.tell(_CAST, EnqueueAccepted(cast_id=_CAST, request_id=asked.request_id))
+        await asyncio.wait_for(enqueuing, timeout=2)
+
+        assert asked.hello.unattended
         await link.close(status="ok")
         await daemon.stop()
 

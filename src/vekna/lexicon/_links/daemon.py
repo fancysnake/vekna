@@ -566,6 +566,7 @@ class LinkQueue(CastQueueProtocol):
             wired=True,
             enqueued_by=parent.cast_id,
             worktree=found.worktree,
+            unattended=parent.unattended,
         )
         await self._link.enqueue(hello)
         self._queued(hello.cast_id)

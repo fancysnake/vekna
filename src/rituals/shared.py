@@ -2,7 +2,8 @@ from typing import Annotated
 
 from pydantic import Field
 
-from vekna.folio.shell import ShellResult
+from vekna.folio.shell import ShellResult, shell
+from vekna.lexicon import RitualError
 
 # A retry budget counts down to zero, so a negative one has no meaning to count
 # from. Rejecting it at the boundary is the whole point of a typed Components:
@@ -17,6 +18,14 @@ Bound = Annotated[int, Field(ge=0)]
 def said(result: ShellResult) -> str:
     joined = "\n".join(part for part in (result.stdout, result.stderr) if part.strip())
     return joined or f"the command exited with code {result.exit_code}"
+
+
+async def ran(command: str, *, doing: str, stream: bool = True) -> ShellResult:
+    result = await shell(command, stream=stream)
+    if result.exit_code:
+        msg = f"{doing} failed: {said(result)}"
+        raise RitualError(msg)
+    return result
 
 
 # Untrusted text reaches an agent only inside a fence that opens and closes in
