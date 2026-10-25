@@ -14,15 +14,17 @@ from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
-from vekna.links.spawner import Spawner, pid_alive
+from vekna.links.spawner import Spawner, pid_alive, signal_pid
 from vekna.links.worktrees import GitTrees
 from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
+from vekna.mills.cutter import Cutter
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -30,6 +32,7 @@ from vekna.wire import (
     CastRequested,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideResolved,
     EnqueueAccepted,
     EnqueueRefused,
@@ -145,7 +148,9 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         if record.hello.cast_id not in running:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
-    server = await serve(path=path, routes=_Daemon(hub=hub, circle=circle, pool=pool))
+    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_logged)
+    routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
+    server = await serve(path=path, routes=routes)
     _logged(f"listening on {path}")
     try:
         await server.stopped()
@@ -220,10 +225,13 @@ async def stop_daemon() -> str:
 # every cast is doing, the circle what may run next, the pool who is talking to
 # an agent. Slot traffic is the pool's alone, and an ending is everyone's.
 class _Daemon(Routes):
-    def __init__(self, *, hub: Hub, circle: Circle, pool: CodingPool) -> None:
+    def __init__(
+        self, *, hub: Hub, circle: Circle, pool: CodingPool, cutter: Cutter
+    ) -> None:
         self._hub = hub
         self._circle = circle
         self._pool = pool
+        self._cutter = cutter
         self._tasks: set[asyncio.Task[None]] = set()
 
     def apply(self, message: CastMessage) -> None:
@@ -291,8 +299,16 @@ class _Daemon(Routes):
     def detach_surface(self, surface: Surface) -> None:
         self._hub.detach_surface(surface)
 
-    def answer(self, resolved: DecideResolved) -> None:
-        self._hub.answer(resolved)
+    def answer(self, surface: Surface, resolved: DecideResolved) -> None:
+        self._hub.answer(surface, resolved)
+
+    def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
+        self._hub.claim(surface, claimed)
+
+    # Asked over the wire, then made to if it does not listen.
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+        if self._hub.forward_cancel(surface, cancel):
+            self._cutter.cut(cancel.cast_id)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

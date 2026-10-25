@@ -5,10 +5,11 @@ from pathlib import Path
 
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    CastCancelRequested,
     CastGoodbye,
     CastMessage,
-    CastRefused,
     CastRequested,
+    DecideClaimed,
     DecideResolved,
     StopRequested,
     SurfaceHello,
@@ -125,9 +126,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
             elif isinstance(opened, StopRequested):
                 stopping.set()
             # A request is a surface's to make, after it has said it is one.
-            elif opened is not None and not isinstance(
-                opened, CastRequested | CastRefused
-            ):
+            elif isinstance(opened, CastMessage):
                 await _as_cast(
                     opened,
                     cast_frames(frames),
@@ -162,8 +161,9 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is fanned out to, and says two things back: start a cast, and
-# answer one. Anything else it sends is read past, to notice the disconnect.
+# A surface is fanned out to, and says four things back: start a cast, claim
+# a prompt, answer one, and cancel a cast. Anything else it sends is read past,
+# to notice the disconnect.
 async def _as_surface(
     frames: AsyncIterator[WireMessage], surface: Surface, *, routes: Routes
 ) -> None:
@@ -174,7 +174,11 @@ async def _as_surface(
                 if isinstance(message, CastRequested):
                     routes.request(surface, message)
                 elif isinstance(message, DecideResolved):
-                    routes.answer(message)
+                    routes.answer(surface, message)
+                elif isinstance(message, DecideClaimed):
+                    routes.claim(surface, message)
+                elif isinstance(message, CastCancelRequested):
+                    routes.cancel(surface, message)
     finally:
         routes.detach_surface(surface)
 

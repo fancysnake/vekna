@@ -99,6 +99,18 @@ async def _marked(
                 await asyncio.to_thread(mark.unlink, missing_ok=True)
 
 
+# Whether it was sent: a process already gone, or one not ours to signal, is
+# not.
+def signal_pid(pid: int, signum: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signum)
+    except OSError:
+        return False
+    return True
+
+
 # shortcut: a pid reused by another process reads as the cast still running,
 # holding its slot and tree until that process ends; a start time beside the
 # pid would tell them apart.

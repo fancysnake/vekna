@@ -37,6 +37,17 @@ when.
   where it runs; `rituals show` prints each value and its file; a key the ritual
   does not take fails the cast.
   ([#94](https://github.com/fancysnake/vekna/issues/94))
+- **`vekna` is drawn with Textual** in a terminal: a table of casts with each
+  one's branch and directory, the one under the cursor streaming beside it,
+  `c` to start a ritual, `t` to take over a prompt and answer it in a dialog.
+  `--no-tui` keeps the line view.
+  ([#107](https://github.com/fancysnake/vekna/issues/107))
+- **A window takes over a prompt** by claiming it: the cast's own terminal, or
+  the one following it, stops taking answers until the window lets go or
+  closes. `a <answer>` now reaches a cast typed by hand.
+- **`vekna cast` follows the casts it queued** until they end, printing each
+  one's rites under its name and asking their prompts on its terminal; it
+  exits `1` if any failed. `--no-follow` ends with the cast's own steps.
 
 ### Changed
 

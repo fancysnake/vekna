@@ -195,3 +195,14 @@ async def _git(cwd: str, *args: str) -> str:
         msg = f"git {args[0]} in {cwd}: {err.decode(errors='replace').strip()}"
         raise TreeError(msg)
     return out.decode(errors="replace").strip()
+
+
+# The branch a tree has checked out, read when asked because a cast can switch
+# it under its own feet — `gh pr checkout` does. None where git has no name for
+# it: a detached head, a directory that is no repository or is gone.
+async def branch_of(path: str) -> str | None:
+    try:
+        branch = await _git(path, "rev-parse", "--abbrev-ref", "HEAD")
+    except TreeError:
+        return None
+    return None if branch == "HEAD" else branch
