@@ -1,5 +1,6 @@
 import asyncio
 import io
+import warnings
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -246,6 +247,35 @@ class TestFollowing:
         await server.close()
 
         assert not await asyncio.wait_for(follower.until_settled(), timeout=2)
+        await follower.close()
+
+    @staticmethod
+    async def test_the_daemon_hanging_up_closes_the_connection_here(socket_path: Path):
+        hung_up = asyncio.Event()
+
+        async def daemon(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            writer.write_eof()
+            await reader.read()
+            hung_up.set()
+            writer.close()
+
+        server = await asyncio.start_unix_server(daemon, path=str(socket_path))
+        follower = Follower(
+            socket_path=socket_path,
+            lineage=Lineage("root"),
+            out=io.StringIO(),
+            ask=None,
+        )
+        with warnings.catch_warnings(record=True) as warned:
+            warnings.simplefilter("always")
+            await follower.attach()
+
+            await asyncio.wait_for(hung_up.wait(), timeout=2)
+
+        assert not [w for w in warned if issubclass(w.category, ResourceWarning)]
+        server.close()
         await follower.close()
 
     @staticmethod

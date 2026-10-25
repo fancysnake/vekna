@@ -63,6 +63,7 @@ _USAGE = (
     '       vekna cast --prompt "<text>"\n'
     "       vekna cast --continue <cast_id>\n"
     "       vekna cast --unattended <ritual> ...  (refuse every decide)\n"
+    "       vekna cast --no-follow <ritual> ...  (leave the casts it queued)\n"
 )
 _RESUME_FLAG = "--resume"
 _UNATTENDED_FLAG = "--unattended"
@@ -624,27 +625,30 @@ async def _run(plan: _Plan) -> int:
     lineage = Lineage(cast_id)
     follower = await _follower(plan=plan, link=link, lineage=lineage, ask=renderer)
     try:
-        # The queue the cast's `enqueue` and `await_cast` reach.
-        with CAST_QUEUE.scope(
-            LinkQueue(link=link, ritual=plan.compendium.ritual, queued=lineage.expect)
-        ):
-            code = await _cast(
-                plan=plan,
-                grimoire=grimoire,
-                channel=channel,
-                link=link,
-                renderer=renderer,
-            )
-    finally:
-        watcher.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await watcher
-    if follower is None:
-        return code
-    try:
+        try:
+            # The queue the cast's `enqueue` and `await_cast` reach.
+            with CAST_QUEUE.scope(
+                LinkQueue(
+                    link=link, ritual=plan.compendium.ritual, queued=lineage.expect
+                )
+            ):
+                code = await _cast(
+                    plan=plan,
+                    grimoire=grimoire,
+                    channel=channel,
+                    link=link,
+                    renderer=renderer,
+                )
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+        if follower is None:
+            return code
         return await _followed(code, follower=follower, lineage=lineage)
     finally:
-        await follower.close()
+        if follower is not None:
+            await follower.close()
 
 
 # Only a cast typed by hand with a daemon to hear from follows: a spawned one has

@@ -9,6 +9,7 @@ from uuid import uuid4
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
+from textual.command import CommandPalette
 from textual.containers import Horizontal, Vertical
 from textual.markup import escape
 from textual.screen import ModalScreen
@@ -641,13 +642,15 @@ class VeknaApp(App[None]):
         return said[-1] if said else None
 
     # A prompt answered or withdrawn while its dialog is up closes the dialog:
-    # nobody is waiting on what it would send. Whatever is open over it, the
-    # command palette, goes with it, or `dismiss` would pop that instead.
+    # nobody is waiting on what it would send. The command palette, the one
+    # screen that can be open over it, is popped first and at once: `dismiss`
+    # pops whatever is on top.
     def _close_answered(self) -> None:
         if (dialog := self._view.claims.dialog) is None or any(
             dialog.request_id in view.waiting for view in self._casts.casts.values()
         ):
             return
         self._view.claims.dialog = None
-        dialog.pop_until_active()
+        if isinstance(self.screen, CommandPalette):
+            self.pop_screen()
         dialog.dismiss(None)

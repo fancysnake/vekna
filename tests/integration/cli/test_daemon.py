@@ -1146,6 +1146,20 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("hold_one")
     async def hold_one(_: NoComponents) -> Holding:
         return Holding()
+
+
+    class Boom(BaseModel):
+        pass
+
+
+    @step
+    async def blow_up(_: Boom) -> Done[Boom]:
+        raise RuntimeError("boom")
+
+
+    @ritual("boom")
+    async def boom(_: NoComponents) -> Boom:
+        return Boom()
     """)
 
 
@@ -1429,6 +1443,18 @@ class TestFollowing:
 
         assert code == 1
         assert _DAEMON_WENT in capsys.readouterr().err
+
+    @staticmethod
+    async def test_a_cast_that_raises_still_lets_go_of_the_daemon(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log):
+            with pytest.raises(RuntimeError, match="boom"):
+                await _drive(["boom"])
+
+            await _eventually(lambda: "detached" in log.read_text())
 
 
 def _drained(capsys: pytest.CaptureFixture[str], said: list[str]) -> str:

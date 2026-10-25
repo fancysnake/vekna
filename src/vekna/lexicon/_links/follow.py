@@ -39,7 +39,7 @@ _MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
 
 # Every line a cast's renderer writes, under the name of the cast that said it:
 # several casts stream into one terminal, and indentation is all a line carries.
-class _Prefixed:
+class _Prefixed(Out):
     def __init__(self, out: Out, label: str) -> None:
         self._out = out
         self._label = f"[{label}] "
@@ -135,6 +135,9 @@ class Follower:
         if (reader := self._wire.reader) is not None:
             reader.cancel()
             await asyncio.gather(reader, return_exceptions=True)
+        await self._hang_up()
+
+    async def _hang_up(self) -> None:
         if (writer := self._wire.writer) is not None:
             self._wire.writer = None
             writer.close()
@@ -151,7 +154,7 @@ class Follower:
                     self._lineage.settled
                 ):
                     self._done.set()
-        self._wire.writer = None
+        await self._hang_up()
         self._done.set()
 
     def _heard(self, message: WireMessage) -> None:
