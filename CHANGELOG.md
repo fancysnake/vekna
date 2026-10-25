@@ -42,6 +42,21 @@ when.
 
 - A worktree lease fails, rather than waits forever, when every tree not
   blocked is held by a cast awaiting one that needs a tree.
+- **Errors name what went wrong and where.**
+  ([#98](https://github.com/fancysnake/vekna/issues/98))
+  - A bad component value names the flag and the ritual, not pydantic's model
+    dump; an unknown flag is refused instead of dropped.
+  - A config names its file when it does not parse, a misspelt top-level table
+    such as `[ritual]`, and a `[defaults.<ritual>]` value of the wrong type,
+    in `rituals show` as well as at the cast.
+  - A corrupt event log names the line; a resume with nothing to replay says
+    so; a queued or resumed cast whose recorded components no longer fit names
+    the cast.
+  - One payload class claimed by steps in two sources names both files.
+  - An agent error from outside the SDK's own hierarchy fails the cast instead
+    of escaping as a traceback, and a stream that ends with no result fails it
+    instead of passing half a reply.
+  - A Focus that did not load names the module that was missing.
 
 ## [0.14.0] - 2026-10-23
 

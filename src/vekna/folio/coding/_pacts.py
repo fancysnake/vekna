@@ -10,6 +10,7 @@ from pydantic import (
 )
 
 from vekna.lexicon import RitualError
+from vekna.wire import refusals
 
 
 class CodingOutputError(RitualError):
@@ -36,15 +37,13 @@ def _where(loc: tuple[int | str, ...]) -> str:
 # refusal names where they went. Anything else pydantic rejected is quoted as it
 # came: a `RitualError` either way, because a mis-built bundle is an author's
 # mistake in a file only they decide to type-check, and the cast should say so
-# rather than unwind through the engine's frames. Reading `errors()` is what
-# this module's `disallow_any_expr` exemption is for — pydantic's report is a
-# list of TypedDicts whose values are `Any`, and it stops here.
+# rather than unwind through the engine's frames.
 def _refusal(*, bundle: str, error: ValidationError) -> str:
-    details = error.errors()
+    details = refusals(error)
     extras = [
-        str(detail["loc"][0])
+        str(detail.loc[0])
         for detail in details
-        if detail["type"] == "extra_forbidden" and detail["loc"]
+        if detail.kind == "extra_forbidden" and detail.loc
     ]
     if extras:
         named = ", ".join(repr(name) for name in extras)
@@ -54,7 +53,7 @@ def _refusal(*, bundle: str, error: ValidationError) -> str:
     # Reassembled rather than quoted whole: inside a wrap validator pydantic
     # titles its own report `ValidatorCallable`, which names an implementation
     # detail of this refusal instead of the model the author was building.
-    said = "; ".join(f"{_where(detail['loc'])}: {detail['msg']}" for detail in details)
+    said = "; ".join(f"{_where(detail.loc)}: {detail.msg}" for detail in details)
     return f"{bundle} refused what it was given — {said}"
 
 

@@ -1,11 +1,14 @@
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from vekna.lexicon._pacts import Resumption, RitualDefinitionError
 from vekna.wire import (
     RunRecord,
     WireMessage,
     default_runs_root,
     events_log,
+    explained,
     read_events,
     read_record,
     run_file,
@@ -39,7 +42,8 @@ def _record(root: Path, cast_id: str) -> RunRecord | None:
     try:
         return read_record(root, cast_id)
     except (OSError, ValueError) as error:
-        msg = f"the record at {run_file(root, cast_id)} cannot be read: {error}"
+        said = explained(error) if isinstance(error, ValidationError) else error
+        msg = f"the record at {run_file(root, cast_id)} cannot be read: {said}"
         raise RitualDefinitionError(msg) from error
 
 

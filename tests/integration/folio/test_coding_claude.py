@@ -333,6 +333,70 @@ class TestAgentUnreachable:
         assert "cast failed: the agent failed" in err
         assert "ClaudeSDKError: the transport went away" in err
 
+    # What did not import is named as it came: a dependency of the SDK, or a
+    # module inside the folio itself, is not fixed by installing the SDK.
+    @staticmethod
+    def test_a_focus_that_did_not_load_names_the_missing_module(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", None)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert "no Focus registered for medium 'coding'" in err
+        assert (
+            "vekna.folio.coding_claude did not load: import of claude_agent_sdk"
+            " halted" in err
+        )
+
+    # The SDK's control protocol times out with a bare `Exception`, and its
+    # reader re-raises whatever broke the stream as it came.
+    @staticmethod
+    def test_an_error_outside_the_sdk_hierarchy_ends_the_cast_with_its_name(
+        tmp_path, monkeypatch, capsys
+    ):
+        stub = _sdk_stub_failing_with(Exception("Control request timeout: initialize"))
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        assert (
+            "cast failed: the agent failed: Exception: Control request timeout:"
+            " initialize" in err
+        )
+        assert "Traceback" not in err
+
+    # The SDK drops a torn last frame at debug level, so a CLI that exits clean
+    # after one leaves a stream with no result in it.
+    @staticmethod
+    def test_a_stream_that_ends_without_a_result_fails_the_cast(
+        tmp_path, monkeypatch, capsys
+    ):
+        stub = _sdk_stub({})
+
+        async def query(**_kwargs):
+            await asyncio.sleep(0)
+            yield stub.AssistantMessage(content=[stub.TextBlock(text="half a hai")])
+
+        stub.query = query
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _CAST_FAILED_EXIT
+        assert "cast failed: the agent's stream ended without a result" in err
+
     # A stream that is not a generator cannot be closed, and an unclosed stream
     # is a CLI left working the repo after its rite is cut.
     @staticmethod

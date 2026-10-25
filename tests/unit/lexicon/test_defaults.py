@@ -1,8 +1,9 @@
 import asyncio
 from pathlib import Path
+from typing import Self
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from vekna.lexicon import Done, RitualDefinitionError
 from vekna.lexicon._mills.defaults import Default, Defaults
@@ -15,6 +16,18 @@ PROJECT = Path("/repo/.vekna.toml")
 class _Greeting(BaseModel):
     name: str
     loud: bool = False
+
+
+class _Span(BaseModel):
+    start: int
+    stop: int
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.start >= self.stop:
+            msg = "start must come before stop"
+            raise ValueError(msg)
+        return self
 
 
 async def _never(_: BaseModel) -> Transition:
@@ -66,3 +79,15 @@ class TestDefaults:
         defaults = Defaults([])
 
         assert defaults.of(GREET) == {}
+
+    # A model-level validator refuses the whole set, and has no flag to name.
+    @staticmethod
+    def test_a_refusal_of_the_whole_model_names_the_ritual():
+        span = Ritual(
+            name="span", components=_Span, run=_never, max_steps=1, exits=(), ends=True
+        )
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            Defaults([]).components(span, {"start": 3, "stop": 1})
+
+        assert str(raised.value) == "span: Value error, start must come before stop"

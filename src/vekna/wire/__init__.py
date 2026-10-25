@@ -55,6 +55,7 @@ from ._pacts import (
     decode_frame,
     encode_frame,
 )
+from ._refusals import Refusal, explained, refusals
 from ._specs import allowed_answers, parse_flags
 from ._toml import TomlValue, read_toml
 
@@ -89,6 +90,7 @@ __all__ = [
     "LockDenied",
     "LockGranted",
     "LockReleased",
+    "Refusal",
     "RiteDelta",
     "RiteEndStatus",
     "RiteFinished",
@@ -108,6 +110,7 @@ __all__ = [
     "default_state_root",
     "encode_frame",
     "events_log",
+    "explained",
     "parse_flags",
     "project_config_path",
     "project_of",
@@ -115,5 +118,6 @@ __all__ = [
     "read_frames",
     "read_record",
     "read_toml",
+    "refusals",
     "run_file",
 ]

@@ -311,6 +311,9 @@ Transition = BaseModel | Done[BaseModel | None]
 @dataclass(frozen=True, kw_only=True)
 class Step:
     name: str
+    # The file it was written in: two sources can claim one payload class, and
+    # the import that trips over the second names only itself.
+    source: str
     run: Callable[[BaseModel], Awaitable[Transition]]
     payloads: tuple[type[BaseModel], ...]
     exits: tuple[type[BaseModel], ...]

@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
-    ClaudeSDKError,
     CLINotFoundError,
     TextBlock,
     create_sdk_mcp_server,
@@ -231,6 +230,12 @@ async def _streamed(
                 num_turns = message.num_turns
                 cost_usd = message.total_cost_usd
                 result_text = message.result
+    # The SDK drops a torn last frame at debug level, so a CLI that exits clean
+    # after one ends the stream with no result, and the text so far is half a
+    # reply rather than the reply.
+    if session_id is None:
+        msg = "the agent's stream ended without a result — its reply was cut short"
+        raise RitualError(msg)
     return FocusReply(
         text=result_text if result_text is not None else "".join(parts),
         session_id=session_id,
@@ -256,10 +261,14 @@ class ClaudeCodingFocus(CodingFocusProtocol):
             )
         except CLINotFoundError as error:
             raise RitualError(_NO_CLI) from error
+        except RitualError:
+            raise
         # Everything else the SDK raises mid-stream — the subprocess dying, a
-        # dropped connection, a frame that will not decode. A traceback out of
-        # someone else's library says nothing about which rite was running, and
-        # the cast has to end as a failed cast rather than as a crash.
-        except ClaudeSDKError as error:
+        # dropped connection, a frame that will not decode. Not only its own
+        # hierarchy: the control protocol times out with a bare `Exception`, and
+        # the reader re-raises whatever broke the stream as it came. A traceback
+        # out of someone else's library says nothing about which rite was
+        # running, and the cast has to end as a failed cast, not as a crash.
+        except Exception as error:
             msg = f"the agent failed: {error.__class__.__name__}: {error}"
             raise RitualError(msg) from error

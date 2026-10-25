@@ -5,6 +5,8 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import UTC
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from ._pacts import (
     CastMessage,
     CastRefused,
@@ -15,6 +17,7 @@ from ._pacts import (
     WireMessage,
     decode_frame,
 )
+from ._refusals import explained
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -168,6 +171,14 @@ def read_events(root: Path, cast_id: str) -> Iterator[WireMessage]:
     if not path.is_file():
         return
     with path.open("rb") as events:
-        for frame in events:
-            if frame.strip():
-                yield decode_frame(frame)
+        for line, frame in enumerate(events, start=1):
+            if not frame.strip():
+                continue
+            # A log runs to thousands of frames, and the parser's report names
+            # the field but not the frame it was in.
+            try:
+                message = decode_frame(frame)
+            except ValidationError as error:
+                msg = f"line {line}: {explained(error)}"
+                raise ValueError(msg) from error
+            yield message

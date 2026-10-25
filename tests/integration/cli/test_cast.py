@@ -148,6 +148,23 @@ class TestCast:
         assert "tick" in capsys.readouterr().out
 
     @staticmethod
+    def test_a_rituals_file_that_does_not_parse_names_the_file_and_line(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        rituals = tmp_path / "rituals.py"
+        rituals.write_text("def broken(:\n")
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["countdown"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err.startswith(f"{rituals} failed to import: SyntaxError: ")
+        assert "(rituals.py, line 1)" in err
+        assert "Traceback" not in err
+
+    @staticmethod
     def test_unknown_ritual_exits_nonzero(tmp_path, monkeypatch):
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
@@ -382,6 +399,63 @@ class TestCastConfig:
         assert ".vekna.toml" in capsys.readouterr().err
 
     @staticmethod
+    def test_a_config_that_does_not_validate_names_the_field(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[rituals]\nfiles = "extra.py"\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["countdown", "--start", "1"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            f"{tmp_path / '.vekna.toml'}: rituals.files: Input should be a valid list\n"
+        )
+
+    @staticmethod
+    def test_a_config_that_does_not_parse_names_the_file(tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text("[rituals\n")
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["countdown", "--start", "1"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err.startswith(f"{tmp_path / '.vekna.toml'}: Expected ']'")
+
+    @staticmethod
+    def test_a_misspelt_table_names_the_one_it_resembles(tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "extra.py").write_text(_EXTRA)
+        (tmp_path / ".vekna.toml").write_text('[ritual]\nfiles = ["extra.py"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["ping"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            f"{tmp_path / '.vekna.toml'}: vekna reads no [ritual] table"
+            " — did you mean [rituals]?\n"
+        )
+
+    # Other tools keep their tables in the same file, and what vekna does not
+    # read is theirs.
+    @staticmethod
+    def test_a_table_vekna_does_not_read_is_left_alone(tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[cabinet]\nremote = "origin"\n')
+        monkeypatch.chdir(tmp_path)
+
+        assert main(["countdown", "--start", "1"]) == 0
+
+    @staticmethod
     def test_unimportable_rituals_file_is_a_usage_error(tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         (tmp_path / "extra.txt").write_text(_EXTRA)
@@ -598,6 +672,68 @@ class TestCastDefaults:
         err = capsys.readouterr().err
         assert exit_code == _USAGE_EXIT
         assert ".vekna.toml: [defaults.pr_check] sets 'base_brnach'" in err
+
+    @staticmethod
+    def test_a_default_of_the_wrong_type_fails_naming_the_file(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        (tmp_path / ".vekna.toml").write_text('[defaults.pr_check]\nmax_prs = "many"\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["pr_check", "--pull-request", "7", "--base-branch", "x"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            f'{tmp_path / ".vekna.toml"}: [defaults.pr_check] max_prs = "many":'
+            " Input should be a valid integer, unable to parse string as an integer\n"
+        )
+
+    @staticmethod
+    def test_a_value_that_does_not_validate_names_the_flag_and_the_ritual(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["pr_check", "--pull-request", "seven", "--base-branch", "x"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            "pr_check: --pull-request 'seven': Input should be a valid integer,"
+            " unable to parse string as an integer\n"
+        )
+
+    @staticmethod
+    def test_a_missing_component_names_its_flag(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["pr_check", "--base-branch", "x"])
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == "pr_check: --pull-request is required\n"
+
+    # Dropped, an unknown flag is a typo the ritual runs straight past: a
+    # `--max-pr 9` would cast with the default the operator meant to override.
+    @staticmethod
+    def test_an_unknown_flag_is_refused(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_CHECKED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(
+            ["pr_check", "--pull-request", "7", "--base-branch", "x", "--max-pr", "9"]
+        )
+
+        err = capsys.readouterr().err
+        assert exit_code == _USAGE_EXIT
+        assert err == (
+            "pr_check takes no --max-pr"
+            " (it takes --pull-request, --base-branch, --max-prs)\n"
+        )
 
     @staticmethod
     def test_a_ritual_not_installed_here_is_not_an_error(tmp_path, monkeypatch):

@@ -198,6 +198,31 @@ class TestResume:
 
         assert (project / "said.log").read_text() == "hey q"
 
+    # Queued from a lexicon that has since changed: the record still names the
+    # cast it was, so the refusal does too.
+    @staticmethod
+    def test_a_queued_cast_whose_components_no_longer_fit_names_the_cast(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        _queued_greeting(project, tmp_path / "runs", {"word": "hey"})
+
+        assert main(["--resume", "q1"]) == _USAGE_EXIT
+
+        assert capsys.readouterr().err == "cast 'q1': greet: --name is required\n"
+
+    @staticmethod
+    def test_a_resumed_cast_whose_components_no_longer_fit_names_the_cast(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        _journalled(project, tmp_path / "runs", "c9", ritual="greet")
+
+        assert main(["--resume", "c9"]) == _USAGE_EXIT
+
+        assert capsys.readouterr().err == (
+            "cast 'c9': its recorded components do not fit greet"
+            " — name: Field required\n"
+        )
+
     # Only the cast knows its ritual wants a tree, so a spawned one without a
     # lease says so before it does anything, and the daemon queues it again.
     @staticmethod
@@ -348,8 +373,10 @@ class TestResume:
 
     @staticmethod
     @pytest.mark.usefixtures("project")
-    def test_a_cast_with_no_journal_says_so():
+    def test_a_cast_with_no_journal_says_so(capsys: pytest.CaptureFixture[str]):
         assert main(["--resume", "never-happened"]) == _USAGE_EXIT
+
+        assert "no journal for cast 'never-happened' at" in capsys.readouterr().err
 
     @staticmethod
     @pytest.mark.usefixtures("project")
@@ -472,9 +499,12 @@ class TestWhereTheJournalLives:
         assert default_runs_root().parts[-4:] == (".local", "state", "vekna", "runs")
 
     # A run directory with no event log is a cast the daemon heard say hello and
-    # nothing else. There is nothing to replay, and that is not an error.
+    # nothing else. There is nothing to replay, and that is not an error — but
+    # a resume that redoes every step says so before it starts.
     @staticmethod
-    def test_a_run_with_no_events_replays_nothing(project: Path, tmp_path: Path):
+    def test_a_run_with_no_events_replays_nothing(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
         cast_id = "c4"
         _journalled(project, tmp_path / "runs", cast_id)
         (tmp_path / "runs" / cast_id / "events.jsonl").unlink()
@@ -482,6 +512,10 @@ class TestWhereTheJournalLives:
         assert main(["--resume", cast_id]) == 0
 
         assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
+        assert (
+            "note: cast 'c4' recorded nothing to replay — every step runs live\n"
+            in capsys.readouterr().err
+        )
 
 
 class TestFramesOnDisk:
@@ -539,7 +573,35 @@ class TestFramesOnDisk:
 
         assert main(["--resume", cast_id]) == _USAGE_EXIT
 
-        assert "events.jsonl cannot be read" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "events.jsonl cannot be read: line 5: Invalid JSON" in err
+        assert "errors.pydantic.dev" not in err
+
+    @staticmethod
+    def test_a_frame_of_no_known_kind_names_its_line(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        events = tmp_path / "runs" / cast_id / "events.jsonl"
+        first, *rest = events.read_bytes().splitlines(keepends=True)
+        events.write_bytes(b"".join([first, b'{"kind": "nope"}\n', *rest]))
+
+        assert main(["--resume", cast_id]) == _USAGE_EXIT
+
+        assert "events.jsonl cannot be read: line 2: " in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_record_of_the_wrong_shape_names_the_field(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        cast_id = _record_an_interrupted_cast(project, tmp_path / "runs")
+        (tmp_path / "runs" / cast_id / "run.json").write_text('{"hello": {}}')
+
+        assert main(["--resume", cast_id]) == _USAGE_EXIT
+
+        err = capsys.readouterr().err
+        assert "run.json cannot be read: hello.cast_id: Field required;" in err
+        assert "errors.pydantic.dev" not in err
 
     # A gap costs the tail, which is what an interrupted cast loses anyway: the
     # journal never appends past a failed write, so there is no hole to resume

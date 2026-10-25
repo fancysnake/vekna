@@ -297,8 +297,10 @@ class TestStepTable:
             def again(state: State) -> Done[State]:
                 return Done(state)
 
-        assert "State is the payload of both step 'noop' and step 'again'" in str(
-            raised.value
+        here = __file__
+        assert str(raised.value) == (
+            f"State is the payload of both step 'noop' ({here}) and step 'again'"
+            f" ({here}) — one payload class, one step"
         )
 
     @staticmethod
@@ -332,7 +334,9 @@ class TestStepTable:
 
     @staticmethod
     def test_a_renamed_copy_is_another_step():
-        with pytest.raises(RitualDefinitionError, match="'noop' and step 'copy'"):
+        with pytest.raises(
+            RitualDefinitionError, match=r"'noop' \(.*\) and step 'copy'"
+        ):
             register_step(replace(noop, name="copy"))
 
 

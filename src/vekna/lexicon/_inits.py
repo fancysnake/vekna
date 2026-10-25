@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import NamedTuple
 from uuid import uuid4
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from vekna.wire import (
     NEEDS_TREE,
@@ -18,6 +18,7 @@ from vekna.wire import (
     WireMessage,
     default_config_path,
     default_socket_path,
+    explained,
     parse_flags,
     project_config_path,
     project_of,
@@ -90,10 +91,18 @@ _FOLIOS = ("vekna.folio.coding", "vekna.folio.coding_claude")
 # Registration is an explicit call, not an import side effect: importing a
 # folio twice must not mean registering twice, and tests need a seam that is
 # not "delete the module from sys.modules".
-def _load_folios() -> None:
+# A folio that does not import is not the cast's failure until a medium needs
+# it, so each one is kept as said, for the refusal that comes then: the module
+# missing may be a dependency of the SDK or a module of the folio's own, and
+# the medium's install hint can only guess.
+def _load_folios() -> tuple[str, ...]:
+    unloaded: list[str] = []
     for name in _FOLIOS:
-        with contextlib.suppress(ModuleNotFoundError):
+        try:
             importlib.import_module(name).register()
+        except ModuleNotFoundError as error:
+            unloaded.append(f"{name} did not load: {error}")
+    return tuple(unloaded)
 
 
 # A directory counts only with an `__init__.py`, at every level: a `rituals/`
@@ -420,6 +429,8 @@ class _Plan(NamedTuple):
     leased: bool = False
     # The cast that queued this one, kept on the hello its own run says.
     enqueued_by: str | None = None
+    # Each folio that did not import, as `_load_folios` said it.
+    unloaded: tuple[str, ...] = ()
 
 
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
@@ -435,10 +446,17 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     the_ritual = compendium.ritual(hello.ritual)
     if resumption.record.status == "queued":
         # Nobody typed a queued cast's components: whoever queued it named what
-        # it meant, and this repo's defaults answer the rest.
+        # it meant, and this repo's defaults answer the rest. The cast is named
+        # because nobody typed it either: it is a row in `vekna log`, not a
+        # command line still on screen.
+        try:
+            components = library.defaults.components(the_ritual, hello.components)
+        except RitualDefinitionError as error:
+            msg = f"cast {cast_id!r}: {error}"
+            raise RitualDefinitionError(msg) from error
         return _Plan(
             the_ritual,
-            library.defaults.components(the_ritual, hello.components),
+            components,
             refusing,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
@@ -448,11 +466,27 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     # The record holds the components as the CLI already validated them once,
     # so they are validated again against the same model rather than
     # re-derived into flags and parsed back out.
+    try:
+        components = the_ritual.components.model_validate(hello.components)
+    except ValidationError as error:
+        msg = (
+            f"cast {cast_id!r}: its recorded components do not fit"
+            f" {the_ritual.name} — {explained(error)}"
+        )
+        raise RitualDefinitionError(msg) from error
+    # Not an error: a cast killed before its first rite landed has nothing to
+    # replay. But every step it redoes is one the operator may have expected
+    # off the record.
+    if (ledger := Ledger.from_resumption(resumption)).empty:
+        sys.stderr.write(
+            f"note: cast {cast_id!r} recorded nothing to replay"
+            " — every step runs live\n"
+        )
     return _Plan(
         ritual=the_ritual,
-        components=the_ritual.components.model_validate(hello.components),
+        components=components,
         unattended=refusing,
-        ledger=Ledger.from_resumption(resumption),
+        ledger=ledger,
         resumed_from=cast_id,
         compendium=compendium,
     )
@@ -547,8 +581,9 @@ async def _cast(
                 ledger=plan.ledger,
             )
     except FocusMissingError as error:
-        sys.stderr.write(f"{error}\n")
-        code, detail = 2, str(error)
+        detail = "; ".join((str(error), *plan.unloaded))
+        sys.stderr.write(f"{detail}\n")
+        code = 2
     except RitualError as error:
         sys.stderr.write(f"cast failed: {error}\n")
         code, detail = 1, str(error)
@@ -641,10 +676,10 @@ async def _drive(argv: list[str]) -> int:
     if not argv:
         sys.stderr.write(_USAGE)
         return 2
-    _load_folios()
+    unloaded = _load_folios()
     try:
         plan = _resolve_cast(argv, unattended=unattended)._replace(
-            wired=_WIRED_FLAG in leading
+            wired=_WIRED_FLAG in leading, unloaded=unloaded
         )
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
