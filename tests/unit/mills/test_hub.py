@@ -916,6 +916,33 @@ class TestClaims:
         assert peer.sent == [_claim()]
 
     @staticmethod
+    def test_a_claim_made_before_its_prompt_holds_nothing():
+        hub = Hub()
+        hub.apply(_hello())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(_Surface(), _claim())
+        hub.apply(_asked())
+
+        hub.answer(_Surface(), _yes())
+
+        assert peer.sent == [_yes()]
+
+    @staticmethod
+    def test_a_claim_applied_on_no_open_prompt_is_dropped():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+
+        hub.apply(_claim())
+
+        assert "q1" not in hub.casts["c1"].waiting
+        assert not peer.sent
+        assert routed[-1].reason == "no such prompt"
+
+    @staticmethod
     def test_a_late_surface_hears_the_claim_after_the_prompt():
         hub = Hub()
         hub.apply(_hello())

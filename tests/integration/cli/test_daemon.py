@@ -15,13 +15,16 @@ from click.testing import CliRunner
 
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
+from vekna.lexicon._inits import _DAEMON_WENT, _FOLLOWING, _LEFT, _drive
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
+from vekna.links.spawner import Spawner, pid_alive
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastQueued,
@@ -30,6 +33,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideRequested,
     EnqueueRefused,
     EnqueueRequested,
@@ -342,6 +346,16 @@ class TestPeers:
         assert await host == 0
 
     @staticmethod
+    async def test_the_drawn_window_opens_with_debug_asked_too_late(socket_path: Path):
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log) as host:
+            peer = asyncio.create_task(tui_window(debug=True, headless=True))
+            await _eventually(lambda: log.exists() and "attached" in log.read_text())
+
+        assert await asyncio.wait_for(peer, timeout=10) == 0
+        assert await host == 0
+
+    @staticmethod
     async def test_debug_asked_of_a_running_daemon_says_it_is_too_late(
         socket_path: Path,
     ):
@@ -353,6 +367,34 @@ class TestPeers:
             keys.press("q")
 
             assert await peer == 0
+
+    @staticmethod
+    async def test_a_window_s_claim_and_cancel_reach_the_cast(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        asked = DecideRequested(
+            cast_id="c1", request_id="q1", prompt="push?", options=["yes", "no"]
+        )
+        claimed = DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+        cancel = CastCancelRequested(cast_id="c1")
+        async with _served(socket_path):
+            cast_reader, cast_writer = await attach(socket_path)
+            for message in (_hello(), asked):
+                cast_writer.write(encode_frame(message))
+            await cast_writer.drain()
+            surface = await _say(socket_path, SurfaceHello(), claimed, cancel)
+
+            heard: list[WireMessage] = []
+            async with asyncio.timeout(10):
+                async for message in read_frames(cast_reader):
+                    heard.append(message)
+                    if message == cancel:
+                        break
+
+            assert heard == [claimed, cancel]
+            surface.close()
+            cast_writer.close()
+        assert "cast c1 has no pid to signal" in capsys.readouterr().err
 
     # The handshake this end wrote is the one frame kind that cannot come back,
     # and a peer that took it for a cast would paint one that is not there. The
@@ -986,6 +1028,9 @@ class TestWorktrees:
 
 
 _QUEUE_RITUALS = textwrap.dedent("""
+    import asyncio
+    from pathlib import Path
+
     from pydantic import BaseModel
 
     from vekna.folio.flow import await_cast, enqueue
@@ -1032,6 +1077,38 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("fan")
     async def fan(_: NoComponents) -> Fan:
         return Fan()
+
+
+    class Held(BaseModel):
+        pass
+
+
+    # Runs until the test lets it go by touching `release` where it runs.
+    @step
+    async def held(_: Held) -> Done[Held]:
+        while not Path("release").exists():
+            await asyncio.sleep(0.05)
+        return Done(Held())
+
+
+    @ritual("hold")
+    async def hold(_: NoComponents) -> Held:
+        return Held()
+
+
+    class Holding(BaseModel):
+        pass
+
+
+    @step
+    async def holding(_: Holding) -> Done[Holding]:
+        await enqueue("hold", NoComponents())
+        return Done(Holding())
+
+
+    @ritual("hold_one")
+    async def hold_one(_: NoComponents) -> Holding:
+        return Holding()
     """)
 
 
@@ -1264,3 +1341,59 @@ class TestQueue:
             writer.close()
             keys.press("q")
             await peer
+
+
+# The hand cast in this process, so what it does once its own steps end is
+# measured: a subprocess's lines are not.
+@pytest.mark.asyncio
+class TestFollowing:
+    @staticmethod
+    async def test_it_says_it_is_following_and_ends_with_the_child(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        (queue_rituals / "release").touch()
+        async with _served(socket_path):
+            code = await _drive(["hold_one"])
+
+        assert code == 0
+        assert _FOLLOWING in capsys.readouterr().out
+
+    @staticmethod
+    async def test_ctrl_c_leaves_the_child_running_and_keeps_the_cast_s_code(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        said: list[str] = []
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["hold_one"]))
+            await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
+
+            cast.cancel()
+            code = await cast
+            (queue_rituals / "release").touch()
+            await _spawned(lambda: _finished(queue_rituals / "runs", "hold"))
+
+        assert code == 0
+        assert _LEFT in _drained(capsys, said)
+
+    @staticmethod
+    async def test_a_daemon_gone_before_the_child_ends_fails_the_cast(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        said: list[str] = []
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["hold_one"]))
+            await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
+
+        code = await asyncio.wait_for(cast, timeout=10)
+        [child] = Spawner(command=[], runs=queue_rituals / "runs").left_behind()
+        (queue_rituals / "release").touch()
+        # Reaped while this loop still runs, or its watcher reports to a closed one.
+        await _spawned(lambda: not pid_alive(child.pid))
+
+        assert code == 1
+        assert _DAEMON_WENT in capsys.readouterr().err
+
+
+def _drained(capsys: pytest.CaptureFixture[str], said: list[str]) -> str:
+    said.append(capsys.readouterr().out)
+    return "".join(said)

@@ -57,7 +57,7 @@ class _Prefixed:
     def flush(self) -> None:
         self._out.flush()
 
-    def isatty(self) -> bool:
+    def isatty(self) -> bool:  # pragma: no cover
         return self._out.isatty()
 
 

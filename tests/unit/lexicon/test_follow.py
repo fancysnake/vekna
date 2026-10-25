@@ -76,3 +76,14 @@ class TestSettled:
 
         assert lineage.settled
         assert not lineage.failed
+
+    @staticmethod
+    def test_every_descendant_ending_ok_has_not_failed():
+        lineage = Lineage("root")
+        lineage.expect("child")
+        lineage.heard(_hello("child", by="root"))
+
+        lineage.heard(CastGoodbye(cast_id="child", status="ok"))
+
+        assert lineage.settled
+        assert not lineage.failed

@@ -16,7 +16,9 @@ from vekna.wire import (
     DecideRequested,
     DecideResolved,
     RiteDelta,
+    RiteFinished,
     RiteStarted,
+    TreeBlocked,
     WireMessage,
 )
 
@@ -161,6 +163,114 @@ class TestListing:
         assert output == "[red] check"
         assert "main · /proj" in head
 
+    @staticmethod
+    async def test_a_failed_rite_says_the_first_line_of_why():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(
+            RiteFinished(
+                cast_id="c1",
+                rite_id="r1",
+                status="error",
+                finished_at=_WHEN,
+                error="gh failed\ntraceback",
+            )
+        )
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            rites = _rites(app)
+        assert rites == ["✗ watch  0s  gh failed"]
+
+    @staticmethod
+    async def test_a_tree_left_blocked_is_said_under_the_cast():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(TreeBlocked(cast_id="c1", path="/trees/1", reason="dirty"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            head = _text(app, "#head")
+        assert head.endswith("\ntree /trees/1 left blocked: dirty")
+
+    @staticmethod
+    async def test_why_an_ended_cast_ended_follows_its_output():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(CastGoodbye(cast_id="c1", status="error", detail="boom\ntrace"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["boom", "trace"]
+
+    @staticmethod
+    async def test_the_cursor_stays_on_its_cast_when_another_arrives():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            hub.apply(_hello("c2", "sweep"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            rows = _cells(app)
+            head = _text(app, "#head")
+        assert sorted(row[1] for row in rows) == ["nap", "sweep"]
+        assert head.startswith("nap  c1")
+
+    @staticmethod
+    async def test_the_rite_picked_keeps_its_output_when_the_tree_grows():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "first"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one"))
+        hub.apply(_rite("r2", "second"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="two"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            tree: Tree[str | None] = app.query_one("#rites", Tree)
+            tree.move_cursor(tree.root.children[0])
+            await pilot.pause(_PAINTED)
+            hub.apply(_rite("r3", "third"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+            picked = tree.cursor_node
+        assert output == ["one"]
+        assert picked is not None
+        assert picked.data == "r1"
+
+    @staticmethod
+    async def test_g_shows_every_project_and_p_goes_back_home():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            every = (app.sub_title, _cells(app)[0][1])
+            await pilot.press("p")
+            await pilot.pause(_PAINTED)
+
+            home = (app.sub_title, _cells(app)[0][1])
+        assert every == ("1 running  (all projects)", "proj:nap")
+        assert home == ("1 running  (proj)", "nap")
+
 
 @pytest.mark.asyncio
 class TestWaiting:
@@ -208,6 +318,32 @@ class TestWaiting:
         assert pointer == "⏸ 1 cast waits on you · w goes to it"
         assert ask.startswith("⏸ push?")
 
+    @staticmethod
+    async def test_with_no_cast_waiting_w_says_so():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("w")
+
+            note = _text(app, "#note")
+        assert note == "no cast is waiting on you"
+
+    @staticmethod
+    async def test_a_prompt_claimed_by_another_window_says_so():
+        hub = Hub()
+        _asking(hub)
+        hub.apply(DecideClaimed(cast_id="c1", request_id="q1", claim_id="other"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            ask = _text(app, "#ask")
+        assert ask == "⏸ push?\n  yes | no · claimed elsewhere · t answers it"
+
 
 @pytest.mark.asyncio
 class TestCommands:
@@ -240,6 +376,60 @@ class TestCommands:
             note = _text(app, "#note")
         assert note.startswith("'zap' means nothing here")
 
+    @staticmethod
+    async def test_q_typed_quits():
+        app = _app(Hub(), [])
+
+        async with app.run_test() as pilot:
+            await pilot.press("c", "ctrl+u", "q", "enter")
+            await pilot.pause()
+
+            running = app.is_running
+        assert not running
+
+    @staticmethod
+    async def test_g_typed_shows_every_project():
+        app = _app(Hub(), [])
+
+        async with app.run_test() as pilot:
+            await pilot.press("c", "ctrl+u", "g", "enter")
+            await pilot.pause(_PAINTED)
+
+            title = app.sub_title
+        assert title == "no casts  (all projects)"
+
+    @staticmethod
+    async def test_t_typed_takes_the_prompt_over():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("c", "ctrl+u", "t", "enter")
+            await pilot.pause()
+
+            screen = app.screen
+        assert isinstance(screen, AnswerScreen)
+        assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_an_answer_with_nothing_waiting_says_so():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("a", *"yes", "enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+        assert not sent
+        assert note == "nothing to answer — pick a waiting cast first"
+
 
 @pytest.mark.asyncio
 class TestTakingOver:
@@ -262,6 +452,30 @@ class TestTakingOver:
         assert sent == [
             DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim.claim_id),
             DecideResolved(cast_id="c1", request_id="q1", answer="no"),
+        ]
+
+    @staticmethod
+    async def test_a_free_prompt_takes_an_answer_typed_into_the_dialog():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(
+            DecideRequested(cast_id="c1", request_id="q1", prompt="why?", free=True)
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("t")
+            await pilot.pause()
+            await pilot.click("#free")
+            await pilot.press(*"flaky", "enter")
+            await pilot.pause()
+
+        claim = _claim_then(sent)
+        assert sent == [
+            claim,
+            DecideResolved(cast_id="c1", request_id="q1", answer="flaky"),
         ]
 
     @staticmethod

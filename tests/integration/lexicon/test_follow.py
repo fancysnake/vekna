@@ -8,15 +8,19 @@ import pytest
 
 from vekna.lexicon._links.follow import Follower
 from vekna.lexicon._mills.follow import Lineage
+from vekna.lexicon._pacts import StandalonePromptError
 from vekna.links.socket_server import serve
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Surface
 from vekna.wire import (
     CastGoodbye,
     CastHello,
+    CastQueued,
     DecideClaimed,
     DecideRequested,
     DecideResolved,
+    GrimoireBegin,
+    GrimoireEnd,
     RiteDelta,
     RiteFinished,
     RiteStarted,
@@ -84,6 +88,31 @@ class _Asker:
         return self.answer
 
 
+class _Refuser:
+    @staticmethod
+    async def decide(
+        *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+    ) -> str:
+        del prompt, options, free
+        msg = "no terminal to ask on"
+        raise StandalonePromptError(msg)
+
+
+def _rite(cast_id: str = "child0000") -> tuple[RiteStarted, RiteDelta, RiteFinished]:
+    return (
+        RiteStarted(
+            cast_id=cast_id,
+            rite_id="r1",
+            parent_id=None,
+            name="watch",
+            category="step",
+            started_at=_WHEN,
+        ),
+        RiteDelta(cast_id=cast_id, rite_id="r1", delta="checks red"),
+        RiteFinished(cast_id=cast_id, rite_id="r1", status="ok", finished_at=_WHEN),
+    )
+
+
 @pytest.fixture(name="socket_path")
 def _socket_path(tmp_path: Path) -> Path:
     return tmp_path / "vekna.sock"
@@ -130,6 +159,73 @@ class TestFollowing:
             "[ci_watch child000] ✓ watch",
             "[ci_watch child000] ✓ done",
         ]
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_cast_saying_itself_again_shows_nothing_twice(socket_path: Path):
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        server = await serve(path=socket_path, routes=hub)
+        lineage = Lineage("root")
+        lineage.expect("child0000")
+        out = io.StringIO()
+        follower = Follower(socket_path=socket_path, lineage=lineage, out=out, ask=None)
+        await follower.attach()
+        await _eventually(lambda: any(r.action == "attached" for r in routed))
+        hub.apply(_hello("child0000", by="root"))
+        for message in _rite():
+            hub.apply(message)
+
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(GrimoireBegin(cast_id="child0000"))
+        for message in _rite():
+            hub.apply(message)
+        hub.apply(GrimoireEnd(cast_id="child0000"))
+        hub.apply(CastQueued(cast_id="child0000"))
+        hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
+
+        assert await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert out.getvalue().splitlines() == [
+            "[ci_watch child000] ▶ watch",
+            "[ci_watch child000]   checks red",
+            "[ci_watch child000] ✓ watch",
+            "[ci_watch child000] ✓ done",
+        ]
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_cast_heard_before_its_parent_is_not_shown(socket_path: Path):
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        server = await serve(path=socket_path, routes=hub)
+        lineage = Lineage("root")
+        lineage.expect("child0000")
+        out = io.StringIO()
+        asker = _Asker()
+        follower = Follower(
+            socket_path=socket_path, lineage=lineage, out=out, ask=asker
+        )
+        await follower.attach()
+        await _eventually(lambda: any(r.action == "attached" for r in routed))
+        started, delta, finished = _rite("grand0000")
+        hub.apply(_hello("grand0000", by="child0000"))
+        hub.apply(started)
+        hub.apply(_asked("grand0000"))
+
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(delta)
+        hub.apply(finished)
+        hub.claim(
+            _Peer(), DecideClaimed(cast_id="grand0000", request_id="q1", claim_id="k1")
+        )
+        hub.apply(CastGoodbye(cast_id="grand0000", status="ok"))
+        hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
+
+        assert await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert out.getvalue() == "[ci_watch child000] ✓ done\n"
+        assert not asker.asked
         await follower.close()
         await server.close()
 
@@ -241,5 +337,80 @@ class TestPrompts:
         assert out.getvalue() == (
             "[ci_watch child000] ⏸ push? — answer it in `vekna`\n"
         )
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_prompt_answered_at_the_cast_is_no_longer_asked_here(
+        socket_path: Path,
+    ):
+        hub = Hub()
+        server = await serve(path=socket_path, routes=hub)
+        asker = _Asker()
+        follower = Follower(
+            socket_path=socket_path,
+            lineage=Lineage("root"),
+            out=io.StringIO(),
+            ask=asker,
+        )
+        await follower.attach()
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(_asked())
+        await _eventually(lambda: bool(asker.asked))
+
+        hub.apply(DecideResolved(cast_id="child0000", request_id="q1", answer="no"))
+        await _eventually(lambda: asker.cancelled == 1)
+
+        assert asker.asked == ["[ci_watch child000] push?"]
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_prompt_replayed_while_asked_is_not_asked_twice(socket_path: Path):
+        hub = Hub()
+        server = await serve(path=socket_path, routes=hub)
+        asker = _Asker()
+        follower = Follower(
+            socket_path=socket_path,
+            lineage=Lineage("root"),
+            out=io.StringIO(),
+            ask=asker,
+        )
+        await follower.attach()
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(_asked())
+        await _eventually(lambda: bool(asker.asked))
+
+        hub.apply(GrimoireBegin(cast_id="child0000"))
+        hub.apply(_asked())
+        hub.apply(GrimoireEnd(cast_id="child0000"))
+        hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
+
+        assert await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert asker.asked == ["[ci_watch child000] push?"]
+        assert asker.cancelled == 0
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_prompt_it_cannot_ask_says_where_to_answer(socket_path: Path):
+        hub = Hub()
+        server = await serve(path=socket_path, routes=hub)
+        peer = _Peer()
+        out = io.StringIO()
+        follower = Follower(
+            socket_path=socket_path, lineage=Lineage("root"), out=out, ask=_Refuser()
+        )
+        await follower.attach()
+        hub.open_cast("child0000", peer)
+        hub.apply(_hello("child0000", by="root"))
+
+        hub.apply(_asked())
+        await _eventually(lambda: bool(out.getvalue()))
+
+        assert out.getvalue() == (
+            "[ci_watch child000] no terminal to ask on — answer it in `vekna`\n"
+        )
+        assert not peer.sent
         await follower.close()
         await server.close()

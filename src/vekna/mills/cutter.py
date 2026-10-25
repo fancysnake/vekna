@@ -39,7 +39,7 @@ class Cutter:
     def cut(self, cast_id: str) -> asyncio.Task[None]:
         if (task := self._cutting.get(cast_id)) is None:
             task = self._cutting[cast_id] = asyncio.create_task(self._cut(cast_id))
-            task.add_done_callback(lambda _: self._cutting.pop(cast_id, None))
+            task.add_done_callback(lambda _: self._cutting.pop(cast_id))
         return task
 
     async def _cut(self, cast_id: str) -> None:

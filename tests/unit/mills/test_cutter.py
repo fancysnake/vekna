@@ -129,3 +129,26 @@ class TestCutting:
         assert processes.said == [
             "cast c1 has no pid to signal: stop it at its terminal"
         ]
+
+    @staticmethod
+    async def test_a_cast_the_daemon_does_not_know_is_left_alone():
+        processes = _Processes()
+
+        await processes.cutter(Hub()).cut("c1")
+
+        assert not processes.sent
+        assert not processes.said
+
+    # Once one cut has ended, a cast asked to stop again is cut again.
+    @staticmethod
+    async def test_a_cut_asked_after_the_last_one_ended_signals_again():
+        hub = Hub()
+        hub.apply(_hello(pid=42))
+        processes = _Processes(stops_on={signal.SIGINT})
+        cutter = processes.cutter(hub)
+        await cutter.cut("c1")
+        processes.alive.add(42)
+
+        await cutter.cut("c1")
+
+        assert processes.sent == [(42, signal.SIGINT), (42, signal.SIGINT)]

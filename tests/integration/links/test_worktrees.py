@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.links.worktrees import GitTrees
+from vekna.links.worktrees import GitTrees, branch_of
 from vekna.pacts.circle import Full, TreeError
 
 
@@ -287,3 +287,22 @@ class TestTroubles:
 
         with pytest.raises(TreeError, match="prepare exited 4 in "):
             await pool.lease(prepare=swaps)
+
+
+@pytest.mark.asyncio
+class TestBranchOf:
+    @staticmethod
+    async def test_the_checked_out_branch_is_named(repo: Path):
+        _git(repo, "switch", "-q", "-c", "feature")
+
+        assert await branch_of(str(repo)) == "feature"
+
+    @staticmethod
+    async def test_a_detached_head_has_no_name(repo: Path):
+        _git(repo, "switch", "-q", "--detach")
+
+        assert await branch_of(str(repo)) is None
+
+    @staticmethod
+    async def test_a_directory_that_is_no_repository_has_no_name(tmp_path: Path):
+        assert await branch_of(str(tmp_path)) is None
