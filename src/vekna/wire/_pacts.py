@@ -33,7 +33,7 @@ class CastHello(BaseModel):
     started_at: datetime
     resumed_from: str | None = None
     # Spawned by the daemon, so its prompts are answered over the wire. A cast
-    # run by hand answers on its own terminal and nowhere else.
+    # run by hand asks on its own terminal too.
     wired: bool = False
     # Cast with `--unattended`: every `decide` refused. Kept so a cast carried
     # on later is unattended still, whatever the carrying-on command says.
@@ -44,6 +44,9 @@ class CastHello(BaseModel):
     # Said by the enqueuing cast, which has the ritual: the daemon leases a tree
     # before the first spawn instead of learning the need from `NEEDS_TREE`.
     worktree: bool = False
+    # The process saying it, which is what the daemon signals when a cancel
+    # asked over the wire is not acted on.
+    pid: int | None = None
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without
@@ -83,7 +86,8 @@ class CastRequested(BaseModel):
 
 
 # Said back to the surface that asked, and to nobody else: a request the daemon
-# would not queue is that operator's to hear about.
+# would not queue, or a cancel it could not pass on, is that operator's to hear
+# about.
 class CastRefused(BaseModel):
     kind: Literal["cast_refused"] = "cast_refused"
     reason: str
@@ -245,6 +249,19 @@ class DecideWithdrawn(BaseModel):
     request_id: str
 
 
+# Who answers a prompt. Unclaimed, whichever answers first: the terminal of a
+# cast typed by hand, the terminal following a spawned one, or any surface. A
+# surface claims a prompt to take it over: every other answerer
+# stops taking answers for it until the claim lets go, which `claim_id` None
+# says — the claiming surface went away. The id is how a surface tells its own
+# claim from somebody else's.
+class DecideClaimed(BaseModel):
+    kind: Literal["decide_claimed"] = "decide_claimed"
+    cast_id: str
+    request_id: str
+    claim_id: str | None
+
+
 # --- locks ---
 
 
@@ -324,6 +341,7 @@ CastUpdate = (
     | DecideRequested
     | DecideResolved
     | DecideWithdrawn
+    | DecideClaimed
     | LockAcquireRequested
     | LockGranted
     | LockDenied
@@ -349,7 +367,16 @@ Opening = SurfaceHello | StopRequested
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused
 
-WireMessage = CastMessage | Opening | Request
+
+# A surface asking for a running cast to end, passed on by the daemon down the
+# cast's own connection. The cast cancels itself, so its rites end cancelled and
+# it says goodbye like any cast that failed, rather than vanishing mid-write.
+class CastCancelRequested(BaseModel):
+    kind: Literal["cast_cancel_requested"] = "cast_cancel_requested"
+    cast_id: str
+
+
+WireMessage = CastMessage | Opening | Request | CastCancelRequested
 
 
 # --- the record on disk ---

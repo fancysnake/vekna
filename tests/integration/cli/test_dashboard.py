@@ -269,15 +269,15 @@ class TestAnswering:
         assert any("'maybe' is not one of go, stop" in frame for frame in keys.frames)
 
     @staticmethod
-    async def test_a_cast_run_by_hand_is_answered_on_its_own_terminal():
+    async def test_answering_a_cast_run_by_hand_takes_it_over_from_its_terminal():
         hub = Hub()
         _asking(hub, wired=False)
         dashboard, keys, sent = _sending(hub, "1", "a go", "q")
 
         await asyncio.wait_for(dashboard.run(), timeout=2)
 
-        assert not sent
-        assert any("answer it on its own terminal" in frame for frame in keys.frames)
+        assert sent == [DecideResolved(cast_id="c1", request_id="q1", answer="go")]
+        assert any("answering here takes it over" in frame for frame in keys.frames)
 
     @staticmethod
     async def test_with_no_cast_in_view_there_is_nothing_to_answer():

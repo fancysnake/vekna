@@ -1,20 +1,14 @@
 import asyncio
 import contextlib
 import itertools
-import shlex
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from vekna.pacts.casts import Casts, CastView
 from vekna.pacts.screen import Screen
-from vekna.wire import (
-    CastRequested,
-    DecideResolved,
-    WireMessage,
-    allowed_answers,
-    parse_flags,
-)
+from vekna.wire import WireMessage
 
+from .commands import request_cast, send_answer
 from .screen import ordered, paint, scoped
 
 # Long enough that a streaming rite does not repaint per line, short enough that
@@ -163,7 +157,9 @@ class Dashboard:
         elif lowered in _HOME:
             self._scope.every, self._scope.focus = False, None
         elif lowered.startswith(_CAST):
-            self._cast(line[len(_CAST) :])
+            self._note = request_cast(
+                typed=line[len(_CAST) :], root=self._scope.root, send=self._send
+            )
         elif lowered.startswith(_ANSWER):
             self._answer(line[len(_ANSWER) :].strip())
         elif lowered.isdecimal():
@@ -171,26 +167,8 @@ class Dashboard:
         elif lowered:
             self._note = f"{line!r} is not a cast — {_KEYS}"
 
-    # The flags read the way `vekna cast` reads them, and what they mean is the
-    # ritual's to say: the cast the daemon spawns validates them, and a bad one
-    # shows as that cast failing.
-    def _cast(self, typed: str) -> None:
-        try:
-            ritual, *flags = shlex.split(typed)
-            components = parse_flags(flags)
-        except ValueError as error:
-            self._note = f"c <ritual> [--flag value ...] — {error}"
-            return
-        self._send(
-            CastRequested(
-                project_root=self._scope.root, ritual=ritual, components=components
-            )
-        )
-        self._note = f"asked for {ritual}"
-
-    # The oldest open prompt of the cast in view, checked here by the rule the
-    # cast checks it by, so a typo is said at once rather than ignored there.
-    def _answer(self, answer: str) -> None:
+    # The oldest open prompt of the cast in view.
+    def _answer(self, typed: str) -> None:
         view = (
             None
             if self._scope.focus is None
@@ -199,19 +177,11 @@ class Dashboard:
         if view is None or not view.waiting:
             self._note = "nothing to answer — open a waiting cast first"
             return
-        if not view.hello.wired:
-            self._note = "this cast was run by hand — answer it on its own terminal"
-            return
-        request = next(iter(view.waiting.values()))
-        allowed = allowed_answers(options=request.options, free=request.free)
-        if allowed is not None and answer not in allowed:
-            self._note = f"{answer!r} is not one of {', '.join(allowed)}"
-            return
-        self._send(
-            DecideResolved(
-                cast_id=request.cast_id, request_id=request.request_id, answer=answer
-            )
-        )
+        request = next(iter(view.waiting.values())).request
+        if (
+            refused := send_answer(request=request, typed=typed, send=self._send)
+        ) is not None:
+            self._note = refused
 
     # Worked out once for both the listing and the number typed against it, or
     # the number picks the cast above the one it is next to.

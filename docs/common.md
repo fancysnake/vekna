@@ -247,15 +247,16 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `CastGoodbye` | cast → daemon | clean exit + final status |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
-| `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand keeps its own stdin, and the daemon is told it is waiting, not asked to answer. A spawned cast has no terminal: a surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open, and the cast's own `DecideResolved` closes it |
+| `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand asks on its own stdin until a surface claims the prompt; a spawned cast has no terminal, and the hand cast following it, or any surface, answers. A surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open and no other surface has claimed it, the cast takes whichever answer comes first, and the cast's own `DecideResolved` closes it |
 | `DecideWithdrawn` | cast → daemon | a prompt cut before its answer; the daemon drops it from the view and the terminal says it was withdrawn |
+| `DecideClaimed` | surface → daemon → cast and surfaces | a window takes a prompt over (`claim_id`), or lets it go (`None`); only the holder's answer is forwarded, and the terminal that was asking stops |
 | `CodingSlotRequested` / `CodingSlotGranted` / `CodingSlotReleased` | both | the account's coding limit: a cast asks before each agent session, the daemon grants in order, the cast releases when the session ends. Not journaled |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
-| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused only when the directory is not there |
-| `CastKillRequested` | surface → daemon | end a cast. Not built |
+| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
+| `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
 order, `GrimoireEnd`. The daemon wipes cached state for that cast on

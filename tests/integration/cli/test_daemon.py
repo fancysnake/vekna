@@ -3,6 +3,7 @@ import contextlib
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
@@ -12,15 +13,18 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from vekna.inits.cli import init_command, window
-from vekna.inits.daemon import serve_daemon, stop_daemon
+from vekna.inits.cli import init_command, tui_window, window
+from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
+from vekna.lexicon._inits import _DAEMON_WENT, _FOLLOWING, _LEFT, _drive
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
+from vekna.links.spawner import Spawner, pid_alive
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastQueued,
@@ -29,6 +33,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideRequested,
     EnqueueRefused,
     EnqueueRequested,
@@ -216,9 +221,7 @@ class TestTheView:
             await _eventually(lambda: keys.painted("waiting"))
             await _eventually(lambda: keys.painted("allow Bash?"))
             keys.press("1")
-            await _eventually(
-                lambda: keys.painted("answer it where the cast was started")
-            )
+            await _eventually(lambda: keys.painted("answering here takes it over"))
             keys.press("q")
 
             await peer
@@ -330,6 +333,50 @@ class TestPeers:
         assert await peer == 0
         assert await host == 0
 
+    # The Textual window ends the same way, rather than drawing a table nobody
+    # will ever change again.
+    @staticmethod
+    async def test_the_drawn_window_ends_with_the_daemon(socket_path: Path):
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log) as host:
+            peer = asyncio.create_task(tui_window(headless=True))
+            await _eventually(lambda: log.exists() and "attached" in log.read_text())
+
+        assert await asyncio.wait_for(peer, timeout=10) == 0
+        assert await host == 0
+
+    # A line the window cannot read ends it, saying why, rather than leaving a
+    # picture up that nothing will ever change.
+    @staticmethod
+    async def test_the_drawn_window_ends_on_a_frame_it_cannot_read(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        # Reads the handshake and holds on until the window hangs up: closing
+        # with it unread resets the connection before the frame is read.
+        async def garbled(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+            with contextlib.suppress(OSError):
+                await reader.readline()
+                writer.write(b'{"kind": "nonsense"}\n')
+                await writer.drain()
+                await reader.read()
+            writer.close()
+
+        server = await asyncio.start_unix_server(garbled, path=str(socket_path))
+
+        assert await asyncio.wait_for(tui_window(headless=True), timeout=10) == 0
+        assert "the view stopped: 1 validation error" in capsys.readouterr().err
+        server.close()
+
+    @staticmethod
+    async def test_the_drawn_window_opens_with_debug_asked_too_late(socket_path: Path):
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log) as host:
+            peer = asyncio.create_task(tui_window(debug=True, headless=True))
+            await _eventually(lambda: log.exists() and "attached" in log.read_text())
+
+        assert await asyncio.wait_for(peer, timeout=10) == 0
+        assert await host == 0
+
     @staticmethod
     async def test_debug_asked_of_a_running_daemon_says_it_is_too_late(
         socket_path: Path,
@@ -342,6 +389,55 @@ class TestPeers:
             keys.press("q")
 
             assert await peer == 0
+
+    @staticmethod
+    async def test_a_window_s_claim_and_cancel_reach_the_cast(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        asked = DecideRequested(
+            cast_id="c1", request_id="q1", prompt="push?", options=["yes", "no"]
+        )
+        claimed = DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+        cancel = CastCancelRequested(cast_id="c1")
+        async with _served(socket_path):
+            cast_reader, cast_writer = await attach(socket_path)
+            for message in (_hello(), asked):
+                cast_writer.write(encode_frame(message))
+            await cast_writer.drain()
+            surface = await _say(socket_path, SurfaceHello(), claimed, cancel)
+
+            heard: list[WireMessage] = []
+            async with asyncio.timeout(10):
+                async for message in read_frames(cast_reader):
+                    heard.append(message)
+                    if message == cancel:
+                        break
+
+            assert heard == [claimed, cancel]
+            surface.close()
+            cast_writer.close()
+        assert "cast c1 has no pid to signal" in capsys.readouterr().err
+
+    @staticmethod
+    async def test_a_cancel_of_no_running_cast_is_refused_and_signals_nothing(
+        socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            writer.write(encode_frame(SurfaceHello()))
+            writer.write(encode_frame(CastCancelRequested(cast_id="c1")))
+            await writer.drain()
+
+            async with asyncio.timeout(5):
+                refused = None
+                async for frame in read_frames(reader):
+                    if isinstance(frame, CastRefused):
+                        refused = frame
+                        break
+            writer.close()
+
+        assert refused == CastRefused(reason="not cancelled c1: no such running cast")
+        assert "signal" not in capsys.readouterr().err
 
     # The handshake this end wrote is the one frame kind that cannot come back,
     # and a peer that took it for a cast would paint one that is not there. The
@@ -975,9 +1071,12 @@ class TestWorktrees:
 
 
 _QUEUE_RITUALS = textwrap.dedent("""
+    import asyncio
+    from pathlib import Path
+
     from pydantic import BaseModel
 
-    from vekna.folio.flow import await_cast
+    from vekna.folio.flow import await_cast, enqueue
     from vekna.lexicon import Done, NoComponents, ritual, step
 
 
@@ -1006,6 +1105,67 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("sweep")
     async def sweeper(_: NoComponents) -> Sweep:
         return Sweep()
+
+
+    class Fan(BaseModel):
+        pass
+
+
+    @step
+    async def fan_out(_: Fan) -> Done[Fan]:
+        await enqueue("count", Count(n=1))
+        return Done(Fan())
+
+
+    @ritual("fan")
+    async def fan(_: NoComponents) -> Fan:
+        return Fan()
+
+
+    class Held(BaseModel):
+        pass
+
+
+    # Runs until the test lets it go by touching `release` where it runs.
+    @step
+    async def held(_: Held) -> Done[Held]:
+        while not Path("release").exists():
+            await asyncio.sleep(0.05)
+        return Done(Held())
+
+
+    @ritual("hold")
+    async def hold(_: NoComponents) -> Held:
+        return Held()
+
+
+    class Holding(BaseModel):
+        pass
+
+
+    @step
+    async def holding(_: Holding) -> Done[Holding]:
+        await enqueue("hold", NoComponents())
+        return Done(Holding())
+
+
+    @ritual("hold_one")
+    async def hold_one(_: NoComponents) -> Holding:
+        return Holding()
+
+
+    class Boom(BaseModel):
+        pass
+
+
+    @step
+    async def blow_up(_: Boom) -> Done[Boom]:
+        raise RuntimeError("boom")
+
+
+    @ritual("boom")
+    async def boom(_: NoComponents) -> Boom:
+        return Boom()
     """)
 
 
@@ -1027,6 +1187,22 @@ def _run_of(runs: Path, ritual: str) -> RunRecord:
     return found
 
 
+async def _hand_cast(cwd: Path, *args: str) -> tuple[list[str], int | None]:
+    cast = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        CLI_MODULE,
+        "cast",
+        *args,
+        cwd=cwd,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    said, _ = await asyncio.wait_for(cast.communicate(), timeout=60)
+    return said.decode().splitlines(), cast.returncode
+
+
 @pytest.fixture(name="queue_rituals")
 def _queue_rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     project = socket_path.parent
@@ -1037,6 +1213,31 @@ def _queue_rituals(socket_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.mark.asyncio
 class TestQueue:
+    # Typed by hand, a cast that queues another stays for it: what the child
+    # does prints under its name, and the cast ends once the child has.
+    @staticmethod
+    async def test_a_hand_cast_follows_what_it_queued_until_it_ends(
+        socket_path: Path, queue_rituals: Path
+    ):
+        async with _served(socket_path):
+            lines, code = await _hand_cast(queue_rituals, "fan")
+
+        done = [line for line in lines if line.startswith("[count ")]
+        assert code == 0
+        assert done[-1].endswith("✓ done")
+        assert lines.index("result: {}") < lines.index(done[-1])
+
+    @staticmethod
+    async def test_no_follow_ends_with_its_own_steps(
+        socket_path: Path, queue_rituals: Path
+    ):
+        async with _served(socket_path):
+            lines, code = await _hand_cast(queue_rituals, "--no-follow", "fan")
+            await _spawned(lambda: _finished(queue_rituals / "runs", "count"))
+
+        assert code == 0
+        assert not [line for line in lines if line.startswith("[count ")]
+
     # One slot: the sweep gives it up to the child it awaits, or neither runs.
     @staticmethod
     async def test_an_awaited_child_runs_in_the_slot_its_parent_gave_up(
@@ -1197,3 +1398,71 @@ class TestQueue:
             writer.close()
             keys.press("q")
             await peer
+
+
+# The hand cast in this process, so what it does once its own steps end is
+# measured: a subprocess's lines are not.
+@pytest.mark.asyncio
+class TestFollowing:
+    @staticmethod
+    async def test_it_says_it_is_following_and_ends_with_the_child(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        (queue_rituals / "release").touch()
+        async with _served(socket_path):
+            code = await _drive(["hold_one"])
+
+        assert code == 0
+        assert _FOLLOWING in capsys.readouterr().out
+
+    @staticmethod
+    async def test_ctrl_c_leaves_the_child_running_and_keeps_the_cast_s_code(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        said: list[str] = []
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["hold_one"]))
+            await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
+
+            cast.cancel()
+            code = await cast
+            (queue_rituals / "release").touch()
+            await _spawned(lambda: _finished(queue_rituals / "runs", "hold"))
+
+        assert code == 0
+        assert _LEFT in _drained(capsys, said)
+
+    @staticmethod
+    async def test_a_daemon_gone_before_the_child_ends_fails_the_cast(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        said: list[str] = []
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["hold_one"]))
+            await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
+
+        code = await asyncio.wait_for(cast, timeout=10)
+        [child] = Spawner(command=[], runs=queue_rituals / "runs").left_behind()
+        (queue_rituals / "release").touch()
+        # Reaped while this loop still runs, or its watcher reports to a closed one.
+        await _spawned(lambda: not pid_alive(child.pid))
+
+        assert code == 1
+        assert _DAEMON_WENT in capsys.readouterr().err
+
+    @staticmethod
+    async def test_a_cast_that_raises_still_lets_go_of_the_daemon(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log):
+            with pytest.raises(RuntimeError, match="boom"):
+                await _drive(["boom"])
+
+            await _eventually(lambda: "detached" in log.read_text())
+
+
+def _drained(capsys: pytest.CaptureFixture[str], said: list[str]) -> str:
+    said.append(capsys.readouterr().out)
+    return "".join(said)

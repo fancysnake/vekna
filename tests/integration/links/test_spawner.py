@@ -1,6 +1,7 @@
 import asyncio
 import os
 import signal
+import subprocess
 import sys
 import textwrap
 from datetime import UTC, datetime
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.links.spawner import Spawner
+from vekna.links.spawner import Spawner, signal_pid
 from vekna.pacts.circle import Exited, Spawned
 from vekna.wire import CastHello
 
@@ -215,3 +216,26 @@ class TestSpawner:
 
         assert exited.code is None
         assert str(runs) in exited.said
+
+
+class TestSignalPid:
+    @staticmethod
+    def test_a_running_process_is_signalled():
+        sleeps = [sys.executable, "-c", "import time;time.sleep(60)"]
+        with subprocess.Popen(sleeps) as child:
+            sent = signal_pid(child.pid, signal.SIGTERM)
+
+            assert sent is True
+            assert child.wait(timeout=10) == -signal.SIGTERM
+
+    @staticmethod
+    def test_a_process_already_gone_is_not():
+        with subprocess.Popen([sys.executable, "-c", ""]) as child:
+            child.wait(timeout=10)
+
+        assert signal_pid(child.pid, signal.SIGTERM) is False
+
+    @staticmethod
+    @pytest.mark.parametrize("pid", [0, -1])
+    def test_a_pid_naming_a_group_is_not(pid: int):
+        assert signal_pid(pid, signal.SIGTERM) is False

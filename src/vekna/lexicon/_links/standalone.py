@@ -5,7 +5,7 @@ import sys
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal, TextIO
+from typing import Literal, Protocol, TextIO
 
 from vekna.lexicon._pacts import (
     Channel,
@@ -94,6 +94,14 @@ def _read_line(inp: TextIO) -> asyncio.Future[str]:
     return asyncio.wrap_future(line)
 
 
+# What the renderer writes to: a terminal, or a stream that prefixes every line
+# with the cast it came from.
+class Out(Protocol):
+    def write(self, text: str, /) -> int: ...
+    def flush(self) -> None: ...
+    def isatty(self) -> bool: ...
+
+
 @dataclass
 class _Rite:
     name: str
@@ -115,12 +123,15 @@ class _Rite:
 # surface that *can* re-render — the TUI — wants the opposite and will say so
 # itself; that decision belongs to the sink, not here.
 class StandaloneRenderer(Channel):
-    def __init__(self, *, out: TextIO | None = None, inp: TextIO | None = None) -> None:
-        self._out: TextIO = out if out is not None else sys.stdout
+    def __init__(self, *, out: Out | None = None, inp: TextIO | None = None) -> None:
+        self._out: Out = out if out is not None else sys.stdout
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
         self._abandoned: asyncio.Future[str] | None = None
+        # One question at a time: a cast and the casts it set going share this
+        # stdin, and two reads at once would split one answer between them.
+        self._asking = asyncio.Lock()
 
     def _say(self, line: str) -> None:
         self._out.write(line)
@@ -243,12 +254,13 @@ class StandaloneRenderer(Channel):
     async def decide(
         self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
     ) -> str:
-        self.notify("decide", prompt)
-        try:
-            return await self._asked(prompt=prompt, options=options, free=free)
-        except asyncio.CancelledError:
-            self._say(f"\nwithdrawn: {prompt}\n")
-            raise
+        async with self._asking:
+            self.notify("decide", prompt)
+            try:
+                return await self._asked(prompt=prompt, options=options, free=free)
+            except asyncio.CancelledError:
+                self._say(f"\nwithdrawn: {prompt}\n")
+                raise
 
     async def _asked(
         self, *, prompt: str, options: Sequence[str] | None, free: bool

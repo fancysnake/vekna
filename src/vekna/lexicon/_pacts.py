@@ -214,6 +214,18 @@ class CastQueueProtocol(Protocol):
     async def await_end(self, cast_id: str) -> CastEnded: ...
 
 
+# The casts a cast set going, as a terminal following them reads them off the
+# daemon's fan-out: which are this one's, and whether they have all ended.
+class LineageProtocol(Protocol):
+    def expect(self, cast_id: str) -> None: ...
+    def heard(self, message: WireMessage) -> None: ...
+    def descends(self, cast_id: str) -> bool: ...
+    @property
+    def settled(self) -> bool: ...
+    @property
+    def failed(self) -> bool: ...
+
+
 class RitualError(Exception):
     pass
 
@@ -226,6 +238,12 @@ class NoDaemonError(RitualError):
 
 # An awaited cast that did not end `ok`.
 class CastFailedError(RitualError):
+    pass
+
+
+# This cast's work, cut because a surface asked it to end. Not a
+# `CancelledError`, which is Ctrl-C's and goes on being one.
+class CastCancelledError(RitualError):
     pass
 
 

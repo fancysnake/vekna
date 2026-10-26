@@ -54,6 +54,33 @@ without one.
 Exit codes: `0` cast finished, `1` cast failed, `2` the arguments or the ritual
 source were wrong.
 
+### Following what it queued
+
+A cast typed with a daemon running stays at its terminal once its own steps
+end, for as long as the casts it queued — and the ones they queued — are still
+going. Each one's rites stream under its name:
+
+```text
+✓ fan_out
+result: {"queued":[…]}
+following the casts this one queued — Ctrl-C leaves them running
+[ci_watch 3f9a2b11] ▶ watch
+[ci_watch 3f9a2b11] ✓ watch
+[pr_fix 91bb0c4d] ▶ repair_ci
+[pr_fix 91bb0c4d] ✓ done
+[ci_watch 3f9a2b11] ✓ done
+```
+
+Their prompts are asked here, one at a time, under the same name. A prompt
+taken over in `vekna` stops being asked here, and is asked again if that window
+lets it go or closes. The cast exits `1` if any of them failed. Ctrl-C stops
+following and leaves them running; `--no-follow` ends the cast with its own
+steps:
+
+```bash
+vekna cast --no-follow sweep
+```
+
 ### `vekna cast --prompt`
 
 ```bash
@@ -154,12 +181,31 @@ otherwise look like it vanished.
 ```bash
 vekna
 vekna --debug
+vekna --no-tui
 ```
 
 `--debug` starts the daemon writing a line per event to
 `~/.local/state/vekna/debug.log` — the daemon is the one place every message
 passes, and the log says what it did with each one, including the ones it
 dropped. A daemon already running is not restarted for it; the window says so.
+
+In a terminal the window is drawn with Textual: a table of casts, and the one
+under the cursor in a pane beside it — its rite tree, the output of what is
+running, its branch and the directory it runs in, which for a pooled tree is
+the tree. The table's `branch` and `where` columns say the same per cast; the
+branch is read off git every few seconds, because a cast can switch it.
+
+| Key | Does |
+| --- | --- |
+| `c` | start a ritual here: `c <ritual> [--flag value …]` |
+| `t` | take over the prompt of the cast under the cursor, and answer it in a dialog |
+| `a` | answer it in one line: `a <answer>` |
+| `g` / `p` | every project / this one |
+| `q` | close the window; the daemon keeps running |
+
+Esc in the dialog lets the prompt go, back to whoever was answering it.
+`--no-tui`, or no terminal on stdin and stdout, gives the line view described
+below, which repaints whole and reads a line at a time.
 
 A project is a repository, not a directory: every worktree of one shares its git
 common dir, and its casts group under that. A directory in no repository is its
@@ -207,8 +253,11 @@ A cast the daemon started has no terminal, so its prompts are answered here:
 drill into it and type `a <answer>`. The prompt line says what it takes —
 `a yes|no`, the options offered, or `a <anything>` for free text. An answer it
 does not offer is refused before it leaves the window. A cast nobody answers
-waits. A cast typed as `vekna cast` keeps its prompts on its own terminal and
-is answered there.
+waits. A cast typed as `vekna cast` asks its own prompts on its own terminal,
+and the ones of the casts it queued; answering one from a window takes it over,
+and that terminal stops taking answers for it. Only one answer ever counts: a
+prompt taken over answers only to the window that took it, until that window
+lets it go or closes.
 
 `vekna cast` still runs in the directory it was typed in, attached or not. It
 does not start a daemon: with none listening it runs on its own and joins the
