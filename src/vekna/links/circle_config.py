@@ -2,10 +2,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import BaseModel, ConfigDict, PositiveInt, ValidationError
 
 from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES, Limits
-from vekna.wire import default_config_path, project_config_path, read_toml
+from vekna.wire import default_config_path, explained, project_config_path, read_toml
 
 _T = TypeVar("_T")
 
@@ -60,5 +60,6 @@ class ConfigLimits(Limits):
         try:
             return _File.model_validate(read_toml(path)).circle
         except (OSError, ValueError) as error:
-            self._say(f"{path}: {error} — [circle] ignored")
+            said = explained(error) if isinstance(error, ValidationError) else error
+            self._say(f"{path}: {said} — [circle] ignored")
             return _Circle()

@@ -16,6 +16,7 @@ from claude_agent_sdk.types import (
     McpSdkServerConfig,
     McpSSEServerConfig,
     McpStdioServerConfig,
+    Message,
     PermissionResultAllow,
     PermissionResultDeny,
     SystemPromptFile,
@@ -199,6 +200,26 @@ def _agent_options(
     )
 
 
+# Only the SDK's own iteration is the agent's: what vekna does with a message
+# fails as vekna's, outside this. A failure here is everything else the SDK
+# raises mid-stream — the subprocess dying, a dropped connection, a frame that
+# will not decode. Not only its own hierarchy: the control protocol times out
+# with a bare `Exception`, and the reader re-raises whatever broke the stream as
+# it came. A traceback out of someone else's library says nothing about which
+# rite was running, and the cast has to end as a failed cast, not as a crash.
+async def _from_agent(messages: AsyncGenerator[Message]) -> AsyncGenerator[Message]:
+    try:
+        async for message in messages:
+            yield message
+    except CLINotFoundError as error:
+        raise RitualError(_NO_CLI) from error
+    except Exception as error:
+        msg = f"the agent failed: {error.__class__.__name__}: {error}"
+        raise RitualError(msg) from error
+    finally:
+        await messages.aclose()
+
+
 async def _streamed(
     *, prompt: str, options: ClaudeAgentOptions, on_delta: Callable[[str], None]
 ) -> FocusReply:
@@ -219,8 +240,8 @@ async def _streamed(
             f"{type(messages).__name__}, not an async generator vekna can close"
         )
         raise RitualError(msg)
-    async with contextlib.aclosing(messages):
-        async for message in messages:
+    async with contextlib.aclosing(_from_agent(messages)) as stream:
+        async for message in stream:
             if isinstance(message, _AssistantLike):
                 for text in _texts(message.content):
                     parts.append(text)
@@ -255,20 +276,4 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         ask: AskFn,
     ) -> FocusReply:
         options = _agent_options(call=call, gate=gate, ask=ask)
-        try:
-            return await _streamed(
-                prompt=call.prompt, options=options, on_delta=on_delta
-            )
-        except CLINotFoundError as error:
-            raise RitualError(_NO_CLI) from error
-        except RitualError:
-            raise
-        # Everything else the SDK raises mid-stream — the subprocess dying, a
-        # dropped connection, a frame that will not decode. Not only its own
-        # hierarchy: the control protocol times out with a bare `Exception`, and
-        # the reader re-raises whatever broke the stream as it came. A traceback
-        # out of someone else's library says nothing about which rite was
-        # running, and the cast has to end as a failed cast, not as a crash.
-        except Exception as error:
-            msg = f"the agent failed: {error.__class__.__name__}: {error}"
-            raise RitualError(msg) from error
+        return await _streamed(prompt=call.prompt, options=options, on_delta=on_delta)

@@ -10,7 +10,7 @@ from pydantic import (
 )
 
 from vekna.lexicon import RitualError
-from vekna.wire import refusals
+from vekna.wire import explained, refusals
 
 
 class CodingOutputError(RitualError):
@@ -27,10 +27,6 @@ class CodingOptsError(RitualError):
 
 _MOVED = frozenset({"session", "key"})
 _MOVED_HINT = "session and key are parameters of coding(), not fields of CodingOpts"
-
-
-def _where(loc: tuple[int | str, ...]) -> str:
-    return ".".join(str(part) for part in loc) or "the bundle"
 
 
 # The two halves of the declaration are the whole reason `forbid` is on, so the
@@ -53,8 +49,7 @@ def _refusal(*, bundle: str, error: ValidationError) -> str:
     # Reassembled rather than quoted whole: inside a wrap validator pydantic
     # titles its own report `ValidatorCallable`, which names an implementation
     # detail of this refusal instead of the model the author was building.
-    said = "; ".join(f"{_where(detail.loc)}: {detail.msg}" for detail in details)
-    return f"{bundle} refused what it was given — {said}"
+    return f"{bundle} refused what it was given — {explained(error)}"
 
 
 # Closed, and only two words wide: whether this call resumes. *Which* thread it

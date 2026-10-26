@@ -20,6 +20,7 @@ from vekna.wire import (
     default_config_path,
     default_socket_path,
     explained,
+    flag_of,
     parse_flags,
     project_config_path,
     project_of,
@@ -277,7 +278,7 @@ def _build_library(cwd: Path) -> _Library:
 def _component_options(ritual: Ritual) -> str:
     parts: list[str] = []
     for name, type_name, required in component_flags(ritual.components):
-        flag = f"--{name.replace('_', '-')} <{type_name}>"
+        flag = f"{flag_of(name)} <{type_name}>"
         parts.append(flag if required else f"[{flag}]")
     return "  " + " ".join(parts) if parts else ""
 
@@ -332,7 +333,7 @@ def _component_lines(the_ritual: Ritual, defaults: Mapping[str, Default]) -> lis
         return ["  (none)"]
     lines: list[str] = []
     for name, type_name, required in flags:
-        flag = f"  --{name.replace('_', '-')} <{type_name}>"
+        flag = f"  {flag_of(name)} <{type_name}>"
         if (default := defaults.get(name)) is not None:
             lines.append(f"{flag}  = {_shown(default.value)} ({default.source})")
         else:
@@ -445,6 +446,28 @@ class _Plan(NamedTuple):
     follow: bool = True
 
 
+# Nobody typed a recorded cast's components, so a refusal names the cast and
+# the model's fields, not flags.
+def _recorded_components(
+    *,
+    cast_id: str,
+    ritual: Ritual,
+    recorded: Mapping[str, JsonValue],
+    defaults: Mapping[str, Default] | None = None,
+) -> BaseModel:
+    unfit = f"cast {cast_id!r}: its recorded components do not fit {ritual.name}"
+    fields = ritual.components.model_fields
+    if unknown := [key for key in recorded if key not in fields]:
+        msg = f"{unfit} — it takes no {', '.join(repr(key) for key in unknown)}"
+        raise RitualDefinitionError(msg)
+    values = {key: default.value for key, default in (defaults or {}).items()}
+    try:
+        return ritual.components.model_validate(values | dict(recorded))
+    except ValidationError as error:
+        msg = f"{unfit} — {explained(error)}"
+        raise RitualDefinitionError(msg) from error
+
+
 def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     resumption = read_run(cast_id)
     hello = resumption.record.hello
@@ -461,14 +484,14 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
         # it meant, and this repo's defaults answer the rest. The cast is named
         # because nobody typed it either: it is a row in `vekna log`, not a
         # command line still on screen.
-        try:
-            components = library.defaults.components(the_ritual, hello.components)
-        except RitualDefinitionError as error:
-            msg = f"cast {cast_id!r}: {error}"
-            raise RitualDefinitionError(msg) from error
         return _Plan(
             the_ritual,
-            components,
+            _recorded_components(
+                cast_id=cast_id,
+                ritual=the_ritual,
+                recorded=hello.components,
+                defaults=library.defaults.of(the_ritual),
+            ),
             refusing,
             cast_id=cast_id,
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
@@ -478,14 +501,9 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     # The record holds the components as the CLI already validated them once,
     # so they are validated again against the same model rather than
     # re-derived into flags and parsed back out.
-    try:
-        components = the_ritual.components.model_validate(hello.components)
-    except ValidationError as error:
-        msg = (
-            f"cast {cast_id!r}: its recorded components do not fit"
-            f" {the_ritual.name} — {explained(error)}"
-        )
-        raise RitualDefinitionError(msg) from error
+    components = _recorded_components(
+        cast_id=cast_id, ritual=the_ritual, recorded=hello.components
+    )
     # Not an error: a cast killed before its first rite landed has nothing to
     # replay. But every step it redoes is one the operator may have expected
     # off the record.

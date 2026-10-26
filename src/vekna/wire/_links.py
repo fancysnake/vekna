@@ -149,7 +149,10 @@ def read_record(root: Path, cast_id: str) -> RunRecord | None:
     path = run_file(root, cast_id)
     if not path.is_file():
         return None
-    record = RunRecord.model_validate_json(path.read_text())
+    try:
+        record = RunRecord.model_validate_json(path.read_text())
+    except ValidationError as error:
+        raise ValueError(explained(error)) from error
     if record.hello.started_at.tzinfo is None:
         record.hello.started_at = record.hello.started_at.replace(tzinfo=UTC)
     return record

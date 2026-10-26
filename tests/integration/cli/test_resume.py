@@ -208,7 +208,23 @@ class TestResume:
 
         assert main(["--resume", "q1"]) == _USAGE_EXIT
 
-        assert capsys.readouterr().err == "cast 'q1': greet: --name is required\n"
+        assert capsys.readouterr().err == (
+            "cast 'q1': its recorded components do not fit greet"
+            " — name: Field required\n"
+        )
+
+    @staticmethod
+    def test_a_queued_cast_naming_a_component_its_ritual_lost_names_it(
+        project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        _queued_greeting(project, tmp_path / "runs", {"name": "q", "tone": "low"})
+
+        assert main(["--resume", "q1"]) == _USAGE_EXIT
+
+        assert capsys.readouterr().err == (
+            "cast 'q1': its recorded components do not fit greet"
+            " — it takes no 'tone'\n"
+        )
 
     @staticmethod
     def test_a_resumed_cast_whose_components_no_longer_fit_names_the_cast(
@@ -220,7 +236,7 @@ class TestResume:
 
         assert capsys.readouterr().err == (
             "cast 'c9': its recorded components do not fit greet"
-            " — name: Field required\n"
+            " — it takes no 'left'\n"
         )
 
     # Only the cast knows its ritual wants a tree, so a spawned one without a

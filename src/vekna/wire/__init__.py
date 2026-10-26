@@ -58,7 +58,7 @@ from ._pacts import (
     encode_frame,
 )
 from ._refusals import Refusal, explained, refusals
-from ._specs import SHORT_ID, allowed_answers, parse_flags
+from ._specs import SHORT_ID, allowed_answers, flag_of, parse_flags
 from ._toml import TomlValue, read_toml
 
 __all__ = [
@@ -116,6 +116,7 @@ __all__ = [
     "encode_frame",
     "events_log",
     "explained",
+    "flag_of",
     "parse_flags",
     "project_config_path",
     "project_of",

@@ -333,6 +333,33 @@ class TestAgentUnreachable:
         assert "cast failed: the agent failed" in err
         assert "ClaudeSDKError: the transport went away" in err
 
+    # vekna's own event emit breaking is vekna's failure, not the agent's.
+    @staticmethod
+    def test_a_delta_that_cannot_be_emitted_is_not_called_an_agent_failure(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub({}))
+        focus = importlib.import_module("vekna.folio.coding_claude._links")
+        call = CodingCall(
+            prompt="work",
+            model=None,
+            system=None,
+            cwd=str(tmp_path),
+            output_schema=None,
+            focus_options=None,
+        )
+
+        def emit(_text):
+            msg = "the event log is gone"
+            raise OSError(msg)
+
+        with pytest.raises(OSError, match="the event log is gone"):
+            asyncio.run(
+                focus.ClaudeCodingFocus().run(
+                    call, on_delta=emit, gate=None, ask=_never_asked
+                )
+            )
+
     # What did not import is named as it came: a dependency of the SDK, or a
     # module inside the folio itself, is not fixed by installing the SDK.
     @staticmethod

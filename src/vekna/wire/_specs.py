@@ -45,3 +45,9 @@ def parse_flags(flags: Sequence[str]) -> dict[str, str]:
             value = following
         parsed[key.replace("-", "_")] = value
     return parsed
+
+
+# The way back: the flag an operator types for a field, so every refusal and
+# listing spells it as `parse_flags` reads it.
+def flag_of(field: str) -> str:
+    return f"--{field.replace('_', '-')}"

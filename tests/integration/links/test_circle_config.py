@@ -88,7 +88,12 @@ class TestCoding:
         config.write_text("[circle]\ncoding = 0\n", encoding="utf-8")
 
         assert ConfigLimits(say=said.append).coding() is None
-        assert len(said) == 1
+        assert said == [
+            (
+                f"{config}: circle.coding: Input should be greater than 0"
+                " — [circle] ignored"
+            )
+        ]
 
 
 @pytest.mark.usefixtures("config")
