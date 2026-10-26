@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-26
+
 ### Added
 
 - **`attended()`** in `vekna.lexicon`: false in a cast run with `--unattended`,
@@ -37,11 +39,22 @@ when.
   where it runs; `rituals show` prints each value and its file; a key the ritual
   does not take fails the cast.
   ([#94](https://github.com/fancysnake/vekna/issues/94))
+- **`sweep`, `ci_watch` and `pr_fix` example rituals.** `sweep` queues a
+  `ci_watch` for each open pull request from this repository; a red `ci_watch`
+  awaits a `pr_fix`, which fixes the branch in a leased tree under an allowlist
+  and asks before it pushes.
+- **`ritual-scribe`** teaches `enqueue`, `await_cast`, `trial.queue`,
+  `attended()` and `[defaults.<ritual>]`.
 
 ### Changed
 
 - A worktree lease fails, rather than waits forever, when every tree not
   blocked is held by a cast awaiting one that needs a tree.
+
+### Fixed
+
+- A restarted daemon holds the process slots and trees of casts still running
+  until they reattach. ([#172](https://github.com/fancysnake/vekna/issues/172))
 
 ## [0.14.0] - 2026-10-23
 
@@ -67,10 +80,8 @@ when.
   pooled worktree, leased before spawn and parked on `vekna/wt-<n>` after.
   `[circle] worktrees` (default 2) sizes the pool and `prepare` runs once in
   each new tree. A tree left dirty or mid-merge is reported as blocked
-  (`TreeBlocked`) and stays out of the pool until it is clean. A restarted
-  daemon keeps the slots and trees of casts still running until they reattach.
-  ([#140](https://github.com/fancysnake/vekna/issues/140),
-  [#172](https://github.com/fancysnake/vekna/issues/172))
+  (`TreeBlocked`) and stays out of the pool until it is clean.
+  ([#140](https://github.com/fancysnake/vekna/issues/140))
 - **`ritual-scribe`** teaches `timeout`, `race`, `@step(timeout=N)` and
   `@ritual(worktree=True)`.
 
@@ -863,7 +874,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.14.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/fancysnake/vekna/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/fancysnake/vekna/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/fancysnake/vekna/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fancysnake/vekna/compare/v0.11.0...v0.12.0

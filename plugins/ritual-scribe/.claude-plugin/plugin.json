@@ -1,7 +1,7 @@
 {
   "name": "ritual-scribe",
-  "description": "Write vekna rituals: @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide mediums",
-  "version": "0.14.0",
+  "description": "Write vekna rituals: @ritual entrypoints, @step tasks, typed transitions, and the coding/shell/decide/enqueue mediums",
+  "version": "0.15.0",
   "author": {
     "name": "fancysnake"
   },

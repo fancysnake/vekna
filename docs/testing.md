@@ -44,14 +44,18 @@ def test_it_gives_up_after_the_budget(trial):
 ## Scripting the answers
 
 Each double takes answers matched by a glob — the command for `shell`, the
-prompt for `coding` and `decide` — and falls back to an ordered queue for
-whatever no pattern claims:
+prompt for `coding` and `decide`, the ritual name for `queue` — and falls back
+to an ordered queue for whatever no pattern claims:
 
 ```python
 trial.shell.replies(when="mise run lint*", exit_code=0)
 trial.coding.replies("wrote a test", uses=["Bash"])
 trial.decide.answers(answer=True, when="*proceed*")
+trial.queue.returns(Fixed(outcome="pushed"), when="pr_fix")
 ```
+
+`trial.queue` answers `await_cast` only, `returns` with the child's result or
+`fails(detail)` with `CastFailedError`; an `enqueue` needs no script.
 
 `always=True` keeps one answer standing instead of consuming it. A `decide`
 answer is checked against the options the step offered, and one that is not
@@ -69,8 +73,8 @@ the ritual asks anyway raises `UnattendedPromptError`, scripted answer or not.
 ## Assert on what the doubles recorded
 
 `trial.shell.commands`, `trial.coding.prompts`, `trial.coding.gated`,
-`trial.decide.prompts`. There is no `assert_called_with` here — the recording
-is the assertion surface.
+`trial.decide.prompts`, `trial.queue.enqueued`. There is no
+`assert_called_with` here — the recording is the assertion surface.
 
 The cast records too: `trial.steps` is the step names in the order they ran,
 `trial.deltas` and `trial.events` the grimoire as it happened, and
