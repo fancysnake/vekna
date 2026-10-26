@@ -3,12 +3,14 @@ from typing import assert_never
 
 from typing_extensions import override
 
-from vekna.pacts.casts import CastBoard, CastView, RiteView
+from vekna.pacts.casts import CastBoard, CastView, Prompt, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
+    SHORT_ID,
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
@@ -19,6 +21,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DecideClaimed,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -43,9 +46,11 @@ _NO_CAST = "no such cast"
 _NO_RITE = "no such rite"
 _NO_PROMPT = "no such prompt"
 _NO_PEER = "the cast is not connected"
+_NOT_RUNNING = "no such running cast"
 _SLOTS_ELSEWHERE = "coding slots are the circle's"
 _QUEUE_ELSEWHERE = "the queue is the circle's"
 _NO_AWAIT = "no such await"
+_CLAIMED_ELSEWHERE = "another surface has claimed the prompt"
 _STARTS_NOTHING = "this daemon starts no casts"
 _LOCKS = (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
 _SLOTS = (CodingSlotRequested, CodingSlotGranted, CodingSlotReleased)
@@ -63,6 +68,7 @@ _Viewed = (
     | DecideRequested
     | DecideResolved
     | DecideWithdrawn
+    | DecideClaimed
     | TreeBlocked
     | AwaitRequested
     | AwaitEnded
@@ -100,6 +106,10 @@ class Hub(CastBoard, Routes):
         self._peers: dict[str, Surface] = {}
         self._on_routed = on_routed
         self._on_journal = on_journal
+        # The surface holding each claimed prompt, by cast and request. The view
+        # keeps the claim id every surface is told; only the daemon knows the
+        # holder.
+        self._claims: dict[tuple[str, str], Surface] = {}
 
     @property
     def casts(self) -> dict[str, CastView]:
@@ -111,10 +121,18 @@ class Hub(CastBoard, Routes):
             surface.send(message)
         self._say(kind="surface_hello", cast_id=None, action="attached")
 
+    # A claim dies with the surface that made it, or the prompt would wait on a
+    # window nobody has open: the answerer it took over takes it back.
     def detach_surface(self, surface: Surface) -> None:
         if surface in self._surfaces:
             self._surfaces.remove(surface)
         self._say(kind="surface_hello", cast_id=None, action="detached")
+        for (cast_id, request_id), holder in list(self._claims.items()):
+            if holder is surface:
+                del self._claims[cast_id, request_id]
+                self._claimed(
+                    DecideClaimed(cast_id=cast_id, request_id=request_id, claim_id=None)
+                )
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._peers[cast_id] = peer
@@ -145,27 +163,97 @@ class Hub(CastBoard, Routes):
     # Forwarded, not applied: the cast's own `DecideResolved` is what closes the
     # prompt, so the journal and every surface hear one answer, from the cast
     # that took it. A prompt that is not open — answered already, withdrawn,
-    # never asked — goes nowhere.
-    def answer(self, resolved: DecideResolved) -> None:
+    # never asked — goes nowhere, and neither does one to a prompt another
+    # surface has claimed. Unclaimed, any surface's answer goes: the cast takes
+    # whichever comes first, its own terminal's or this one.
+    def answer(self, surface: Surface, resolved: DecideResolved) -> None:
         view = self._casts.get(resolved.cast_id)
         if view is None or resolved.request_id not in view.waiting:
             self._drop(resolved, reason=_NO_PROMPT)
+        elif (
+            view.waiting[resolved.request_id].claim_id is not None
+            and self._claims.get((resolved.cast_id, resolved.request_id)) is not surface
+        ):
+            self._drop(resolved, reason=_CLAIMED_ELSEWHERE)
         elif not self.tell(resolved.cast_id, resolved):
             self._drop(resolved, reason=_NO_PEER)
         else:
             self._say(kind=resolved.kind, cast_id=resolved.cast_id, action="applied")
 
-    def apply(self, message: CastMessage) -> None:
-        if isinstance(message, CastHello):
-            self._casts[message.cast_id] = CastView(hello=message)
-            self._accept(message)
+    # Forwarded, not applied: the cast cancels itself and says so in its
+    # goodbye. One not running has nothing to cancel, and one that is not
+    # connected cannot be told; either way the surface that asked hears why.
+    @override
+    def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
+        self.forward_cancel(surface, cancel)
+
+    # `cancel`, saying whether it was forwarded, which is what the daemon makes
+    # good on if the cast does not listen.
+    def forward_cancel(self, surface: Surface, cancel: CastCancelRequested) -> bool:
+        view = self._casts.get(cancel.cast_id)
+        if view is None or view.status != "running":
+            refused = _NOT_RUNNING
+        elif not self.tell(cancel.cast_id, cancel):
+            refused = _NO_PEER
+        else:
+            self._say(kind=cancel.kind, cast_id=cancel.cast_id, action="applied")
+            return True
+        self._drop(cancel, reason=refused)
+        surface.send(
+            CastRefused(reason=f"not cancelled {cancel.cast_id[:SHORT_ID]}: {refused}")
+        )
+        return False
+
+    # Told to every surface and to the cast, so whoever was answering it stops.
+    def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
+        view = self._casts.get(claimed.cast_id)
+        if view is None or claimed.request_id not in view.waiting:
+            self._drop(claimed, reason=_NO_PROMPT)
+        elif claimed.claim_id is None:
+            self._release(surface, claimed)
+        else:
+            self._claims[claimed.cast_id, claimed.request_id] = surface
+            self._claimed(claimed)
+
+    # Only the holder lets go: a claim it did not make is somebody else's.
+    def _release(self, surface: Surface, claimed: DecideClaimed) -> None:
+        if self._claims.get((claimed.cast_id, claimed.request_id)) is not surface:
+            self._drop(claimed, reason="the claim is not this surface's")
             return
-        if (view := self._casts.get(message.cast_id)) is None:
+        del self._claims[claimed.cast_id, claimed.request_id]
+        self._claimed(claimed)
+
+    # The cast first: a surface the claim finds gone lets go of it on the way
+    # out, and the cast has to hear that release after the claim, not before.
+    def _claimed(self, claimed: DecideClaimed) -> None:
+        self.tell(claimed.cast_id, claimed)
+        self.apply(claimed)
+
+    def apply(self, message: CastMessage) -> None:
+        view = self._casts.get(message.cast_id)
+        if isinstance(message, CastHello):
+            view = self._casts[message.cast_id] = CastView(hello=message)
+        elif view is None:
             self._drop(message, reason=_NO_CAST)
+            return
         elif (refused := _refusal(view, message)) is not None:
             self._drop(message, reason=refused)
-        else:
-            self._accept(message)
+            return
+        self._unclaim(message)
+        self._accept(message)
+
+    # A claim ends with its prompt, however the prompt ends: answered,
+    # withdrawn, the cast gone or reattached, or a replay starting over.
+    def _unclaim(self, message: CastMessage) -> None:
+        match message:
+            case DecideResolved() | DecideWithdrawn():
+                self._claims.pop((message.cast_id, message.request_id), None)
+            case CastHello() | CastGoodbye() | GrimoireBegin():
+                self._claims = {
+                    key: holder
+                    for key, holder in self._claims.items()
+                    if key[0] != message.cast_id
+                }
 
     def _accept(self, message: CastMessage) -> None:
         self._journal(message)
@@ -186,16 +274,21 @@ class Hub(CastBoard, Routes):
     # problem, and the cast writing when it went must not be the one that pays.
     # The dead surface is dropped rather than tried again on the next event —
     # its socket is not coming back, and the detach it never got to send is
-    # exactly what this stands in for.
+    # exactly what this stands in for. Detached once every surface has the
+    # message: a detach can release a claim, and no surface may hear that
+    # release before the message it follows.
     def _fan_out(self, message: CastMessage) -> None:
+        gone: list[Surface] = []
         for surface in list(self._surfaces):
             try:
                 surface.send(message)
             except OSError as error:
-                self.detach_surface(surface)
+                gone.append(surface)
                 self._drop(message, reason=f"surface gone: {error}")
+        for surface in gone:
+            self.detach_surface(surface)
 
-    def _drop(self, message: CastMessage, *, reason: str) -> None:
+    def _drop(self, message: CastMessage | CastCancelRequested, *, reason: str) -> None:
         self._say(
             kind=message.kind, cast_id=message.cast_id, action="dropped", reason=reason
         )
@@ -220,7 +313,7 @@ class Hub(CastBoard, Routes):
             yield view.hello
             yield GrimoireBegin(cast_id=view.hello.cast_id)
             yield from _replay_rites(view)
-            yield from view.waiting.values()
+            yield from _replay_prompts(view)
             yield from view.on_children.values()
             yield GrimoireEnd(cast_id=view.hello.cast_id)
             if view.status == "queued":
@@ -263,6 +356,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             DecideRequested()
             | DecideResolved()
             | DecideWithdrawn()
+            | DecideClaimed()
             | AwaitRequested()
             | AwaitEnded()
             | AwaitWithdrawn()
@@ -310,6 +404,7 @@ def _update_wait(
         DecideRequested
         | DecideResolved
         | DecideWithdrawn
+        | DecideClaimed
         | AwaitRequested
         | AwaitEnded
         | AwaitWithdrawn
@@ -317,12 +412,14 @@ def _update_wait(
 ) -> str | None:
     match message:
         case DecideRequested():
-            view.waiting[message.request_id] = message
+            view.waiting[message.request_id] = Prompt(request=message)
         case AwaitRequested():
             view.on_children[message.request_id] = message
         case DecideResolved() | DecideWithdrawn():
             if view.waiting.pop(message.request_id, None) is None:
                 return _NO_PROMPT
+        case DecideClaimed():
+            return _claim(view, message)
         case _:
             if view.on_children.pop(message.request_id, None) is None:
                 return _NO_AWAIT
@@ -360,4 +457,24 @@ def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
         case "ok" | "error" | "disconnected" as status:
             yield CastGoodbye(
                 cast_id=view.hello.cast_id, status=status, detail=view.detail
+            )
+
+
+def _claim(view: CastView, message: DecideClaimed) -> str | None:
+    if (prompt := view.waiting.get(message.request_id)) is None:
+        return _NO_PROMPT
+    prompt.claim_id = message.claim_id
+    return None
+
+
+# A claim is said after the prompt it claims, so a late surface knows what is
+# being answered before it hears who holds it.
+def _replay_prompts(view: CastView) -> Iterator[WireMessage]:
+    for prompt in view.waiting.values():
+        yield prompt.request
+        if prompt.claim_id is not None:
+            yield DecideClaimed(
+                cast_id=view.hello.cast_id,
+                request_id=prompt.request.request_id,
+                claim_id=prompt.claim_id,
             )

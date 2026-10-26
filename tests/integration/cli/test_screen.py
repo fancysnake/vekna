@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 
 from vekna.gates.cli.screen import listing, ordered, paint
-from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView
+from vekna.pacts.casts import CastView, DamagedRun, Prompt, RiteStatus, RiteView
 from vekna.wire import (
     AwaitRequested,
     CastHello,
@@ -207,8 +207,10 @@ class TestTheList:
     def test_a_waiting_cast_sorts_above_a_busy_one_and_shows_the_question():
         busy = _running("merge_ready", ago=90)
         asking = _running("triage", ago=30)
-        asking.waiting["q1"] = DecideRequested(
-            cast_id="triage", request_id="q1", prompt="merge #74 now?"
+        asking.waiting["q1"] = Prompt(
+            request=DecideRequested(
+                cast_id="triage", request_id="q1", prompt="merge #74 now?"
+            )
         )
 
         listed = _rows(

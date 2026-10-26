@@ -7,16 +7,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ._pacts import (
-    CastMessage,
-    CastRefused,
-    CastRequested,
-    RunRecord,
-    StopRequested,
-    SurfaceHello,
-    WireMessage,
-    decode_frame,
-)
+from ._pacts import CastMessage, RunRecord, WireMessage, decode_frame
 from ._refusals import explained
 
 _EVENTS = "events.jsonl"
@@ -42,9 +33,7 @@ async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage
 # reader in turn.
 async def cast_frames(frames: AsyncIterator[WireMessage]) -> AsyncIterator[CastMessage]:
     async for message in frames:
-        if not isinstance(
-            message, (SurfaceHello, StopRequested, CastRequested, CastRefused)
-        ):
+        if isinstance(message, CastMessage):
             yield message
 
 
