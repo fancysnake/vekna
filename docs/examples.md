@@ -82,12 +82,15 @@ base branch, queues a `ci_watch` for each with `enqueue`, and ends. `ci_watch`
 reads one pull request's CI; red, it waits on a `pr_fix` with `await_cast`,
 giving up its process slot meanwhile, then reads CI again. `pr_fix` checks the
 branch out in a leased worktree, has an agent fix it, and asks you before it
-pushes. How many run at once is `[circle]`'s answer.
+pushes. How many run at once is `[circle]`'s answer. Cast by hand, `pr_fix`
+runs in your own checkout and switches its branch; queue it to get a leased
+tree.
 
 `sweep` takes the base branch from `[defaults.sweep]`, and `pr_fix` its push
 remote from `[defaults.pr_fix]` — an https one, since a cast has no terminal for
-an ssh passphrase. All three need the daemon; start `sweep` from the dashboard
-and attend `pr_fix` there to answer the push.
+an ssh passphrase. `sweep` and `ci_watch` need the daemon. The terminal that
+cast `sweep` follows every cast it queued and asks the push there; claim it
+from the dashboard with `t` to answer it there instead.
 
 **Credentials:** a GitHub token that reads pull requests and CI runs, and a git
 credential that pushes to this repository's branches.

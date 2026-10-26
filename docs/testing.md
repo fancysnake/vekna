@@ -73,8 +73,8 @@ the ritual asks anyway raises `UnattendedPromptError`, scripted answer or not.
 ## Assert on what the doubles recorded
 
 `trial.shell.commands`, `trial.coding.prompts`, `trial.coding.gated`,
-`trial.decide.prompts`, `trial.queue.enqueued`. There is no
-`assert_called_with` here — the recording is the assertion surface.
+`trial.decide.prompts`, `trial.queue.enqueued`, `trial.queue.rituals`. There
+is no `assert_called_with` here — the recording is the assertion surface.
 
 The cast records too: `trial.steps` is the step names in the order they ran,
 `trial.deltas` and `trial.events` the grimoire as it happened, and
