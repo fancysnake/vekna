@@ -1,7 +1,17 @@
+---
+description: "Write a vekna ritual: typed steps and transitions, failure routing, step budgets, components as CLI flags, and where rituals are discovered."
+---
+
 # Rituals
 
 A ritual is a named program made of steps. Casting one runs it to completion
 and prints its result.
+
+/// html | div.diagram
+    markdown: html
+
+--8<-- "rituals.svg"
+///
 
 ## The vocabulary
 

@@ -9,14 +9,23 @@ copyright: BSD-3-Clause
 # `docs/` holds the plan as well as the manual — `common.md` and the runbook are
 # written for the author, and read as noise to anyone arriving from PyPI. They
 # stay in the repository and out of the build; a second directory tree would buy
-# the same thing and cost a second place to look.
+# the same thing and cost a second place to look. The diagrams are inlined by
+# `pymdownx.snippets`, and the GitHub social preview is uploaded by hand, so
+# neither is published as a file of its own.
 exclude_docs: |
   README.md
   releasing.md
   common.md
+  overrides/
+  diagrams/
+  assets/vekna-github.*
 
 theme:
   name: material
+  # Adds the social card, Open Graph and JSON-LD tags Material leaves to its
+  # `social` plugin, whose image rendering would pull cairo into CI for a card
+  # that already exists as `assets/vekna-card.png`.
+  custom_dir: docs/overrides
   logo: assets/logo.png
   favicon: assets/favicon.png
   # Both schemes are defined in `docs/stylesheets/eldritch.css`. No `primary` or
@@ -53,6 +62,8 @@ markdown_extensions:
   - pymdownx.highlight: {anchor_linenums: true}
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.blocks.html
+  - pymdownx.snippets: {base_path: docs/diagrams, check_paths: true}
 
 nav:
   - Start here:

@@ -1,3 +1,8 @@
+---
+head_title: "vekna — run coding agents as Python rituals"
+description: "vekna runs coding agents such as Claude Code inside Python rituals: you write the loop, branches and stopping condition; the agent gets one bounded task per step."
+---
+
 # vekna
 
 Run coding agents as **rituals**: ordinary Python programs whose steps you

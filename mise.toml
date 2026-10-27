@@ -32,10 +32,7 @@ includes = [
 ]
 
 [tasks.update]
-run = [
-    { task = "dep:upgrade:py" },
-    "pre-commit autoupdate",
-]
+run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
 
 # Globs and rule config live in `.markdownlint-cli2.jsonc`, which pre-commit
 # reads too — so there is one answer to "does this markdown pass".
