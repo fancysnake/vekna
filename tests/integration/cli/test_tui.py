@@ -374,6 +374,24 @@ class TestContents:
         assert cursor == "c:c1"
 
     @staticmethod
+    async def test_when_the_last_line_goes_the_cursor_goes_with_it():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap").model_copy(update={"project": "/other/.git"}))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            await pilot.press("p")
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            cursor = _cursor(app)
+        assert lines == []
+        assert cursor is None
+
+    @staticmethod
     async def test_the_rite_picked_keeps_its_output_when_the_tree_grows():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
@@ -919,6 +937,31 @@ class TestFollowing:
             again = (log.scroll_y, log.max_scroll_y)
         assert held == _UP
         assert again[0] == again[1]
+
+    @staticmethod
+    async def test_a_banner_pushing_the_end_down_keeps_the_follow():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for line in range(100):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            log = app.query_one("#log", Log)
+            hub.apply(
+                DecideRequested(
+                    cast_id="c1", request_id="q1", prompt="push?", options=["yes"]
+                )
+            )
+            app.changed()
+            await pilot.pause(_PAINTED)
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            end = (log.scroll_y, log.max_scroll_y)
+        assert end[0] == end[1]
 
 
 @pytest.mark.asyncio
