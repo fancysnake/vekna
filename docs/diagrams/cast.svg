@@ -1,49 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1400" width="1400" height="1400" role="img" aria-labelledby="t d">
   <title id="t">A cast, end to end</title>
   <desc id="d">How one vekna cast streams its rite tree to its terminal and its events to the daemon, which journals them and shows them on every window; how a cast is resumed, who answers its prompts, and how it follows the casts it queued.</desc>
-  <style>
-    :root {
-      --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
-      --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
-      --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
-        --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
-        --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
-      }
-    }
-    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
-    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
-    .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
-    .lede { font-size: 16px; fill: var(--soft); }
-    .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
-    .h3 { font-size: 16px; font-weight: 700; }
-    .b { font-size: 13px; fill: var(--ink); }
-    .s { font-size: 12px; fill: var(--soft); }
-    .xs { font-size: 11px; fill: var(--faint); }
-    .code { font-size: 12px; fill: var(--verd); }
-    .ok { fill: var(--verd); font-weight: 700; }
-    .warn { fill: var(--ox); }
-    .bg { fill: var(--bg); }
-    .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
-    .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
-    .daemon { fill: none; stroke: var(--moss); stroke-width: 2.2; }
-    .circle { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
-    .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
-    .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
-    .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
-    .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
-    .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
-    .dash { stroke-dasharray: 5 4; }
-    .slot-on { fill: var(--verd); }
-    .slot-off { fill: none; stroke: var(--verd); stroke-width: 1.6; }
-    .lane { stroke: var(--line); stroke-width: 1; }
-    .bar { fill: var(--verd); }
-    .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
-    .bar-q { fill: var(--line); }
-  </style>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
     <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>

@@ -8,7 +8,11 @@ A ritual is a program, and it deserves the same test any other program gets.
 `vekna.trial` runs one with every medium answering from a script, so a test
 costs no agent call and no wall time.
 
-![vekna.trial runs a ritual with doubles at the folio outer edge: the mediums still run, each call is answered from a script by glob then queue, nothing defaults, and the recordings are what a test asserts on.](assets/trial.svg)
+/// html | div.diagram
+    markdown: html
+
+--8<-- "trial.svg"
+///
 
 ```bash
 pip install 'vekna[trial]'

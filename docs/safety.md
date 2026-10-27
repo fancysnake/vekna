@@ -8,7 +8,11 @@ description: "What vekna does not sandbox, and where the real boundaries are: sc
 your commands — that is the job, and a sandbox around it would defeat the
 point.
 
-![Vekna does not sandbox agents: the agent acts freely inside a cast, a failure stops at the cast process, vekna offers a tool gate, read-only tool lists, decide and step budgets, and the real boundaries are scoped credentials and a fence around vekna itself.](assets/safety.svg)
+/// html | div.diagram
+    markdown: html
+
+--8<-- "safety.svg"
+///
 
 What the process split does buy is containment of *failure*: a broken ritual or
 a misbehaving SDK kills one cast process and nothing else.

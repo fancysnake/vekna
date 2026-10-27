@@ -8,7 +8,11 @@ A medium is what a step reaches out to. Three ship: `coding` (an agent),
 `shell`, and `decide` (ask the operator). Each call opens a rite of its own, so
 the grimoire records what happened and in what order.
 
-![What a step reaches out to: shell, coding, decide, enqueue and await_cast, each call a rite; agent sessions and tool permissions; timeout, race and cancellation.](assets/mediums.svg)
+/// html | div.diagram
+    markdown: html
+
+--8<-- "mediums.svg"
+///
 
 On the surface that rite is one line, quoting the medium's first argument — a
 `shell`'s command, a prompt — with its whitespace collapsed and cut to 60

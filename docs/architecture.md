@@ -11,7 +11,11 @@ Import boundaries are enforced by
 and the layering *inside* each one. Every module sits in a layer and every
 layer has a contract; nothing is exempt by accident.
 
-![Two processes, the long-lived daemon (root package) and one cast process per cast (lexicon and folios), share only the wire package over a unix socket and the run record on disk. Inside every package the GLIMPSE layers inits, gates, links, mills, specs and pacts, with gates and links importing only pacts, enforced by import-linter.](assets/architecture.svg)
+/// html | div.diagram
+    markdown: html
+
+--8<-- "architecture.svg"
+///
 
 ## Packages
 

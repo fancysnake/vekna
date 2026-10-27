@@ -6,7 +6,11 @@ description: "vekna CLI reference: vekna cast, rituals, the dashboard window, re
 
 One binary, two command groups.
 
-![How one vekna cast streams its rite tree to its terminal and its events to the daemon, which journals them and shows them on every window; how a cast is resumed, who answers its prompts, and how it follows the casts it queued.](assets/cast.svg)
+/// html | div.diagram
+    markdown: html
+
+--8<-- "cast.svg"
+///
 
 ## `vekna cast`
 

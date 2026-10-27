@@ -9,12 +9,16 @@ copyright: BSD-3-Clause
 # `docs/` holds the plan as well as the manual — `common.md` and the runbook are
 # written for the author, and read as noise to anyone arriving from PyPI. They
 # stay in the repository and out of the build; a second directory tree would buy
-# the same thing and cost a second place to look.
+# the same thing and cost a second place to look. The diagrams are inlined by
+# `pymdownx.snippets`, and the GitHub social preview is uploaded by hand, so
+# neither is published as a file of its own.
 exclude_docs: |
   README.md
   releasing.md
   common.md
   overrides/
+  diagrams/
+  assets/vekna-github.*
 
 theme:
   name: material
@@ -58,6 +62,8 @@ markdown_extensions:
   - pymdownx.highlight: {anchor_linenums: true}
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.blocks.html
+  - pymdownx.snippets: {base_path: docs/diagrams, check_paths: true}
 
 nav:
   - Start here:
