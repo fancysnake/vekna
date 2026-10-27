@@ -147,6 +147,38 @@
   --faint: var(--md-default-fg-color--lighter);
   --sigil: var(--md-typeset-a-color);
   --verd: var(--md-accent-fg-color);
+  cursor: zoom-in;
+}
+
+/* Drawn at 1400px, a diagram's text is unreadable at column width, so
+ * `diagram.js` opens it full screen: natural size and scrolling below 1400px,
+ * scaled up to the window above it. */
+.diagram::after {
+  display: block;
+  content: "click to enlarge";
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--md-default-fg-color--lighter);
+}
+
+.diagram.is-open {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: auto;
+  padding: 1rem;
+  background: var(--md-default-bg-color);
+  cursor: zoom-out;
+}
+
+.diagram.is-open::after {
+  content: none;
+}
+
+.diagram.is-open svg {
+  width: max(100%, 1400px);
+  max-width: none;
+  height: auto;
 }
 
 [data-md-color-scheme="eldritch"] .diagram {
