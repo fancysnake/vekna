@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1020" width="1400" height="1020" role="img" aria-labelledby="t d">
+  <title id="t">Where the boundaries are</title>
+  <desc id="d">Vekna does not sandbox agents: the agent acts freely inside a cast, a failure stops at the cast process, vekna offers a tool gate, read-only tool lists, decide and step budgets, and the real boundaries are scoped credentials and a fence around vekna itself.</desc>
+    <style>
+      :root {
+        --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+        --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+        --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+          --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+          --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
+        }
+      }
+      text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+      .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+      .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+      .lede { font-size: 16px; fill: var(--soft); }
+      .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+      .h3 { font-size: 16px; font-weight: 700; }
+      .b { font-size: 13px; fill: var(--ink); }
+      .s { font-size: 12px; fill: var(--soft); }
+      .xs { font-size: 11px; fill: var(--faint); }
+      .code { font-size: 12px; fill: var(--verd); }
+      .ok { fill: var(--verd); font-weight: 700; }
+      .warn { fill: var(--ox); }
+      .bg { fill: var(--bg); }
+      .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+      .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+      .daemon { fill: none; stroke: var(--moss); stroke-width: 2.2; }
+      .circle { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
+      .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+      .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+      .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+      .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+      .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+      .dash { stroke-dasharray: 5 4; }
+      .slot-on { fill: var(--verd); }
+      .slot-off { fill: none; stroke: var(--verd); stroke-width: 1.6; }
+      .lane { stroke: var(--line); stroke-width: 1; }
+      .bar { fill: var(--verd); }
+      .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .bar-q { fill: var(--line); }
+    </style>
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+      <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+      <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+      <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+    </defs>
+
+  <rect class="bg" width="1400" height="1020"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">Where the boundaries are</text>
+  <text x="40" y="94" class="lede">Vekna does not sandbox agents. The agent edits your repository and runs your commands — that is the job.</text>
+  <text x="40" y="116" class="lede">What it buys is containment of failure, and a few stated places where you get to say no.</text>
+
+  <!-- ============ HOST / FENCE ============ -->
+  <rect x="40" y="150" width="1320" height="790" rx="18" style="fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-dasharray: 9 6"/>
+  <rect x="60" y="138" width="346" height="24" class="bg"/>
+  <text x="68" y="156" class="h3" style="fill: var(--soft)">the host · or a fence you put round all of vekna</text>
+
+  <!-- cast process A -->
+  <rect class="daemon" x="70" y="190" width="860" height="720" rx="16"/>
+  <rect x="90" y="178" width="380" height="24" class="bg"/>
+  <text x="98" y="196" class="h3" style="fill: var(--moss)">one cast process · ordinary Python, a working dir</text>
+
+  <!-- agent zone -->
+  <g transform="translate(100,226)">
+    <rect class="hot" width="400" height="410" rx="14"/>
+    <text x="24" y="40" class="h3">The agent, inside a step</text>
+    <text x="24" y="62" class="s">acts permissively — no sandbox, by design</text>
+    <g transform="translate(24,92)">
+      <rect class="card" width="352" height="64" rx="8"/>
+      <text x="16" y="26" class="b" font-weight="700">edits your repository</text>
+      <text x="16" y="46" class="s">the checkout the cast runs in</text>
+    </g>
+    <g transform="translate(24,170)">
+      <rect class="card" width="352" height="64" rx="8"/>
+      <text x="16" y="26" class="b" font-weight="700">runs your commands</text>
+      <text x="16" y="46" class="s">through <tspan class="mono" style="fill: var(--verd)">shell</tspan> and its own tools</text>
+    </g>
+    <g transform="translate(24,248)">
+      <rect class="card" width="352" height="64" rx="8"/>
+      <text x="16" y="26" class="b" font-weight="700">reaches what its token reaches</text>
+      <text x="16" y="46" class="s">GitHub, APIs — as far as the credential lets it</text>
+    </g>
+    <text x="24" y="346" class="s">A sandbox around it would defeat the point.</text>
+    <text x="24" y="366" class="s">Where a boundary is wanted, it lives outside</text>
+    <text x="24" y="386" class="s">the cast: in the token, or in the fence.</text>
+  </g>
+
+  <!-- say-no chips -->
+  <text x="540" y="248" class="h3">Where you get to say no</text>
+  <text x="540" y="270" class="s">vekna's own, small and stated</text>
+  <g transform="translate(540,290)">
+    <rect class="card" width="364" height="78" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">Tool gate</text>
+    <text x="16" y="46" class="code mono">gate_tools=["Bash"]</text>
+    <text x="16" y="66" class="s">asks you before the agent runs a named tool</text>
+  </g>
+  <g transform="translate(540,380)">
+    <rect class="card" width="364" height="78" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">Read-only agent</text>
+    <text x="16" y="46" class="code mono">dontAsk + allowed_tools</text>
+    <text x="16" y="66" class="s">off the list, denied — bar vekna's own ask tool</text>
+  </g>
+  <g transform="translate(540,470)">
+    <rect class="card" width="364" height="78" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">decide never answers for you</text>
+    <text x="16" y="46" class="code mono">decide(…)</text>
+    <text x="16" y="66" class="s">no default, no timeout</text>
+  </g>
+  <g transform="translate(540,560)">
+    <rect class="card" width="364" height="78" rx="10"/>
+    <text x="16" y="26" class="b" font-weight="700">Step budget</text>
+    <text x="16" y="46" class="code mono">max_steps</text>
+    <text x="16" y="66" class="s">a ritual that loops forever stops</text>
+  </g>
+
+  <path class="arrow" d="M500,330 L538,330"/>
+  <path class="arrow" d="M500,420 L538,420"/>
+  <path class="arrow" d="M500,510 L538,510"/>
+  <path class="arrow" d="M500,600 L538,600"/>
+
+  <!-- credentials -->
+  <g transform="translate(100,666)">
+    <rect class="tint" width="804" height="214" rx="14"/>
+    <text x="24" y="38" class="h3">Scope the credentials, not the process</text>
+    <text x="24" y="60" class="s">a boundary that is yours to draw, and the one worth having</text>
+    <g transform="translate(24,82)">
+      <rect class="card" width="240" height="104" rx="8"/>
+      <text x="16" y="28" class="b" font-weight="700">one token per ritual</text>
+      <text x="16" y="50" class="s">fine-grained,</text>
+      <text x="16" y="68" class="s">least privilege</text>
+    </g>
+    <path class="arrow" d="M264,134 L300,134"/>
+    <g transform="translate(302,82)">
+      <rect class="hot" width="230" height="104" rx="8"/>
+      <text x="16" y="28" class="b mono" font-weight="700">triage</text>
+      <text x="16" y="50" class="s"><tspan class="ok">✓</tspan> read pull requests</text>
+      <text x="16" y="70" class="s"><tspan class="ok">✓</tspan> comment on them</text>
+    </g>
+    <g transform="translate(550,82)">
+      <rect class="bad" width="230" height="104" rx="8"/>
+      <text x="16" y="28" class="b warn" font-weight="700">not granted</text>
+      <text x="16" y="50" class="s"><tspan class="warn">✗</tspan> push to main</text>
+      <text x="16" y="70" class="s"><tspan class="warn">✗</tspan> read every repo in the org</text>
+    </g>
+  </g>
+
+  <!-- other processes -->
+  <text x="970" y="214" class="h3">Failure stops at the process</text>
+  <text x="970" y="236" class="s">blast radius: one cast</text>
+
+  <g transform="translate(970,262)">
+    <rect class="bad" width="360" height="92" rx="10"/>
+    <text x="16" y="28" class="b warn" font-weight="700">✗ this cast dies</text>
+    <text x="16" y="50" class="s">a broken ritual, a misbehaving SDK</text>
+    <text x="16" y="70" class="s">kills its own process</text>
+  </g>
+  <path class="arrow-x" d="M930,308 L968,308"/>
+
+  <g transform="translate(970,378)">
+    <rect class="card" width="360" height="66" rx="10"/>
+    <text x="16" y="28" class="b"><tspan class="ok">✓</tspan> the daemon carries on</text>
+    <text x="16" y="48" class="s">its row says how the cast ended</text>
+  </g>
+  <g transform="translate(970,456)">
+    <rect class="card" width="360" height="66" rx="10"/>
+    <text x="16" y="28" class="b"><tspan class="ok">✓</tspan> every other cast carries on</text>
+    <text x="16" y="48" class="s">each is a process of its own</text>
+  </g>
+
+  <!-- fence -->
+  <g transform="translate(970,560)">
+    <rect class="tint" width="360" height="320" rx="14"/>
+    <text x="24" y="38" class="h3">Fence the whole thing</text>
+    <text x="24" y="60" class="s">if a cast must not reach the host</text>
+    <rect x="24" y="84" width="312" height="132" rx="10" style="fill: none; stroke: var(--faint); stroke-width: 1.4; stroke-dasharray: 7 5"/>
+    <text x="40" y="106" class="xs">devcontainer · VM · what you already use</text>
+    <rect class="daemon" x="44" y="120" width="272" height="80" rx="10"/>
+    <text x="180" y="156" class="b" text-anchor="middle" font-weight="700">vekna</text>
+    <text x="180" y="178" class="s" text-anchor="middle">daemon and its casts</text>
+    <text x="24" y="250" class="s">Run vekna inside it, rather than</text>
+    <text x="24" y="270" class="s">expecting vekna to grow a fence inwards.</text>
+    <text x="24" y="296" class="xs">a cast containerises like any Python process</text>
+  </g>
+
+  <!-- footer -->
+  <text x="40" y="984" class="b"><tspan font-weight="700">None of these is a sandbox.</tspan> They are places where you get to say no.</text>
+</svg>

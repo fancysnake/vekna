@@ -14,9 +14,14 @@ exclude_docs: |
   README.md
   releasing.md
   common.md
+  overrides/
 
 theme:
   name: material
+  # Adds the social card, Open Graph and JSON-LD tags Material leaves to its
+  # `social` plugin, whose image rendering would pull cairo into CI for a card
+  # that already exists as `assets/vekna-card.png`.
+  custom_dir: docs/overrides
   logo: assets/logo.png
   favicon: assets/favicon.png
   # Both schemes are defined in `docs/stylesheets/eldritch.css`. No `primary` or

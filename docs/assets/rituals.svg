@@ -1,0 +1,316 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1620" width="1400" height="1620" role="img" aria-labelledby="t d">
+  <title id="t">Anatomy of a ritual</title>
+  <desc id="d">How a ritual runs: components become flags, an entrypoint returns the first payload, steps hop by typed payloads until Done, failures route to recovery steps, and rituals are found nearby, in config, or in installed tomes.</desc>
+    <style>
+      :root {
+        --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+        --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+        --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+          --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+          --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
+        }
+      }
+      text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+      .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+      .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+      .lede { font-size: 16px; fill: var(--soft); }
+      .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+      .h3 { font-size: 16px; font-weight: 700; }
+      .b { font-size: 13px; fill: var(--ink); }
+      .s { font-size: 12px; fill: var(--soft); }
+      .xs { font-size: 11px; fill: var(--faint); }
+      .code { font-size: 12px; fill: var(--verd); }
+      .ok { fill: var(--verd); font-weight: 700; }
+      .warn { fill: var(--ox); }
+      .bg { fill: var(--bg); }
+      .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+      .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+      .daemon { fill: none; stroke: var(--moss); stroke-width: 2.2; }
+      .circle { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
+      .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+      .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+      .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+      .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+      .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+      .dash { stroke-dasharray: 5 4; }
+      .slot-on { fill: var(--verd); }
+      .slot-off { fill: none; stroke: var(--verd); stroke-width: 1.6; }
+      .lane { stroke: var(--line); stroke-width: 1; }
+      .bar { fill: var(--verd); }
+      .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .bar-q { fill: var(--line); }
+    </style>
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+      <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+      <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+      <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+    </defs>
+
+  <rect class="bg" width="1400" height="1620"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">Anatomy of a ritual</text>
+  <text x="40" y="94" class="lede">A named program made of steps. You write the loop, the branches and the stopping condition;</text>
+  <text x="40" y="116" class="lede">the agent gets one bounded piece of work at a time. Determinism lives at the step boundaries.</text>
+
+  <!-- ============ FROM THE COMMAND LINE ============ -->
+  <text x="40" y="172" class="sec">FROM THE COMMAND LINE TO THE FIRST STEP</text>
+
+  <g transform="translate(40,190)">
+    <rect class="card" width="300" height="180" rx="12"/>
+    <text x="20" y="32" class="h3">The command</text>
+    <rect class="tint" x="20" y="50" width="260" height="34" rx="6"/>
+    <text x="34" y="72" class="code mono">vekna cast fix --bound 5</text>
+    <text x="20" y="112" class="s">options before the ritual's name</text>
+    <text x="20" y="130" class="s">are vekna's; everything after it</text>
+    <text x="20" y="148" class="s">belongs to the ritual</text>
+  </g>
+  <path class="arrow" d="M340,280 L378,280"/>
+
+  <g transform="translate(380,190)">
+    <rect class="card" width="300" height="180" rx="12"/>
+    <text x="20" y="32" class="h3">Components</text>
+    <text x="20" y="56" class="s">one pydantic model, the ritual's only</text>
+    <text x="20" y="74" class="s">parameter; each field is a <tspan class="mono" style="fill: var(--verd)">--option</tspan></text>
+    <rect class="hot" x="20" y="92" width="260" height="66" rx="8"/>
+    <text x="34" y="114" class="b">validated at the boundary</text>
+    <text x="34" y="134" class="xs"><tspan class="mono">--bound -1</tspan> is refused before step one,</text>
+    <text x="34" y="149" class="xs">and the error names the field</text>
+  </g>
+  <path class="arrow" d="M680,280 L718,280"/>
+
+  <g transform="translate(720,190)">
+    <rect class="card" width="300" height="180" rx="12"/>
+    <text x="20" y="32" class="h3">Defaults fill the gaps</text>
+    <text x="20" y="56" class="s">per key, the first that answers wins</text>
+    <rect class="hot" x="20" y="70" width="260" height="26" rx="6"/>
+    <text x="34" y="88" class="b"><tspan font-weight="700">1</tspan>  a flag on the command</text>
+    <rect class="tint" x="20" y="102" width="260" height="26" rx="6"/>
+    <text x="34" y="120" class="b"><tspan font-weight="700">2</tspan>  <tspan class="mono" font-size="12">[defaults.&lt;ritual&gt;]</tspan> in .vekna.toml</text>
+    <rect class="tint" x="20" y="134" width="260" height="26" rx="6"/>
+    <text x="34" y="152" class="b"><tspan font-weight="700">3</tspan>  the same table in the user config</text>
+  </g>
+  <path class="arrow" d="M1020,280 L1058,280"/>
+
+  <g transform="translate(1060,190)">
+    <rect class="card" width="300" height="180" rx="12"/>
+    <text x="20" y="32" class="h3">The entrypoint</text>
+    <rect class="tint" x="20" y="50" width="260" height="34" rx="6"/>
+    <text x="34" y="72" class="code mono">@ritual("fix")</text>
+    <text x="20" y="112" class="s">takes the components and returns</text>
+    <text x="20" y="130" class="s">the first step's payload; from here</text>
+    <text x="20" y="148" class="s">the trampoline runs the cast</text>
+  </g>
+
+  <!-- ============ THE TRAMPOLINE ============ -->
+  <text x="40" y="428" class="sec">THE TRAMPOLINE</text>
+
+  <rect class="card" x="40" y="446" width="860" height="470" rx="14"/>
+  <text x="62" y="480" class="h3">A payload is the next step</text>
+  <text x="62" y="502" class="s">a step takes one typed payload and returns one transition: the next step's payload, or Done</text>
+
+  <!-- nodes -->
+  <rect class="tint" x="62" y="590" width="140" height="60" rx="10"/>
+  <text x="132" y="616" class="b mono" text-anchor="middle" font-weight="700">@ritual</text>
+  <text x="132" y="636" class="xs" text-anchor="middle">first payload</text>
+
+  <rect class="card" x="310" y="580" width="180" height="80" rx="10"/>
+  <text x="400" y="612" class="b mono" text-anchor="middle" font-weight="700">run_tests</text>
+  <text x="400" y="634" class="xs" text-anchor="middle">takes Tests</text>
+
+  <rect class="card" x="660" y="580" width="180" height="80" rx="10"/>
+  <text x="750" y="612" class="b mono" text-anchor="middle" font-weight="700">fix</text>
+  <text x="750" y="634" class="xs" text-anchor="middle">takes Attempt</text>
+
+  <rect class="hot" x="310" y="790" width="180" height="64" rx="10"/>
+  <text x="400" y="818" class="b mono" text-anchor="middle" font-weight="700">Done(result)</text>
+  <text x="400" y="838" class="xs" text-anchor="middle">printed as JSON, the cast ends</text>
+
+  <rect class="bad" x="660" y="790" width="180" height="64" rx="10"/>
+  <text x="750" y="818" class="b mono" text-anchor="middle" font-weight="700">triage</text>
+  <text x="750" y="838" class="xs" text-anchor="middle">takes Failure[Attempt]</text>
+
+  <!-- edges -->
+  <path class="arrow" d="M202,620 L308,620"/>
+  <rect class="hot" x="222" y="590" width="66" height="20" rx="10"/>
+  <text x="255" y="604" class="xs mono" text-anchor="middle" style="fill: var(--verd)">Tests</text>
+
+  <path class="arrow" d="M490,604 L658,604"/>
+  <rect class="hot" x="538" y="574" width="72" height="20" rx="10"/>
+  <text x="574" y="588" class="xs mono" text-anchor="middle" style="fill: var(--verd)">Attempt</text>
+
+  <path class="arrow" d="M658,640 L492,640"/>
+  <rect class="hot" x="541" y="648" width="66" height="20" rx="10"/>
+  <text x="574" y="662" class="xs mono" text-anchor="middle" style="fill: var(--verd)">Tests</text>
+
+  <path class="arrow-v" d="M400,660 L400,788"/>
+  <text x="410" y="730" class="xs ok">green</text>
+
+  <path class="arrow-x" d="M750,660 L750,788"/>
+  <text x="760" y="722" class="xs warn">raises</text>
+
+  <path class="arrow" d="M840,822 C885,812 885,640 842,630"/>
+  <rect class="hot" x="824" y="716" width="66" height="20" rx="10"/>
+  <text x="857" y="730" class="xs mono" text-anchor="middle" style="fill: var(--verd)">Attempt</text>
+
+  <path class="arrow-v" d="M658,822 L492,822"/>
+  <text x="575" y="814" class="xs ok" text-anchor="middle">gave up</text>
+
+  <line x1="62" y1="878" x2="878" y2="878" class="lane"/>
+  <text x="62" y="902" class="s">One payload class belongs to one step, so returning <tspan class="mono" style="fill: var(--verd)">Attempt(…)</tspan> names <tspan class="mono">fix</tspan>. No name routes anything.</text>
+
+  <!-- annotation panel -->
+  <rect class="card" x="930" y="446" width="430" height="470" rx="14"/>
+  <text x="952" y="480" class="h3">The annotation is the graph</text>
+  <text x="952" y="502" class="s">there is no second place for it to live, so nothing drifts</text>
+  <rect class="tint" x="952" y="520" width="386" height="56" rx="8"/>
+  <text x="968" y="543" class="code mono">def fix(a: Attempt)</text>
+  <text x="968" y="563" class="code mono">    -&gt; Tests | Done[Verdict]</text>
+  <text x="952" y="606" class="b">• exits are declared once, in the return type</text>
+  <text x="952" y="630" class="b">• mypy checks every return against them</text>
+  <text x="952" y="654" class="b">• an exit no step takes is refused at load</text>
+  <text x="952" y="678" class="b">• two steps on one class: an error naming both</text>
+  <text x="952" y="716" class="s"><tspan class="mono" style="fill: var(--verd)">vekna rituals show fix</tspan> draws it:</text>
+  <rect class="tint" x="952" y="728" width="386" height="128" rx="8"/>
+  <text x="968" y="752" class="code mono" style="fill: var(--sigil)">steps:</text>
+  <text x="968" y="774" class="code mono">  (start) → run_tests</text>
+  <text x="968" y="794" class="code mono">  run_tests → fix, (done)</text>
+  <text x="968" y="814" class="code mono">  fix → run_tests, triage (on failure)</text>
+  <text x="968" y="834" class="code mono">  triage → fix, (done)</text>
+  <text x="952" y="890" class="xs">a step may admit a union, Lint | Coverage, to join two paths</text>
+
+  <!-- ============ THE MECHANISMS ============ -->
+  <text x="40" y="976" class="sec">THE MECHANISMS</text>
+
+  <!-- Panel: failure -->
+  <g transform="translate(40,994)">
+    <rect class="card" width="420" height="330" rx="14"/>
+    <text x="22" y="34" class="h3">When a step fails</text>
+    <text x="22" y="56" class="s">a raise goes to the step taking <tspan class="mono" style="fill: var(--ox)">Failure[P]</tspan>,</text>
+    <text x="22" y="74" class="s">P being the payload that entered</text>
+    <g transform="translate(22,92)">
+      <rect class="bad" width="376" height="76" rx="8"/>
+      <text x="14" y="22" class="b" font-weight="700">Failure carries</text>
+      <text x="14" y="44" class="s"><tspan class="mono">payload</tspan> what entered · <tspan class="mono">error</tspan> type, message,</text>
+      <text x="14" y="62" class="s">traceback · <tspan class="mono">rite</tspan> what raised · <tspan class="mono">attempt</tspan> count</text>
+    </g>
+    <text x="22" y="198" class="b">• recovery is an ordinary step with exits</text>
+    <text x="22" y="222" class="b">• its own raise → <tspan class="mono" font-size="12">Failure[Failure[P]]</tspan>, or the end</text>
+    <text x="22" y="246" class="b">• a step never catches its own failure</text>
+    <text x="22" y="270" class="b">• no such step: the cast ends, the error named</text>
+    <text x="22" y="304" class="xs"><tspan class="mono">--unattended</tspan> turns each decide into a routable failure</text>
+  </g>
+
+  <!-- Panel: bounds -->
+  <g transform="translate(490,994)">
+    <rect class="card" width="420" height="330" rx="14"/>
+    <text x="22" y="34" class="h3">Bounds</text>
+    <text x="22" y="56" class="s">a ritual that loops forever stops rather than runs on</text>
+    <g transform="translate(22,76)">
+      <rect class="tint" width="376" height="50" rx="8"/>
+      <text x="14" y="22" class="code mono">max_steps</text>
+      <text x="130" y="22" class="s">the whole trampoline</text>
+      <text x="130" y="40" class="xs mono warn">StepBudgetExceededError</text>
+    </g>
+    <g transform="translate(22,134)">
+      <rect class="tint" width="376" height="50" rx="8"/>
+      <text x="14" y="22" class="code mono">max_visits=N</text>
+      <text x="130" y="22" class="s">entries into one step</text>
+      <text x="130" y="40" class="xs">ends a retry loop sooner</text>
+    </g>
+    <g transform="translate(22,192)">
+      <rect class="tint" width="376" height="50" rx="8"/>
+      <text x="14" y="22" class="code mono">timeout=600</text>
+      <text x="130" y="22" class="s">one visit, in seconds</text>
+      <text x="130" y="40" class="xs"><tspan class="mono warn">RiteTimeoutError</tspan>, recovered as a Failure</text>
+    </g>
+    <rect class="hot" x="22" y="256" width="376" height="54" rx="8"/>
+    <text x="36" y="278" class="b" font-weight="700">A failed cast still owes its report</text>
+    <text x="36" y="296" class="xs">route every ending through one step that writes the summary</text>
+  </g>
+
+  <!-- Panel: inside a step -->
+  <g transform="translate(940,994)">
+    <rect class="card" width="420" height="330" rx="14"/>
+    <text x="22" y="34" class="h3">Inside one step</text>
+    <text x="22" y="56" class="s">concurrency lives in a step, never between steps</text>
+
+    <text x="22" y="92" class="b mono" font-size="12">step</text>
+    <rect class="bar" x="70" y="80" width="326" height="18" rx="4"/>
+    <text x="22" y="128" class="xs mono">lint</text>
+    <rect class="hot" x="80" y="116" width="200" height="18" rx="4"/>
+    <text x="22" y="156" class="xs mono">tests</text>
+    <rect class="hot" x="80" y="144" width="306" height="18" rx="4"/>
+    <text x="22" y="190" class="xs">two shell calls in one TaskGroup: both run, each its own rite</text>
+
+    <line x1="22" y1="210" x2="398" y2="210" class="lane"/>
+    <g transform="translate(22,226)">
+      <rect class="card" width="96" height="36" rx="6"/>
+      <text x="48" y="23" class="xs mono" text-anchor="middle">gates</text>
+      <path class="arrow" d="M96,18 L136,18"/>
+      <rect class="card" x="138" width="96" height="36" rx="6"/>
+      <text x="186" y="23" class="xs mono" text-anchor="middle">fix</text>
+      <path class="arrow" d="M234,18 L274,18"/>
+      <rect class="card" x="276" width="100" height="36" rx="6"/>
+      <text x="326" y="23" class="xs mono" text-anchor="middle">report</text>
+    </g>
+    <text x="22" y="290" class="s">steps run one at a time: the boundary between</text>
+    <text x="22" y="308" class="s">two is what makes a cast reproducible</text>
+  </g>
+
+  <!-- ============ WHERE RITUALS COME FROM ============ -->
+  <text x="40" y="1384" class="sec">WHERE RITUALS COME FROM</text>
+
+  <g transform="translate(40,1402)">
+    <rect class="card" width="320" height="150" rx="12"/>
+    <text x="20" y="30" class="h3">Found nearby</text>
+    <text x="20" y="54" class="code mono">rituals.py</text>
+    <text x="104" y="54" class="s">or a</text>
+    <text x="140" y="54" class="code mono">rituals/</text>
+    <text x="210" y="54" class="s">package</text>
+    <text x="20" y="78" class="s">in this directory or any parent;</text>
+    <text x="20" y="96" class="s">a package is swept all the way down</text>
+    <text x="20" y="120" class="xs warn">every level needs an __init__.py;</text>
+    <text x="20" y="136" class="xs warn">both a file and a package is an error</text>
+  </g>
+  <path class="arrow" d="M360,1477 L388,1477"/>
+
+  <g transform="translate(390,1402)">
+    <rect class="card" width="320" height="150" rx="12"/>
+    <text x="20" y="30" class="h3">Named in config</text>
+    <rect class="tint" x="20" y="44" width="280" height="54" rx="6"/>
+    <text x="34" y="65" class="code mono" style="fill: var(--sigil)">[rituals]</text>
+    <text x="34" y="86" class="code mono">files = […]  modules = […]</text>
+    <text x="20" y="120" class="s">in .vekna.toml or the user config,</text>
+    <text x="20" y="138" class="s">additive to what was found</text>
+  </g>
+  <path class="arrow" d="M710,1477 L738,1477"/>
+
+  <g transform="translate(740,1402)">
+    <rect class="card" width="320" height="150" rx="12"/>
+    <text x="20" y="30" class="h3">Installed as a tome</text>
+    <text x="20" y="54" class="s">a ritual library shipped as a package,</text>
+    <text x="20" y="72" class="s">its rituals carrying its name:</text>
+    <rect class="tint" x="20" y="84" width="280" height="30" rx="6"/>
+    <text x="34" y="104" class="code mono">vekna cast mycompany:review</text>
+    <text x="20" y="138" class="xs">installed in vekna's own environment</text>
+  </g>
+  <path class="arrow" d="M1060,1477 L1088,1477"/>
+
+  <g transform="translate(1090,1402)">
+    <rect class="hot" width="270" height="150" rx="12"/>
+    <text x="20" y="30" class="h3">One library</text>
+    <text x="20" y="54" class="s">a bare name finds the project's</text>
+    <text x="20" y="72" class="s">own ritual first, then a tome's</text>
+    <text x="20" y="102" class="xs warn">two sources claiming one name:</text>
+    <text x="20" y="118" class="xs warn">an error naming both, every</text>
+    <text x="20" y="134" class="xs warn">collision reported at once</text>
+  </g>
+
+  <text x="40" y="1590" class="xs">A ritual's vocabulary: component · step · transition · medium · focus · grimoire (the cast's event log) · tome</text>
+</svg>

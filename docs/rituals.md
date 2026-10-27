@@ -1,7 +1,13 @@
+---
+description: "Write a vekna ritual: typed steps and transitions, failure routing, step budgets, components as CLI flags, and where rituals are discovered."
+---
+
 # Rituals
 
 A ritual is a named program made of steps. Casting one runs it to completion
 and prints its result.
+
+![How a ritual runs: components become flags, an entrypoint returns the first payload, steps hop by typed payloads until Done, failures route to recovery steps, and rituals are found nearby, in config, or in installed tomes.](assets/rituals.svg)
 
 ## The vocabulary
 

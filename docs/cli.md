@@ -1,6 +1,12 @@
+---
+description: "vekna CLI reference: vekna cast, rituals, the dashboard window, resuming a cast with --continue, unattended casts, notifications, log and stop."
+---
+
 # CLI reference
 
 One binary, two command groups.
+
+![How one vekna cast streams its rite tree to its terminal and its events to the daemon, which journals them and shows them on every window; how a cast is resumed, who answers its prompts, and how it follows the casts it queued.](assets/cast.svg)
 
 ## `vekna cast`
 
@@ -52,7 +58,7 @@ The last line is the result as JSON, or `null` for a ritual that finishes
 without one.
 
 Exit codes: `0` cast finished, `1` cast failed, `2` the arguments or the ritual
-source were wrong.
+source were wrong, or a medium the ritual calls has no focus registered.
 
 ### Following what it queued
 

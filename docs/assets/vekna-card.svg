@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="t d">
+  <title id="t">vekna — run coding agents as rituals</title>
+  <desc id="d">vekna runs coding agents inside Python rituals whose steps you control. pip install vekna. github.com/fancysnake/vekna</desc>
+  <style>
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: #1f241b; }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+    .name { font-size: 84px; font-weight: 700; fill: #3b4a2a; letter-spacing: 1px; }
+    .tag { font-size: 23px; fill: #1f241b; }
+    .soft { font-size: 15px; fill: #4b5147; }
+    .sec { font-size: 12px; font-weight: 700; letter-spacing: 2px; fill: #4a6127; }
+    .b { font-size: 14px; }
+    .s { font-size: 12px; fill: #4b5147; }
+    .xs { font-size: 11px; fill: #767e70; }
+    .code { fill: #12715a; }
+    .card { fill: #fbf8f3; stroke: #c9cfbf; stroke-width: 1.2; }
+    .tint { fill: #e6eadf; stroke: #c9cfbf; stroke-width: 1; }
+    .hot { fill: #dcebe4; stroke: #12715a; stroke-width: 1.4; }
+    .bad { fill: #f3dde0; stroke: #8c2230; stroke-width: 1.3; }
+    .arrow { fill: none; stroke: #4b5147; stroke-width: 1.6; marker-end: url(#a); }
+    .arrow-v { fill: none; stroke: #12715a; stroke-width: 1.8; marker-end: url(#av); }
+    .arrow-x { fill: none; stroke: #8c2230; stroke-width: 1.5; stroke-dasharray: 4 3; marker-end: url(#ax); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5147"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#12715a"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c2230"/></marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="#f3efe7"/>
+  <rect x="14" y="14" width="1172" height="602" rx="18" fill="none" stroke="#3b4a2a" stroke-width="2"/>
+
+  <!-- ===== identity ===== -->
+  <g transform="translate(60,52) scale(0.15)" fill="#3b4a2a" fill-rule="evenodd">
+    <polygon points="64,64 128,256 256,64 384,256 512,64 640,256 768,64 896,256 960,64 960,384 64,384"/>
+    <path d="M64,448 H960 V640 L768,832 V960 H640 V832 H576 V960 H448 V832 H384 V960 H256 V832 L64,640 Z
+             M192,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z
+             M640,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z
+             M510,576 L574,768 L448,768 Z"/>
+  </g>
+  <text x="56" y="290" class="name">vekna</text>
+  <text x="60" y="334" class="tag">Run coding agents as rituals.</text>
+  <text x="60" y="368" class="soft">Plain Python programs: you write the steps,</text>
+  <text x="60" y="390" class="soft">the agent works inside them. Determinism</text>
+  <text x="60" y="412" class="soft">lives at the step boundaries.</text>
+
+  <rect x="60" y="440" width="360" height="52" rx="10" fill="#1f241b"/>
+  <text x="80" y="473" class="mono" font-size="20" style="fill: #a7bd86">$</text>
+  <text x="102" y="473" class="mono" font-size="20" style="fill: #f3efe7">pip install vekna</text>
+
+  <text x="60" y="532" class="mono" font-size="16" style="fill: #12715a">github.com/fancysnake/vekna</text>
+  <text x="60" y="558" class="mono" font-size="16" style="fill: #4b5147">vekna.fancysnake.dev</text>
+  <text x="60" y="590" class="xs">Python 3.11+ · coding agent via Claude Code</text>
+
+  <line x1="470" y1="56" x2="470" y2="574" stroke="#c9cfbf" stroke-width="1.2"/>
+
+  <!-- ===== how it works ===== -->
+  <text x="510" y="70" class="sec">HOW A CAST RUNS</text>
+
+  <g transform="translate(510,88)">
+    <rect class="tint" width="118" height="58" rx="9"/>
+    <text x="59" y="25" class="b" text-anchor="middle" font-weight="700">components</text>
+    <text x="59" y="44" class="xs mono" text-anchor="middle">--flag value</text>
+  </g>
+  <path class="arrow" d="M628,117 L652,117"/>
+  <g transform="translate(654,88)">
+    <rect class="card" width="118" height="58" rx="9"/>
+    <text x="59" y="25" class="b mono code" text-anchor="middle">@ritual</text>
+    <text x="59" y="44" class="xs" text-anchor="middle">names first step</text>
+  </g>
+  <path class="arrow" d="M772,117 L796,117"/>
+  <g transform="translate(798,88)">
+    <rect class="hot" width="118" height="58" rx="9"/>
+    <text x="59" y="25" class="b mono code" text-anchor="middle">@step</text>
+    <text x="59" y="44" class="xs" text-anchor="middle">typed payload in</text>
+  </g>
+  <path class="arrow-v" d="M890,88 C890,58 824,58 824,86"/>
+  <text x="857" y="60" class="xs" text-anchor="middle" style="fill: #12715a">loop</text>
+  <path class="arrow" d="M916,117 L1000,117"/>
+  <text x="958" y="108" class="xs" text-anchor="middle">returns</text>
+  <g transform="translate(1002,88)">
+    <rect class="card" width="138" height="58" rx="9"/>
+    <text x="69" y="25" class="b mono code" text-anchor="middle">Done(result)</text>
+    <text x="69" y="44" class="xs" text-anchor="middle">printed as JSON</text>
+  </g>
+
+  <!-- mediums under the step -->
+  <path class="arrow" d="M857,146 L857,170"/>
+  <g transform="translate(640,172)">
+    <rect class="card" width="500" height="54" rx="9"/>
+    <text x="16" y="22" class="xs">each step calls mediums, each call a rite on the record</text>
+    <text x="16" y="42" class="b mono code">coding</text>
+    <text x="80" y="42" class="s">agent</text>
+    <text x="130" y="42" class="b mono code">shell</text>
+    <text x="184" y="42" class="s">command</text>
+    <text x="252" y="42" class="b mono code">decide</text>
+    <text x="312" y="42" class="s">you</text>
+    <text x="348" y="42" class="b mono code">enqueue</text>
+    <text x="414" y="42" class="s">a cast</text>
+  </g>
+  <g transform="translate(510,172)">
+    <rect class="bad" width="118" height="54" rx="9"/>
+    <text x="59" y="23" class="b mono" text-anchor="middle" style="fill: #8c2230">Failure[P]</text>
+    <text x="59" y="41" class="xs" text-anchor="middle">a step recovers</text>
+  </g>
+  <path class="arrow-x" d="M826,146 C806,160 640,156 590,170"/>
+  <text x="640" y="160" class="xs" style="fill: #8c2230">raises</text>
+
+  <!-- process picture -->
+  <g transform="translate(510,248)">
+    <rect class="card" width="170" height="70" rx="9"/>
+    <text x="16" y="26" class="b mono" font-weight="700">vekna cast</text>
+    <text x="16" y="46" class="s">one process per cast,</text>
+    <text x="16" y="62" class="s">streams a rite tree</text>
+  </g>
+  <path class="arrow-v" d="M680,283 L744,283" style="marker-start: url(#av)"/>
+  <text x="712" y="276" class="xs" text-anchor="middle">wire</text>
+  <g transform="translate(746,248)">
+    <rect class="card" width="170" height="70" rx="9" stroke="#3b4a2a" stroke-width="1.8"/>
+    <text x="16" y="26" class="b mono" font-weight="700">daemon</text>
+    <text x="16" y="46" class="s">journals every event,</text>
+    <text x="16" y="62" class="s">queues, spawns</text>
+  </g>
+  <path class="arrow" d="M916,283 L980,283"/>
+  <g transform="translate(982,248)">
+    <rect class="card" width="158" height="70" rx="9"/>
+    <text x="16" y="26" class="b mono" font-weight="700">vekna</text>
+    <text x="16" y="46" class="s">live dashboard:</text>
+    <text x="16" y="62" class="s">watch, answer</text>
+  </g>
+
+  <!-- ===== features ===== -->
+  <text x="510" y="356" class="sec">WHAT YOU GET</text>
+  <g transform="translate(510,370)" class="b">
+    <rect class="tint" width="306" height="46" rx="9"/>
+    <text x="14" y="20" font-weight="700">Typed control flow</text>
+    <text x="14" y="37" class="s">exits checked by mypy, graph drawn</text>
+
+    <rect class="tint" x="324" width="306" height="46" rx="9"/>
+    <text x="338" y="20" font-weight="700">Failure as a transition</text>
+    <text x="338" y="37" class="s">recovery steps, budgets, timeouts</text>
+
+    <rect class="tint" y="56" width="306" height="46" rx="9"/>
+    <text x="14" y="76" font-weight="700">Resume, not rerun</text>
+    <text x="14" y="93" class="s">finished rites replay off the journal</text>
+
+    <rect class="tint" x="324" y="56" width="306" height="46" rx="9"/>
+    <text x="338" y="76" font-weight="700">Agent sessions on purpose</text>
+    <text x="338" y="93" class="s">continue a retry, fresh for review</text>
+
+    <rect class="tint" y="112" width="306" height="46" rx="9"/>
+    <text x="14" y="132" font-weight="700">Many casts at once</text>
+    <text x="14" y="149" class="s">a queue, process slots, worktree pool</text>
+
+    <rect class="tint" x="324" y="112" width="306" height="46" rx="9"/>
+    <text x="338" y="132" font-weight="700">You hold the decisions</text>
+    <text x="338" y="149" class="s">decide never defaults, tool gates</text>
+
+    <rect class="tint" y="168" width="306" height="46" rx="9"/>
+    <text x="14" y="188" font-weight="700">Tested like code</text>
+    <text x="14" y="205" class="s">vekna.trial scripts every medium</text>
+
+    <rect class="tint" x="324" y="168" width="306" height="46" rx="9"/>
+    <text x="338" y="188" font-weight="700">Rituals you install</text>
+    <text x="338" y="205" class="s">tomes ship as Python packages</text>
+  </g>
+</svg>

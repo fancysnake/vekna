@@ -1,8 +1,14 @@
+---
+description: "The vekna mediums a step calls: shell commands, coding agents via Claude Code, operator decisions, queued casts, sessions, tool gates, timeouts and races."
+---
+
 # Mediums
 
 A medium is what a step reaches out to. Three ship: `coding` (an agent),
 `shell`, and `decide` (ask the operator). Each call opens a rite of its own, so
 the grimoire records what happened and in what order.
+
+![What a step reaches out to: shell, coding, decide, enqueue and await_cast, each call a rite; agent sessions and tool permissions; timeout, race and cancellation.](assets/mediums.svg)
 
 On the surface that rite is one line, quoting the medium's first argument — a
 `shell`'s command, a prompt — with its whitespace collapsed and cut to 60
@@ -117,7 +123,8 @@ harmless, which is the point. What stays on the call is what cannot be shared:
 `output`, which decides what it returns.
 
 `dontAsk` with an allowlist is how you get a read-only agent: everything
-outside the list is denied without stopping to ask you. Not
+outside the list is denied without stopping to ask you, bar vekna's own
+`ask_human`, which only puts a question to you. Not
 `permission_mode="plan"`, which executes no tools at all — an agent in plan
 mode cannot read the files you gave it `Read` for.
 

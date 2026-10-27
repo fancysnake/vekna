@@ -1,0 +1,283 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1580" width="1400" height="1580" role="img" aria-labelledby="t d">
+  <title id="t">Mediums</title>
+  <desc id="d">What a step reaches out to: shell, coding, decide, enqueue and await_cast, each call a rite; agent sessions and tool permissions; timeout, race and cancellation.</desc>
+    <style>
+      :root {
+        --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+        --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+        --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+          --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+          --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
+        }
+      }
+      text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+      .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+      .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+      .lede { font-size: 16px; fill: var(--soft); }
+      .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+      .h3 { font-size: 16px; font-weight: 700; }
+      .b { font-size: 13px; fill: var(--ink); }
+      .s { font-size: 12px; fill: var(--soft); }
+      .xs { font-size: 11px; fill: var(--faint); }
+      .code { font-size: 12px; fill: var(--verd); }
+      .ok { fill: var(--verd); font-weight: 700; }
+      .warn { fill: var(--ox); }
+      .bg { fill: var(--bg); }
+      .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+      .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+      .daemon { fill: none; stroke: var(--moss); stroke-width: 2.2; }
+      .circle { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
+      .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+      .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+      .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+      .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+      .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+      .dash { stroke-dasharray: 5 4; }
+      .slot-on { fill: var(--verd); }
+      .slot-off { fill: none; stroke: var(--verd); stroke-width: 1.6; }
+      .lane { stroke: var(--line); stroke-width: 1; }
+      .bar { fill: var(--verd); }
+      .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
+      .bar-q { fill: var(--line); }
+    </style>
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+      <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+      <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+      <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+    </defs>
+
+  <rect class="bg" width="1400" height="1580"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">Mediums</text>
+  <text x="40" y="94" class="lede">What a step reaches out to: a command, an agent, you, or another cast. Each call opens a rite of its own,</text>
+  <text x="40" y="116" class="lede">so the grimoire records what happened and in what order.</text>
+
+  <text x="40" y="172" class="sec">ONE STEP, MANY RITES</text>
+
+  <!-- centre: the step -->
+  <rect class="daemon" x="490" y="250" width="420" height="330" rx="16"/>
+  <rect x="510" y="238" width="96" height="24" class="bg"/>
+  <text x="518" y="256" class="h3" style="fill: var(--moss)">a step</text>
+  <text x="514" y="292" class="s">the terminal draws a tree of rites, one per call:</text>
+  <rect class="tint" x="514" y="306" width="372" height="182" rx="8"/>
+  <text x="530" y="332" class="b mono" font-size="12">▶ fix</text>
+  <text x="550" y="356" class="b mono" font-size="12">↳ shell  pytest -x</text>
+  <text x="570" y="378" class="xs mono">3 failed, 41 passed</text>
+  <text x="550" y="400" class="b mono" font-size="12"><tspan class="ok">✓</tspan> shell  pytest -x</text>
+  <text x="550" y="424" class="b mono" font-size="12">↳ coding  The test suite fails…</text>
+  <text x="550" y="446" class="b mono" font-size="12"><tspan class="ok">✓</tspan> coding  The test suite fails…</text>
+  <text x="530" y="470" class="b mono" font-size="12"><tspan class="ok">✓</tspan> fix</text>
+  <text x="514" y="516" class="s">a rite quotes the call's first argument, cut to</text>
+  <text x="514" y="534" class="s">60 characters: lead with the part worth reading</text>
+  <text x="514" y="560" class="xs">ends ok · error · cancelled ⊘</text>
+
+  <!-- shell -->
+  <g transform="translate(40,190)">
+    <rect class="card" width="410" height="210" rx="12"/>
+    <text x="20" y="32" class="h3"><tspan class="mono" style="fill: var(--verd)">shell</tspan>  a command</text>
+    <text x="20" y="58" class="s">returns the exit code, stdout and stderr</text>
+    <rect class="hot" x="20" y="74" width="370" height="54" rx="8"/>
+    <text x="34" y="96" class="b">never raises on a non-zero exit</text>
+    <text x="34" y="116" class="xs">a failing command is usually what the ritual is about</text>
+    <text x="20" y="156" class="s">runs on closed stdin: a command that reads</text>
+    <text x="20" y="174" class="s">gets EOF, not the line you were typing</text>
+  </g>
+
+  <!-- decide -->
+  <g transform="translate(40,420)">
+    <rect class="card" width="410" height="230" rx="12"/>
+    <text x="20" y="32" class="h3"><tspan class="mono" style="fill: var(--verd)">decide</tspan>  ask the operator</text>
+    <text x="20" y="58" class="s">the cast blocks until you answer; three shapes:</text>
+    <rect class="tint" x="20" y="70" width="370" height="84" rx="8"/>
+    <text x="34" y="92" class="code mono">decide("Push?")</text>
+    <text x="250" y="92" class="s">→ bool</text>
+    <text x="34" y="116" class="code mono">options=…</text>
+    <text x="250" y="116" class="s">→ that option</text>
+    <text x="34" y="140" class="code mono">free=True</text>
+    <text x="250" y="140" class="s">→ str</text>
+    <rect class="bad" x="20" y="166" width="370" height="46" rx="8"/>
+    <text x="34" y="186" class="xs warn">no default and no timeout: guessing your choice is</text>
+    <text x="34" y="202" class="xs warn">worse than waiting; ended stdin stops the cast</text>
+  </g>
+
+  <!-- coding -->
+  <g transform="translate(950,190)">
+    <rect class="card" width="410" height="210" rx="12"/>
+    <text x="20" y="32" class="h3"><tspan class="mono" style="fill: var(--verd)">coding</tspan>  an agent</text>
+    <text x="20" y="58" class="s">through the Claude Code CLI, installed separately</text>
+    <rect class="tint" x="20" y="72" width="180" height="74" rx="8"/>
+    <text x="32" y="92" class="b" font-weight="700">shared</text>
+    <text x="32" y="112" class="code mono">CodingOpts</text>
+    <text x="32" y="132" class="xs">model · cwd · gate_tools</text>
+    <rect class="hot" x="210" y="72" width="180" height="74" rx="8"/>
+    <text x="222" y="92" class="b" font-weight="700">per call</text>
+    <text x="222" y="112" class="code mono">session · key</text>
+    <text x="222" y="132" class="code mono">output=Model</text>
+    <text x="20" y="172" class="s">typed output is validated on return; the agent</text>
+    <text x="20" y="190" class="s">can hand you a choice with <tspan class="mono" style="fill: var(--verd)">ask_human</tspan></text>
+  </g>
+
+  <!-- flow -->
+  <g transform="translate(950,420)">
+    <rect class="card" width="410" height="230" rx="12"/>
+    <text x="20" y="32" class="h3"><tspan class="mono" style="fill: var(--verd)">enqueue · await_cast</tspan>  a cast</text>
+    <text x="20" y="58" class="s">start another cast through the daemon's queue</text>
+    <rect class="tint" x="20" y="70" width="370" height="60" rx="8"/>
+    <text x="34" y="92" class="code mono">enqueue</text>
+    <text x="150" y="92" class="s">→ its id; the step carries on</text>
+    <text x="34" y="116" class="code mono">await_cast</text>
+    <text x="150" y="116" class="s">→ its result, as <tspan class="mono" style="fill: var(--verd)">output=</tspan></text>
+    <text x="20" y="156" class="s">a waiting cast gives its slot back, keeps its tree</text>
+    <text x="20" y="180" class="xs">a failed child → <tspan class="mono warn">CastFailedError</tspan> · no daemon → <tspan class="mono warn">NoDaemonError</tspan></text>
+    <text x="20" y="204" class="xs">a resumed cast does not enqueue twice</text>
+  </g>
+
+  <path class="arrow" d="M490,330 C470,330 470,300 452,300"/>
+  <path class="arrow" d="M490,500 C470,500 470,530 452,530"/>
+  <path class="arrow" d="M910,330 C930,330 930,300 948,300"/>
+  <path class="arrow" d="M910,500 C930,500 930,530 948,530"/>
+
+  <!-- ============ THE AGENT ============ -->
+  <text x="40" y="712" class="sec">THE AGENT</text>
+
+  <!-- sessions -->
+  <g transform="translate(40,730)">
+    <rect class="card" width="650" height="390" rx="14"/>
+    <text x="22" y="34" class="h3">Sessions: which memory a call is on</text>
+    <text x="22" y="56" class="s"><tspan class="mono" style="fill: var(--verd)">session</tspan> says whether it resumes, <tspan class="mono" style="fill: var(--verd)">key</tspan> says which thread</text>
+
+    <rect class="tint" x="22" y="74" width="606" height="30" rx="6"/>
+    <text x="38" y="94" class="xs" font-weight="700">DECLARATION</text>
+    <text x="300" y="94" class="xs" font-weight="700">WHAT THE CALL GETS</text>
+    <text x="38" y="130" class="code mono">Session.NEW</text>
+    <text x="152" y="130" class="xs">default</text>
+    <text x="300" y="130" class="b">a fresh context</text>
+    <line x1="22" y1="144" x2="628" y2="144" class="lane"/>
+    <text x="38" y="168" class="code mono">Session.CONTINUE</text>
+    <text x="300" y="168" class="b">the cast's last agent call, carried on</text>
+    <line x1="22" y1="182" x2="628" y2="182" class="lane"/>
+    <text x="38" y="206" class="code mono">CONTINUE, key="fix"</text>
+    <text x="300" y="206" class="b">the thread keyed "fix", carried on</text>
+    <line x1="22" y1="220" x2="628" y2="220" class="lane"/>
+    <text x="38" y="244" class="code mono">NEW, key="fix"</text>
+    <text x="300" y="244" class="b">a fresh context, and "fix" starts from it</text>
+
+    <rect class="hot" x="22" y="268" width="296" height="74" rx="8"/>
+    <text x="36" y="290" class="b" font-weight="700">a retry wants CONTINUE</text>
+    <text x="36" y="310" class="xs">an agent remembering what it already</text>
+    <text x="36" y="326" class="xs">tried is the whole value</text>
+    <rect class="bad" x="332" y="268" width="296" height="74" rx="8"/>
+    <text x="346" y="290" class="b" font-weight="700">a review wants NEW</text>
+    <text x="346" y="310" class="xs warn">an agent that helped write the code</text>
+    <text x="346" y="326" class="xs warn">is no reviewer of it</text>
+    <text x="22" y="370" class="xs">NEW is the default because a step is a task boundary · give a loop its own key</text>
+  </g>
+
+  <!-- permissions -->
+  <g transform="translate(710,730)">
+    <rect class="card" width="650" height="390" rx="14"/>
+    <text x="22" y="34" class="h3">Tools: where you get to say no</text>
+    <text x="22" y="56" class="s">none of this is a sandbox; the agent edits your repository by design</text>
+
+    <g transform="translate(22,74)">
+      <rect class="tint" width="606" height="62" rx="8"/>
+      <text x="14" y="24" class="code mono">gate_tools=["Bash"]</text>
+      <text x="230" y="24" class="b">asks you before the agent runs it</text>
+      <text x="230" y="44" class="xs">the question arrives as a decide</text>
+    </g>
+    <g transform="translate(22,146)">
+      <rect class="hot" width="606" height="80" rx="8"/>
+      <text x="14" y="24" class="code mono">dontAsk + allowed_tools</text>
+      <text x="230" y="24" class="b">a read-only agent, with [Read, Grep]</text>
+      <text x="14" y="44" class="xs">on ClaudeOptions</text>
+      <text x="230" y="44" class="xs">off the list: denied without asking, bar vekna's ask tool;</text>
+      <text x="230" y="60" class="xs">the list does the work: one write tool, a writing agent</text>
+    </g>
+    <g transform="translate(22,236)">
+      <rect class="tint" width="606" height="62" rx="8"/>
+      <text x="14" y="24" class="code mono">disallowed_tools</text>
+      <text x="230" y="24" class="b">takes a few tools away</text>
+      <text x="14" y="44" class="xs">on ClaudeOptions</text>
+      <text x="230" y="44" class="xs">a tool on both lists stays denied</text>
+    </g>
+    <text x="22" y="326" class="xs warn">not permission_mode="plan": it executes no tools at all, so it cannot even Read</text>
+    <text x="22" y="352" class="s"><tspan class="mono" style="fill: var(--verd)">[circle] coding = N</tspan> caps agent sessions across every cast;</text>
+    <text x="22" y="370" class="s">a call past it waits for a slot before its session starts</text>
+  </g>
+
+  <!-- ============ BOUNDING A CALL ============ -->
+  <text x="40" y="1182" class="sec">BOUNDING A CALL</text>
+
+  <!-- timeout -->
+  <g transform="translate(40,1200)">
+    <rect class="card" width="420" height="300" rx="14"/>
+    <text x="22" y="34" class="h3"><tspan class="mono" style="fill: var(--verd)">timeout</tspan>  a deadline</text>
+    <text x="22" y="56" class="s">nothing else bounds one rite in time</text>
+    <rect class="bar" x="22" y="92" width="270" height="22" rx="4"/>
+    <rect class="bar-wait" x="292" y="92" width="100" height="22" rx="4" style="stroke: var(--ox)"/>
+    <line x1="292" y1="80" x2="292" y2="126" style="stroke: var(--ox); stroke-width: 2"/>
+    <text x="292" y="142" class="xs warn" text-anchor="middle">600s</text>
+    <text x="22" y="174" class="b">the work is cancelled and the step gets</text>
+    <rect class="bad" x="22" y="186" width="376" height="30" rx="6"/>
+    <text x="36" y="206" class="xs mono warn">RiteTimeoutError: coding timed out after 600s</text>
+    <text x="22" y="244" class="s">raised inside the step, so a step taking</text>
+    <text x="22" y="262" class="s"><tspan class="mono" style="fill: var(--ox)">Failure[P]</tspan> recovers from it like any other</text>
+  </g>
+
+  <!-- race -->
+  <g transform="translate(490,1200)">
+    <rect class="card" width="420" height="300" rx="14"/>
+    <text x="22" y="34" class="h3"><tspan class="mono" style="fill: var(--verd)">race</tspan>  the first to finish</text>
+    <text x="22" y="56" class="s">returns the winner and cancels the rest</text>
+    <text x="22" y="98" class="xs mono">fast</text>
+    <rect class="bar" x="90" y="86" width="170" height="18" rx="4"/>
+    <text x="268" y="100" class="xs ok">✓ wins</text>
+    <text x="22" y="130" class="xs mono">thorough</text>
+    <rect class="hot" x="90" y="118" width="170" height="18" rx="4"/>
+    <text x="268" y="132" class="xs">⊘ cancelled</text>
+    <text x="22" y="162" class="xs mono">third</text>
+    <rect class="bad" x="90" y="150" width="90" height="18" rx="4"/>
+    <text x="188" y="164" class="xs warn">✗ raised, drops out</text>
+    <line x1="260" y1="76" x2="260" y2="176" class="lane" style="stroke-dasharray: 4 3"/>
+    <text x="22" y="214" class="b">an entrant that raises does not end the race</text>
+    <text x="22" y="244" class="s">when every entrant raises, the race fails</text>
+    <text x="22" y="262" class="s">naming each error</text>
+  </g>
+
+  <!-- cancel -->
+  <g transform="translate(940,1200)">
+    <rect class="card" width="420" height="300" rx="14"/>
+    <text x="22" y="34" class="h3">Cancelling cancels the work</text>
+    <text x="22" y="56" class="s">not only the wait, before the rite closes</text>
+    <g transform="translate(22,74)">
+      <rect class="tint" width="376" height="34" rx="6"/>
+      <text x="14" y="22" class="code mono">shell</text>
+      <text x="100" y="22" class="s">its process group is killed</text>
+    </g>
+    <g transform="translate(22,114)">
+      <rect class="tint" width="376" height="34" rx="6"/>
+      <text x="14" y="22" class="code mono">coding</text>
+      <text x="100" y="22" class="s">its agent session is closed</text>
+    </g>
+    <g transform="translate(22,154)">
+      <rect class="tint" width="376" height="34" rx="6"/>
+      <text x="14" y="22" class="code mono">decide</text>
+      <text x="100" y="22" class="s">withdrawn, and the terminal says so</text>
+    </g>
+    <g transform="translate(22,194)">
+      <rect class="tint" width="376" height="34" rx="6"/>
+      <text x="14" y="22" class="code mono">await_cast</text>
+      <text x="100" y="22" class="s">the wait ends, the child keeps running</text>
+    </g>
+    <text x="22" y="262" class="s">a cut rite is drawn ⊘ and recorded <tspan class="mono" style="fill: var(--verd)">cancelled</tspan>,</text>
+    <text x="22" y="280" class="s">with the output it had produced by then</text>
+  </g>
+
+  <text x="40" y="1546" class="xs">Agent unreachable: a missing Claude Code CLI fails the cast with a message, not a traceback; an SDK error mid-cast ends it, named.</text>
+</svg>

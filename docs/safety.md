@@ -1,8 +1,14 @@
+---
+description: "What vekna does not sandbox, and where the real boundaries are: scoped credentials, a fence around vekna itself, tool gates and step budgets."
+---
+
 # Safety, and what vekna does not sandbox
 
 **Vekna does not sandbox agents.** The agent edits your repository and runs
 your commands — that is the job, and a sandbox around it would defeat the
 point.
+
+![Vekna does not sandbox agents: the agent acts freely inside a cast, a failure stops at the cast process, vekna offers a tool gate, read-only tool lists, decide and step budgets, and the real boundaries are scoped credentials and a fence around vekna itself.](assets/safety.svg)
 
 What the process split does buy is containment of *failure*: a broken ritual or
 a misbehaving SDK kills one cast process and nothing else.
