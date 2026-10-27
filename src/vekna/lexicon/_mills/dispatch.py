@@ -174,6 +174,7 @@ def _step(
 
     the_step = Step(
         name=name,
+        source=inspect.getsourcefile(func) or func.__module__,
         run=run,
         payloads=payloads,
         exits=exits,

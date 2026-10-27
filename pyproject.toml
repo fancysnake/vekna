@@ -579,14 +579,6 @@ module = "vekna.lexicon._mills._annotations"
 disallow_any_expr = false
 disallow_any_explicit = false
 
-# Pydantic's own error report is a list of TypedDicts whose values are `Any`.
-# Reading it is how `CodingOpts` and `ClaudeOptions` turn a refusal into a
-# sentence, and a `pacts` module may import no internal layer, so the boundary
-# lives here rather than in an adapter beside it.
-[[tool.mypy.overrides]]
-module = ["vekna.folio.coding._pacts", "vekna.folio.coding_claude._pacts"]
-disallow_any_expr = false
-
 # `@pytest.fixture` is an overloaded, Any-typed decorator from a framework we do
 # not define. The plugin is one module holding one fixture, which is what keeps
 # the exemption from spreading anywhere it could matter.
@@ -598,6 +590,13 @@ disallow_any_expr = false
 # module, which hands the rest of the codebase `object` to validate.
 [[tool.mypy.overrides]]
 module = "vekna.wire._toml"
+disallow_any_expr = false
+
+# Pydantic's error report is a list of TypedDicts whose values are `Any`. Every
+# refusal a cast or the daemon turns into a sentence is read through this one
+# module, which hands the rest of the codebase typed fields.
+[[tool.mypy.overrides]]
+module = "vekna.wire._refusals"
 disallow_any_expr = false
 
 # RUFF

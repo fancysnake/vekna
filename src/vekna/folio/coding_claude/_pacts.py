@@ -9,6 +9,7 @@ from pydantic import (
 )
 
 from vekna.lexicon import RitualError
+from vekna.wire import explained
 
 PermissionMode = Literal[
     "default", "acceptEdits", "plan", "dontAsk", "bypassPermissions", "auto"
@@ -41,9 +42,5 @@ class ClaudeOptions(BaseModel):
         try:
             return handler(values)
         except ValidationError as error:
-            said = "; ".join(
-                f"{'.'.join(str(part) for part in detail['loc'])}: {detail['msg']}"
-                for detail in error.errors()
-            )
-            msg = f"{cls.__name__} refused what it was given — {said}"
+            msg = f"{cls.__name__} refused what it was given — {explained(error)}"
             raise ClaudeOptionsError(msg) from error

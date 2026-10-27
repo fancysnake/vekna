@@ -1,17 +1,18 @@
 import contextlib
+import difflib
 import hashlib
 import importlib
 import importlib.util
 import pkgutil
 import sys
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from pathlib import Path
 from types import ModuleType
 
 from pydantic import ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
-from vekna.wire import read_toml
+from vekna.wire import explained, read_toml
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -134,13 +135,36 @@ def load_rituals_source(path: Path) -> list[RitualSource]:
     return load_rituals_package(path) if path.is_dir() else load_rituals_file(path)
 
 
+# Not a closed set: other tools keep their tables in the same file. `[circle]`
+# is the daemon's, read in its own process.
+_TABLES = (*Config.model_fields, "circle")
+
+
+# A table vekna does not read is somebody else's, unless it is a near spelling
+# of one vekna does: a `[ritual]` would otherwise load nothing and leave the
+# next cast to fail with "no ritual named ...".
+def _misspelt(path: Path, tables: Iterable[str]) -> None:
+    for table in tables:
+        if table in _TABLES:
+            continue
+        if meant := difflib.get_close_matches(table, _TABLES, n=1, cutoff=0.8):
+            msg = f"{path}: vekna reads no [{table}] table — did you mean [{meant[0]}]?"
+            raise RitualDefinitionError(msg)
+
+
 # A config that does not parse stops the command: loading no rituals from it
 # would surface later as "no ritual named ...", which names neither the file
-# nor the mistake.
+# nor the mistake. `TOMLDecodeError` is a `ValueError`, and says where in the
+# file but not which file.
 def read_config(path: Path) -> Config:
-    data = read_toml(path)
+    try:
+        data = read_toml(path)
+    except ValueError as error:
+        msg = f"{path}: {error}"
+        raise RitualDefinitionError(msg) from error
+    _misspelt(path, data)
     try:
         return Config.model_validate(data)
     except ValidationError as error:
-        msg = f"{path}: {error}"
+        msg = f"{path}: {explained(error)}"
         raise RitualDefinitionError(msg) from error

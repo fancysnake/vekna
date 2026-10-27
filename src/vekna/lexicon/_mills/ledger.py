@@ -49,6 +49,10 @@ class Ledger:
         }
         return cls(entries)
 
+    @property
+    def empty(self) -> bool:
+        return not self._entries
+
     def take(self, *, rite_id: str, name: str) -> JsonValue | None:
         entry = self._entries.get(rite_id)
         if entry is None or entry.name != name:
