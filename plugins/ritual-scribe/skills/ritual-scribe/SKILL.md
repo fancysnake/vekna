@@ -151,6 +151,18 @@ instead of halfway through a cast:
 Bound = Annotated[int, Field(ge=0)]
 ```
 
+**A repository's answer is a default, not a field default.** A component with
+no default — a base branch, a push remote — is filled per repository by
+`[defaults.<ritual>]` in `.vekna.toml` or the user config; a flag still wins,
+and a queued cast takes the defaults where it runs. A key the model does not
+take fails the cast, so rename a field and its tables together. No secrets:
+`.vekna.toml` is committed.
+
+```toml
+[defaults.sweep]
+base_branch = "main"
+```
+
 `sha256_of(path)` is exported for pinning what an agent actually read.
 
 ---
@@ -287,7 +299,13 @@ the components must be that ritual's model, or `MediumBoundaryError`.
 tree, and returns the child's result: validated as `output=`, raw JSON without
 it. A child ending `error` or aborted raises `CastFailedError`, routable as
 `Failure[P]`. Both need a daemon (`NoDaemonError` otherwise). On resume the
-enqueue replays its id, so nothing is queued twice.
+enqueue replays its id, so nothing is queued twice. A queued cast inherits
+`--unattended`, and takes `[defaults.<ritual>]` where it runs for whatever
+components the enqueuer left unset.
+
+Keep worktrees at the leaves: a `worktree=True` cast awaiting another
+`worktree=True` cast holds a tree while it waits, and when every free tree is
+held that way the child's lease fails rather than waits forever.
 
 ---
 
