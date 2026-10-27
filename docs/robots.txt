@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vekna.fancysnake.dev/sitemap.xml

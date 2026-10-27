@@ -133,3 +133,197 @@
   border-bottom: 1px solid var(--md-default-fg-color--lightest);
   padding-bottom: 0.3em;
 }
+
+/*
+ * Diagrams are inlined rather than linked, so they read the scheme the page is
+ * in instead of the one the OS prefers. They draw from the page's own colours;
+ * the few they need that the page has no use for are defined here.
+ */
+
+.diagram {
+  --bg: var(--md-default-bg-color);
+  --ink: var(--md-default-fg-color);
+  --soft: var(--md-default-fg-color--light);
+  --faint: var(--md-default-fg-color--lighter);
+  --sigil: var(--md-typeset-a-color);
+  --verd: var(--md-accent-fg-color);
+}
+
+[data-md-color-scheme="eldritch"] .diagram {
+  --card: var(--eldritch-vellum);
+  --moss: var(--eldritch-moss);
+  --ox: var(--eldritch-oxblood);
+  --line: #c9cfbf;
+  --tint: #e6eadf;
+  --verd-bg: #dcebe4;
+  --ox-bg: #f3dde0;
+}
+
+[data-md-color-scheme="eldritch-dark"] .diagram {
+  --card: #1f241b;
+  --moss: #a7bd86;
+  --ox: #e58a96;
+  --line: #3c4534;
+  --tint: #262c21;
+  --verd-bg: #173329;
+  --ox-bg: #3a1c21;
+}
+
+.diagram text {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  fill: var(--ink);
+}
+
+.diagram .mono {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
+
+.diagram .h1 {
+  font-size: 36px;
+  font-weight: 700;
+  fill: var(--moss);
+  letter-spacing: 0.5px;
+}
+
+.diagram .lede {
+  font-size: 16px;
+  fill: var(--soft);
+}
+
+.diagram .sec {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  fill: var(--sigil);
+}
+
+.diagram .h3 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.diagram .b {
+  font-size: 13px;
+  fill: var(--ink);
+}
+
+.diagram .s {
+  font-size: 12px;
+  fill: var(--soft);
+}
+
+.diagram .xs {
+  font-size: 11px;
+  fill: var(--faint);
+}
+
+.diagram .code {
+  font-size: 12px;
+  fill: var(--verd);
+}
+
+.diagram .ok {
+  fill: var(--verd);
+  font-weight: 700;
+}
+
+.diagram .warn {
+  fill: var(--ox);
+}
+
+.diagram .bg {
+  fill: var(--bg);
+}
+
+.diagram .card {
+  fill: var(--card);
+  stroke: var(--line);
+  stroke-width: 1.2;
+}
+
+.diagram .tint {
+  fill: var(--tint);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.diagram .daemon {
+  fill: none;
+  stroke: var(--moss);
+  stroke-width: 2.2;
+}
+
+.diagram .circle {
+  fill: var(--tint);
+  stroke: var(--sigil);
+  stroke-width: 1.6;
+  stroke-dasharray: 7 5;
+}
+
+.diagram .hot {
+  fill: var(--verd-bg);
+  stroke: var(--verd);
+  stroke-width: 1.4;
+}
+
+.diagram .bad {
+  fill: var(--ox-bg);
+  stroke: var(--ox);
+  stroke-width: 1.4;
+}
+
+.diagram .arrow {
+  fill: none;
+  stroke: var(--soft);
+  stroke-width: 1.6;
+  marker-end: url("#a");
+}
+
+.diagram .arrow-v {
+  fill: none;
+  stroke: var(--verd);
+  stroke-width: 1.8;
+  marker-end: url("#av");
+}
+
+.diagram .arrow-x {
+  fill: none;
+  stroke: var(--ox);
+  stroke-width: 1.6;
+  marker-end: url("#ax");
+}
+
+.diagram .dash {
+  stroke-dasharray: 5 4;
+}
+
+.diagram .slot-on {
+  fill: var(--verd);
+}
+
+.diagram .slot-off {
+  fill: none;
+  stroke: var(--verd);
+  stroke-width: 1.6;
+}
+
+.diagram .lane {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.diagram .bar {
+  fill: var(--verd);
+}
+
+.diagram .bar-wait {
+  fill: none;
+  stroke: var(--verd);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.diagram .bar-q {
+  fill: var(--line);
+}

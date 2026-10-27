@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1400" width="1400" height="1400" role="img" aria-labelledby="t d">
+  <title id="t">A cast, end to end</title>
+  <desc id="d">How one vekna cast streams its rite tree to its terminal and its events to the daemon, which journals them and shows them on every window; how a cast is resumed, who answers its prompts, and how it follows the casts it queued.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+    <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+  </defs>
+  <rect class="bg" width="1400" height="1400"/>
+
+  <text x="40" y="62" class="h1">A cast, end to end</text>
+  <text x="40" y="94" class="lede">One <tspan class="mono" style="fill: var(--verd)">vekna cast</tspan> is one process. It draws its rite tree on its own terminal and, when a daemon listens,</text>
+  <text x="40" y="116" class="lede">sends the same events over the socket, where they are journaled and shown to every window.</text>
+
+  <text x="40" y="170" class="sec">THE STREAM</text>
+
+  <!-- the process -->
+  <g transform="translate(40,190)">
+    <rect class="hot" width="290" height="250" rx="12"/>
+    <text x="20" y="34" class="h3">the cast process</text>
+    <text x="20" y="62" class="code mono">vekna cast &lt;ritual&gt; --flag v</text>
+    <line x1="20" y1="80" x2="270" y2="80" class="lane"/>
+    <text x="20" y="104" class="s">runs in the directory it was</text>
+    <text x="20" y="122" class="s">typed in, step after step</text>
+    <text x="20" y="150" class="s">every step and every medium</text>
+    <text x="20" y="168" class="s">call opens a rite</text>
+    <text x="20" y="196" class="s">it never starts a daemon;</text>
+    <text x="20" y="214" class="s">it uses one if it is there</text>
+  </g>
+
+  <path class="arrow" d="M330,260 L398,260"/>
+  <text x="340" y="250" class="xs">to its tty</text>
+  <path class="arrow-v" d="M330,380 C365,380 360,540 398,540"/>
+  <text x="300" y="478" class="xs" style="fill: var(--verd)">the wire</text>
+
+  <!-- terminal -->
+  <g transform="translate(400,190)">
+    <rect class="card" width="380" height="250" rx="12"/>
+    <text x="20" y="32" class="h3">its terminal</text>
+    <rect class="tint" x="20" y="48" width="340" height="130" rx="8"/>
+    <text x="34" y="72" class="b mono" font-size="12">▶ gates</text>
+    <text x="54" y="92" class="b mono" font-size="12">↳ shell  mise run lint:py</text>
+    <text x="54" y="112" class="b mono" font-size="12"><tspan class="ok">✓</tspan> shell  mise run lint:py</text>
+    <text x="34" y="132" class="b mono" font-size="12"><tspan class="ok">✓</tspan> gates</text>
+    <text x="34" y="160" class="code mono">result: {"green":true}</text>
+    <text x="20" y="204" class="s"><tspan class="ok">✓</tspan> ok · <tspan class="warn">✗</tspan> error · <tspan style="fill: var(--soft)">⊘</tspan> cancelled; the last line is</text>
+    <text x="20" y="222" class="s">the result as JSON, or null</text>
+  </g>
+
+  <!-- daemon socket -->
+  <g transform="translate(400,470)">
+    <rect class="card" width="380" height="170" rx="12"/>
+    <text x="20" y="32" class="h3">the daemon's socket</text>
+    <text x="20" y="56" class="s">if one listens: every event goes to it</text>
+    <rect class="bad" x="20" y="74" width="340" height="76" rx="8"/>
+    <text x="34" y="98" class="s warn">none listening? the cast runs on its own,</text>
+    <text x="34" y="116" class="s warn">leaves no record, and joins the next</text>
+    <text x="34" y="134" class="s warn">daemon that starts</text>
+  </g>
+
+  <path class="arrow" d="M780,520 C810,520 800,300 838,300"/>
+  <path class="arrow" d="M780,580 L838,580"/>
+
+  <!-- journal -->
+  <g transform="translate(840,190)">
+    <rect class="card" width="520" height="250" rx="12"/>
+    <text x="20" y="32" class="h3">the journal</text>
+    <text x="20" y="54" class="code mono">~/.local/state/vekna/runs/&lt;cast_id&gt;/</text>
+    <rect class="tint" x="20" y="70" width="234" height="80" rx="8"/>
+    <text x="34" y="94" class="code mono">run.json</text>
+    <text x="34" y="114" class="s">what the cast was,</text>
+    <text x="34" y="132" class="s">how it ended, its result</text>
+    <rect class="tint" x="266" y="70" width="234" height="80" rx="8"/>
+    <text x="280" y="94" class="code mono">events.jsonl</text>
+    <text x="280" y="114" class="s">the wire, verbatim —</text>
+    <text x="280" y="132" class="s">what a resume replays</text>
+    <text x="20" y="178" class="s">newest 200 kept at startup; queued and running ones spared</text>
+    <text x="20" y="200" class="s"><tspan class="mono" style="fill: var(--verd)">vekna log</tspan> lists them, newest first</text>
+    <text x="20" y="222" class="s"><tspan class="mono" style="fill: var(--verd)">◌ gap</tspan> lost its tail · <tspan class="mono warn">damaged</tspan> has no readable run.json</text>
+  </g>
+
+  <!-- dashboard -->
+  <g transform="translate(840,470)">
+    <rect class="card" width="520" height="170" rx="12"/>
+    <text x="20" y="32" class="h3">every window: one row per cast</text>
+    <text x="20" y="54" class="s">sorted by what needs you first</text>
+    <rect class="hot" x="20" y="70" width="90" height="28" rx="14"/>
+    <text x="65" y="89" class="b" text-anchor="middle">waiting</text>
+    <rect class="tint" x="118" y="70" width="84" height="28" rx="14"/>
+    <text x="160" y="89" class="b" text-anchor="middle">on child</text>
+    <rect class="tint" x="210" y="70" width="90" height="28" rx="14"/>
+    <text x="255" y="89" class="b" text-anchor="middle">running</text>
+    <rect class="tint" x="308" y="70" width="100" height="28" rx="14"/>
+    <text x="358" y="89" class="b" text-anchor="middle">recovering</text>
+    <rect class="tint" x="416" y="70" width="84" height="28" rx="14"/>
+    <text x="458" y="89" class="b" text-anchor="middle">queued</text>
+    <rect class="tint" x="20" y="108" width="80" height="28" rx="14"/>
+    <text x="60" y="127" class="b" text-anchor="middle">done</text>
+    <rect class="bad" x="108" y="108" width="80" height="28" rx="14"/>
+    <text x="148" y="127" class="b warn" text-anchor="middle">failed</text>
+    <rect class="bad" x="196" y="108" width="90" height="28" rx="14"/>
+    <text x="241" y="127" class="b warn" text-anchor="middle">aborted</text>
+    <text x="300" y="120" class="xs">socket closed without a goodbye;</text>
+    <text x="300" y="134" class="xs">its row prints the resume command</text>
+    <text x="20" y="158" class="xs">then the ones that ended · drill in for the rite tree, live output, the error</text>
+  </g>
+
+  <!-- ============ MECHANISMS ============ -->
+  <text x="40" y="700" class="sec">THE MECHANISMS</text>
+
+  <!-- Resume -->
+  <g transform="translate(40,720)">
+    <rect class="card" width="420" height="440" rx="14"/>
+    <text x="22" y="34" class="h3">Carrying a cast on</text>
+    <text x="22" y="56" class="code mono">vekna cast --continue &lt;id&gt;</text>
+
+    <text x="22" y="96" class="xs">journal</text>
+    <rect class="bar-q" x="90" y="84" width="54" height="18" rx="4"/>
+    <rect class="bar-q" x="150" y="84" width="54" height="18" rx="4"/>
+    <rect class="bar-q" x="210" y="84" width="54" height="18" rx="4"/>
+    <rect class="bad" x="270" y="84" width="54" height="18" rx="4"/>
+    <text x="297" y="80" class="xs warn" text-anchor="middle">cut</text>
+
+    <text x="22" y="136" class="xs">replay</text>
+    <rect class="bar-wait" x="90" y="124" width="54" height="18" rx="4"/>
+    <rect class="bar-wait" x="150" y="124" width="54" height="18" rx="4"/>
+    <rect class="bar" x="210" y="124" width="54" height="18" rx="4"/>
+    <rect class="bar" x="270" y="124" width="54" height="18" rx="4"/>
+    <rect class="bar" x="330" y="124" width="54" height="18" rx="4"/>
+    <text x="147" y="162" class="xs" text-anchor="middle">off the journal</text>
+    <text x="297" y="162" class="xs" text-anchor="middle" style="fill: var(--verd)">live from the first mismatch</text>
+
+    <line x1="22" y1="182" x2="398" y2="182" class="lane"/>
+    <text x="22" y="208" class="b">• a fresh process, with an id of its own</text>
+    <text x="22" y="232" class="b">• it re-walks the ritual's steps</text>
+    <text x="22" y="256" class="b">• finished agent calls, commands and</text>
+    <text x="34" y="276" class="b">prompts come back, not run twice</text>
+    <text x="22" y="300" class="b">• an agent rite cut mid-flight reruns</text>
+    <text x="34" y="320" class="b">on the session it had opened</text>
+    <text x="22" y="344" class="b">• a ritual taking a new path is not</text>
+    <text x="34" y="364" class="b">made to pretend otherwise</text>
+    <rect class="tint" x="22" y="384" width="376" height="38" rx="8"/>
+    <text x="36" y="408" class="s">an 8-char prefix works · ambiguous or damaged: refused</text>
+  </g>
+
+  <!-- Prompt ownership -->
+  <g transform="translate(490,720)">
+    <rect class="card" width="420" height="440" rx="14"/>
+    <text x="22" y="34" class="h3">Who answers a prompt</text>
+    <text x="22" y="56" class="s">a decide, a tool gate, or the agent asking</text>
+
+    <rect class="hot" x="22" y="80" width="170" height="64" rx="10"/>
+    <text x="107" y="106" class="b" text-anchor="middle" font-weight="700">the cast's terminal</text>
+    <text x="107" y="126" class="xs" text-anchor="middle">answers by default</text>
+
+    <rect class="tint" x="228" y="80" width="170" height="64" rx="10"/>
+    <text x="313" y="106" class="b" text-anchor="middle" font-weight="700">one window</text>
+    <text x="313" y="126" class="xs" text-anchor="middle">owns it after taking it</text>
+
+    <path class="arrow-v" d="M192,96 L226,96"/>
+    <text x="209" y="88" class="xs mono" text-anchor="middle" style="fill: var(--verd)">t</text>
+    <path class="arrow" d="M228,130 L194,130"/>
+    <text x="211" y="160" class="xs" text-anchor="middle">Esc, or the window closes</text>
+
+    <rect class="bad" x="22" y="180" width="376" height="40" rx="8"/>
+    <text x="210" y="205" class="b warn" text-anchor="middle">only one answer ever counts</text>
+
+    <line x1="22" y1="242" x2="398" y2="242" class="lane"/>
+    <text x="22" y="268" class="b" font-weight="700">A cast the daemon spawned</text>
+    <text x="22" y="290" class="s">has no terminal, so a window answers it:</text>
+    <text x="22" y="310" class="s">drill in, type <tspan class="mono" style="fill: var(--verd)">a &lt;answer&gt;</tspan></text>
+    <text x="22" y="338" class="s">the prompt line says what it takes:</text>
+    <text x="22" y="358" class="code mono">a yes|no · a red|green · a &lt;anything&gt;</text>
+    <text x="22" y="386" class="s">an answer it does not offer is refused</text>
+    <text x="22" y="404" class="s">before it leaves the window</text>
+    <text x="22" y="426" class="xs">nobody answers? the cast waits; a decide never defaults</text>
+  </g>
+
+  <!-- Following -->
+  <g transform="translate(940,720)">
+    <rect class="card" width="420" height="440" rx="14"/>
+    <text x="22" y="34" class="h3">Following what it queued</text>
+    <text x="22" y="56" class="s">its own steps end, its terminal stays on</text>
+
+    <rect class="tint" x="22" y="74" width="376" height="150" rx="8"/>
+    <text x="36" y="98" class="b mono" font-size="12"><tspan class="ok">✓</tspan> fan_out</text>
+    <text x="36" y="118" class="xs">following the casts this one queued</text>
+    <text x="36" y="140" class="code mono">[ci_watch 3f9a2b11] ▶ watch</text>
+    <text x="36" y="160" class="code mono">[pr_fix 91bb0c4d] ▶ repair_ci</text>
+    <text x="36" y="180" class="code mono">[pr_fix 91bb0c4d] ✓ done</text>
+    <text x="36" y="200" class="code mono">[ci_watch 3f9a2b11] ✓ done</text>
+
+    <text x="22" y="254" class="b">• children, and theirs, stream under</text>
+    <text x="34" y="274" class="b">their own name</text>
+    <text x="22" y="298" class="b">• their prompts are asked here, one</text>
+    <text x="34" y="318" class="b">at a time</text>
+    <text x="22" y="342" class="b">• exits 1 if any of them failed</text>
+    <text x="22" y="366" class="b">• <tspan class="mono" style="fill: var(--verd)">Ctrl-C</tspan> stops following, leaves</text>
+    <text x="34" y="386" class="b">them running</text>
+    <text x="22" y="416" class="s"><tspan class="mono" style="fill: var(--verd)">--no-follow</tspan> ends with its own steps</text>
+  </g>
+
+  <!-- ============ SIGNALS ============ -->
+  <text x="40" y="1210" class="sec">WHAT IT TELLS YOU</text>
+  <g transform="translate(40,1230)">
+    <rect class="card" width="870" height="120" rx="14"/>
+    <text x="22" y="34" class="h3">Notifications</text>
+    <text x="130" y="34" class="s">OSC 777 to a tty only — Ghostty, kitty, wezterm, foot show it</text>
+    <rect class="hot" x="22" y="54" width="260" height="48" rx="10"/>
+    <text x="38" y="76" class="b" font-weight="700">decide</text>
+    <text x="38" y="93" class="xs">a question waiting on you</text>
+    <rect class="hot" x="296" y="54" width="260" height="48" rx="10"/>
+    <text x="312" y="76" class="b" font-weight="700">done</text>
+    <text x="312" y="93" class="xs">the cast finished</text>
+    <rect class="bad" x="570" y="54" width="280" height="48" rx="10"/>
+    <text x="586" y="76" class="b warn" font-weight="700">failed</text>
+    <text x="586" y="93" class="xs">with the error in the body</text>
+  </g>
+  <g transform="translate(940,1230)">
+    <rect class="card" width="420" height="120" rx="14"/>
+    <text x="22" y="34" class="h3">Exit codes</text>
+    <text x="22" y="62" class="b mono ok">0</text>
+    <text x="44" y="62" class="b">the cast finished</text>
+    <text x="22" y="84" class="b mono warn">1</text>
+    <text x="44" y="84" class="b">the cast failed</text>
+    <text x="22" y="106" class="b mono warn">2</text>
+    <text x="44" y="106" class="b">bad arguments or ritual, or a medium with no focus</text>
+  </g>
+</svg>

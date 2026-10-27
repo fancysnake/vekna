@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1240" width="1400" height="1240" role="img" aria-labelledby="t d">
+  <title id="t">How vekna is put together</title>
+  <desc id="d">Two processes, the long-lived daemon (root package) and one cast process per cast (lexicon and folios), share only the wire package over a unix socket and the run record on disk. Inside every package the GLIMPSE layers inits, gates, links, mills, specs and pacts, with gates and links importing only pacts, enforced by import-linter.</desc>
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+      <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+      <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+      <g id="tree"><path d="M0,-11 L8,2 L3,2 L3,9 L-3,9 L-3,2 L-8,2 z"/></g>
+    </defs>
+
+  <rect class="bg" width="1400" height="1240"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">How vekna is put together</text>
+  <text x="40" y="94" class="lede">One binary, two kinds of process. The long-lived daemon never loads ritual code; each cast runs in a process</text>
+  <text x="40" y="116" class="lede">of its own. Inside every package the same GLIMPSE layers, and import-linter decides what may import what.</text>
+
+  <!-- ============ PROCESSES & PACKAGES ============ -->
+  <text x="40" y="172" class="sec">PROCESSES AND PACKAGES</text>
+
+  <!-- daemon process -->
+  <rect class="daemon" x="40" y="206" width="520" height="440" rx="16"/>
+  <rect x="60" y="194" width="300" height="24" class="bg"/>
+  <text x="68" y="212" class="h3" style="fill: var(--moss)">vekna · the daemon · long-lived</text>
+  <g transform="translate(66,240)">
+    <rect class="card" width="468" height="270" rx="12"/>
+    <text x="20" y="32" class="h3">root</text>
+    <text x="68" y="32" class="s">the CLI and the daemon</text>
+    <g transform="translate(20,52)">
+      <rect class="tint" width="208" height="88" rx="8"/>
+      <text x="14" y="26" class="b" font-weight="700">hub</text>
+      <text x="14" y="48" class="s">a view per cast,</text>
+      <text x="14" y="66" class="s">fan-out to surfaces</text>
+    </g>
+    <g transform="translate(240,52)">
+      <rect class="tint" width="208" height="88" rx="8"/>
+      <text x="14" y="26" class="b" font-weight="700">journal</text>
+      <text x="14" y="48" class="s">a run record per cast,</text>
+      <text x="14" y="66" class="s">read back to resume</text>
+    </g>
+    <g transform="translate(20,152)">
+      <rect class="tint" width="208" height="88" rx="8"/>
+      <text x="14" y="26" class="b" font-weight="700">socket server</text>
+      <text x="14" y="48" class="s">one unix socket,</text>
+      <text x="14" y="66" class="s">every cast and window</text>
+    </g>
+    <g transform="translate(240,152)">
+      <rect class="tint" width="208" height="88" rx="8"/>
+      <text x="14" y="26" class="b" font-weight="700">dashboard</text>
+      <text x="14" y="48" class="s">the window: casts,</text>
+      <text x="14" y="66" class="s">prompts, keys</text>
+    </g>
+  </g>
+  <g transform="translate(66,526)">
+    <rect class="bad" width="468" height="96" rx="10"/>
+    <text x="18" y="28" class="b warn" font-weight="700">✗ root never imports the lexicon</text>
+    <text x="18" y="50" class="s">no ritual code, no folio, no agent SDK in the long-lived</text>
+    <text x="18" y="68" class="s">process. The CLI reaches the cast runtime by name, at call</text>
+    <text x="18" y="86" class="s">time, through importlib and a protocol.</text>
+  </g>
+
+  <!-- cast process -->
+  <rect class="daemon" x="840" y="206" width="520" height="440" rx="16"/>
+  <rect x="860" y="194" width="300" height="24" class="bg"/>
+  <text x="868" y="212" class="h3" style="fill: var(--moss)">vekna cast · one process per cast</text>
+  <g transform="translate(866,240)">
+    <rect class="card" width="468" height="150" rx="12"/>
+    <text x="20" y="32" class="h3">lexicon</text>
+    <text x="90" y="32" class="s">the SDK and the cast runtime</text>
+    <text x="20" y="60" class="s">one public door, <tspan class="mono" style="fill: var(--verd)">vekna.lexicon</tspan>: ritual, step,</text>
+    <text x="20" y="80" class="s">Done, components, errors. Behind it, private:</text>
+    <text x="20" y="100" class="s">the engine and grimoire, the loader, the step graph,</text>
+    <text x="20" y="120" class="s">the ledger a resumed cast replays from.</text>
+  </g>
+  <path class="arrow dash" d="M920,392 L920,434"/>
+  <text x="930" y="418" class="xs">loads each folio by name, asks it to register()</text>
+  <path class="arrow" d="M1296,434 L1296,392"/>
+  <text x="1304" y="418" class="xs">imports</text>
+  <g transform="translate(866,436)">
+    <rect class="card" width="468" height="186" rx="12"/>
+    <text x="20" y="32" class="h3">folio</text>
+    <text x="74" y="32" class="s">the mediums and the foci behind them</text>
+    <rect class="tint" x="20" y="48" width="98" height="40" rx="6"/>
+    <text x="69" y="73" class="b mono" font-size="12" text-anchor="middle">coding</text>
+    <rect class="tint" x="128" y="48" width="132" height="40" rx="6"/>
+    <text x="194" y="73" class="b mono" font-size="12" text-anchor="middle">coding_claude</text>
+    <rect class="tint" x="270" y="48" width="80" height="40" rx="6"/>
+    <text x="310" y="73" class="b mono" font-size="12" text-anchor="middle">shell</text>
+    <rect class="tint" x="360" y="48" width="88" height="40" rx="6"/>
+    <text x="404" y="73" class="b mono" font-size="12" text-anchor="middle">flow</text>
+    <text x="20" y="116" class="s"><tspan class="warn">✗</tspan> a folio never imports another folio</text>
+    <text x="20" y="138" class="s"><tspan class="warn">✗</tspan> the lexicon never imports a folio</text>
+    <text x="20" y="160" class="s"><tspan class="ok">✓</tspan> only coding_claude touches the agent SDK</text>
+  </g>
+
+  <!-- wire -->
+  <g transform="translate(590,240)">
+    <rect class="hot" width="220" height="196" rx="12"/>
+    <text x="110" y="32" class="h3" text-anchor="middle">wire</text>
+    <text x="110" y="54" class="s" text-anchor="middle">imports nothing internal</text>
+    <line x1="18" y1="70" x2="202" y2="70" class="lane"/>
+    <text x="18" y="94" class="s">the messages both</text>
+    <text x="18" y="112" class="s">sides speak, and the</text>
+    <text x="18" y="130" class="s">frame codec over them</text>
+    <text x="18" y="156" class="s">the run record both</text>
+    <text x="18" y="174" class="s">read off the disk</text>
+  </g>
+  <path class="arrow" d="M534,300 L588,300"/>
+  <text x="540" y="292" class="xs">imports</text>
+  <path class="arrow" d="M866,300 L812,300"/>
+  <text x="820" y="292" class="xs">imports</text>
+
+  <!-- channels between processes -->
+  <path class="arrow-v" d="M562,500 L838,500" style="marker-start: url(#av)"/>
+  <rect x="604" y="486" width="192" height="28" rx="14" class="card"/>
+  <text x="700" y="505" class="b" text-anchor="middle">unix socket · frames</text>
+  <text x="700" y="534" class="xs" text-anchor="middle">rites, output, prompts out; answers in</text>
+
+  <path class="arrow-v" d="M562,590 L838,590"/>
+  <rect x="604" y="576" width="192" height="28" rx="14" class="card"/>
+  <text x="700" y="595" class="b mono" font-size="12" text-anchor="middle">runs/&lt;id&gt;/run.json</text>
+  <text x="700" y="624" class="xs" text-anchor="middle">the daemon writes it, a resumed cast reads it</text>
+
+  <!-- ============ LAYERS ============ -->
+  <text x="40" y="712" class="sec">INSIDE EVERY PACKAGE · GLIMPSE LAYERS</text>
+
+  <g transform="translate(40,736)">
+    <rect class="card" width="720" height="420" rx="14"/>
+
+    <rect class="hot" x="24" y="24" width="672" height="56" rx="10"/>
+    <text x="44" y="50" class="h3">inits</text>
+    <text x="44" y="70" class="s">wiring: the only layer that knows more than one other, and binds them</text>
+
+    <path class="arrow" d="M130,80 L130,116"/>
+    <path class="arrow" d="M360,80 L360,116"/>
+    <path class="arrow" d="M590,80 L590,116"/>
+
+    <rect class="tint" x="24" y="118" width="212" height="76" rx="10"/>
+    <text x="40" y="146" class="h3">gates</text>
+    <text x="40" y="168" class="s">entry points, CLI</text>
+    <text x="40" y="184" class="xs">commands</text>
+
+    <rect class="tint" x="254" y="118" width="212" height="76" rx="10"/>
+    <text x="270" y="146" class="h3">links</text>
+    <text x="270" y="168" class="s">I/O adapters: sockets,</text>
+    <text x="270" y="184" class="xs">subprocesses, SDK clients</text>
+
+    <rect class="tint" x="484" y="118" width="212" height="76" rx="10"/>
+    <text x="500" y="146" class="h3">mills</text>
+    <text x="500" y="168" class="s">business logic,</text>
+    <text x="500" y="184" class="xs">no I/O</text>
+
+    <text x="475" y="112" class="warn" font-size="14" text-anchor="middle">✗</text>
+    <text x="475" y="212" class="xs warn" text-anchor="middle">peers</text>
+
+    <rect class="tint" x="484" y="240" width="140" height="56" rx="10"/>
+    <text x="500" y="266" class="h3">specs</text>
+    <text x="500" y="284" class="xs">constants only</text>
+
+    <path class="arrow" d="M554,194 L554,238"/>
+
+    <rect class="hot" x="24" y="330" width="672" height="64" rx="10"/>
+    <text x="44" y="358" class="h3">pacts</text>
+    <text x="44" y="380" class="s">protocols, DTOs, errors: the contracts every other layer knows</text>
+
+    <path class="arrow" d="M130,194 L130,328"/>
+    <path class="arrow" d="M360,194 L360,328"/>
+    <path class="arrow" d="M664,194 L664,328"/>
+  </g>
+  <text x="40" y="1180" class="xs">edges: the framework edge (settings, entry scripts), outside GLIMPSE proper</text>
+
+  <!-- rules -->
+  <g transform="translate(800,736)">
+    <rect class="card" width="560" height="92" rx="12"/>
+    <text x="20" y="30" class="b" font-weight="700">Gates and links import only pacts</text>
+    <text x="20" y="52" class="s">Stricter than textbook GLIMPSE: a command declares what it</text>
+    <text x="20" y="72" class="s">needs as a protocol and is handed an implementation.</text>
+  </g>
+  <g transform="translate(800,840)">
+    <rect class="card" width="560" height="92" rx="12"/>
+    <text x="20" y="30" class="b" font-weight="700">Links and mills are peers</text>
+    <text x="20" y="52" class="s">Neither imports the other. A link returns a value from pacts;</text>
+    <text x="20" y="72" class="s">joining it to a service is inits' job.</text>
+  </g>
+  <g transform="translate(800,944)">
+    <rect class="card" width="560" height="92" rx="12"/>
+    <text x="20" y="30" class="b" font-weight="700">Mills are I/O-free, specs hold no logic</text>
+    <text x="20" y="52" class="s">No socket, subprocess or file inside a mill; a spec is a</text>
+    <text x="20" y="72" class="s">constant. The logic stays testable without the world.</text>
+  </g>
+  <g transform="translate(800,1048)">
+    <rect class="hot" width="560" height="108" rx="12"/>
+    <text x="20" y="30" class="b" font-weight="700">import-linter decides</text>
+    <text x="20" y="52" class="s">34 contracts in pyproject.toml, between the packages and</text>
+    <text x="20" y="72" class="s">inside each. Every module sits in a layer and every layer</text>
+    <text x="20" y="92" class="s">has a contract: nothing is exempt by accident.</text>
+  </g>
+
+  <text x="40" y="1206" class="xs">Grey arrows read “imports”; green ones carry data while vekna runs. The wire is the one package both processes import, which is why it stays top-level.</text>
+</svg>

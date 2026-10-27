@@ -1,3 +1,7 @@
+---
+description: "How vekna is built: a daemon and one process per cast sharing a wire package, GLIMPSE layering inside each package, and import-linter contracts."
+---
+
 # Architecture
 
 Vekna uses the [**GLIMPSE**](https://glimpse.fancysnake.dev/) layering model.
@@ -6,6 +10,12 @@ Import boundaries are enforced by
 `pyproject.toml`) — 31 of them, covering both the boundaries *between* packages
 and the layering *inside* each one. Every module sits in a layer and every
 layer has a contract; nothing is exempt by accident.
+
+/// html | div.diagram
+    markdown: html
+
+--8<-- "architecture.svg"
+///
 
 ## Packages
 

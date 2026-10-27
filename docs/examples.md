@@ -1,3 +1,7 @@
+---
+description: "Real vekna rituals this project runs on itself: issue and PR triage, merge babysitting, code review, coverage gaps, and keeping pull requests green."
+---
+
 # Examples
 
 These rituals are not illustrations. They live in

@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-labelledby="t d">
+  <title id="t">vekna — run coding agents as rituals</title>
+  <desc id="d">vekna runs coding agents inside Python rituals whose steps you control. pip install vekna. vekna.fancysnake.dev</desc>
+  <style>
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: #1f241b; }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+    .name { font-size: 104px; font-weight: 700; fill: #3b4a2a; letter-spacing: 1px; }
+    .tag { font-size: 30px; fill: #1f241b; }
+    .soft { font-size: 20px; fill: #4b5147; }
+    .sec { font-size: 15px; font-weight: 700; letter-spacing: 2.5px; fill: #4a6127; }
+    .b { font-size: 21px; }
+    .s { font-size: 17px; fill: #4b5147; }
+    .xs { font-size: 15px; fill: #767e70; }
+    .code { fill: #12715a; }
+    .card { fill: #fbf8f3; stroke: #c9cfbf; stroke-width: 1.4; }
+    .tint { fill: #e6eadf; stroke: #c9cfbf; stroke-width: 1.2; }
+    .hot { fill: #dcebe4; stroke: #12715a; stroke-width: 1.8; }
+    .bad { fill: #f3dde0; stroke: #8c2230; stroke-width: 1.6; }
+    .arrow { fill: none; stroke: #4b5147; stroke-width: 2; marker-end: url(#a); }
+    .arrow-v { fill: none; stroke: #12715a; stroke-width: 2.2; marker-end: url(#av); }
+    .arrow-x { fill: none; stroke: #8c2230; stroke-width: 2; stroke-dasharray: 5 4; marker-end: url(#ax); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5147"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#12715a"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c2230"/></marker>
+  </defs>
+
+  <rect width="1280" height="640" fill="#f3efe7"/>
+  <rect x="16" y="16" width="1248" height="608" rx="20" fill="none" stroke="#3b4a2a" stroke-width="2.4"/>
+
+  <!-- ===== identity ===== -->
+  <g transform="translate(76,64) scale(0.17)" fill="#3b4a2a" fill-rule="evenodd">
+    <polygon points="64,64 128,256 256,64 384,256 512,64 640,256 768,64 896,256 960,64 960,384 64,384"/>
+    <path d="M64,448 H960 V640 L768,832 V960 H640 V832 H576 V960 H448 V832 H384 V960 H256 V832 L64,640 Z
+             M192,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z
+             M640,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z
+             M510,576 L574,768 L448,768 Z"/>
+  </g>
+  <text x="70" y="330" class="name">vekna</text>
+  <text x="76" y="382" class="tag">Run coding agents as rituals.</text>
+  <text x="76" y="424" class="soft">Plain Python programs: you write the steps,</text>
+  <text x="76" y="452" class="soft">the agent works inside them.</text>
+
+  <rect x="76" y="486" width="380" height="62" rx="12" fill="#1f241b"/>
+  <text x="100" y="527" class="mono" font-size="24" style="fill: #a7bd86">$</text>
+  <text x="128" y="527" class="mono" font-size="24" style="fill: #f3efe7">pip install vekna</text>
+
+  <text x="76" y="590" class="mono" font-size="19" style="fill: #12715a">vekna.fancysnake.dev</text>
+
+  <line x1="540" y1="64" x2="540" y2="576" stroke="#c9cfbf" stroke-width="1.4"/>
+
+  <!-- ===== how a cast runs ===== -->
+  <text x="584" y="96" class="sec">HOW A CAST RUNS</text>
+
+  <g transform="translate(584,150)">
+    <rect class="tint" width="184" height="78" rx="11"/>
+    <text x="92" y="34" class="b" text-anchor="middle" font-weight="700">components</text>
+    <text x="92" y="58" class="xs mono" text-anchor="middle">--flag value</text>
+  </g>
+  <path class="arrow" d="M768,189 L798,189"/>
+  <g transform="translate(800,150)">
+    <rect class="card" width="184" height="78" rx="11"/>
+    <text x="92" y="34" class="b mono code" text-anchor="middle">@ritual</text>
+    <text x="92" y="58" class="xs" text-anchor="middle">names first step</text>
+  </g>
+  <path class="arrow" d="M984,189 L1014,189"/>
+  <g transform="translate(1016,150)">
+    <rect class="hot" width="184" height="78" rx="11"/>
+    <text x="92" y="34" class="b mono code" text-anchor="middle">@step</text>
+    <text x="92" y="58" class="xs" text-anchor="middle">typed payload in</text>
+  </g>
+  <path class="arrow-v" d="M1160,150 C1160,112 1056,112 1056,148"/>
+  <text x="1108" y="114" class="xs" text-anchor="middle" style="fill: #12715a">loop</text>
+
+  <path class="arrow" d="M1108,228 L1108,268"/>
+  <text x="1118" y="254" class="xs">returns</text>
+  <g transform="translate(1016,270)">
+    <rect class="card" width="184" height="78" rx="11"/>
+    <text x="92" y="34" class="b mono code" text-anchor="middle">Done(result)</text>
+    <text x="92" y="58" class="xs" text-anchor="middle">printed as JSON</text>
+  </g>
+
+  <path class="arrow-x" d="M1040,228 C1010,262 1000,300 986,306"/>
+  <text x="944" y="256" class="xs" style="fill: #8c2230">raises</text>
+  <g transform="translate(800,270)">
+    <rect class="bad" width="184" height="78" rx="11"/>
+    <text x="92" y="34" class="b mono" text-anchor="middle" style="fill: #8c2230">Failure[P]</text>
+    <text x="92" y="58" class="xs" text-anchor="middle">a step recovers</text>
+  </g>
+
+  <g transform="translate(584,390)">
+    <rect class="card" width="616" height="96" rx="11"/>
+    <text x="22" y="34" class="s">each step calls mediums, each call a rite on the record</text>
+    <text x="22" y="72" class="b mono code">coding</text>
+    <text x="102" y="72" class="s">agent</text>
+    <text x="168" y="72" class="b mono code">shell</text>
+    <text x="236" y="72" class="s">command</text>
+    <text x="330" y="72" class="b mono code">decide</text>
+    <text x="410" y="72" class="s">you</text>
+    <text x="458" y="72" class="b mono code">enqueue</text>
+    <text x="550" y="72" class="s">a cast</text>
+  </g>
+
+  <text x="584" y="532" class="s">typed exits · resume, not rerun · tested with <tspan class="mono code">vekna.trial</tspan></text>
+  <text x="584" y="562" class="xs">Python 3.11+ · coding agent via Claude Code</text>
+</svg>

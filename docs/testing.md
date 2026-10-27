@@ -1,8 +1,18 @@
+---
+description: "Test vekna rituals with vekna.trial: every medium answers from a script, so a test runs with no agent call and no wall time, then asserts on recordings."
+---
+
 # Testing rituals
 
 A ritual is a program, and it deserves the same test any other program gets.
 `vekna.trial` runs one with every medium answering from a script, so a test
 costs no agent call and no wall time.
+
+/// html | div.diagram
+    markdown: html
+
+--8<-- "trial.svg"
+///
 
 ```bash
 pip install 'vekna[trial]'
