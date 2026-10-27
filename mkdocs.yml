@@ -56,6 +56,9 @@ extra:
 extra_css:
   - stylesheets/eldritch.css
 
+extra_javascript:
+  - javascripts/diagram.js
+
 markdown_extensions:
   - admonition
   - toc: {permalink: true}

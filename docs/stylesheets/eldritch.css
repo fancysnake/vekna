@@ -149,6 +149,43 @@
   --verd: var(--md-accent-fg-color);
 }
 
+.diagram {
+  cursor: zoom-in;
+}
+
+.diagram button {
+  display: block;
+  margin: 0 auto;
+  font-size: 0.7rem;
+  color: var(--md-typeset-a-color);
+  cursor: pointer;
+}
+
+.diagram dialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 1rem;
+  overflow: auto;
+  color: inherit;
+  background: var(--md-default-bg-color);
+  cursor: zoom-out;
+}
+
+/* Drawn width; scrolls where the window is narrower, scales up where wider. */
+.diagram dialog svg {
+  min-width: 100%;
+  max-width: none;
+  height: auto;
+}
+
+body:has(.diagram dialog[open]) {
+  overflow: hidden;
+}
+
 [data-md-color-scheme="eldritch"] .diagram {
   --card: var(--eldritch-vellum);
   --moss: var(--eldritch-moss);
