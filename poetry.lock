@@ -3704,14 +3704,14 @@ syntax = ["tree-sitter (>=0.25.0) ; python_version >= \"3.10\"", "tree-sitter-ba
 
 [[package]]
 name = "tingle"
-version = "0.8.0"
+version = "0.9.0"
 description = "Constant refactoring monitoring tool"
 optional = false
-python-versions = "<3.15,>=3.11"
+python-versions = "<4,>=3.11"
 groups = ["dev"]
 files = [
-    {file = "tingle-0.8.0-py3-none-any.whl", hash = "sha256:7e1cd664988772ba35bea6aa90abc68e6332f6dea70107baa569dc64d4553196"},
-    {file = "tingle-0.8.0.tar.gz", hash = "sha256:bd3ba8b321f66a93b196b3c1673527434f37061b83b50e7cc310d501db5898f2"},
+    {file = "tingle-0.9.0-py3-none-any.whl", hash = "sha256:e4806c189de6d64c9feb2506745d84b48473116ba07f24cc4cbc04d3c35dd72c"},
+    {file = "tingle-0.9.0.tar.gz", hash = "sha256:541560038815f0070595e5b1f7d295ea2275cd288fead5a3a85e1bb75bf16409"},
 ]
 
 [package.dependencies]
@@ -3996,4 +3996,4 @@ trial = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.16"
-content-hash = "8220c03fbd199394cf4ee85d593ffcc3d64492175648f4afe804a01f2098c983"
+content-hash = "d983c0d3dcfd84dcfc622a504dfbea1ecc286760adeddf73265a8a9454bd2c9f"
