@@ -147,38 +147,43 @@
   --faint: var(--md-default-fg-color--lighter);
   --sigil: var(--md-typeset-a-color);
   --verd: var(--md-accent-fg-color);
+}
+
+.diagram {
   cursor: zoom-in;
 }
 
-/* Drawn at 1400px, a diagram's text is unreadable at column width, so
- * `diagram.js` opens it full screen: natural size and scrolling below 1400px,
- * scaled up to the window above it. */
-.diagram::after {
+.diagram button {
   display: block;
-  content: "click to enlarge";
+  margin: 0 auto;
   font-size: 0.7rem;
-  text-align: center;
-  color: var(--md-default-fg-color--lighter);
+  color: var(--md-typeset-a-color);
+  cursor: pointer;
 }
 
-.diagram.is-open {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  overflow: auto;
+.diagram dialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
   padding: 1rem;
+  overflow: auto;
+  color: inherit;
   background: var(--md-default-bg-color);
   cursor: zoom-out;
 }
 
-.diagram.is-open::after {
-  content: none;
-}
-
-.diagram.is-open svg {
-  width: max(100%, 1400px);
+/* Drawn width; scrolls where the window is narrower, scales up where wider. */
+.diagram dialog svg {
+  min-width: 100%;
   max-width: none;
   height: auto;
+}
+
+body:has(.diagram dialog[open]) {
+  overflow: hidden;
 }
 
 [data-md-color-scheme="eldritch"] .diagram {
