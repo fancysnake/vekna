@@ -1,15 +1,14 @@
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal, Self
 
 from vekna.pacts.casts import CastView, RiteView
 
-from .cast_text import named
+from .cast_text import innermost, live, named
 
 Kind = Literal["project", "ritual", "cast", "more", "rite"]
 
-_LIVE = frozenset({"running", "queued"})
 _FAILED = frozenset({"error", "disconnected"})
 
 
@@ -30,33 +29,22 @@ class Counts:
         )
 
 
-# Each key opens with what its line is, so the line need not say it twice.
-_KINDS: dict[str, Kind] = {
-    "p": "project",
-    "r": "ritual",
-    "c": "cast",
-    "…": "more",
-    "t": "rite",
-}
-
-
 # One line of the contents. The key is stable across repaints, so the cursor and
 # the operator's folds stay on the line they were put on. A folded line keeps
 # its children and is drawn without them, so what `w` and `t` reach into a fold
-# for is still there.
+# for is still there. A project or ritual line holds every cast of its own,
+# ended ones too, newest first, though its children may be the running ones only.
 @dataclass(frozen=True)
-class Entry:
+class Entry:  # pylint: disable=too-many-instance-attributes
     key: str
+    kind: Kind
     name: str
     counts: Counts
     folded: bool = False
     view: CastView | None = None
     rite: RiteView | None = None
+    views: tuple[CastView, ...] = ()
     children: tuple["Entry", ...] = ()
-
-    @property
-    def kind(self) -> Kind:
-        return _KINDS[self.key.split(":", 1)[0]]
 
     @property
     def happening(self) -> bool:
@@ -89,11 +77,11 @@ def cast_key(cast_id: str) -> str:
 
 # How the contents are read: every cast or only the running ones, the lines
 # the operator folded, and the failed casts already opened.
-@dataclass(frozen=True)
-class _Reading:
-    everything: bool
-    folded: set[str]
-    seen: set[str]
+@dataclass
+class Reading:
+    everything: bool = False
+    folded: set[str] = field(default_factory=set)
+    seen: set[str] = field(default_factory=set)
 
 
 def _named(entry: Entry) -> str:
@@ -110,10 +98,7 @@ def _started(view: CastView) -> datetime:
 # cast and the whole of each rite tree.
 # Every project the casts touch stays, quiet or not, so a failure in it has a
 # line to count on.
-def contents(
-    casts: Sequence[CastView], *, everything: bool, folded: set[str], seen: set[str]
-) -> list[Entry]:
-    reading = _Reading(everything=everything, folded=folded, seen=seen)
+def contents(casts: Sequence[CastView], reading: Reading) -> list[Entry]:
     by_project: dict[str, list[CastView]] = {}
     for view in casts:
         by_project.setdefault(project_key(view), []).append(view)
@@ -121,7 +106,7 @@ def contents(
     return sorted(projects, key=_named)
 
 
-def _project(key: str, views: list[CastView], reading: _Reading) -> Entry:
+def _project(key: str, views: list[CastView], reading: Reading) -> Entry:
     by_ritual: dict[str, list[CastView]] = {}
     for view in views:
         by_ritual.setdefault(view.hello.ritual, []).append(view)
@@ -133,34 +118,40 @@ def _project(key: str, views: list[CastView], reading: _Reading) -> Entry:
     return _fold(
         Entry(
             key=key,
+            kind="project",
             name=named(views[0].hello.project),
             counts=sum((entry.counts for entry in rituals), Counts()),
+            views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(shown),
         ),
         reading.folded,
     )
 
 
-def _ritual(key: str, views: list[CastView], reading: _Reading) -> Entry:
+def _ritual(key: str, views: list[CastView], reading: Reading) -> Entry:
     newest = sorted(views, key=_started, reverse=True)
-    kept = [view for view in newest if reading.everything or _happening(view, reading)]
+    casts = [_cast(view, reading) for view in newest]
+    shown = [entry for entry in casts if reading.everything or entry.happening]
     return _fold(
         Entry(
             key=key,
+            kind="ritual",
             name=views[0].hello.ritual,
-            counts=sum((_counts(view, reading.seen) for view in views), Counts()),
-            children=tuple(_cast(view, reading) for view in kept),
+            counts=sum((entry.counts for entry in casts), Counts()),
+            views=tuple(newest),
+            children=tuple(shown),
         ),
         reading.folded,
     )
 
 
-def _cast(view: CastView, reading: _Reading) -> Entry:
+def _cast(view: CastView, reading: Reading) -> Entry:
     cast_id = view.hello.cast_id
     rites = rite_tree(view) if reading.everything else _now(view)
     return _fold(
         Entry(
             key=cast_key(cast_id),
+            kind="cast",
             name=view.hello.ritual,
             counts=_counts(view, reading.seen),
             view=view,
@@ -170,15 +161,10 @@ def _cast(view: CastView, reading: _Reading) -> Entry:
     )
 
 
-# Still worth a line while running only: live, or a failure not yet opened.
-def _happening(view: CastView, reading: _Reading) -> bool:
-    return view.status in _LIVE or bool(_counts(view, reading.seen).fails)
-
-
 def _counts(view: CastView, seen: set[str]) -> Counts:
     if view.waiting:
         return Counts(asks=1)
-    if view.status in _LIVE:
+    if live(view):
         return Counts(running=1)
     unseen = view.status in _FAILED and view.hello.cast_id not in seen
     return Counts(fails=int(unseen))
@@ -188,13 +174,16 @@ def _counts(view: CastView, seen: set[str]) -> Counts:
 # innermost one still running. The ones before it are `…`, so a cast reads as
 # one line of what is happening however many steps it has behind it.
 def _now(view: CastView) -> list[Entry]:
-    if (rite := _asking(view) or _innermost(view)) is None:
+    if (rite := _asking(view) or innermost(view)) is None:
         return []
     entries = [_rite(view, rite, ())]
     if len(view.rites) > 1:
         cast_id = view.hello.cast_id
         entries.insert(
-            0, Entry(key=f"…:{cast_id}", name="…", counts=Counts(), view=view)
+            0,
+            Entry(
+                key=f"…:{cast_id}", kind="more", name="…", counts=Counts(), view=view
+            ),
         )
     return entries
 
@@ -206,14 +195,10 @@ def _asking(view: CastView) -> RiteView | None:
     return None
 
 
-def _innermost(view: CastView) -> RiteView | None:
-    running = [rite for rite in view.rites.values() if rite.status == "running"]
-    return running[-1] if running else None
-
-
 # Each rite under its parent, in the order they began. One whose parent never
-# arrived hangs off the cast rather than going missing, and a chain a peer made
-# loop is cut where it would close, so the tree is its own bound.
+# arrived hangs off the cast rather than going missing, and so does the first
+# rite of a loop with no way in; a loop is cut where it would close, so the
+# tree is its own bound.
 def rite_tree(view: CastView) -> list[Entry]:
     children: dict[str | None, list[RiteView]] = {}
     for rite in view.rites.values():
@@ -230,13 +215,16 @@ def rite_tree(view: CastView) -> list[Entry]:
         ]
         return _rite(view, rite, tuple(under))
 
-    return [grow(rite) for rite in children.get(None, [])]
+    # Checked one at a time, so a rite an earlier one grew is passed over.
+    roots = [*children.get(None, []), *view.rites.values()]
+    return [grow(rite) for rite in roots if rite.started.rite_id not in seen]
 
 
 def _rite(view: CastView, rite: RiteView, under: tuple[Entry, ...]) -> Entry:
     cast_id = view.hello.cast_id
     return Entry(
         key=f"t:{cast_id}:{rite.started.rite_id}",
+        kind="rite",
         name=rite.started.name,
         counts=Counts(),
         view=view,

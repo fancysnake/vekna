@@ -190,6 +190,45 @@ class TestContents:
         assert output == "[red] check"
 
     @staticmethod
+    async def test_rites_whose_parents_loop_hang_off_the_cast():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch", parent="r2"))
+        hub.apply(_rite("r2", "coding", parent="r1"))
+        hub.apply(_rite("r3", "shell", parent="r3"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert [line.rsplit("  ", 1)[0] for line in lines[3:]] == [
+            "      ▶ watch",
+            "        ▶ coding",
+            "      ▶ shell",
+        ]
+
+    @staticmethod
+    async def test_a_cast_that_ended_still_asking_stays_in_the_running_ones():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        hub.apply(
+            DecideRequested(
+                cast_id="c1", request_id="q1", prompt="push?", options=["yes", "no"]
+            )
+        )
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines[:2] == ["proj (1 asks)", "  pr_fix"]
+        assert lines[2].endswith("  c1  asks")
+
+    @staticmethod
     async def test_every_cast_shows_on_e_and_the_running_ones_again_on_a_second():
         hub = Hub()
         hub.apply(_hello("c1", "nap"))

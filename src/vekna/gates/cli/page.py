@@ -6,8 +6,8 @@ from rich.text import Text
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
-from .cast_text import ago, carried, clock, counted, elapsed, word
-from .contents import Counts, Entry, project_key, rite_tree, ritual_key, walked
+from .cast_text import ago, carried, clipped, clock, counted, elapsed, live, word
+from .contents import Counts, Entry, rite_tree, walked
 
 # A tree row holds the first line of an error, cut to this: the whole of it is
 # on the right page, where it wraps.
@@ -39,14 +39,6 @@ NO_CAST = "no cast here — c starts one"
 def where(root: str) -> str:
     path, home = Path(root), Path.home()
     return str(Path("~", path.relative_to(home))) if path.is_relative_to(home) else root
-
-
-def first(text: str) -> str:
-    return next(iter(text.splitlines()), "")
-
-
-def cut(text: str, width: int) -> str:
-    return f"{text[: width - 1]}…" if len(text) > width else text
 
 
 # Who answers a prompt, as this window sees it: a claim id it minted is its own.
@@ -119,7 +111,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         (f"  {_took(rite, now)}", "dim"),
     )
     if rite.error is not None:
-        text.append(f"  {cut(first(rite.error), _ERROR)}", "red")
+        text.append(f"  {clipped(rite.error, _ERROR)}", "red")
     if any(
         prompt.request.rite_id == rite.started.rite_id
         for prompt in view.waiting.values()
@@ -134,11 +126,7 @@ def _flags(hello: CastHello) -> str:
 
 # The right page's top: what the line under the cursor is, in full.
 def head(
-    entry: Entry | None,
-    *,
-    casts: dict[str, CastView],
-    branches: dict[str, str | None],
-    now: datetime,
+    entry: Entry | None, *, branches: dict[str, str | None], now: datetime
 ) -> Text:
     if entry is None:
         return Text(NO_CAST)
@@ -147,38 +135,23 @@ def head(
         return _rite_head(rite, now)
     if view is not None:
         return _cast_head(view, branches, now)
-    # Every cast of the line, ended ones too, though the contents may hold
-    # only the running ones.
-    keyed = ritual_key if entry.kind == "ritual" else project_key
-    views = sorted(
-        (view for view in casts.values() if keyed(view) == entry.key),
-        key=_started,
-        reverse=True,
-    )
     if entry.kind == "ritual":
-        return _ritual_head(entry, views, now)
-    return _project_head(entry, views, branches)
+        return _ritual_head(entry, now)
+    return _project_head(entry, branches)
 
 
-def _started(view: CastView) -> datetime:
-    return view.hello.started_at
-
-
-def _project_head(
-    entry: Entry, views: list[CastView], branches: dict[str, str | None]
-) -> Text:
-    # A project line is there only for the casts it holds, so it holds one.
-    root = views[0].hello.project_root
+def _project_head(entry: Entry, branches: dict[str, str | None]) -> Text:
+    root = entry.views[0].hello.project_root
     return Text.assemble(
         (entry.name, "bold"),
         (f"\n{branches.get(root) or '—'} · {where(root)}", "dim"),
-        f"\n{counted(views)}",
+        f"\n{counted(entry.views)}",
     )
 
 
-def _ritual_head(entry: Entry, views: list[CastView], now: datetime) -> Text:
+def _ritual_head(entry: Entry, now: datetime) -> Text:
     text = Text(entry.name, "bold")
-    for view in views:
+    for view in entry.views:
         text.append("\n")
         text.append_text(_CAST_LOOK[word(view)].copy())
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
@@ -227,8 +200,7 @@ def output(entry: Entry | None) -> list[str]:
     view = entry.view
     rite = entry.rite or _shown_rite(view)
     lines = [] if rite is None else list(rite.deltas)
-    ended = view.status not in {"running", "queued"}
-    if entry.rite is None and view.detail and ended:
+    if entry.rite is None and view.detail and not live(view):
         lines += ["", *view.detail.splitlines()]
     return lines
 

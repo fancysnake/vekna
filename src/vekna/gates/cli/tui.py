@@ -25,9 +25,9 @@ from vekna.wire import (
     allowed_answers,
 )
 
-from .cast_text import counted, labelled, named
+from .cast_text import counted, labelled, live, named
 from .commands import request_cast, send_answer
-from .contents import Entry, contents, walked
+from .contents import Entry, Reading, contents, walked
 from .page import head, holder, line_text, output
 from .screen import ordered, scoped
 
@@ -128,22 +128,29 @@ class _Claims:
 # page now.
 @dataclass
 class _Shown:
-    everything: bool = False
-    folded: set[str] = field(default_factory=set)
-    seen: set[str] = field(default_factory=set)
+    reading: Reading = field(default_factory=Reading)
     opened: str | None = None
 
 
-# The contents last drawn: the line under the cursor, their shape, a node per
-# line, each line's entry, and the line each hangs under — which is where the
-# cursor goes when its own line goes.
+# The contents last drawn: the line under the cursor, their shape — each line's
+# key, the key it hangs under, and whether it opens — a node per line, and each
+# line's entry.
 @dataclass
 class _Drawn:
     cursor: str | None = None
     shape: tuple[tuple[str, str | None, bool], ...] = ()
     nodes: dict[str, TreeNode[str]] = field(default_factory=dict)
     entries: dict[str, Entry] = field(default_factory=dict)
-    parents: dict[str, str | None] = field(default_factory=dict)
+
+
+# Where the cursor goes when its line goes: up the lines it hung under, to the
+# nearest one still drawn.
+def _kept(
+    *, key: str | None, parents: dict[str, str | None], nodes: dict[str, TreeNode[str]]
+) -> str | None:
+    if key is None or key in nodes:
+        return key
+    return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
 # Whether the output follows its newest line, the line it was left on when it
@@ -292,8 +299,9 @@ class VeknaApp(App[None]):
         self.changed()
 
     def action_everything(self) -> None:
-        self._view.shown.everything = not self._view.shown.everything
-        self.say("every cast" if self._view.shown.everything else "running casts only")
+        reading = self._view.shown.reading
+        reading.everything = not reading.everything
+        self.say("every cast" if reading.everything else "running casts only")
         self.changed()
 
     # A fold hides what is under the line; a folded line opens again. A line
@@ -301,7 +309,7 @@ class VeknaApp(App[None]):
     def action_fold(self) -> None:
         if (entry := self._entry()) is None:
             return
-        folded = self._view.shown.folded
+        folded = self._view.shown.reading.folded
         if entry.key in folded:
             folded.discard(entry.key)
         elif entry.children:
@@ -457,8 +465,7 @@ class VeknaApp(App[None]):
         roots = {
             view.hello.project_root
             for view in self._listed()
-            if view.status in {"running", "queued"}
-            or view.hello.project_root not in self._view.branches
+            if live(view) or view.hello.project_root not in self._view.branches
         }
         found = await asyncio.gather(*(self._branch_of(root) for root in roots))
         self._view.branches.update(zip(roots, found, strict=True))
@@ -474,7 +481,7 @@ class VeknaApp(App[None]):
         opened = None if entry is None or entry.view is None else entry.view
         cast_id = None if opened is None else opened.hello.cast_id
         if shown.opened is not None and shown.opened != cast_id:
-            shown.seen.add(shown.opened)
+            shown.reading.seen.add(shown.opened)
         shown.opened = cast_id
 
     def _repaint(self) -> None:
@@ -490,9 +497,7 @@ class VeknaApp(App[None]):
         self._paint_contents(listed, now)
         entry = self._entry()
         self._paint_ask(listed, self._focused())
-        self._w.head.update(
-            head(entry, casts=self._casts.casts, branches=self._view.branches, now=now)
-        )
+        self._w.head.update(head(entry, branches=self._view.branches, now=now))
         self._paint_output(entry)
         self._close_answered()
 
@@ -502,52 +507,37 @@ class VeknaApp(App[None]):
     # to the first cast, which is what a window opens to look at.
     def _paint_contents(self, listed: list[CastView], now: datetime) -> None:
         drawn = self._view.drawn
-        lines = walked(
-            contents(
-                listed,
-                everything=self._view.shown.everything,
-                folded=self._view.shown.folded,
-                seen=self._view.shown.seen,
-            )
-        )
-        drawn.entries = {entry.key: entry for entry, _ in lines}
+        lines = walked(contents(listed, self._view.shown.reading))
+        entries = {entry.key: entry for entry, _ in lines}
         shape = tuple((entry.key, parent, bool(entry.shown)) for entry, parent in lines)
         if shape == drawn.shape:
+            drawn.entries = entries
             for key, node in drawn.nodes.items():
-                node.set_label(line_text(drawn.entries[key], now))
+                node.set_label(line_text(entries[key], now))
             return
         tree = self._w.contents
         tree.clear()
-        drawn.nodes = {}
+        nodes: dict[str, TreeNode[str]] = {}
         for entry, parent in lines:
-            under = drawn.nodes[parent] if parent is not None else tree.root
+            under = nodes[parent] if parent is not None else tree.root
             text = line_text(entry, now)
-            drawn.nodes[entry.key] = (
+            nodes[entry.key] = (
                 under.add(text, data=entry.key, expand=True)
                 if entry.shown
                 else under.add_leaf(text, data=entry.key)
             )
-        cursor = self._kept(self._view.drawn.cursor)
-        drawn.shape = shape
-        drawn.parents = {entry.key: parent for entry, parent in lines}
+        parents = {key: parent for key, parent, _ in drawn.shape}
+        cursor = _kept(key=drawn.cursor, parents=parents, nodes=nodes)
         if cursor is None and lines:
             casts = [entry.key for entry, _ in lines if entry.kind == "cast"]
             cursor = casts[0] if casts else lines[0][0].key
-        self._view.drawn.cursor = cursor
+        self._view.drawn = _Drawn(
+            cursor=cursor, shape=shape, nodes=nodes, entries=entries
+        )
         # A node has no line until the tree has laid it out, and the cursor
         # the rebuild left on the first line says so on its way.
         if cursor is not None:
-            tree.call_after_refresh(tree.move_cursor, drawn.nodes[cursor])
-
-    # Up the chain of lines it hung under, no longer than the chain itself, so
-    # a parent map that loops still ends.
-    def _kept(self, key: str | None) -> str | None:
-        drawn = self._view.drawn
-        for _ in range(len(drawn.parents) + 1):
-            if key is None or key in drawn.nodes:
-                return key
-            key = drawn.parents.get(key)
-        return None
+            tree.call_after_refresh(tree.move_cursor, nodes[cursor])
 
     # Loud while the cast in view waits on the operator, and a pointer to the
     # next one while some other cast does: a question nobody sees is a cast
