@@ -322,6 +322,8 @@ class TestContents:
     async def test_why_an_ended_cast_ended_follows_its_output():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="said"))
         hub.apply(CastGoodbye(cast_id="c1", status="error", detail="boom\ntrace"))
         app = _app(hub, [])
 
@@ -332,7 +334,25 @@ class TestContents:
             await pilot.pause(_PAINTED)
 
             output = list(app.query_one("#log", Log).lines)
-        assert output == ["boom", "trace"]
+        assert output == ["said", " ", "boom", "trace"]
+
+    @staticmethod
+    async def test_an_empty_delta_shows_as_a_blank_line():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        for delta in ("one", "", "two"):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=delta))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["one", " ", "two"]
 
     @staticmethod
     async def test_the_cursor_stays_on_its_cast_when_another_arrives():

@@ -202,7 +202,8 @@ def output(entry: Entry | None) -> list[str]:
     lines = [] if rite is None else list(rite.deltas)
     if entry.rite is None and view.detail and not live(view):
         lines += ["", *view.detail.splitlines()]
-    return lines
+    # Log.write_lines drops an empty line, so a blank one is drawn as a space.
+    return [line or " " for line in lines]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:
