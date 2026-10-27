@@ -9,6 +9,7 @@ from vekna.wire import SHORT_ID, CastHello
 _RESUMED = "↳"
 _MINUTE = 60
 _HOUR = 3600
+_DAY = 86400
 # The word, not the glyph: the list is read across a row of casts, and "aborted"
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
@@ -59,6 +60,19 @@ def _recovering(view: CastView) -> bool:
         if rite.started.category == "step" and rite.status != "running"
     ]
     return bool(finished) and finished[-1].status == "error"
+
+
+# Which cast of a ritual this is, by when it began: a live one is happening now
+# whenever it began, and one that ended is placed by how long ago that was.
+def ago(view: CastView, now: datetime) -> str:
+    seconds = (now - view.hello.started_at).total_seconds()
+    if view.status in {"running", "queued"} or seconds < _MINUTE:
+        return "@now"
+    if seconds < _HOUR:
+        return f"@{int(seconds // _MINUTE)}m ago"
+    if seconds < _DAY:
+        return f"@{int(seconds // _HOUR)}h ago"
+    return f"@{int(seconds // _DAY)}d ago"
 
 
 def clock(seconds: float) -> str:

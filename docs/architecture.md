@@ -106,7 +106,9 @@ submodules cooperate.
       commands.py # what `c` and `a` send, and what either view says after
       screen.py   # painting: the cast list, one cast drilled into, `casts`
       dashboard.py # what the keys do — over the two protocols, nothing else
-      tui.py      # the Textual window: table, pane, take-over dialog
+      contents.py # the book's contents: project › ritual › cast › rite, folds
+      page.py     # what a contents line reads as, and its page in full
+      tui.py      # the Textual window: contents, page, take-over dialog
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/

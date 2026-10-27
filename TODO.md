@@ -23,3 +23,11 @@
   the sandboxed shell that endpoint was unreachable, so every `mise run` and
   `mise exec` aborted until `MISE_DISABLE_TOOLS=jq` was set. Worked outside the
   sandbox; log it if it recurs.
+- `tingle` counts `object` in an annotation as typing debt, so
+  `Mapping[str, object]` for a hello's `components` (pydantic `JsonValue`, not
+  re-exported by `vekna.wire`) failed `fullcheck`. Worked around by passing the
+  `CastHello` itself.
+- Textual's `Log` scrolls to its end on write, but the end moves when a widget
+  above it grows in the same frame, so the follow fell short by a line or two
+  (#208). Scrolling after refresh fixed it; worth knowing for any pane under
+  an `height: auto` sibling.

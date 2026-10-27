@@ -189,17 +189,31 @@ vekna --no-tui
 passes, and the log says what it did with each one, including the ones it
 dropped. A daemon already running is not restarted for it; the window says so.
 
-In a terminal the window is drawn with Textual: a table of casts, and the one
-under the cursor in a pane beside it — its rite tree, the output of what is
-running, its branch and the directory it runs in, which for a pooled tree is
-the tree. The table's `branch` and `where` columns say the same per cast; the
-branch is read off git every few seconds, because a cast can switch it.
+In a terminal the window is drawn with Textual, as two pages of a book. The left
+page is the contents: a tree of project, ritual, the ritual's casts newest first
+(`@now` while live, `@3h ago` once ended), and their rites. By default it shows
+the running casts, each as `…` and the rite it is on now, or the rite that asks,
+and the failed ones you have not opened yet. The right page is the line under
+the cursor in full: a project's branch and directory, a ritual's casts with
+their flags, a cast's whole rite tree, or a rite's whole error. Below it is the
+output, which follows the newest line until you scroll up. The branch is read
+off git every few seconds, because a cast can switch it.
+
+A fold hides everything under its line, and the line says what still happens
+there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A project line always says it.
+A failure counts until you have opened its cast and moved on.
 
 | Key | Does |
 | --- | --- |
+| `space` | fold the line under the cursor, or open it again |
+| `e` | every cast and every rite, or the running ones only again |
+| `w` | the next line that asks, a fold included |
+| `j` / `k` / `h` | down, up, to the line above in the tree |
 | `c` | start a ritual here: `c <ritual> [--flag value …]` |
-| `t` | take over the prompt of the cast under the cursor, and answer it in a dialog |
+| `t` | take over the prompt under the cursor, and answer it in a dialog |
 | `a` | answer it in one line: `a <answer>` |
+| `x` | cancel the cast under the cursor; twice, to be sure |
+| `:` | the command line, empty |
 | `g` / `p` | every project / this one |
 | `q` | close the window; the daemon keeps running |
 
