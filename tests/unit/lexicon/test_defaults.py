@@ -153,3 +153,77 @@ class TestDefaults:
             f'{PROJECT}: [defaults.greet] loud = "very":'
             " Input should be a valid boolean, unable to interpret input"
         )
+
+    @staticmethod
+    def test_a_required_field_nobody_set_is_named_by_its_flag():
+        with pytest.raises(RitualDefinitionError) as raised:
+            Defaults([]).components(GREET, {})
+
+        assert str(raised.value) == "greet: --name is required"
+
+    @staticmethod
+    def test_a_flag_the_ritual_does_not_take_names_what_it_does_take():
+        with pytest.raises(RitualDefinitionError) as raised:
+            Defaults([]).components(GREET, {"shout": True, "whisper": True})
+
+        assert str(raised.value) == (
+            "greet takes no --shout, --whisper (it takes --name, --loud)"
+        )
+
+    @staticmethod
+    def test_a_flag_to_a_ritual_taking_none_says_it_takes_nothing():
+        silent = Ritual(
+            name="silent",
+            components=BaseModel,
+            run=_never,
+            max_steps=1,
+            exits=(),
+            ends=True,
+        )
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            Defaults([]).components(silent, {"shout": True})
+
+        assert str(raised.value) == "silent takes no --shout (it takes nothing)"
+
+    # A nested refusal keeps its path below the key, so the operator finds it in
+    # the value the config set.
+    @staticmethod
+    def test_a_nested_refusal_in_a_config_names_its_path_under_the_key():
+        class _Deep(BaseModel):
+            x: int
+
+        class _Outer(BaseModel):
+            deep: _Deep
+
+        class _Nested(BaseModel):
+            shallow: _Deep
+            outer: _Outer
+
+        nested = Ritual(
+            name="nested",
+            components=_Nested,
+            run=_never,
+            max_steps=1,
+            exits=(),
+            ends=True,
+        )
+        defaults = Defaults(
+            [
+                (
+                    PROJECT,
+                    Config.model_validate(
+                        {"defaults": {"nested": {"shallow": {}, "outer": {"deep": {}}}}}
+                    ),
+                )
+            ]
+        )
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            defaults.of(nested)
+
+        assert str(raised.value) == (
+            f"{PROJECT}: [defaults.nested] shallow = {{}}: x: Field required\n"
+            f'{PROJECT}: [defaults.nested] outer = {{"deep": {{}}}}:'
+            " deep.x: Field required"
+        )

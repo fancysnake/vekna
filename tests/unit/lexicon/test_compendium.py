@@ -297,7 +297,7 @@ class TestStepTable:
             def again(state: State) -> Done[State]:
                 return Done(state)
 
-        here = __file__
+        here = noop.source
         assert str(raised.value) == (
             f"State is the payload of both step 'noop' ({here}) and step 'again'"
             f" ({here}) — one payload class, one step"
