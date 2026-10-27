@@ -10,7 +10,7 @@ jobs = 8
 jq = "1.8.2"
 markdownlint-cli2 = "0.23.3"
 node = "26"
-pipx = "1.17.14"
+pipx = "1.18.4"
 "pipx:poetry" = "2.5.1"
 python = "3.11"
 
@@ -28,13 +28,11 @@ TOML_PATHS = ".taplo.toml .vekna.toml pyproject.toml mise.toml tingle.toml"
 
 [task_config]
 includes = [
-    "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=5da354f89c7e72d677e80326270aa8d8226ee76e",
+    "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=20e8c1f42f6e2904cef3fa60ba9c64283e2d7ae8",
 ]
 
 [tasks.update]
 run = [
-    "mise upgrade --bump --exclude python --minimum-release-age=7d",
-    "mise install",
     { task = "dep:upgrade:py" },
     "pre-commit autoupdate",
 ]

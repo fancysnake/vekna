@@ -82,5 +82,8 @@ class TestReadConfig:
         config = tmp_path / ".vekna.toml"
         config.write_text('[rituals]\nmodule = ["pkg.rites"]\n')
 
-        with pytest.raises(RitualDefinitionError, match="extra"):
+        with pytest.raises(
+            RitualDefinitionError,
+            match=r"rituals\.module: Extra inputs are not permitted",
+        ):
             read_config(config)

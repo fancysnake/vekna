@@ -197,8 +197,9 @@ def register_step(the_step: Step) -> None:
     for payload in the_step.payloads:
         if (first := _steps.get(payload)) is not None and first is not the_step:
             msg = (
-                f"{payload.__name__} is the payload of both step {first.name!r} "
-                f"and step {the_step.name!r} — one payload class, one step"
+                f"{payload.__name__} is the payload of both step {first.name!r}"
+                f" ({first.source}) and step {the_step.name!r} ({the_step.source})"
+                " — one payload class, one step"
             )
             raise RitualDefinitionError(msg)
     _steps.update(dict.fromkeys(the_step.payloads, the_step))

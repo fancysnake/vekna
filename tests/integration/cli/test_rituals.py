@@ -175,6 +175,17 @@ def _home(tmp_path, monkeypatch) -> None:
 _SHARED = "shared_rituals"
 _RITUALS_PACKAGE = "rituals"
 
+# A project step on a class the shared module's own step already takes.
+_CLAIMS_SHARED_TICK = textwrap.dedent(f"""
+    from {_SHARED} import Tick
+    from vekna.lexicon import Done, step
+
+
+    @step
+    async def tock(state: Tick) -> Done[Tick]:
+        return Done(state)
+    """)
+
 
 def _forget(package):
     for name in [
@@ -613,6 +624,27 @@ class TestRitualSources:
             f"{_SHARED}:ping",
         ]
 
+    # Across sources the import that trips names only itself, so the collision
+    # says where each step was written.
+    @staticmethod
+    @pytest.mark.usefixtures("_shared_module")
+    def test_a_payload_class_claimed_in_two_sources_names_both_files(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_CLAIMS_SHARED_TICK)
+        (tmp_path / ".vekna.toml").write_text(f'[rituals]\nmodules = ["{_SHARED}"]\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        rituals = tmp_path / "rituals.py"
+        assert exit_code == _USAGE_EXIT
+        assert capsys.readouterr().err == (
+            f"{rituals} failed to import: RitualDefinitionError: Tick is the payload"
+            f" of both step 'tick' ({tmp_path / 'lib' / _SHARED}.py) and step 'tock'"
+            f" ({rituals}) — one payload class, one step\n"
+        )
+
     @staticmethod
     @pytest.mark.usefixtures("_shared_module")
     def test_a_table_names_the_tome(tmp_path, monkeypatch, capsys):
@@ -836,3 +868,19 @@ class TestRitualsShowDefaults:
 
         assert exit_code == _USAGE_EXIT
         assert "'strat'" in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_value_of_the_wrong_type_is_a_usage_error(tmp_path, monkeypatch, capsys):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        (tmp_path / ".vekna.toml").write_text('[defaults.countdown]\nstart = "three"\n')
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_show("countdown")
+
+        captured = capsys.readouterr()
+        assert exit_code == _USAGE_EXIT
+        assert not captured.out
+        assert captured.err == (
+            f'{tmp_path / ".vekna.toml"}: [defaults.countdown] start = "three":'
+            " Input should be a valid integer, unable to parse string as an integer\n"
+        )
