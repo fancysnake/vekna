@@ -11,6 +11,15 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`vekna purify`** cleans every pooled worktree of the project that no
+  cast holds and parks it, so a tree a failed cast left blocked rejoins the
+  pool. Open merges and rebases are aborted, and gitignored files stay.
+  `--save` first commits each tree's uncommitted work to a local
+  `vekna/rescue/` branch. Windows drop the blocked mark of the trees it parks.
+  ([#201](https://github.com/fancysnake/vekna/issues/201))
+
 ## [0.15.0] - 2026-10-26
 
 ### Added

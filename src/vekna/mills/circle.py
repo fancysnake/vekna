@@ -17,6 +17,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    PurifiedTree,
     RunRecord,
     TreeBlocked,
     WireMessage,
@@ -202,8 +203,7 @@ class Leasing:
             found = await self._trees.lease(
                 project_root=root,
                 project=hello.project,
-                held=self._left.trees()
-                | {held for held in self._needs_tree.values() if held is not None},
+                held=self._held(),
                 count=self._limits.worktrees(root),
             )
             if isinstance(found, str):
@@ -227,6 +227,22 @@ class Leasing:
         if reason is not None:
             self._say(f"{tree} is blocked after cast {hello.cast_id}: {reason}")
         return reason
+
+    # Under the lease lock, so no tree is leased while it is being purified.
+    # Raises `TreeError`.
+    async def purify(
+        self, *, project_root: str, project: str, save: bool
+    ) -> list[PurifiedTree]:
+        async with self._lock(project):
+            return await self._trees.purify(
+                project_root=project_root, project=project, held=self._held(), save=save
+            )
+
+    # A tree leased to a cast still preparing it is held too.
+    def _held(self) -> set[str]:
+        return self._left.trees() | {
+            held for held in self._needs_tree.values() if held is not None
+        }
 
     def _lock(self, project: str) -> asyncio.Lock:
         return self._locks.setdefault(project, asyncio.Lock())

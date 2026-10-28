@@ -34,10 +34,13 @@ from vekna.wire import (
     LockDenied,
     LockGranted,
     LockReleased,
+    PurifyRequested,
     RiteDelta,
     RiteFinished,
     RiteStarted,
     TreeBlocked,
+    TreeFreed,
+    TreesPurified,
     WireMessage,
 )
 
@@ -52,6 +55,8 @@ _QUEUE_ELSEWHERE = "the queue is the circle's"
 _NO_AWAIT = "no such await"
 _CLAIMED_ELSEWHERE = "another surface has claimed the prompt"
 _STARTS_NOTHING = "this daemon starts no casts"
+_KEEPS_NO_POOL = "this daemon keeps no worktree pool"
+_NOT_BLOCKED = "the cast left no such tree blocked"
 _LOCKS = (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
 _SLOTS = (CodingSlotRequested, CodingSlotGranted, CodingSlotReleased)
 _ENQUEUES = (EnqueueRequested, EnqueueAccepted, EnqueueRefused)
@@ -70,6 +75,7 @@ _Viewed = (
     | DecideWithdrawn
     | DecideClaimed
     | TreeBlocked
+    | TreeFreed
     | AwaitRequested
     | AwaitEnded
     | AwaitWithdrawn
@@ -159,6 +165,11 @@ class Hub(CastBoard, Routes):
     def request(self, surface: Surface, request: CastRequested) -> None:
         del request
         surface.send(CastRefused(reason=_STARTS_NOTHING))
+
+    @override
+    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+        del request
+        return CastRefused(reason=_KEEPS_NO_POOL)
 
     # Forwarded, not applied: the cast's own `DecideResolved` is what closes the
     # prompt, so the journal and every surface hear one answer, from the cast
@@ -368,12 +379,22 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             # A cast that is gone is not still asking, nor awaiting.
             view.waiting.clear()
             view.on_children.clear()
-        case TreeBlocked():
-            # Said after the cast is gone, and nothing else about it changes.
-            view.blocked = message
+        case TreeBlocked() | TreeFreed():
+            refused = _update_tree(view, message)
         case _:
             assert_never(message)
     return refused
+
+
+# Said after the cast is gone, and nothing else about it changes.
+def _update_tree(view: CastView, message: TreeBlocked | TreeFreed) -> str | None:
+    if isinstance(message, TreeBlocked):
+        view.blocked = message
+    elif view.blocked is None or view.blocked.path != message.path:
+        return _NOT_BLOCKED
+    else:
+        view.blocked = None
+    return None
 
 
 def _elsewhere(

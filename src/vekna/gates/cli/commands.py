@@ -5,6 +5,7 @@ from vekna.wire import (
     CastRequested,
     DecideRequested,
     DecideResolved,
+    PurifiedTree,
     WireMessage,
     allowed_answers,
     parse_flags,
@@ -27,6 +28,15 @@ def request_cast(*, typed: str, root: str, send: Callable[[WireMessage], None]) 
         return f"{_CAST_USAGE} — {error}"
     send(request)
     return f"asked for {request.ritual}"
+
+
+# What `vekna purify` and the daemon's log say about one tree.
+def purified(tree: PurifiedTree) -> str:
+    said = {"parked": "purified", "held": "held by a running cast, left alone"}.get(
+        tree.outcome, f"failed: {tree.reason}"
+    )
+    saved = f" — its uncommitted work is on {tree.saved}" if tree.saved else ""
+    return f"{tree.path}: {said}{saved}"
 
 
 # The answer typed to `request`, checked by the rule the cast checks it by, so

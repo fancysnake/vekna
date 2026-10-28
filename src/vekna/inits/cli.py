@@ -11,6 +11,7 @@ from typing import Protocol, cast
 import click
 from click import Group
 
+from vekna.gates.cli.commands import purified
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing
 from vekna.gates.cli.tui import VeknaApp
@@ -24,7 +25,9 @@ from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastMessage,
     CastRefused,
+    PurifyRequested,
     SurfaceHello,
+    TreesPurified,
     WireMessage,
     default_runs_root,
     default_socket_path,
@@ -52,6 +55,8 @@ _DAEMON_ENDED = "the daemon ended"
 _VIEW_STOPPED = "the view stopped"
 _STARTED = "started the daemon — q leaves it running, `vekna stop` ends it"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
+_NO_TREES = "no pooled worktrees for this project"
+_NO_ANSWER = "the daemon closed the connection without answering"
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -336,6 +341,50 @@ def _stop() -> None:
     click.echo(asyncio.run(stop_daemon()))
 
 
+@click.command(
+    "purify",
+    help=(
+        "Clean every pooled worktree of this project that no cast holds and park"
+        " it. Uncommitted work is lost unless --save keeps it."
+    ),
+)
+@click.option(
+    "--save",
+    is_flag=True,
+    help="First commit each tree's uncommitted work to a vekna/rescue/ branch.",
+)
+def _purify(*, save: bool = False) -> None:
+    reply = asyncio.run(_purified(save=save))
+    for tree in reply.trees:
+        click.echo(purified(tree))
+    if not reply.trees:
+        click.echo(_NO_TREES)
+    if any(tree.outcome == "failed" for tree in reply.trees):
+        raise SystemExit(1)
+
+
+# The daemon does the purifying: only it knows which trees a cast holds, a tree
+# still being prepared among them.
+async def _purified(*, save: bool) -> TreesPurified:
+    path = default_socket_path()
+    if not await alive(path):
+        await summon(path=path, debug=False)
+    reader, writer = await attach(path)
+    try:
+        writer.write(
+            encode_frame(PurifyRequested(project_root=str(Path.cwd()), save=save))
+        )
+        reply = await anext(read_frames(reader), None)
+    finally:
+        writer.close()
+        with contextlib.suppress(OSError):
+            await writer.wait_closed()
+    if isinstance(reply, TreesPurified):
+        return reply
+    reason = reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
+    raise click.ClickException(reason)
+
+
 def init_command() -> Group:
     # Bare `vekna` is the project's view, which is why the group runs a body of
     # its own rather than printing help: the first one starts the daemon, and
@@ -366,6 +415,7 @@ def init_command() -> Group:
     vekna.add_command(_cats)
     vekna.add_command(_serve)
     vekna.add_command(_stop)
+    vekna.add_command(_purify)
     return vekna
 
 

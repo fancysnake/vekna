@@ -6,6 +6,7 @@ import pytest
 
 from vekna.links.worktrees import GitTrees, branch_of
 from vekna.pacts.circle import Full, TreeError
+from vekna.wire import PurifiedTree
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -59,6 +60,16 @@ class _Pool:
             return None
         await self.trees.prepare(found, prepare)
         return found
+
+    async def purify(
+        self, *, held: set[str] | None = None, save: bool = False
+    ) -> list[PurifiedTree]:
+        return await self.trees.purify(
+            project_root=str(self.repo),
+            project=str(self.repo / ".git"),
+            held=held or set(),
+            save=save,
+        )
 
 
 @pytest.fixture(name="pool")
@@ -257,6 +268,117 @@ class TestRelease:
             await pool.trees.prepare(str(repo / "1"), "touch prepared")
 
         assert not (repo / "1.prepared").exists()
+
+
+@pytest.mark.asyncio
+class TestPurify:
+    @staticmethod
+    async def test_saved_work_is_kept_on_a_branch_and_the_tree_parked(pool: _Pool):
+        tree = await pool.lease(prepare="mkdir venv && touch venv/prepared")
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "feature")
+        (work / "a.txt").write_text("edited\n")
+        (work / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify(save=True)
+
+        assert purified.outcome == "parked"
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/feature-")
+        assert _git(pool.repo, "show", f"{purified.saved}:a.txt") == "edited"
+        assert _git(pool.repo, "show", f"{purified.saved}:new.txt") == "mine"
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+        assert not _git(work, "status", "--porcelain")
+        assert (work / "venv" / "prepared").is_file()
+
+    @staticmethod
+    async def test_unsaved_work_is_thrown_away(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify()
+
+        assert purified == PurifiedTree(path=tree, outcome="parked")
+        assert (Path(tree) / "a.txt").read_text() == "a\n"
+        assert not (Path(tree) / "new.txt").exists()
+        assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
+
+    @staticmethod
+    async def test_an_open_merge_is_saved_then_aborted(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "left")
+        (work / "a.txt").write_text("left\n")
+        _git(work, "commit", "-q", "-am", "left")
+        _git(work, "checkout", "-q", "-b", "right", "main")
+        (work / "a.txt").write_text("right\n")
+        _git(work, "commit", "-q", "-am", "right")
+        assert _conflicts(work, "left")
+
+        [purified] = await pool.purify(save=True)
+
+        assert purified.outcome == "parked"
+        assert purified.saved is not None
+        assert "<<<<<<<" in _git(pool.repo, "show", f"{purified.saved}:a.txt")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+        assert not (
+            Path(_git(work, "rev-parse", "--absolute-git-dir")) / "MERGE_HEAD"
+        ).exists()
+
+    @staticmethod
+    async def test_a_held_tree_is_left_as_it_is(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+
+        purified = await pool.purify(held={tree})
+
+        assert purified == [PurifiedTree(path=tree, outcome="held")]
+        assert (Path(tree) / "a.txt").read_text() == "edited\n"
+
+    @staticmethod
+    async def test_a_clean_tree_has_nothing_to_save(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        _git(Path(tree), "checkout", "-q", "-b", "feature")
+
+        purified = await pool.purify(save=True)
+
+        assert purified == [PurifiedTree(path=tree, outcome="parked")]
+        assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
+
+    @staticmethod
+    async def test_a_tree_whose_parking_branch_is_gone_says_why(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        _git(Path(tree), "checkout", "-q", "-b", "feature")
+        _git(pool.repo, "branch", "-q", "-D", "vekna/wt-1")
+
+        [purified] = await pool.purify()
+
+        assert purified.outcome == "failed"
+        assert purified.reason is not None
+        assert purified.reason.startswith("git checkout in ")
+
+    @staticmethod
+    async def test_a_tree_that_is_gone_fails_alone(pool: _Pool):
+        first = await pool.lease(count=2)
+        assert first is not None
+        second = await pool.lease(held={first}, count=2)
+        assert second is not None
+        shutil.rmtree(first)
+        (Path(second) / "a.txt").write_text("edited\n")
+
+        gone, purified = await pool.purify()
+
+        assert gone.outcome == "failed"
+        assert gone.reason is not None
+        assert gone.reason.startswith("git rev-parse in ")
+        assert purified == PurifiedTree(path=second, outcome="parked")
 
 
 @pytest.mark.asyncio

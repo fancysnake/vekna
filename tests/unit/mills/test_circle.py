@@ -18,6 +18,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    PurifiedTree,
     RunRecord,
     TreeBlocked,
     WireMessage,
@@ -121,6 +122,15 @@ class _Trees(Trees):
             return reason
         self.free.append(tree)
         return None
+
+    # Parks every free tree, and says each one it was told is held as held.
+    async def purify(
+        self, *, project_root: str, project: str, held: set[str], save: bool
+    ) -> list[PurifiedTree]:
+        del project_root, project, save
+        return [PurifiedTree(path=tree, outcome="held") for tree in sorted(held)] + [
+            PurifiedTree(path=tree, outcome="parked") for tree in self.free
+        ]
 
 
 class _Peer(Surface):
@@ -558,6 +568,33 @@ class TestTrees:
         )
         assert not trees.free
         assert said == ["/pool/1 is blocked after cast c1: uncommitted changes"]
+
+    # Leased and still preparing, the tree is in no view and no left-behind
+    # spawn: only the lease says a cast holds it.
+    @staticmethod
+    async def test_purify_holds_a_tree_still_being_prepared():
+        trees = _Trees("/pool/1")
+        trees.preparing = asyncio.get_running_loop().create_future()
+        hub, spawn, alive = Hub(), _Spawn(), _Alive()
+        leasing = Leasing(
+            left=LeftBehind(casts=hub, spawned=alive.left, alive=alive),
+            say=[].append,
+            spawn=spawn,
+            trees=trees,
+            limits=_Limits(),
+        )
+        running = asyncio.create_task(leasing.run(_hello("c1", worktree=True)))
+        await _settled()
+
+        purified = await leasing.purify(
+            project_root="/proj", project="/proj/.git", save=True
+        )
+
+        assert purified == [PurifiedTree(path="/pool/1", outcome="held")]
+        trees.preparing.set_result(None)
+        await _settled()
+        spawn.exit("c1")
+        await running
 
     @staticmethod
     async def test_a_cast_that_dies_before_its_hello_in_a_dirty_tree_says_why():
