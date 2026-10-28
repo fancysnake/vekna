@@ -25,6 +25,8 @@ from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastMessage,
     CastRefused,
+    FailedTree,
+    Opening,
     PurifyRequested,
     SurfaceHello,
     TreesPurified,
@@ -53,10 +55,13 @@ _RECENT = 20
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
 _VIEW_STOPPED = "the view stopped"
-_STARTED = "started the daemon — q leaves it running, `vekna stop` ends it"
+_STARTED = "started the daemon — it runs until `vekna stop`"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
 _NO_TREES = "no pooled worktrees for this project"
-_NO_ANSWER = "the daemon closed the connection without answering"
+_NO_ANSWER = (
+    "the daemon hung up without answering: it may predate this vekna"
+    " (`vekna stop`, then retry)"
+)
 
 
 # The root project may not import the lexicon: `vekna` (daemon) and `vekna cast`
@@ -215,8 +220,8 @@ _rituals.add_command(_rituals_list)
 _rituals.add_command(_rituals_show)
 
 
-# A window's line to the daemon, summoning it when none is listening, and what
-# the window has to say about how it got one.
+# A line to the daemon, summoning it when none is listening, and what the
+# command has to say about how it got one.
 @dataclass(frozen=True, kw_only=True)
 class _Line:
     reader: asyncio.StreamReader
@@ -232,7 +237,7 @@ class _Line:
             await self.writer.wait_closed()
 
 
-async def _opened(*, debug: bool) -> _Line:
+async def _opened(*, opening: Opening, debug: bool) -> _Line:
     path = default_socket_path()
     note = ""
     if not await alive(path):
@@ -241,7 +246,7 @@ async def _opened(*, debug: bool) -> _Line:
     elif debug:
         note = _DEBUG_LATE
     reader, writer = await attach(path)
-    writer.write(encode_frame(SurfaceHello()))
+    writer.write(encode_frame(opening))
     return _Line(reader=reader, writer=writer, note=note)
 
 
@@ -264,7 +269,7 @@ async def _listen(
 # leaves the daemon running.
 async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
     hub = Hub()
-    line = await _opened(debug=debug)
+    line = await _opened(opening=SurfaceHello(), debug=debug)
     dashboard = Dashboard(
         casts=hub,
         screen=screen if screen is not None else Terminal(),
@@ -289,7 +294,7 @@ async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
 # are the line view's; only the painting differs.
 async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
     hub = Hub()
-    line = await _opened(debug=debug)
+    line = await _opened(opening=SurfaceHello(), debug=debug)
     app = VeknaApp(
         casts=hub,
         project=await project_of(Path.cwd()),
@@ -359,26 +364,22 @@ def _purify(*, save: bool = False) -> None:
         click.echo(purified(tree))
     if not reply.trees:
         click.echo(_NO_TREES)
-    if any(tree.outcome == "failed" for tree in reply.trees):
+    if any(isinstance(tree, FailedTree) for tree in reply.trees):
         raise SystemExit(1)
 
 
 # The daemon does the purifying: only it knows which trees a cast holds, a tree
-# still being prepared among them.
+# still being prepared among them. Its note goes to stderr: stdout is the trees.
 async def _purified(*, save: bool) -> TreesPurified:
-    path = default_socket_path()
-    if not await alive(path):
-        await summon(path=path, debug=False)
-    reader, writer = await attach(path)
+    line = await _opened(
+        opening=PurifyRequested(project_root=str(Path.cwd()), save=save), debug=False
+    )
+    if line.note:
+        click.echo(line.note, err=True)
     try:
-        writer.write(
-            encode_frame(PurifyRequested(project_root=str(Path.cwd()), save=save))
-        )
-        reply = await anext(read_frames(reader), None)
+        reply = await anext(read_frames(line.reader), None)
     finally:
-        writer.close()
-        with contextlib.suppress(OSError):
-            await writer.wait_closed()
+        await line.close()
     if isinstance(reply, TreesPurified):
         return reply
     reason = reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER

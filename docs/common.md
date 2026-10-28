@@ -256,7 +256,7 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
 | `PurifyRequested` / `TreesPurified` | surface ↔ daemon | `vekna purify`; cleans and parks every pooled tree no cast holds, saving its work on a branch first with `save`. Refused as `CastRefused` |
-| `TreeFreed` | daemon → surfaces | a tree a cast left blocked was purified; the block is over. Journaled with that cast |
+| `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again, by `vekna purify` or a lease; the block is over. Journaled with that cast |
 | `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
 | `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 

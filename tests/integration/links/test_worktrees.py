@@ -6,7 +6,7 @@ import pytest
 
 from vekna.links.worktrees import GitTrees, branch_of
 from vekna.pacts.circle import Full, TreeError
-from vekna.wire import PurifiedTree
+from vekna.wire import FailedTree, HeldTree, ParkedTree, PurifiedTree
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -283,7 +283,7 @@ class TestPurify:
 
         [purified] = await pool.purify(save=True)
 
-        assert purified.outcome == "parked"
+        assert isinstance(purified, ParkedTree)
         assert purified.saved is not None
         assert purified.saved.startswith("vekna/rescue/feature-")
         assert _git(pool.repo, "show", f"{purified.saved}:a.txt") == "edited"
@@ -301,7 +301,7 @@ class TestPurify:
 
         [purified] = await pool.purify()
 
-        assert purified == PurifiedTree(path=tree, outcome="parked")
+        assert purified == ParkedTree(path=tree)
         assert (Path(tree) / "a.txt").read_text() == "a\n"
         assert not (Path(tree) / "new.txt").exists()
         assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
@@ -321,7 +321,7 @@ class TestPurify:
 
         [purified] = await pool.purify(save=True)
 
-        assert purified.outcome == "parked"
+        assert isinstance(purified, ParkedTree)
         assert purified.saved is not None
         assert "<<<<<<<" in _git(pool.repo, "show", f"{purified.saved}:a.txt")
         assert _git(work, "branch", "--show-current") == "vekna/wt-1"
@@ -337,7 +337,7 @@ class TestPurify:
 
         purified = await pool.purify(held={tree})
 
-        assert purified == [PurifiedTree(path=tree, outcome="held")]
+        assert purified == [HeldTree(path=tree)]
         assert (Path(tree) / "a.txt").read_text() == "edited\n"
 
     @staticmethod
@@ -348,7 +348,7 @@ class TestPurify:
 
         purified = await pool.purify(save=True)
 
-        assert purified == [PurifiedTree(path=tree, outcome="parked")]
+        assert purified == [ParkedTree(path=tree)]
         assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
 
     @staticmethod
@@ -360,9 +360,28 @@ class TestPurify:
 
         [purified] = await pool.purify()
 
-        assert purified.outcome == "failed"
-        assert purified.reason is not None
+        assert isinstance(purified, FailedTree)
         assert purified.reason.startswith("git checkout in ")
+
+    # As a daemon summoned from a git hook would inherit them.
+    @staticmethod
+    async def test_a_repository_named_in_the_environment_is_not_touched(
+        pool: _Pool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+        mine = tmp_path / "mine"
+        mine.mkdir()
+        _git(mine, "init", "-q")
+        (mine / "work.txt").write_text("unsaved\n")
+        monkeypatch.setenv("GIT_DIR", str(mine / ".git"))
+        monkeypatch.setenv("GIT_WORK_TREE", str(mine))
+
+        purified = await pool.purify()
+
+        assert purified == [ParkedTree(path=tree)]
+        assert (mine / "work.txt").read_text() == "unsaved\n"
 
     @staticmethod
     async def test_a_tree_that_is_gone_fails_alone(pool: _Pool):
@@ -375,10 +394,9 @@ class TestPurify:
 
         gone, purified = await pool.purify()
 
-        assert gone.outcome == "failed"
-        assert gone.reason is not None
+        assert isinstance(gone, FailedTree)
         assert gone.reason.startswith("git rev-parse in ")
-        assert purified == PurifiedTree(path=second, outcome="parked")
+        assert purified == ParkedTree(path=second)
 
 
 @pytest.mark.asyncio

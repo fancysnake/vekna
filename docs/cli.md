@@ -372,8 +372,8 @@ vekna purify --save   # commits it to a branch of its own first
 `--save` names each branch `vekna/rescue/<branch the tree was on>-<hash>`, and
 keeps it local. The daemon does the work, since only it knows which trees are
 held; with none listening, `vekna purify` starts one. A cast whose tree is
-purified loses its blocked mark in every window. Exits `1` when any tree would
-not come clean, saying why.
+parked again, purified or found clean by a lease, loses its blocked mark in
+every window. Exits `1` when any tree would not come clean, saying why.
 
 ## `vekna stop`
 

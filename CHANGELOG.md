@@ -17,7 +17,9 @@ when.
   cast holds and parks it, so a tree a failed cast left blocked rejoins the
   pool. Open merges and rebases are aborted, and gitignored files stay.
   `--save` first commits each tree's uncommitted work to a local
-  `vekna/rescue/` branch. Windows drop the blocked mark of the trees it parks.
+  `vekna/rescue/` branch. Once a blocked tree is parked again, by
+  `vekna purify` or by a lease that finds it clean, open windows drop its
+  blocked mark.
   ([#201](https://github.com/fancysnake/vekna/issues/201))
 
 ### Changed

@@ -1,10 +1,11 @@
 import asyncio
 import hashlib
+import os
 import secrets
 from pathlib import Path
 
 from vekna.pacts.circle import Full, TreeError, Trees
-from vekna.wire import PurifiedTree
+from vekna.wire import FailedTree, HeldTree, ParkedTree, PurifiedTree
 
 _PARKING = "vekna/wt-"
 _PREPARED = ".prepared"
@@ -21,6 +22,28 @@ _IN_PROGRESS = {
     "rebase-merge": "rebase",
     "rebase-apply": "rebase",
 }
+# What `git rev-parse --local-env-vars` lists: each aims git at a repository
+# other than the one `cwd` is in. A daemon summoned from a git hook inherits
+# them, and `reset --hard` there would wipe somebody's own checkout.
+_REPOSITORY_ENV = frozenset(
+    {
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_IMPLICIT_WORK_TREE",
+        "GIT_GRAFT_FILE",
+        "GIT_INDEX_FILE",
+        "GIT_NO_REPLACE_OBJECTS",
+        "GIT_REPLACE_REF_BASE",
+        "GIT_PREFIX",
+        "GIT_SHALLOW_FILE",
+        "GIT_COMMON_DIR",
+    }
+)
 _RESCUE = "vekna/rescue/"
 _DETACHED = "detached"
 
@@ -82,8 +105,8 @@ class GitTrees(Trees):
             if await _git(tree, "status", "--porcelain"):
                 return "uncommitted changes"
             git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
-            if marker := await _in_progress(git_dir):
-                return f"a {_IN_PROGRESS[marker]} in progress"
+            if operations := await _open_operations(git_dir):
+                return f"a {_IN_PROGRESS[operations[0]]} in progress"
             await _git(tree, "checkout", "--quiet", _branch(number))
         except TreeError as error:
             return str(error)
@@ -96,7 +119,7 @@ class GitTrees(Trees):
         taken = await asyncio.to_thread(_resolved, held)
         return [
             (
-                PurifiedTree(path=str(tree), outcome="held")
+                HeldTree(path=str(tree))
                 if tree in taken
                 else await self._purified(str(tree), save=save)
             )
@@ -108,16 +131,15 @@ class GitTrees(Trees):
     async def _purified(self, tree: str, *, save: bool) -> PurifiedTree:
         saved: str | None = None
         try:
+            git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
             if save:
-                saved = await _saved(tree)
-            await _abandoned(tree)
+                saved = await _saved(tree, git_dir)
+            await _abandoned(tree, git_dir)
         except TreeError as error:
-            return PurifiedTree(
-                path=tree, outcome="failed", saved=saved, reason=str(error)
-            )
+            return FailedTree(path=tree, saved=saved, reason=str(error))
         if (reason := await self.release(tree)) is not None:
-            return PurifiedTree(path=tree, outcome="failed", saved=saved, reason=reason)
-        return PurifiedTree(path=tree, outcome="parked", saved=saved)
+            return FailedTree(path=tree, saved=saved, reason=reason)
+        return ParkedTree(path=tree, saved=saved)
 
     async def _home(self, project: str) -> Path:
         try:
@@ -139,21 +161,21 @@ def _branch(number: int) -> str:
     return f"{_PARKING}{number}"
 
 
-# The marker of the operation left open in `git_dir`, if one is.
-async def _in_progress(git_dir: Path) -> str | None:
-    for marker in _IN_PROGRESS:
-        if await asyncio.to_thread((git_dir / marker).exists):
-            return marker
-    return None
+# The marker of every operation left open in `git_dir`.
+async def _open_operations(git_dir: Path) -> list[str]:
+    return [
+        marker
+        for marker in _IN_PROGRESS
+        if await asyncio.to_thread((git_dir / marker).exists)
+    ]
 
 
 # Everything uncommitted, untracked files and a half-resolved conflict too, as a
 # commit on a branch of its own. Built from plumbing so HEAD never moves: in the
 # middle of a rebase or a merge, `checkout` and `commit` would each make it part
 # of the operation. `None` when there was nothing to save.
-async def _saved(tree: str) -> str | None:
-    git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
-    if not await _git(tree, "status", "--porcelain") and not await _in_progress(
+async def _saved(tree: str, git_dir: Path) -> str | None:
+    if not await _git(tree, "status", "--porcelain") and not await _open_operations(
         git_dir
     ):
         return None
@@ -167,13 +189,13 @@ async def _saved(tree: str) -> str | None:
 
 
 # Every operation left open aborted, then whatever is not committed thrown away.
-# Gitignored files stay: `clean` without `-x` leaves them, and the venv
-# `prepare` built is among them.
-async def _abandoned(tree: str) -> None:
-    git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
-    for marker, command in _IN_PROGRESS.items():
-        if await asyncio.to_thread((git_dir / marker).exists):
-            await _git(tree, command, "--abort")
+# A rebase leaves one of two markers, so each command aborts once. Gitignored
+# files stay: `clean` without `-x` leaves them, and the venv `prepare` built is
+# among them.
+async def _abandoned(tree: str, git_dir: Path) -> None:
+    operations = await _open_operations(git_dir)
+    for command in {_IN_PROGRESS[marker]: None for marker in operations}:
+        await _git(tree, command, "--abort")
     await _git(tree, "reset", "--hard", "--quiet")
     await _git(tree, "clean", "-d", "--force", "--quiet")
 
@@ -259,6 +281,7 @@ async def _git(cwd: str, *args: str) -> str:
             "git",
             *args,
             cwd=cwd,
+            env={k: v for k, v in os.environ.items() if k not in _REPOSITORY_ENV},
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

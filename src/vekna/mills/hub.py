@@ -388,12 +388,13 @@ def _update(view: CastView, message: _Viewed) -> str | None:
 
 # Said after the cast is gone, and nothing else about it changes.
 def _update_tree(view: CastView, message: TreeBlocked | TreeFreed) -> str | None:
-    if isinstance(message, TreeBlocked):
-        view.blocked = message
-    elif view.blocked is None or view.blocked.path != message.path:
-        return _NOT_BLOCKED
-    else:
-        view.blocked = None
+    match message:
+        case TreeBlocked():
+            view.blocked = message
+        case _:
+            if view.blocked is None or view.blocked.path != message.path:
+                return _NOT_BLOCKED
+            view.blocked = None
     return None
 
 

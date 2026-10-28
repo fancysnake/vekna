@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import click
 
-from vekna.gates.cli.commands import purified
 from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
@@ -41,7 +40,6 @@ from vekna.wire import (
     EnqueueRequested,
     PurifyRequested,
     StopRequested,
-    TreeFreed,
     TreesPurified,
     default_runs_root,
     default_socket_path,
@@ -154,7 +152,7 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
     cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_logged)
-    routes = _Daemon(hub=hub, circle=circle, leasing=leasing, pool=pool, cutter=cutter)
+    routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
     server = await serve(path=path, routes=routes)
     _logged(f"listening on {path}")
     try:
@@ -231,17 +229,10 @@ async def stop_daemon() -> str:
 # an agent. Slot traffic is the pool's alone, and an ending is everyone's.
 class _Daemon(Routes):
     def __init__(
-        self,
-        *,
-        hub: Hub,
-        circle: Circle,
-        leasing: Leasing,
-        pool: CodingPool,
-        cutter: Cutter,
+        self, *, hub: Hub, circle: Circle, pool: CodingPool, cutter: Cutter
     ) -> None:
         self._hub = hub
         self._circle = circle
-        self._leasing = leasing
         self._pool = pool
         self._cutter = cutter
         self._tasks: set[asyncio.Task[None]] = set()
@@ -353,26 +344,18 @@ class _Daemon(Routes):
             )
         )
 
-    # A cast whose tree was parked is told its block is over, so no window
-    # goes on showing it.
     async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
         root = request.project_root
         if (reason := await _missing(root)) is not None:
             return CastRefused(reason=reason)
         try:
-            trees = await self._leasing.purify(
+            trees = await self._circle.purify(
                 project_root=root,
                 project=await project_of(Path(root)),
                 save=request.save,
             )
         except TreeError as error:
             return CastRefused(reason=str(error))
-        parked = {tree.path for tree in trees if tree.outcome == "parked"}
-        for cast_id, view in list(self._hub.casts.items()):
-            if view.blocked is not None and view.blocked.path in parked:
-                self._hub.apply(TreeFreed(cast_id=cast_id, path=view.blocked.path))
-        for tree in trees:
-            _logged(purified(tree))
         return TreesPurified(trees=trees)
 
 

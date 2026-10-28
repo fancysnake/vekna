@@ -17,7 +17,7 @@ from vekna.wire import (
     CastRequested,
     DecideClaimed,
     DecideResolved,
-    PurifiedTree,
+    HeldTree,
     PurifyRequested,
     RiteDelta,
     StopRequested,
@@ -96,9 +96,7 @@ class _Daemon(Routes):
 
     async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
         self.requests.append(request)
-        return TreesPurified(
-            trees=[PurifiedTree(path=f"{request.project_root}/1", outcome="held")]
-        )
+        return TreesPurified(trees=[HeldTree(path=f"{request.project_root}/1")])
 
     async def start(self, path: Path) -> Serving:
         return await serve(path=path, routes=self)
@@ -179,9 +177,7 @@ class TestServing:
         await writer.drain()
         reply = [message async for message in read_frames(reader)]
 
-        assert reply == [
-            TreesPurified(trees=[PurifiedTree(path="/proj/1", outcome="held")])
-        ]
+        assert reply == [TreesPurified(trees=[HeldTree(path="/proj/1")])]
         assert daemon.requests == [PurifyRequested(project_root="/proj", save=True)]
         assert not daemon.attached
         writer.close()

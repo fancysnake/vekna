@@ -723,6 +723,32 @@ class TestPurify:
         assert not (Path(tree) / "new.txt").exists()
 
     @staticmethod
+    async def test_a_tree_a_running_cast_stands_in_is_left_alone(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await _leased(_one_commit_repo(tmp_path, monkeypatch))
+        (Path(tree) / "new.txt").write_text("mine\n")
+        hello = _hello().model_copy(update={"project_root": tree})
+
+        async with _served(socket_path):
+            reader, watcher = await attach(socket_path)
+            watcher.write(encode_frame(SurfaceHello()))
+            cast = await _say(socket_path, hello)
+            async with asyncio.timeout(_PATIENCE * _TICK):
+                async for message in read_frames(reader):
+                    if message == hello:
+                        break
+            purified = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["purify"]
+            )
+            cast.close()
+            watcher.close()
+
+        assert purified.exit_code == 0
+        assert purified.stdout == f"{tree}: held by a running cast, left alone\n"
+        assert (Path(tree) / "new.txt").exists()
+
+    @staticmethod
     async def test_a_directory_with_no_repository_is_refused(socket_path: Path):
         async with _served(socket_path):
             purified = await asyncio.to_thread(
@@ -816,7 +842,7 @@ class TestTheBareCommand:
         assert "listening on" in (tmp_path / "state/vekna/daemon.log").read_text()
 
     @staticmethod
-    def test_purify_starts_a_daemon_and_says_an_empty_pool_is_empty(
+    def test_purify_starts_a_daemon_says_so_and_says_an_empty_pool_is_empty(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         _one_commit_repo(tmp_path, monkeypatch)
@@ -827,7 +853,8 @@ class TestTheBareCommand:
             CliRunner().invoke(init_command(), ["stop"])
 
         assert purified.exit_code == 0
-        assert purified.output == "no pooled worktrees for this project\n"
+        assert purified.stdout == "no pooled worktrees for this project\n"
+        assert purified.stderr == "started the daemon — it runs until `vekna stop`\n"
         assert started
 
     @staticmethod

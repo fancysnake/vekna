@@ -117,7 +117,8 @@ class TreeBlocked(BaseModel):
     reason: str
 
 
-# The tree a cast left blocked was purified and parked: the block is over.
+# The tree a cast left blocked was parked, by `vekna purify` or by a lease
+# that found it clean: the block is over.
 class TreeFreed(BaseModel):
     kind: Literal["tree_freed"] = "tree_freed"
     cast_id: str
@@ -133,13 +134,28 @@ class PurifyRequested(BaseModel):
     save: bool = False
 
 
-# One tree of the pool and what purifying it did. `saved` is the branch its
+# What purifying one tree of the pool did. `saved` is the branch its
 # uncommitted work went to, whether or not the tree was then parked.
-class PurifiedTree(BaseModel):
+class ParkedTree(BaseModel):
+    outcome: Literal["parked"] = "parked"
     path: str
-    outcome: Literal["parked", "held", "failed"]
     saved: str | None = None
-    reason: str | None = None
+
+
+# A running cast holds it, so it is left as it is.
+class HeldTree(BaseModel):
+    outcome: Literal["held"] = "held"
+    path: str
+
+
+class FailedTree(BaseModel):
+    outcome: Literal["failed"] = "failed"
+    path: str
+    reason: str
+    saved: str | None = None
+
+
+PurifiedTree = Annotated[ParkedTree | HeldTree | FailedTree, Discriminator("outcome")]
 
 
 # Said back down the connection that asked, which then closes.
