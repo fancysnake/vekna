@@ -3,12 +3,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import PurePath
 
-from vekna.pacts.casts import CastView
+from vekna.pacts.casts import CastView, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
 _RESUMED = "↳"
 _MINUTE = 60
 _HOUR = 3600
+_DAY = 86400
 # The word, not the glyph: the list is read across a row of casts, and "aborted"
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
@@ -38,6 +39,27 @@ def named(project: str) -> str:
     return where.parent.name if where.name == ".git" else where.name
 
 
+def live(view: CastView) -> bool:
+    return view.status in {"running", "queued"}
+
+
+# What a cast is inside of now: the last rite to begin of those still running,
+# of one category or of any.
+def innermost(view: CastView, category: str | None = None) -> RiteView | None:
+    running = [
+        rite
+        for rite in view.rites.values()
+        if rite.status == "running" and category in {None, rite.started.category}
+    ]
+    return running[-1] if running else None
+
+
+# Text a ritual wrote, to its first line, cut with `…` where it runs past `width`.
+def clipped(text: str, width: int) -> str:
+    line = next(iter(text.splitlines()), "")
+    return f"{line[: width - 1]}…" if len(line) > width else line
+
+
 def word(view: CastView) -> str:
     if view.status == "running":
         if view.waiting:
@@ -61,6 +83,19 @@ def _recovering(view: CastView) -> bool:
     return bool(finished) and finished[-1].status == "error"
 
 
+# Which cast of a ritual this is, by when it began: a live one is happening now
+# whenever it began, and one that ended is placed by how long ago that was.
+def ago(view: CastView, now: datetime) -> str:
+    seconds = (now - view.hello.started_at).total_seconds()
+    if live(view) or seconds < _MINUTE:
+        return "@now"
+    if seconds < _HOUR:
+        return f"@{int(seconds // _MINUTE)}m ago"
+    if seconds < _DAY:
+        return f"@{int(seconds // _HOUR)}h ago"
+    return f"@{int(seconds // _DAY)}d ago"
+
+
 def clock(seconds: float) -> str:
     whole = max(0, int(seconds))
     if whole < _MINUTE:
@@ -80,8 +115,7 @@ def _ended_at(view: CastView) -> datetime | None:
 
 
 def elapsed(view: CastView, now: datetime) -> str:
-    live = view.status in {"running", "queued"}
-    if (until := now if live else _ended_at(view)) is None:
+    if (until := now if live(view) else _ended_at(view)) is None:
         return "—"
     return clock((until - view.hello.started_at).total_seconds())
 

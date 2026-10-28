@@ -4,7 +4,17 @@ from datetime import UTC, datetime
 from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
 from vekna.wire import SHORT_ID, DecideRequested, RunRecord, allowed_answers
 
-from .cast_text import carried, clock, counted, elapsed, named, word
+from .cast_text import (
+    carried,
+    clipped,
+    clock,
+    counted,
+    elapsed,
+    innermost,
+    live,
+    named,
+    word,
+)
 
 _CAST_GLYPH = {
     "queued": "…",
@@ -54,11 +64,11 @@ _HEAD = (
 # Shared with the dashboard rather than done at paint time, because the number
 # an operator types is a position in this order.
 def ordered(casts: Sequence[CastView]) -> list[CastView]:
-    live = [view for view in casts if view.status == "running"]
+    running = [view for view in casts if view.status == "running"]
     queued = [view for view in casts if view.status == "queued"]
-    done = [view for view in casts if view.status not in {"running", "queued"}]
-    asking = [view for view in live if view.waiting]
-    working = [view for view in live if not view.waiting]
+    done = [view for view in casts if not live(view)]
+    asking = [view for view in running if view.waiting]
+    working = [view for view in running if not view.waiting]
     return [*asking, *working, *queued, *reversed(done)]
 
 
@@ -73,8 +83,7 @@ def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
 # of them is cut to its width. Left whole, one long name pushes the columns of
 # its own row sideways and the listing stops being a table.
 def _fit(text: str, width: int) -> str:
-    line = next(iter(text.splitlines()), "")
-    return (f"{line[: width - 1]}…" if len(line) > width else line).ljust(width)
+    return clipped(text, width).ljust(width)
 
 
 def _steps_done(view: CastView) -> int:
@@ -83,15 +92,6 @@ def _steps_done(view: CastView) -> int:
         for rite in view.rites.values()
         if rite.started.category == "step" and rite.status != "running"
     )
-
-
-def _innermost(view: CastView, category: str) -> RiteView | None:
-    found = [
-        rite
-        for rite in view.rites.values()
-        if rite.status == "running" and rite.started.category == category
-    ]
-    return found[-1] if found else None
 
 
 # The one free column, and what it says depends on what the cast needs from the
@@ -108,9 +108,9 @@ def _now(view: CastView, now: datetime) -> str:
         )
     if view.status == "disconnected":
         return f"vekna cast --continue {view.hello.cast_id[:SHORT_ID]}"
-    if (step := _innermost(view, "step")) is None:
+    if (step := innermost(view, "step")) is None:
         return ""
-    medium = _innermost(view, "medium")
+    medium = innermost(view, "medium")
     doing = (
         f"{step.started.name} · {medium.started.name}" if medium else step.started.name
     )
@@ -131,8 +131,8 @@ def _line(index: int, view: CastView, now: datetime) -> str:
 # for, and a machine running fifteen at once is exactly when it matters. What is
 # left of the screenful goes to the ones that ended, newest first.
 def _shown(casts: Sequence[CastView]) -> Sequence[CastView]:
-    live = sum(1 for view in casts if view.status in {"running", "queued"})
-    return casts[: max(live, _SHOWN)]
+    going = sum(1 for view in casts if live(view))
+    return casts[: max(going, _SHOWN)]
 
 
 def _listing(casts: Sequence[CastView], now: datetime) -> list[str]:

@@ -20,6 +20,25 @@ when.
   `vekna/rescue/` branch. Windows drop the blocked mark of the trees it parks.
   ([#201](https://github.com/fancysnake/vekna/issues/201))
 
+### Changed
+
+- **The TUI is a book.** The left page is a tree of project › ritual › its
+  casts by age › rites. By default it shows the running casts, each as `…` and
+  the rite it is on, and the failed ones not yet opened. `space` folds a line,
+  and a folded line counts what still happens under it: asks, unseen fails,
+  running. `e` shows every cast. The right page shows the line under the cursor
+  in full, and the borders and the hotkey footer are gone. Casts a cast queued
+  now sit under their own ritual, not under the cast that queued them.
+  ([#210](https://github.com/fancysnake/vekna/issues/210))
+
+### Fixed
+
+- The TUI's output follows the newest line, and keeps following when the page
+  above it grows. ([#208](https://github.com/fancysnake/vekna/issues/208))
+- A rite's long error no longer breaks the TUI's layout: its row shows a cut
+  first line, and its page shows the whole error.
+  ([#205](https://github.com/fancysnake/vekna/issues/205))
+
 ## [0.15.0] - 2026-10-26
 
 ### Added
