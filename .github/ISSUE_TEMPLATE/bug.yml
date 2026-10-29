@@ -1,0 +1,30 @@
+name: Bug
+description: Something vekna does differs from what it should do
+labels: ["bug"]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The command you ran, and its output or error.
+      render: console
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The smallest ritual or steps that show it.
+  - type: input
+    id: version
+    attributes:
+      label: vekna version
+      description: "`pip show vekna`"
+    validations:
+      required: true

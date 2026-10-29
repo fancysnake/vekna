@@ -14,6 +14,9 @@ decides the failing test was the problem. A ritual is the other arrangement:
 you write the loop, the branches and the stopping condition yourself, and hand
 the agent one bounded piece of work at a time.
 
+![The vekna window: casts by ritual on the left, a pr_fix cast waiting on a
+push decision on the right](assets/tui.svg)
+
 The one below fits on a screen because it is an introduction; a ritual in daily
 use is a package with a test suite. What stays true at any size is that the
 control flow is yours to read.

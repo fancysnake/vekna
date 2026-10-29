@@ -1,10 +1,19 @@
 # vekna
 
+[![PyPI](https://img.shields.io/pypi/v/vekna)](https://pypi.org/project/vekna/)
+[![Python](https://img.shields.io/pypi/pyversions/vekna)](https://pypi.org/project/vekna/)
+[![CI](https://github.com/fancysnake/vekna/actions/workflows/ci.yml/badge.svg)](https://github.com/fancysnake/vekna/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/fancysnake/vekna/graph/badge.svg)](https://codecov.io/gh/fancysnake/vekna)
+[![License](https://img.shields.io/pypi/l/vekna)](https://github.com/fancysnake/vekna/blob/main/LICENSE)
+
 Run coding agents as **rituals**: ordinary Python programs whose steps you
 control and whose agent calls happen inside those steps. Agents run
 permissively *within* a step; determinism lives at the step boundaries.
 
 Documentation is at [vekna.fancysnake.dev](https://vekna.fancysnake.dev).
+
+![The vekna window: casts by ritual on the left, a pr_fix cast waiting on a
+push decision on the right](https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/tui.svg)
 
 ## Install
 
@@ -98,20 +107,12 @@ claude plugin install ritual-scribe@vekna
 | `vekna rituals list` | Every ritual and the options it takes |
 | `vekna rituals show <ritual>` | A ritual's components and its step graph |
 
-## Architecture
+## Contributing
 
-[GLIMPSE](https://glimpse.fancysnake.dev/) layering, enforced by
-[`import-linter`](https://import-linter.readthedocs.io/). See
-[`docs/architecture.md`](docs/architecture.md) and
-[`docs/README.md`](docs/README.md) for where the ideas live.
-
-## Development
-
-```bash
-mise run test:py     # all tests
-mise run check:py    # the loop while you work: format, lint, tests
-mise run fullcheck   # the gate before you push: adds diff-coverage and tingle
-```
+[`CONTRIBUTING.md`](https://github.com/fancysnake/vekna/blob/main/.github/CONTRIBUTING.md)
+covers setup, the check loop, where code goes, and pull requests.
+[`docs/README.md`](https://github.com/fancysnake/vekna/blob/main/docs/README.md)
+is where the ideas live.
 
 ## Licence
 
