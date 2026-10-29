@@ -27,10 +27,12 @@ from vekna.wire import (
     GrimoireBegin,
     GrimoireEnd,
     LockGranted,
+    PurifyRequested,
     RiteDelta,
     RiteFinished,
     RiteStarted,
     TreeBlocked,
+    TreeFreed,
     WireMessage,
 )
 
@@ -628,6 +630,45 @@ class TestTreeBlocked:
 
         assert hub.casts["c1"].blocked == blocked
         assert late.sent[-2:] == [CastGoodbye(cast_id="c1", status="ok"), blocked]
+
+    @staticmethod
+    def test_a_freed_tree_is_no_longer_held_nor_replayed():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        hub.apply(TreeBlocked(cast_id="c1", path="/pool/1", reason="dirty"))
+        watching = _Surface()
+        hub.attach_surface(watching)
+
+        hub.apply(TreeFreed(cast_id="c1", path="/pool/1"))
+        late = _Surface()
+        hub.attach_surface(late)
+
+        assert hub.casts["c1"].blocked is None
+        assert watching.sent[-1] == TreeFreed(cast_id="c1", path="/pool/1")
+        assert late.sent[-1] == CastGoodbye(cast_id="c1", status="ok")
+
+    @staticmethod
+    def test_freeing_a_tree_the_cast_did_not_block_is_dropped():
+        seen: list[Routed] = []
+        hub = Hub(on_routed=seen.append)
+        hub.apply(_hello())
+        hub.apply(TreeBlocked(cast_id="c1", path="/pool/1", reason="dirty"))
+
+        hub.apply(TreeFreed(cast_id="c1", path="/pool/2"))
+
+        assert (seen[-1].action, seen[-1].reason) == (
+            "dropped",
+            "the cast left no such tree blocked",
+        )
+        assert hub.casts["c1"].blocked is not None
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_hub_purifies_nothing():
+        refused = await Hub().purify(PurifyRequested(project_root="/proj"))
+
+        assert refused == CastRefused(reason="this daemon keeps no worktree pool")
 
 
 class TestPeers:

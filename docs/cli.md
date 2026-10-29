@@ -337,7 +337,8 @@ and runs again at the tree's next lease. Nothing removes a tree.
 After the cast, the daemon parks a clean tree. A tree with uncommitted or
 untracked changes, or with a merge, rebase, cherry-pick or revert in progress,
 is left as it is and marked blocked: the cast's drilled view and `daemon.log`
-say which tree and why. It joins the pool again once it is clean. Gitignored
+say which tree and why. It joins the pool again once it is clean, by hand or
+through [`vekna purify`](#vekna-purify). Gitignored
 files are not changes, so whatever `prepare` builds must be gitignored, or
 every tree reads dirty. Past the pool, a cast waits queued for a tree while
 another cast holds one; once every tree is blocked and none is held, nothing
@@ -348,6 +349,31 @@ for a tree: neither would ever end.
 A tree holds only what git tracks. A `.vekna.toml` or `rituals.py` kept out of
 git is not there, and a cast in the tree will not find its rituals. A
 `worktree=True` ritual typed as `vekna cast` runs where it was typed.
+
+## `vekna purify`
+
+Cleans every pooled worktree of the project it is typed in and parks it: an
+open merge, rebase, cherry-pick or revert is aborted, uncommitted and untracked
+changes are thrown away, and the tree goes back to its parking branch.
+Gitignored files stay, so a prepared venv survives. A tree a running cast
+holds is left alone. Neither the checkout you work in nor the pool's size is
+touched.
+
+```bash
+vekna purify          # throws away what the trees had not committed
+vekna purify --save   # commits it to a branch of its own first
+```
+
+```text
+/home/you/.local/state/vekna/worktrees/vekna-1a2b3c4d/1: purified — its uncommitted work is on vekna/rescue/fix-flaky-1f2e3d4c
+/home/you/.local/state/vekna/worktrees/vekna-1a2b3c4d/2: held by a running cast, left alone
+```
+
+`--save` names each branch `vekna/rescue/<branch the tree was on>-<hash>`, and
+keeps it local. The daemon does the work, since only it knows which trees are
+held; with none listening, `vekna purify` starts one. A cast whose tree is
+parked again, purified or found clean by a lease, loses its blocked mark in
+every window. Exits `1` when any tree would not come clean, saying why.
 
 ## `vekna stop`
 

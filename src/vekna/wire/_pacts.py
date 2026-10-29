@@ -108,13 +108,60 @@ NEEDS_TREE = 75
 
 
 # The tree a cast ran in was not parked after it: uncommitted work, or a merge or
-# rebase left open. Nothing resets it, so it stays out of the pool until somebody
+# rebase left open. It stays out of the pool until `vekna purify` or somebody
 # cleans it, and the cast that left it is who it is reported against.
 class TreeBlocked(BaseModel):
     kind: Literal["tree_blocked"] = "tree_blocked"
     cast_id: str
     path: str
     reason: str
+
+
+# The tree a cast left blocked was parked, by `vekna purify` or by a lease
+# that found it clean: the block is over.
+class TreeFreed(BaseModel):
+    kind: Literal["tree_freed"] = "tree_freed"
+    cast_id: str
+    path: str
+
+
+# `vekna purify` opens a connection with this and nothing else. Every pooled
+# tree of the project no cast holds goes back to its parking branch, and with
+# `save` what it had not committed is kept on a branch of its own first.
+class PurifyRequested(BaseModel):
+    kind: Literal["purify_requested"] = "purify_requested"
+    project_root: str
+    save: bool = False
+
+
+# What purifying one tree of the pool did. `saved` is the branch its
+# uncommitted work went to, whether or not the tree was then parked.
+class ParkedTree(BaseModel):
+    outcome: Literal["parked"] = "parked"
+    path: str
+    saved: str | None = None
+
+
+# A running cast holds it, so it is left as it is.
+class HeldTree(BaseModel):
+    outcome: Literal["held"] = "held"
+    path: str
+
+
+class FailedTree(BaseModel):
+    outcome: Literal["failed"] = "failed"
+    path: str
+    reason: str
+    saved: str | None = None
+
+
+PurifiedTree = Annotated[ParkedTree | HeldTree | FailedTree, Discriminator("outcome")]
+
+
+# Said back down the connection that asked, which then closes.
+class TreesPurified(BaseModel):
+    kind: Literal["trees_purified"] = "trees_purified"
+    trees: list[PurifiedTree]
 
 
 class GrimoireBegin(BaseModel):
@@ -350,6 +397,7 @@ CastUpdate = (
     | CodingSlotGranted
     | CodingSlotReleased
     | TreeBlocked
+    | TreeFreed
     | EnqueueRequested
     | EnqueueAccepted
     | EnqueueRefused
@@ -362,10 +410,10 @@ CastMessage = CastHello | CastUpdate
 
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
-Opening = SurfaceHello | StopRequested
+Opening = SurfaceHello | StopRequested | PurifyRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused
+Request = CastRequested | CastRefused | TreesPurified
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

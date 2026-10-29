@@ -13,12 +13,16 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastRefused,
     CastRequested,
     DecideClaimed,
     DecideResolved,
+    HeldTree,
+    PurifyRequested,
     RiteDelta,
     StopRequested,
     SurfaceHello,
+    TreesPurified,
     WireMessage,
     encode_frame,
     read_frames,
@@ -53,7 +57,7 @@ class _Daemon(Routes):
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
-        self.requests: list[CastRequested] = []
+        self.requests: list[CastRequested | PurifyRequested] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
             tuple[Surface, DecideClaimed | DecideResolved | CastCancelRequested]
@@ -89,6 +93,10 @@ class _Daemon(Routes):
     def close_cast(self, cast_id: str, peer: Surface) -> None:
         del peer
         self.closed.append(cast_id)
+
+    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+        self.requests.append(request)
+        return TreesPurified(trees=[HeldTree(path=f"{request.project_root}/1")])
 
     async def start(self, path: Path) -> Serving:
         return await serve(path=path, routes=self)
@@ -156,6 +164,22 @@ class TestServing:
         await asyncio.wait_for(server.stopped(), timeout=2)
 
         assert not daemon.messages
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_purify_is_answered_down_its_connection(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        reader, writer = await attach(socket_path)
+        writer.write(encode_frame(PurifyRequested(project_root="/proj", save=True)))
+        await writer.drain()
+        reply = [message async for message in read_frames(reader)]
+
+        assert reply == [TreesPurified(trees=[HeldTree(path="/proj/1")])]
+        assert daemon.requests == [PurifyRequested(project_root="/proj", save=True)]
+        assert not daemon.attached
         writer.close()
         await server.close()
 

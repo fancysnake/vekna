@@ -18,6 +18,10 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    FailedTree,
+    HeldTree,
+    ParkedTree,
+    PurifiedTree,
     RunRecord,
     TreeBlocked,
     WireMessage,
@@ -83,7 +87,8 @@ class _Trees(Trees):
     def __init__(self, *free: str) -> None:
         self.free = list(free)
         self.blocked: dict[str, str] = {}
-        self.leases: list[dict[str, object]] = []
+        # Every lease and purify, by what it was asked with.
+        self.asked: list[dict[str, object]] = []
         self.prepared: list[tuple[str, str | None]] = []
         self.released: list[str] = []
         # What a lease or a prepare waits on before it is done, or fails with.
@@ -93,7 +98,7 @@ class _Trees(Trees):
     async def lease(
         self, *, project_root: str, project: str, held: set[str], count: int
     ) -> str | Full:
-        self.leases.append(
+        self.asked.append(
             {
                 "project_root": project_root,
                 "project": project,
@@ -121,6 +126,28 @@ class _Trees(Trees):
             return reason
         self.free.append(tree)
         return None
+
+    # Parks every free tree, says each one it was told is held as held, and
+    # fails each blocked one with its reason.
+    async def purify(
+        self, *, project_root: str, project: str, held: set[str], save: bool
+    ) -> list[PurifiedTree]:
+        self.asked.append(
+            {
+                "project_root": project_root,
+                "project": project,
+                "held": held,
+                "save": save,
+            }
+        )
+        return (
+            [HeldTree(path=tree) for tree in sorted(held)]
+            + [ParkedTree(path=tree) for tree in self.free]
+            + [
+                FailedTree(path=tree, reason=reason)
+                for tree, reason in self.blocked.items()
+            ]
+        )
 
 
 class _Peer(Surface):
@@ -363,6 +390,13 @@ class TestProcesses:
 
 # A cast learns its ritual wants a tree only once spawned, so it exits saying so
 # and is queued again: this is where the pool is taken.
+# A cast gone, which left `tree` blocked.
+def _left_blocked(hub: Hub, cast_id: str, tree: str) -> None:
+    hub.apply(_hello(cast_id))
+    hub.apply(CastGoodbye(cast_id=cast_id, status="ok"))
+    hub.apply(TreeBlocked(cast_id=cast_id, path=tree, reason="uncommitted changes"))
+
+
 async def _asked_for_a_tree(circle: Circle, spawn: _Spawn, cast_id: str) -> None:
     circle.enqueue(_hello(cast_id))
     await _settled()
@@ -385,7 +419,7 @@ class TestTrees:
         assert spawn.spawned == ["c1", "c1"]
         assert spawn.trees == [None, "/pool/1"]
         assert hub.casts["c1"].status == "queued"
-        assert trees.leases == [
+        assert trees.asked == [
             {
                 "project_root": "/proj",
                 "project": "/proj/.git",
@@ -413,7 +447,7 @@ class TestTrees:
         await _asked_for_a_tree(circle, spawn, "c1")
         await _asked_for_a_tree(circle, spawn, "c2")
         assert spawn.trees == [None, "/pool/1", None]
-        assert trees.leases[1]["held"] == {"/pool/1"}
+        assert trees.asked[1]["held"] == {"/pool/1"}
         assert hub.casts["c2"].status == "queued"
 
         hub.apply(_hello("c1"))
@@ -433,7 +467,7 @@ class TestTrees:
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
-        assert trees.leases[0]["held"] == {"/pool/1"}
+        assert trees.asked[0]["held"] == {"/pool/1"}
 
     # A daemon restarted under a running cast hears from it only once it
     # reattaches, seconds later; its process says it is there before that.
@@ -447,7 +481,7 @@ class TestTrees:
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
-        assert trees.leases[0]["held"] == {"/pool/1"}
+        assert trees.asked[0]["held"] == {"/pool/1"}
 
     @staticmethod
     async def test_a_tree_whose_cast_is_gone_is_not_held():
@@ -457,7 +491,7 @@ class TestTrees:
 
         await _asked_for_a_tree(circle, spawn, "c1")
 
-        assert trees.leases[0]["held"] == set()
+        assert trees.asked[0]["held"] == set()
         assert alive.asked == [7]
 
     # Read at the lease, not at the spawn before it, which takes seconds.
@@ -472,7 +506,7 @@ class TestTrees:
         spawn.exit("c1", code=NEEDS_TREE)
         await _settled()
 
-        assert trees.leases[0]["held"] == {"/pool/1"}
+        assert trees.asked[0]["held"] == {"/pool/1"}
 
     @staticmethod
     async def test_a_lease_that_fails_fails_the_cast():
@@ -503,7 +537,7 @@ class TestTrees:
         assert spawn.spawned == ["c1", "c2", "c2"]
         assert hub.casts["c1"].status == "error"
         assert hub.casts["c1"].detail == "prepare exited 1"
-        assert trees.leases[1]["held"] == set()
+        assert trees.asked[1]["held"] == set()
         assert spawn.trees[-1] == "/pool/1"
 
     # A prepare takes minutes; a release that waited on it would hold the
@@ -619,10 +653,7 @@ class TestTrees:
         spawn.exit("c2", code=NEEDS_TREE)
         await _settled()
 
-        assert [lease["project"] for lease in trees.leases] == [
-            "/one/.git",
-            "/two/.git",
-        ]
+        assert [lease["project"] for lease in trees.asked] == ["/one/.git", "/two/.git"]
         trees.leasing.set_result(None)
 
     @staticmethod
@@ -663,6 +694,152 @@ class TestTrees:
         trees.leasing.set_result(None)
         await _settled()
         assert hub.casts["c1"].status == "error"
+
+
+def _leasing(trees: _Trees, said: list[str] | None = None) -> tuple[Leasing, _Spawn]:
+    hub, spawn, alive = Hub(), _Spawn(), _Alive()
+    leasing = Leasing(
+        left=LeftBehind(casts=hub, spawned=alive.left, alive=alive),
+        say=([] if said is None else said).append,
+        spawn=spawn,
+        trees=trees,
+        limits=_Limits(),
+    )
+    return leasing, spawn
+
+
+@pytest.mark.asyncio
+class TestBlockedTrees:
+    # Leased and still preparing, the tree is in no view and no left-behind
+    # spawn: only the lease says a cast holds it.
+    @staticmethod
+    async def test_purify_holds_a_tree_still_being_prepared():
+        trees = _Trees("/pool/1")
+        trees.preparing = asyncio.get_running_loop().create_future()
+        leasing, spawn = _leasing(trees)
+        running = asyncio.create_task(
+            leasing.run(_hello("c1", worktree=True), parked=[].append)
+        )
+        await _settled()
+
+        purified = await leasing.purify(
+            project_root="/proj", project="/proj/.git", save=True
+        )
+
+        assert purified == [HeldTree(path="/pool/1")]
+        assert trees.asked[-1] == {
+            "project_root": "/proj",
+            "project": "/proj/.git",
+            "held": {"/pool/1"},
+            "save": True,
+        }
+        trees.preparing.set_result(None)
+        await _settled()
+        spawn.exit("c1")
+        await running
+
+    @staticmethod
+    async def test_purify_frees_the_cast_that_left_a_parked_tree_blocked():
+        trees = _Trees("/pool/1")
+        said: list[str] = []
+        circle, hub, _ = _circle(_Limits(), trees, said)
+        _left_blocked(hub, "c1", "/pool/1")
+
+        purified = await circle.purify(
+            project_root="/proj", project="/proj/.git", save=False
+        )
+
+        assert purified == [ParkedTree(path="/pool/1")]
+        assert trees.asked == [
+            {
+                "project_root": "/proj",
+                "project": "/proj/.git",
+                "held": set(),
+                "save": False,
+            }
+        ]
+        assert hub.casts["c1"].blocked is None
+        assert said == ["purify parked /pool/1"]
+
+    @staticmethod
+    async def test_purify_says_each_tree_it_failed_and_why():
+        trees = _Trees()
+        trees.blocked["/pool/1"] = "rebase in progress"
+        said: list[str] = []
+        leasing, _ = _leasing(trees, said)
+
+        purified = await leasing.purify(
+            project_root="/proj", project="/proj/.git", save=False
+        )
+
+        assert purified == [FailedTree(path="/pool/1", reason="rebase in progress")]
+        assert said == ["purify failed /pool/1: rebase in progress"]
+
+    @staticmethod
+    async def test_purify_waits_for_a_lease_in_its_project():
+        trees = _Trees("/pool/1")
+        trees.leasing = asyncio.get_running_loop().create_future()
+        leasing, spawn = _leasing(trees)
+        running = asyncio.create_task(
+            leasing.run(_hello("c1", worktree=True), parked=[].append)
+        )
+        await _settled()
+        purifying = asyncio.create_task(
+            leasing.purify(project_root="/proj", project="/proj/.git", save=False)
+        )
+        await _settled()
+        assert not purifying.done()
+
+        trees.leasing.set_result(None)
+        await _settled()
+
+        assert await purifying == [HeldTree(path="/pool/1")]
+        spawn.exit("c1")
+        await running
+
+    @staticmethod
+    async def test_a_lease_and_a_clean_release_each_park_the_tree():
+        trees = _Trees("/pool/1")
+        leasing, spawn = _leasing(trees)
+        parked: list[str] = []
+        running = asyncio.create_task(
+            leasing.run(_hello("c1", worktree=True), parked=parked.append)
+        )
+        await _settled()
+
+        spawn.exit("c1")
+        await running
+
+        assert parked == ["/pool/1", "/pool/1"]
+
+    # Cleaned by hand, the tree is parked by the next lease that finds it.
+    @staticmethod
+    async def test_a_lease_that_parks_a_blocked_tree_frees_the_cast_that_left_it():
+        trees = _Trees("/pool/1")
+        circle, hub, spawn = _circle(_Limits(), trees)
+        _left_blocked(hub, "c0", "/pool/1")
+
+        await _asked_for_a_tree(circle, spawn, "c1")
+
+        assert spawn.trees == [None, "/pool/1"]
+        assert hub.casts["c0"].blocked is None
+
+    # The release that blocks it again is the new cast's: the old block is over.
+    @staticmethod
+    async def test_a_tree_blocked_again_is_blocked_by_the_last_cast_alone():
+        trees = _Trees("/pool/1")
+        circle, hub, spawn = _circle(_Limits(), trees)
+        _left_blocked(hub, "c0", "/pool/1")
+        await _asked_for_a_tree(circle, spawn, "c1")
+        trees.blocked["/pool/1"] = "uncommitted changes"
+
+        spawn.exit("c1")
+        await _settled()
+
+        assert hub.casts["c0"].blocked is None
+        assert hub.casts["c1"].blocked == TreeBlocked(
+            cast_id="c1", path="/pool/1", reason="uncommitted changes"
+        )
 
 
 @pytest.mark.asyncio
@@ -1072,7 +1249,7 @@ class TestAwaits:
         trees.leasing.set_result(None)
         await _settled()
 
-        assert len(trees.leases) == 1
+        assert len(trees.asked) == 1
         assert hub.casts["child"].status == "error"
         assert hub.casts["child"].detail == (
             "every tree is blocked or held by a cast awaiting one that needs a tree:"

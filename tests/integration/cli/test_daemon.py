@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from vekna.lexicon._inits import _DAEMON_WENT, _FOLLOWING, _LEFT, _drive
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.links.spawner import Spawner, pid_alive
+from vekna.links.worktrees import GitTrees
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
@@ -37,13 +38,18 @@ from vekna.wire import (
     DecideRequested,
     EnqueueRefused,
     EnqueueRequested,
+    PurifyRequested,
     RiteFinished,
     RiteStarted,
     RunRecord,
     StopRequested,
     SurfaceHello,
+    TreeBlocked,
+    TreeFreed,
     WireMessage,
+    default_state_root,
     encode_frame,
+    project_of,
     read_frames,
 )
 
@@ -680,6 +686,139 @@ class TestLeftBehind:
         assert mark.exists()
 
 
+@pytest.mark.asyncio
+class TestPurify:
+    # Run on a thread: the command runs its own event loop, and the daemon it
+    # talks to is on this one.
+    @staticmethod
+    async def test_a_blocked_tree_is_saved_parked_and_its_cast_freed(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        repo = _one_commit_repo(tmp_path, monkeypatch)
+        tree = await _leased(repo)
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        async with _served(socket_path):
+            cast = await _say(
+                socket_path,
+                _hello(),
+                CastGoodbye(cast_id="c1", status="error"),
+                TreeBlocked(cast_id="c1", path=tree, reason="uncommitted changes"),
+            )
+            reader, watcher = await attach(socket_path)
+            watcher.write(encode_frame(SurfaceHello()))
+            purified = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["purify", "--save"]
+            )
+            heard = await _until_freed(read_frames(reader))
+            cast.close()
+            watcher.close()
+
+        assert purified.exit_code == 0
+        # The daemon logs to the same stderr, so only stdout is the command's.
+        assert purified.stdout.startswith(
+            f"{tree}: purified — its uncommitted work is on vekna/rescue/vekna/wt-1-"
+        )
+        assert heard[-1] == TreeFreed(cast_id="c1", path=tree)
+        assert not (Path(tree) / "new.txt").exists()
+
+    @staticmethod
+    async def test_a_tree_a_running_cast_stands_in_is_left_alone(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await _leased(_one_commit_repo(tmp_path, monkeypatch))
+        (Path(tree) / "new.txt").write_text("mine\n")
+        hello = _hello().model_copy(update={"project_root": tree})
+
+        async with _served(socket_path):
+            reader, watcher = await attach(socket_path)
+            watcher.write(encode_frame(SurfaceHello()))
+            cast = await _say(socket_path, hello)
+            async with asyncio.timeout(_PATIENCE * _TICK):
+                async for message in read_frames(reader):
+                    if message == hello:
+                        break
+            purified = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["purify"]
+            )
+            cast.close()
+            watcher.close()
+
+        assert purified.exit_code == 0
+        assert purified.stdout == f"{tree}: held by a running cast, left alone\n"
+        assert (Path(tree) / "new.txt").exists()
+
+    @staticmethod
+    async def test_a_directory_with_no_repository_is_refused(socket_path: Path):
+        async with _served(socket_path):
+            purified = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["purify"]
+            )
+
+        assert purified.exit_code == 1
+        assert "git worktree in " in purified.output
+
+    @staticmethod
+    async def test_a_tree_that_will_not_come_clean_fails_the_command(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await _leased(_one_commit_repo(tmp_path, monkeypatch))
+        shutil.rmtree(tree)
+
+        async with _served(socket_path):
+            purified = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["purify"]
+            )
+
+        assert purified.exit_code == 1
+        assert purified.stdout.startswith(f"{tree}: failed: git rev-parse in ")
+
+    @staticmethod
+    async def test_a_directory_that_is_not_there_is_refused(
+        socket_path: Path, tmp_path: Path
+    ):
+        gone = tmp_path / "gone"
+
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            writer.write(encode_frame(PurifyRequested(project_root=str(gone))))
+            reply = [message async for message in read_frames(reader)]
+            writer.close()
+
+        assert reply == [CastRefused(reason=f"{gone} is not a directory")]
+
+
+def _one_commit_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "vekna@example.com")
+    _git(repo, "config", "user.name", "vekna")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "first")
+    monkeypatch.chdir(repo)
+    return repo
+
+
+# A tree of the pool the daemon under test keeps, as a cast's lease leaves it.
+async def _leased(repo: Path) -> str:
+    tree = await GitTrees(root=default_state_root() / "worktrees").lease(
+        project_root=str(repo), project=await project_of(repo), held=set(), count=1
+    )
+    assert isinstance(tree, str)
+    return tree
+
+
+# What a window hears, up to the first `TreeFreed`.
+async def _until_freed(frames: AsyncIterator[WireMessage]) -> list[WireMessage]:
+    heard: list[WireMessage] = []
+    async with asyncio.timeout(_PATIENCE * _TICK):
+        async for message in frames:
+            heard.append(message)
+            if isinstance(message, TreeFreed):
+                break
+    return heard
+
+
 # The whole path a person takes: a real `vekna`, a daemon in a process of its
 # own, `q`, and `vekna stop`.
 class TestTheBareCommand:
@@ -701,6 +840,22 @@ class TestTheBareCommand:
         assert stopped.output.strip() == "stopped the daemon"
         assert not asyncio.run(alive(socket_path))
         assert "listening on" in (tmp_path / "state/vekna/daemon.log").read_text()
+
+    @staticmethod
+    def test_purify_starts_a_daemon_says_so_and_says_an_empty_pool_is_empty(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        _one_commit_repo(tmp_path, monkeypatch)
+        try:
+            purified = CliRunner().invoke(init_command(), ["purify"])
+            started = asyncio.run(alive(socket_path))
+        finally:
+            CliRunner().invoke(init_command(), ["stop"])
+
+        assert purified.exit_code == 0
+        assert purified.stdout == "no pooled worktrees for this project\n"
+        assert purified.stderr == "started the daemon — it runs until `vekna stop`\n"
+        assert started
 
     @staticmethod
     def test_a_daemon_that_cannot_bind_is_said_with_its_log(

@@ -255,6 +255,8 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
+| `PurifyRequested` / `TreesPurified` | surface ↔ daemon | `vekna purify`; cleans and parks every pooled tree no cast holds, saving its work on a branch first with `save`. Refused as `CastRefused` |
+| `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again, by `vekna purify` or a lease; the block is over. Journaled with that cast |
 | `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
 | `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 
@@ -351,6 +353,7 @@ vekna rituals list                            # defined rituals + their Componen
 vekna rituals show <ritual>                   # Component schema + inferred step graph
 vekna                                         # this project's dashboard; starts the daemon if none
 vekna stop                                    # end the daemon; running casts rejoin the next
+vekna purify [--save]                         # clean and park the pooled worktrees no cast holds
 vekna log                                     # list active + recent casts
 vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal
 vekna --debug                                 # daemon: log every event it processes

@@ -6,6 +6,7 @@ import pytest
 
 from vekna.links.worktrees import GitTrees, branch_of
 from vekna.pacts.circle import Full, TreeError
+from vekna.wire import FailedTree, HeldTree, ParkedTree, PurifiedTree
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -14,11 +15,11 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _conflicts(cwd: Path, branch: str) -> bool:
-    merged = subprocess.run(
-        ["git", "merge", "-q", branch], cwd=cwd, capture_output=True, check=False
+def _conflicts(cwd: Path, command: str, branch: str) -> bool:
+    ran = subprocess.run(
+        ["git", command, "-q", branch], cwd=cwd, capture_output=True, check=False
     )
-    return merged.returncode != 0
+    return ran.returncode != 0
 
 
 @pytest.fixture(name="repo")
@@ -59,6 +60,16 @@ class _Pool:
             return None
         await self.trees.prepare(found, prepare)
         return found
+
+    async def purify(
+        self, *, held: set[str] | None = None, save: bool = False
+    ) -> list[PurifiedTree]:
+        return await self.trees.purify(
+            project_root=str(self.repo),
+            project=str(self.repo / ".git"),
+            held=held or set(),
+            save=save,
+        )
 
 
 @pytest.fixture(name="pool")
@@ -195,6 +206,15 @@ class TestRelease:
 
         assert await pool.trees.release(tree) == "uncommitted changes"
 
+    @staticmethod
+    async def test_untracked_work_blocks_it_when_status_hides_untracked(pool: _Pool):
+        _git(pool.repo, "config", "status.showUntrackedFiles", "no")
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        assert await pool.trees.release(tree) == "uncommitted changes"
+
     # Resolved to what HEAD already had, it reads clean to `--porcelain`, and
     # the merge is still open.
     @staticmethod
@@ -208,7 +228,7 @@ class TestRelease:
         _git(work, "checkout", "-q", "-b", "right", "main")
         (work / "a.txt").write_text("right\n")
         _git(work, "commit", "-q", "-am", "right")
-        assert _conflicts(work, "left")
+        assert _conflicts(work, "merge", "left")
         _git(work, "checkout", "-q", "--ours", "a.txt")
         _git(work, "add", "a.txt")
 
@@ -257,6 +277,188 @@ class TestRelease:
             await pool.trees.prepare(str(repo / "1"), "touch prepared")
 
         assert not (repo / "1.prepared").exists()
+
+
+@pytest.mark.asyncio
+class TestPurify:
+    @staticmethod
+    async def test_saved_work_is_kept_on_a_branch_and_the_tree_parked(pool: _Pool):
+        tree = await pool.lease(prepare="mkdir venv && touch venv/prepared")
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "feature")
+        (work / "a.txt").write_text("edited\n")
+        (work / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/feature-")
+        assert _git(pool.repo, "show", f"{purified.saved}:a.txt") == "edited"
+        assert _git(pool.repo, "show", f"{purified.saved}:new.txt") == "mine"
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+        assert not _git(work, "status", "--porcelain")
+        assert (work / "venv" / "prepared").is_file()
+
+    @staticmethod
+    async def test_untracked_work_is_saved_when_status_hides_untracked(pool: _Pool):
+        _git(pool.repo, "config", "status.showUntrackedFiles", "no")
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert _git(pool.repo, "show", f"{purified.saved}:new.txt") == "mine"
+
+    @staticmethod
+    async def test_unsaved_work_is_thrown_away(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify()
+
+        assert purified == ParkedTree(path=tree)
+        assert (Path(tree) / "a.txt").read_text() == "a\n"
+        assert not (Path(tree) / "new.txt").exists()
+        assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
+
+    @staticmethod
+    async def test_an_open_merge_is_saved_then_aborted(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "left")
+        (work / "a.txt").write_text("left\n")
+        _git(work, "commit", "-q", "-am", "left")
+        _git(work, "checkout", "-q", "-b", "right", "main")
+        (work / "a.txt").write_text("right\n")
+        _git(work, "commit", "-q", "-am", "right")
+        assert _conflicts(work, "merge", "left")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert "<<<<<<<" in _git(pool.repo, "show", f"{purified.saved}:a.txt")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+        assert not (
+            Path(_git(work, "rev-parse", "--absolute-git-dir")) / "MERGE_HEAD"
+        ).exists()
+
+    @staticmethod
+    async def test_an_open_rebase_is_saved_under_the_branch_being_rebased(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "onto")
+        (work / "a.txt").write_text("onto\n")
+        _git(work, "commit", "-q", "-am", "onto")
+        _git(work, "checkout", "-q", "-b", "feature", "main")
+        (work / "a.txt").write_text("feature\n")
+        _git(work, "commit", "-q", "-am", "feature")
+        assert _conflicts(work, "rebase", "onto")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/feature-")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+
+    @staticmethod
+    async def test_an_open_rebase_of_a_detached_head_is_saved_as_detached(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "onto")
+        (work / "a.txt").write_text("onto\n")
+        _git(work, "commit", "-q", "-am", "onto")
+        _git(work, "checkout", "-q", "--detach", "main")
+        (work / "a.txt").write_text("detached\n")
+        _git(work, "commit", "-q", "-am", "detached")
+        assert _conflicts(work, "rebase", "onto")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/detached-")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+
+    @staticmethod
+    async def test_a_held_tree_is_left_as_it_is(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+
+        purified = await pool.purify(held={tree})
+
+        assert purified == [HeldTree(path=tree)]
+        assert (Path(tree) / "a.txt").read_text() == "edited\n"
+
+    @staticmethod
+    async def test_a_clean_tree_has_nothing_to_save(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        _git(Path(tree), "checkout", "-q", "-b", "feature")
+
+        purified = await pool.purify(save=True)
+
+        assert purified == [ParkedTree(path=tree)]
+        assert "vekna/rescue/" not in _git(pool.repo, "branch", "--list")
+
+    @staticmethod
+    async def test_a_tree_whose_parking_branch_is_gone_says_why(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        _git(Path(tree), "checkout", "-q", "-b", "feature")
+        _git(pool.repo, "branch", "-q", "-D", "vekna/wt-1")
+
+        [purified] = await pool.purify()
+
+        assert isinstance(purified, FailedTree)
+        assert purified.reason.startswith("git checkout in ")
+
+    # As a daemon summoned from a git hook would inherit them.
+    @staticmethod
+    async def test_a_repository_named_in_the_environment_is_not_touched(
+        pool: _Pool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "a.txt").write_text("edited\n")
+        mine = tmp_path / "mine"
+        mine.mkdir()
+        _git(mine, "init", "-q")
+        (mine / "work.txt").write_text("unsaved\n")
+        monkeypatch.setenv("GIT_DIR", str(mine / ".git"))
+        monkeypatch.setenv("GIT_WORK_TREE", str(mine))
+
+        purified = await pool.purify()
+
+        assert purified == [ParkedTree(path=tree)]
+        assert (mine / "work.txt").read_text() == "unsaved\n"
+
+    @staticmethod
+    async def test_a_tree_that_is_gone_fails_alone(pool: _Pool):
+        first = await pool.lease(count=2)
+        assert first is not None
+        second = await pool.lease(held={first}, count=2)
+        assert second is not None
+        shutil.rmtree(first)
+        (Path(second) / "a.txt").write_text("edited\n")
+
+        gone, purified = await pool.purify()
+
+        assert isinstance(gone, FailedTree)
+        assert gone.reason.startswith("git rev-parse in ")
+        assert purified == ParkedTree(path=second)
 
 
 @pytest.mark.asyncio

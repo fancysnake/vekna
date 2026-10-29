@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from vekna.wire import CastHello
+from vekna.wire import CastHello, PurifiedTree
 
 # What a project's circle allows when nothing says otherwise.
 DEFAULT_PROCESSES = 4
@@ -72,3 +72,10 @@ class Trees(Protocol):
 
     # Why the tree could not be parked, or `None` once it is.
     async def release(self, tree: str) -> str | None: ...
+
+    # Every tree of the pool not in `held` cleaned and parked, its work saved
+    # on a branch first with `save`. Raises `TreeError` when the pool cannot
+    # be read; a tree that will not come clean is said in its own entry.
+    async def purify(
+        self, *, project_root: str, project: str, held: set[str], save: bool
+    ) -> list[PurifiedTree]: ...

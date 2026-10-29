@@ -20,6 +20,7 @@ from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.cutter import Cutter
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
+from vekna.pacts.circle import TreeError
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
     AwaitRequested,
@@ -37,7 +38,9 @@ from vekna.wire import (
     EnqueueAccepted,
     EnqueueRefused,
     EnqueueRequested,
+    PurifyRequested,
     StopRequested,
+    TreesPurified,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -340,6 +343,20 @@ class _Daemon(Routes):
                 wired=True,
             )
         )
+
+    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+        root = request.project_root
+        if (reason := await _missing(root)) is not None:
+            return CastRefused(reason=reason)
+        try:
+            trees = await self._circle.purify(
+                project_root=root,
+                project=await project_of(Path(root)),
+                save=request.save,
+            )
+        except TreeError as error:
+            return CastRefused(reason=str(error))
+        return TreesPurified(trees=trees)
 
 
 # Why a cast cannot be queued in `root`, or `None` once it can: the tree has to

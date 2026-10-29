@@ -17,8 +17,12 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    HeldTree,
+    ParkedTree,
+    PurifiedTree,
     RunRecord,
     TreeBlocked,
+    TreeFreed,
     WireMessage,
 )
 
@@ -171,8 +175,11 @@ class Leasing:
     # `None` when the cast needs a tree and none is free. Raises `TreeError`.
     # A cast enqueued by another says its need on its hello and is never probed.
     # However its turn ends, short of waiting for a tree, the cast gives back
-    # its entry and whatever tree it leased.
-    async def run(self, hello: CastHello) -> _Ran | None:
+    # its entry and whatever tree it leased. `parked` is told each tree a lease
+    # or a release parks.
+    async def run(
+        self, hello: CastHello, *, parked: Callable[[str], None]
+    ) -> _Ran | None:
         if (cast_id := hello.cast_id) not in self._needs_tree:
             if not hello.worktree:
                 exited = await self._spawn(hello, None)
@@ -183,12 +190,13 @@ class Leasing:
         try:
             if (tree := await self._lease(hello)) is None:
                 return None
+            parked(tree)
             await self._trees.prepare(tree, self._limits.prepare(hello.project_root))
             exited = await self._spawn(hello, tree)
         except BaseException:
-            await self._release(hello, tree)
+            await self._release(hello, tree, parked)
             raise
-        if (reason := await self._release(hello, tree)) is None:
+        if (reason := await self._release(hello, tree, parked)) is None:
             return _Ran(exited=exited)
         blocked = TreeBlocked(cast_id=cast_id, path=tree, reason=reason)
         return _Ran(exited=exited, blocked=blocked)
@@ -202,8 +210,7 @@ class Leasing:
             found = await self._trees.lease(
                 project_root=root,
                 project=hello.project,
-                held=self._left.trees()
-                | {held for held in self._needs_tree.values() if held is not None},
+                held=self._held(),
                 count=self._limits.worktrees(root),
             )
             if isinstance(found, str):
@@ -220,13 +227,38 @@ class Leasing:
 
     # The operator's to clean, so a blocked tree is said where the daemon says
     # things whether or not a window is open.
-    async def _release(self, hello: CastHello, tree: str | None) -> str | None:
+    async def _release(
+        self, hello: CastHello, tree: str | None, parked: Callable[[str], None]
+    ) -> str | None:
         async with self._lock(hello.project):
             reason = None if tree is None else await self._trees.release(tree)
             del self._needs_tree[hello.cast_id]
-        if reason is not None:
+        if tree is None:
+            return None
+        if reason is None:
+            parked(tree)
+        else:
             self._say(f"{tree} is blocked after cast {hello.cast_id}: {reason}")
         return reason
+
+    # Under the lease lock, so no tree is leased while it is being purified.
+    # Raises `TreeError`.
+    async def purify(
+        self, *, project_root: str, project: str, save: bool
+    ) -> list[PurifiedTree]:
+        async with self._lock(project):
+            trees = await self._trees.purify(
+                project_root=project_root, project=project, held=self._held(), save=save
+            )
+        for tree in trees:
+            self._say(_purified(tree))
+        return trees
+
+    # A tree leased to a cast still preparing it is held too.
+    def _held(self) -> set[str]:
+        return self._left.trees() | {
+            held for held in self._needs_tree.values() if held is not None
+        }
 
     def _lock(self, project: str) -> asyncio.Lock:
         return self._locks.setdefault(project, asyncio.Lock())
@@ -256,6 +288,18 @@ class Circle:
         # Spawned and not yet exited. A cast between its spawn and its hello is
         # still `queued` in the view, and has to hold its slot all the same.
         self._launching: dict[str, asyncio.Task[None]] = {}
+
+    # Raises `TreeError`.
+    async def purify(
+        self, *, project_root: str, project: str, save: bool
+    ) -> list[PurifiedTree]:
+        trees = await self._leasing.purify(
+            project_root=project_root, project=project, save=save
+        )
+        for tree in trees:
+            if isinstance(tree, ParkedTree):
+                self._freed(tree.path)
+        return trees
 
     def enqueue(self, hello: CastHello) -> None:
         self._hub.apply(hello)
@@ -310,7 +354,7 @@ class Circle:
         cast_id = hello.cast_id
         try:
             try:
-                ran = await self._leasing.run(hello)
+                ran = await self._leasing.run(hello, parked=self._freed)
             finally:
                 del self._launching[cast_id]
         except Exception as error:
@@ -328,6 +372,13 @@ class Circle:
             self._hub.apply(ran.blocked)
         self._failed(cast_id, _why(ran.exited))
         self._start()
+
+    # A parked tree is back in the pool, so whatever cast left it blocked is
+    # told the block is over, and no window goes on showing it.
+    def _freed(self, tree: str) -> None:
+        for cast_id, view in self._hub.casts.items():
+            if view.blocked is not None and view.blocked.path == tree:
+                self._hub.apply(TreeFreed(cast_id=cast_id, path=tree))
 
     def _failed(self, cast_id: str, detail: str) -> None:
         view = self._hub.casts.get(cast_id)
@@ -376,6 +427,20 @@ class CodingPool:
                 ask.cast_id,
                 CodingSlotGranted(cast_id=ask.cast_id, request_id=ask.request_id),
             )
+
+
+# What the daemon's log says of one tree `purify` reached.
+def _purified(tree: PurifiedTree) -> str:
+    match tree:
+        case HeldTree():
+            return f"purify held {tree.path}"
+        case ParkedTree():
+            said = f"purify parked {tree.path}"
+        case _:
+            said = f"purify failed {tree.path}: {tree.reason}"
+    if tree.saved is None:
+        return said
+    return f"{said}, its uncommitted work on {tree.saved}"
 
 
 def _ended(
