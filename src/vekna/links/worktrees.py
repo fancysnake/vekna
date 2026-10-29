@@ -103,7 +103,7 @@ class GitTrees(Trees):
     async def release(self, tree: str) -> str | None:
         try:
             number = await self._numbered(tree)
-            if await _git(tree, "status", "--porcelain"):
+            if await _git(tree, "status", "--porcelain", "--untracked-files=all"):
                 return "uncommitted changes"
             git_dir = Path(await _git(tree, "rev-parse", "--absolute-git-dir"))
             if operations := await _open_operations(git_dir):
@@ -176,9 +176,9 @@ async def _open_operations(git_dir: Path) -> list[str]:
 # middle of a rebase or a merge, `checkout` and `commit` would each make it part
 # of the operation. `None` when there was nothing to save.
 async def _saved(tree: str, git_dir: Path) -> str | None:
-    if not await _git(tree, "status", "--porcelain") and not await _open_operations(
-        git_dir
-    ):
+    if not await _git(
+        tree, "status", "--porcelain", "--untracked-files=all"
+    ) and not await _open_operations(git_dir):
         return None
     await _git(tree, "add", "--all")
     snapshot = await _git(tree, "write-tree")

@@ -206,6 +206,15 @@ class TestRelease:
 
         assert await pool.trees.release(tree) == "uncommitted changes"
 
+    @staticmethod
+    async def test_untracked_work_blocks_it_when_status_hides_untracked(pool: _Pool):
+        _git(pool.repo, "config", "status.showUntrackedFiles", "no")
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        assert await pool.trees.release(tree) == "uncommitted changes"
+
     # Resolved to what HEAD already had, it reads clean to `--porcelain`, and
     # the merge is still open.
     @staticmethod
@@ -291,6 +300,19 @@ class TestPurify:
         assert _git(work, "branch", "--show-current") == "vekna/wt-1"
         assert not _git(work, "status", "--porcelain")
         assert (work / "venv" / "prepared").is_file()
+
+    @staticmethod
+    async def test_untracked_work_is_saved_when_status_hides_untracked(pool: _Pool):
+        _git(pool.repo, "config", "status.showUntrackedFiles", "no")
+        tree = await pool.lease()
+        assert tree is not None
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert _git(pool.repo, "show", f"{purified.saved}:new.txt") == "mine"
 
     @staticmethod
     async def test_unsaved_work_is_thrown_away(pool: _Pool):
