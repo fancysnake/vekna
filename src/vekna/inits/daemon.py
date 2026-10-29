@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import fcntl
+import logging
 import sys
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
@@ -87,10 +88,7 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
 
 # Said into `daemon.log`, which is where a detached daemon's stderr goes: there
 # is no view of its own to say it on.
-def _logged(note: str) -> None:
-    click.echo(
-        f"{datetime.now(tz=UTC).astimezone():%Y-%m-%d %H:%M:%S} {note}", err=True
-    )
+_log = logging.getLogger(__name__)
 
 
 # The daemon itself, with no view: it binds, journals, fans out, and runs until
@@ -105,7 +103,7 @@ async def serve_daemon(*, debug: Path | None = None) -> int:
     await asyncio.to_thread(lock.parent.mkdir, parents=True, exist_ok=True)
     with lock.open("a", encoding="utf-8") as held:
         if not _locked(held):
-            _logged(f"another daemon holds {lock}")
+            _log.warning("another daemon holds %s", lock)
             return 1
         return await _serving(path=path, debug=debug)
 
@@ -122,18 +120,18 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     journal = Journal(default_runs_root())
     hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
     if debug is not None:
-        _logged(f"logging every event to {debug}")
+        _log.info("logging every event to %s", debug)
     # Before the socket binds, so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
-        _logged(f"could not prune {len(failed)} old cast(s): {failed[0]}")
-    limits = ConfigLimits(say=_logged)
+        _log.warning("could not prune %d old cast(s): %s", len(failed), failed[0])
+    limits = ConfigLimits(say=_log.warning)
     spawner = Spawner(command=_CAST_COMMAND, runs=default_runs_root())
     if spawned := await asyncio.to_thread(spawner.left_behind):
-        _logged(f"holding {len(spawned)} cast(s) left running until they reattach")
+        _log.info("holding %d cast(s) left running until they reattach", len(spawned))
     left = LeftBehind(casts=hub, spawned=spawned, alive=pid_alive)
     leasing = Leasing(
         left=left,
-        say=_logged,
+        say=_log.warning,
         spawn=spawner,
         trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
@@ -151,15 +149,15 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         if record.hello.cast_id not in running:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
-    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_logged)
+    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_log.warning)
     routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
     server = await serve(path=path, routes=routes)
-    _logged(f"listening on {path}")
+    _log.info("listening on %s", path)
     try:
         await server.stopped()
     finally:
         await server.close()
-    _logged("stopped")
+    _log.info("stopped")
     return 0
 
 
@@ -291,7 +289,7 @@ class _Daemon(Routes):
             if done.cancelled() or (error := done.exception()) is None:
                 return
             reason = f"could not queue {ritual}: {error}"
-            _logged(reason)
+            _log.warning(reason)
             refuse(reason)
 
         task.add_done_callback(settled)
