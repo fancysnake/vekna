@@ -958,6 +958,34 @@ class TestFollowing:
         assert held == _UP
         assert again[0] == again[1]
 
+    # Past where the follow last left the end, but short of the new one.
+    @staticmethod
+    async def test_scrolling_down_short_of_the_end_keeps_the_follow_stopped():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for line in range(100):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            log = app.query_one("#log", Log)
+            left = log.max_scroll_y
+            log.scroll_to(y=_UP, animate=False, immediate=True)
+            for line in range(_UP):
+                hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"more {line}"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            log.scroll_to(y=left + 1, animate=False, immediate=True)
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="and another"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            held = (log.scroll_y, log.max_scroll_y)
+        assert held[0] == left + 1
+        assert held[1] > held[0]
+
     @staticmethod
     async def test_a_banner_pushing_the_end_down_keeps_the_follow():
         hub = Hub()

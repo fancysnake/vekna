@@ -18,6 +18,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    FailedTree,
     HeldTree,
     ParkedTree,
     PurifiedTree,
@@ -126,7 +127,8 @@ class _Trees(Trees):
         self.free.append(tree)
         return None
 
-    # Parks every free tree, and says each one it was told is held as held.
+    # Parks every free tree, says each one it was told is held as held, and
+    # fails each blocked one with its reason.
     async def purify(
         self, *, project_root: str, project: str, held: set[str], save: bool
     ) -> list[PurifiedTree]:
@@ -138,9 +140,14 @@ class _Trees(Trees):
                 "save": save,
             }
         )
-        return [HeldTree(path=tree) for tree in sorted(held)] + [
-            ParkedTree(path=tree) for tree in self.free
-        ]
+        return (
+            [HeldTree(path=tree) for tree in sorted(held)]
+            + [ParkedTree(path=tree) for tree in self.free]
+            + [
+                FailedTree(path=tree, reason=reason)
+                for tree, reason in self.blocked.items()
+            ]
+        )
 
 
 class _Peer(Surface):
@@ -689,6 +696,18 @@ class TestTrees:
         assert hub.casts["c1"].status == "error"
 
 
+def _leasing(trees: _Trees, said: list[str] | None = None) -> tuple[Leasing, _Spawn]:
+    hub, spawn, alive = Hub(), _Spawn(), _Alive()
+    leasing = Leasing(
+        left=LeftBehind(casts=hub, spawned=alive.left, alive=alive),
+        say=([] if said is None else said).append,
+        spawn=spawn,
+        trees=trees,
+        limits=_Limits(),
+    )
+    return leasing, spawn
+
+
 @pytest.mark.asyncio
 class TestBlockedTrees:
     # Leased and still preparing, the tree is in no view and no left-behind
@@ -697,14 +716,7 @@ class TestBlockedTrees:
     async def test_purify_holds_a_tree_still_being_prepared():
         trees = _Trees("/pool/1")
         trees.preparing = asyncio.get_running_loop().create_future()
-        hub, spawn, alive = Hub(), _Spawn(), _Alive()
-        leasing = Leasing(
-            left=LeftBehind(casts=hub, spawned=alive.left, alive=alive),
-            say=[].append,
-            spawn=spawn,
-            trees=trees,
-            limits=_Limits(),
-        )
+        leasing, spawn = _leasing(trees)
         running = asyncio.create_task(
             leasing.run(_hello("c1", worktree=True), parked=[].append)
         )
@@ -748,6 +760,57 @@ class TestBlockedTrees:
         ]
         assert hub.casts["c1"].blocked is None
         assert said == ["purify parked /pool/1"]
+
+    @staticmethod
+    async def test_purify_says_each_tree_it_failed_and_why():
+        trees = _Trees()
+        trees.blocked["/pool/1"] = "rebase in progress"
+        said: list[str] = []
+        leasing, _ = _leasing(trees, said)
+
+        purified = await leasing.purify(
+            project_root="/proj", project="/proj/.git", save=False
+        )
+
+        assert purified == [FailedTree(path="/pool/1", reason="rebase in progress")]
+        assert said == ["purify failed /pool/1: rebase in progress"]
+
+    @staticmethod
+    async def test_purify_waits_for_a_lease_in_its_project():
+        trees = _Trees("/pool/1")
+        trees.leasing = asyncio.get_running_loop().create_future()
+        leasing, spawn = _leasing(trees)
+        running = asyncio.create_task(
+            leasing.run(_hello("c1", worktree=True), parked=[].append)
+        )
+        await _settled()
+        purifying = asyncio.create_task(
+            leasing.purify(project_root="/proj", project="/proj/.git", save=False)
+        )
+        await _settled()
+        assert not purifying.done()
+
+        trees.leasing.set_result(None)
+        await _settled()
+
+        assert await purifying == [HeldTree(path="/pool/1")]
+        spawn.exit("c1")
+        await running
+
+    @staticmethod
+    async def test_a_lease_and_a_clean_release_each_park_the_tree():
+        trees = _Trees("/pool/1")
+        leasing, spawn = _leasing(trees)
+        parked: list[str] = []
+        running = asyncio.create_task(
+            leasing.run(_hello("c1", worktree=True), parked=parked.append)
+        )
+        await _settled()
+
+        spawn.exit("c1")
+        await running
+
+        assert parked == ["/pool/1", "/pool/1"]
 
     # Cleaned by hand, the tree is parked by the next lease that finds it.
     @staticmethod

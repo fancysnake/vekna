@@ -218,7 +218,7 @@ class Falling(BaseModel):
 @step
 async def racing(_: Racing) -> Done[Note]:
     return Done(
-        Note(text=await race(runner("slow", seconds=60), runner("fast", seconds=0)))
+        Note(text=await race(runner("slow", seconds=1), runner("fast", seconds=0)))
     )
 
 

@@ -372,6 +372,26 @@ class TestPurify:
         assert _git(work, "branch", "--show-current") == "vekna/wt-1"
 
     @staticmethod
+    async def test_an_open_rebase_of_a_detached_head_is_saved_as_detached(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "onto")
+        (work / "a.txt").write_text("onto\n")
+        _git(work, "commit", "-q", "-am", "onto")
+        _git(work, "checkout", "-q", "--detach", "main")
+        (work / "a.txt").write_text("detached\n")
+        _git(work, "commit", "-q", "-am", "detached")
+        assert _conflicts(work, "rebase", "onto")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/detached-")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
+
+    @staticmethod
     async def test_a_held_tree_is_left_as_it_is(pool: _Pool):
         tree = await pool.lease()
         assert tree is not None
