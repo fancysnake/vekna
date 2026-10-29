@@ -7,7 +7,18 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.11,<3.16"
-keywords = ["agents", "claude", "llm", "orchestration", "workflow"]
+keywords = [
+    "agents",
+    "ai-agents",
+    "automation",
+    "claude",
+    "claude-code",
+    "coding-agents",
+    "llm",
+    "orchestration",
+    "tui",
+    "workflow",
+]
 # No `License ::` classifier: PEP 639 supersedes it with the `License-Expression`
 # metadata field that `license` above produces, and PyPI rejects carrying both.
 # The Python versions are listed by hand — poetry-core emits `Requires-Python`

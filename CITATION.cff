@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: If you use vekna in your work, please cite it as below.
+title: vekna
+abstract: Run coding agents as rituals, ordinary Python programs whose steps you control.
+type: software
+authors:
+  - family-names: Ganczarek
+    given-names: Radosław
+license: BSD-3-Clause
+repository-code: https://github.com/fancysnake/vekna
+url: https://vekna.fancysnake.dev
+keywords:
+  - coding agents
+  - claude code
+  - workflow
+  - orchestration

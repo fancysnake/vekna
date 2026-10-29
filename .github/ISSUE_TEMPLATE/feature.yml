@@ -1,0 +1,15 @@
+name: Feature
+description: Something vekna should do that it does not
+labels: ["feature"]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you want to do
+      description: The ritual or workflow you are writing, and where vekna stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
