@@ -46,6 +46,7 @@ _REPOSITORY_ENV = frozenset(
 )
 _RESCUE = "vekna/rescue/"
 _DETACHED = "detached"
+_HEADS = "refs/heads/"
 
 
 # The pool is whatever git lists under this project's directory in the state
@@ -183,9 +184,23 @@ async def _saved(tree: str, git_dir: Path) -> str | None:
     snapshot = await _git(tree, "write-tree")
     message = f"vekna purify: what {tree} had not committed"
     commit = await _git(tree, "commit-tree", snapshot, "-p", "HEAD", "-m", message)
-    name = f"{_RESCUE}{await branch_of(tree) or _DETACHED}-{secrets.token_hex(4)}"
+    branch = await branch_of(tree) or await _rebasing(git_dir) or _DETACHED
+    name = f"{_RESCUE}{branch}-{secrets.token_hex(4)}"
     await _git(tree, "branch", name, commit)
     return name
+
+
+# A rebase detaches HEAD; the branch it is rebasing is in its own git dir.
+async def _rebasing(git_dir: Path) -> str | None:
+    for marker in ("rebase-merge", "rebase-apply"):
+        try:
+            head = await asyncio.to_thread((git_dir / marker / "head-name").read_text)
+        except OSError:
+            continue
+        # A detached head being rebased reads `detached HEAD`.
+        if (ref := head.strip()).startswith(_HEADS):
+            return ref.removeprefix(_HEADS)
+    return None
 
 
 # Every operation left open aborted, then whatever is not committed thrown away.

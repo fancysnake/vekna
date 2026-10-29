@@ -15,11 +15,11 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _conflicts(cwd: Path, branch: str) -> bool:
-    merged = subprocess.run(
-        ["git", "merge", "-q", branch], cwd=cwd, capture_output=True, check=False
+def _conflicts(cwd: Path, command: str, branch: str) -> bool:
+    ran = subprocess.run(
+        ["git", command, "-q", branch], cwd=cwd, capture_output=True, check=False
     )
-    return merged.returncode != 0
+    return ran.returncode != 0
 
 
 @pytest.fixture(name="repo")
@@ -219,7 +219,7 @@ class TestRelease:
         _git(work, "checkout", "-q", "-b", "right", "main")
         (work / "a.txt").write_text("right\n")
         _git(work, "commit", "-q", "-am", "right")
-        assert _conflicts(work, "left")
+        assert _conflicts(work, "merge", "left")
         _git(work, "checkout", "-q", "--ours", "a.txt")
         _git(work, "add", "a.txt")
 
@@ -317,7 +317,7 @@ class TestPurify:
         _git(work, "checkout", "-q", "-b", "right", "main")
         (work / "a.txt").write_text("right\n")
         _git(work, "commit", "-q", "-am", "right")
-        assert _conflicts(work, "left")
+        assert _conflicts(work, "merge", "left")
 
         [purified] = await pool.purify(save=True)
 
@@ -328,6 +328,26 @@ class TestPurify:
         assert not (
             Path(_git(work, "rev-parse", "--absolute-git-dir")) / "MERGE_HEAD"
         ).exists()
+
+    @staticmethod
+    async def test_an_open_rebase_is_saved_under_the_branch_being_rebased(pool: _Pool):
+        tree = await pool.lease()
+        assert tree is not None
+        work = Path(tree)
+        _git(work, "checkout", "-q", "-b", "onto")
+        (work / "a.txt").write_text("onto\n")
+        _git(work, "commit", "-q", "-am", "onto")
+        _git(work, "checkout", "-q", "-b", "feature", "main")
+        (work / "a.txt").write_text("feature\n")
+        _git(work, "commit", "-q", "-am", "feature")
+        assert _conflicts(work, "rebase", "onto")
+
+        [purified] = await pool.purify(save=True)
+
+        assert isinstance(purified, ParkedTree)
+        assert purified.saved is not None
+        assert purified.saved.startswith("vekna/rescue/feature-")
+        assert _git(work, "branch", "--show-current") == "vekna/wt-1"
 
     @staticmethod
     async def test_a_held_tree_is_left_as_it_is(pool: _Pool):
