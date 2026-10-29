@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/vekna)](https://pypi.org/project/vekna/)
 [![CI](https://github.com/fancysnake/vekna/actions/workflows/ci.yml/badge.svg)](https://github.com/fancysnake/vekna/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/fancysnake/vekna/graph/badge.svg)](https://codecov.io/gh/fancysnake/vekna)
-[![License](https://img.shields.io/pypi/l/vekna)](LICENSE)
+[![License](https://img.shields.io/pypi/l/vekna)](https://github.com/fancysnake/vekna/blob/main/LICENSE)
 
 Run coding agents as **rituals**: ordinary Python programs whose steps you
 control and whose agent calls happen inside those steps. Agents run
@@ -109,9 +109,10 @@ claude plugin install ritual-scribe@vekna
 
 ## Contributing
 
-[`CONTRIBUTING.md`](.github/CONTRIBUTING.md) covers setup, the check loop,
-where code goes, and pull requests. [`docs/README.md`](docs/README.md) is where
-the ideas live.
+[`CONTRIBUTING.md`](https://github.com/fancysnake/vekna/blob/main/.github/CONTRIBUTING.md)
+covers setup, the check loop, where code goes, and pull requests.
+[`docs/README.md`](https://github.com/fancysnake/vekna/blob/main/docs/README.md)
+is where the ideas live.
 
 ## Licence
 
