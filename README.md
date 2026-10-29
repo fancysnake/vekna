@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/vekna)](https://pypi.org/project/vekna/)
 [![Python](https://img.shields.io/pypi/pyversions/vekna)](https://pypi.org/project/vekna/)
 [![CI](https://github.com/fancysnake/vekna/actions/workflows/ci.yml/badge.svg)](https://github.com/fancysnake/vekna/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/fancysnake/vekna/graph/badge.svg)](https://codecov.io/gh/fancysnake/vekna)
 [![License](https://img.shields.io/pypi/l/vekna)](LICENSE)
 
 Run coding agents as **rituals**: ordinary Python programs whose steps you
