@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime
 
 import pytest
@@ -192,7 +193,6 @@ class _Alive:
 def _circle(
     limits: _Limits,
     trees: _Trees | None = None,
-    said: list[str] | None = None,
     *,
     alive: _Alive | None = None,
     records: dict[str, RunRecord] | None = None,
@@ -200,13 +200,7 @@ def _circle(
     hub, spawn = Hub(), _Spawn()
     alive = alive or _Alive()
     behind = LeftBehind(casts=hub, spawned=alive.left, alive=alive)
-    leasing = Leasing(
-        left=behind,
-        say=([] if said is None else said).append,
-        spawn=spawn,
-        trees=trees or _Trees(),
-        limits=limits,
-    )
+    leasing = Leasing(left=behind, spawn=spawn, trees=trees or _Trees(), limits=limits)
     circle = Circle(
         hub=hub,
         left=behind,
@@ -575,11 +569,12 @@ class TestTrees:
         assert spawn.trees == ["/pool/1", "/pool/1"]
 
     @staticmethod
-    async def test_a_tree_left_dirty_is_reported_against_its_cast():
+    async def test_a_tree_left_dirty_is_reported_against_its_cast(
+        caplog: pytest.LogCaptureFixture,
+    ):
         trees = _Trees("/pool/1")
         trees.blocked["/pool/1"] = "uncommitted changes"
-        said: list[str] = []
-        circle, hub, spawn = _circle(_Limits(), trees, said)
+        circle, hub, spawn = _circle(_Limits(), trees)
         await _asked_for_a_tree(circle, spawn, "c1")
         hub.apply(_hello("c1"))
         hub.apply(CastGoodbye(cast_id="c1", status="ok"))
@@ -591,7 +586,13 @@ class TestTrees:
             cast_id="c1", path="/pool/1", reason="uncommitted changes"
         )
         assert not trees.free
-        assert said == ["/pool/1 is blocked after cast c1: uncommitted changes"]
+        assert caplog.record_tuples == [
+            (
+                "vekna.mills.circle",
+                logging.WARNING,
+                "/pool/1 is blocked after cast c1: uncommitted changes",
+            )
+        ]
 
     @staticmethod
     async def test_a_cast_that_dies_before_its_hello_in_a_dirty_tree_says_why():
@@ -696,11 +697,10 @@ class TestTrees:
         assert hub.casts["c1"].status == "error"
 
 
-def _leasing(trees: _Trees, said: list[str] | None = None) -> tuple[Leasing, _Spawn]:
+def _leasing(trees: _Trees) -> tuple[Leasing, _Spawn]:
     hub, spawn, alive = Hub(), _Spawn(), _Alive()
     leasing = Leasing(
         left=LeftBehind(casts=hub, spawned=alive.left, alive=alive),
-        say=([] if said is None else said).append,
         spawn=spawn,
         trees=trees,
         limits=_Limits(),
@@ -739,10 +739,12 @@ class TestBlockedTrees:
         await running
 
     @staticmethod
-    async def test_purify_frees_the_cast_that_left_a_parked_tree_blocked():
+    async def test_purify_frees_the_cast_that_left_a_parked_tree_blocked(
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
         trees = _Trees("/pool/1")
-        said: list[str] = []
-        circle, hub, _ = _circle(_Limits(), trees, said)
+        circle, hub, _ = _circle(_Limits(), trees)
         _left_blocked(hub, "c1", "/pool/1")
 
         purified = await circle.purify(
@@ -759,21 +761,30 @@ class TestBlockedTrees:
             }
         ]
         assert hub.casts["c1"].blocked is None
-        assert said == ["purify parked /pool/1"]
+        assert caplog.record_tuples == [
+            ("vekna.mills.circle", logging.INFO, "purify parked /pool/1")
+        ]
 
     @staticmethod
-    async def test_purify_says_each_tree_it_failed_and_why():
+    async def test_purify_says_each_tree_it_failed_and_why(
+        caplog: pytest.LogCaptureFixture,
+    ):
         trees = _Trees()
         trees.blocked["/pool/1"] = "rebase in progress"
-        said: list[str] = []
-        leasing, _ = _leasing(trees, said)
+        leasing, _ = _leasing(trees)
 
         purified = await leasing.purify(
             project_root="/proj", project="/proj/.git", save=False
         )
 
         assert purified == [FailedTree(path="/pool/1", reason="rebase in progress")]
-        assert said == ["purify failed /pool/1: rebase in progress"]
+        assert caplog.record_tuples == [
+            (
+                "vekna.mills.circle",
+                logging.WARNING,
+                "purify failed /pool/1: rebase in progress",
+            )
+        ]
 
     @staticmethod
     async def test_purify_waits_for_a_lease_in_its_project():

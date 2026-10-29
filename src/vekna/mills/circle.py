@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Literal
@@ -17,6 +18,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    FailedTree,
     HeldTree,
     ParkedTree,
     PurifiedTree,
@@ -25,6 +27,8 @@ from vekna.wire import (
     TreeFreed,
     WireMessage,
 )
+
+_log = logging.getLogger(__name__)
 
 
 # How a cast's process went: how it exited, and the tree it left blocked if it
@@ -149,16 +153,9 @@ class Awaits:
 # caused.
 class Leasing:
     def __init__(
-        self,
-        *,
-        left: LeftBehind,
-        say: Callable[[str], None],
-        spawn: Spawn,
-        trees: Trees,
-        limits: Limits,
+        self, *, left: LeftBehind, spawn: Spawn, trees: Trees, limits: Limits
     ) -> None:
         self._left = left
-        self._say = say
         self._spawn = spawn
         self._trees = trees
         self._limits = limits
@@ -225,8 +222,8 @@ class Leasing:
                 raise TreeError(msg)
             return None
 
-    # The operator's to clean, so a blocked tree is said where the daemon says
-    # things whether or not a window is open.
+    # The operator's to clean, so a blocked tree is logged whether or not a
+    # window is open.
     async def _release(
         self, hello: CastHello, tree: str | None, parked: Callable[[str], None]
     ) -> str | None:
@@ -238,7 +235,7 @@ class Leasing:
         if reason is None:
             parked(tree)
         else:
-            self._say(f"{tree} is blocked after cast {hello.cast_id}: {reason}")
+            _log.warning("%s is blocked after cast %s: %s", tree, hello.cast_id, reason)
         return reason
 
     # Under the lease lock, so no tree is leased while it is being purified.
@@ -251,7 +248,8 @@ class Leasing:
                 project_root=project_root, project=project, held=self._held(), save=save
             )
         for tree in trees:
-            self._say(_purified(tree))
+            failed = isinstance(tree, FailedTree)
+            _log.log(logging.WARNING if failed else logging.INFO, _purified(tree))
         return trees
 
     # A tree leased to a cast still preparing it is held too.

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import signal
 from collections.abc import Callable
 
@@ -8,6 +9,8 @@ from vekna.wire import SHORT_ID
 # Past the shell medium's own grace for reaping what it started, so a cast
 # ending itself is not cut short of it.
 GRACE_SECONDS = 10.0
+
+_log = logging.getLogger(__name__)
 
 
 # What a cancel the cast does not act on comes to. It is asked over the wire
@@ -24,13 +27,11 @@ class Cutter:
         casts: Casts,
         alive: Callable[[int], bool],
         kill: Callable[[int, int], bool],
-        say: Callable[[str], None],
         grace: float = GRACE_SECONDS,
     ) -> None:
         self._casts = casts
         self._alive = alive
         self._kill = kill
-        self._say = say
         self._grace = grace
         self._cutting: dict[str, asyncio.Task[None]] = {}
 
@@ -46,9 +47,9 @@ class Cutter:
         if (view := self._casts.casts.get(cast_id)) is None:
             return
         if (pid := view.hello.pid) is None:
-            self._say(
-                f"cast {cast_id[:SHORT_ID]} has no pid to signal:"
-                " stop it at its terminal"
+            _log.warning(
+                "cast %s has no pid to signal: stop it at its terminal",
+                cast_id[:SHORT_ID],
             )
             return
         for signum in (signal.SIGINT, signal.SIGKILL):
@@ -57,9 +58,12 @@ class Cutter:
                 return
             sent = self._kill(pid, signum)
             said = "sent" if sent else "could not send"
-            self._say(
-                f"cast {cast_id[:SHORT_ID]} still running:"
-                f" {said} {signum.name} to {pid}"
+            _log.warning(
+                "cast %s still running: %s %s to %s",
+                cast_id[:SHORT_ID],
+                said,
+                signum.name,
+                pid,
             )
 
     def _running(self, cast_id: str, pid: int) -> bool:

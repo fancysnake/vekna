@@ -1,3 +1,4 @@
+import logging
 import signal
 from datetime import UTC, datetime
 
@@ -23,8 +24,13 @@ def _hello(pid: int | None) -> CastHello:
     )
 
 
-# The process side of a cut: which pids are alive, what was sent to them, and
-# what the cutter said. A signal stops the pid it is sent to only when told to,
+def _warned(caplog: pytest.LogCaptureFixture) -> list[str]:
+    assert {record.levelno for record in caplog.records} == {logging.WARNING}
+    return [record.getMessage() for record in caplog.records]
+
+
+# The process side of a cut: which pids are alive and what was sent to them. A
+# signal stops the pid it is sent to only when told to,
 # and reaches it at all only when the pid is this daemon's to signal.
 class _Processes:
     def __init__(
@@ -32,7 +38,6 @@ class _Processes:
     ) -> None:
         self.alive: set[int] = {41, 42}
         self.sent: list[tuple[int, int]] = []
-        self.said: list[str] = []
         self._stops_on = stops_on or set()
         self._permitted = permitted
 
@@ -45,19 +50,15 @@ class _Processes:
         return True
 
     def cutter(self, hub: Hub) -> Cutter:
-        return Cutter(
-            casts=hub,
-            alive=self.alive.__contains__,
-            kill=self.kill,
-            say=self.said.append,
-            grace=0,
-        )
+        return Cutter(casts=hub, alive=self.alive.__contains__, kill=self.kill, grace=0)
 
 
 @pytest.mark.asyncio
 class TestCutting:
     @staticmethod
-    async def test_a_cast_that_ends_itself_is_not_signalled():
+    async def test_a_cast_that_ends_itself_is_not_signalled(
+        caplog: pytest.LogCaptureFixture,
+    ):
         hub = Hub()
         hub.apply(_hello(pid=42))
         hub.apply(CastGoodbye(cast_id="c1", status="error", detail="cancelled"))
@@ -66,10 +67,12 @@ class TestCutting:
         await processes.cutter(hub).cut("c1")
 
         assert not processes.sent
-        assert not processes.said
+        assert not caplog.records
 
     @staticmethod
-    async def test_a_cast_deaf_to_the_ask_is_sent_ctrl_c():
+    async def test_a_cast_deaf_to_the_ask_is_sent_ctrl_c(
+        caplog: pytest.LogCaptureFixture,
+    ):
         hub = Hub()
         hub.apply(_hello(pid=42))
         processes = _Processes(stops_on={signal.SIGINT})
@@ -77,7 +80,7 @@ class TestCutting:
         await processes.cutter(hub).cut("c1")
 
         assert processes.sent == [(42, signal.SIGINT)]
-        assert processes.said == ["cast c1 still running: sent SIGINT to 42"]
+        assert _warned(caplog) == ["cast c1 still running: sent SIGINT to 42"]
 
     @staticmethod
     async def test_a_cut_asked_twice_signals_once():
@@ -104,7 +107,9 @@ class TestCutting:
 
     # A pid this daemon may not signal is still a running cast, not a dead one.
     @staticmethod
-    async def test_a_live_pid_that_will_not_take_a_signal_is_said_as_such():
+    async def test_a_live_pid_that_will_not_take_a_signal_is_said_as_such(
+        caplog: pytest.LogCaptureFixture,
+    ):
         hub = Hub()
         hub.apply(_hello(pid=42))
         processes = _Processes(permitted=False)
@@ -112,13 +117,13 @@ class TestCutting:
         await processes.cutter(hub).cut("c1")
 
         assert not processes.sent
-        assert processes.said == [
+        assert _warned(caplog) == [
             "cast c1 still running: could not send SIGINT to 42",
             "cast c1 still running: could not send SIGKILL to 42",
         ]
 
     @staticmethod
-    async def test_with_no_pid_anywhere_it_says_so():
+    async def test_with_no_pid_anywhere_it_says_so(caplog: pytest.LogCaptureFixture):
         hub = Hub()
         hub.apply(_hello(pid=None))
         processes = _Processes()
@@ -126,18 +131,20 @@ class TestCutting:
         await processes.cutter(hub).cut("c1")
 
         assert not processes.sent
-        assert processes.said == [
+        assert _warned(caplog) == [
             "cast c1 has no pid to signal: stop it at its terminal"
         ]
 
     @staticmethod
-    async def test_a_cast_the_daemon_does_not_know_is_left_alone():
+    async def test_a_cast_the_daemon_does_not_know_is_left_alone(
+        caplog: pytest.LogCaptureFixture,
+    ):
         processes = _Processes()
 
         await processes.cutter(Hub()).cut("c1")
 
         assert not processes.sent
-        assert not processes.said
+        assert not caplog.records
 
     # Once one cut has ended, a cast asked to stop again is cut again.
     @staticmethod

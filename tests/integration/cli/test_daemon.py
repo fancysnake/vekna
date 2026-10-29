@@ -850,7 +850,7 @@ class TestTheBareCommand:
         assert stopped.output.strip() == "stopped the daemon"
         assert not asyncio.run(alive(socket_path))
         assert re.search(
-            r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d listening on ",
+            r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d INFO listening on ",
             (tmp_path / "state/vekna/daemon.log").read_text(),
             re.MULTILINE,
         )

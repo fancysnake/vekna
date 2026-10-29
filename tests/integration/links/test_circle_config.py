@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -26,26 +27,23 @@ def _project(tmp_path: Path, toml: str | None = None) -> Path:
     return project
 
 
-def _quiet(note: str) -> None:
-    msg = f"nothing here should be said, and {note!r} was"
-    raise AssertionError(msg)
+def _warned(caplog: pytest.LogCaptureFixture) -> list[str]:
+    assert {record.levelno for record in caplog.records} == {logging.WARNING}
+    return [record.getMessage() for record in caplog.records]
 
 
 @pytest.mark.usefixtures("config")
 class TestProcesses:
     @staticmethod
     def test_nothing_configured_is_four(tmp_path: Path):
-        assert (
-            ConfigLimits(say=_quiet).processes(str(_project(tmp_path)))
-            == DEFAULT_PROCESSES
-        )
+        assert ConfigLimits().processes(str(_project(tmp_path))) == DEFAULT_PROCESSES
 
     @staticmethod
     def test_the_project_s_own_wins_over_the_user_s(config: Path, tmp_path: Path):
         config.write_text(f"[circle]\nprocesses = {_MINE}\n", encoding="utf-8")
         project = _project(tmp_path, f"[circle]\nprocesses = {_THE_PROJECT_S}\n")
 
-        processes = ConfigLimits(say=_quiet).processes(str(project / "deep"))
+        processes = ConfigLimits().processes(str(project / "deep"))
         assert processes == _THE_PROJECT_S
 
     @staticmethod
@@ -55,40 +53,38 @@ class TestProcesses:
         config.write_text(f"[circle]\nprocesses = {_MINE}\n", encoding="utf-8")
         project = _project(tmp_path, "[rituals]\nfiles = []\n")
 
-        assert ConfigLimits(say=_quiet).processes(str(project)) == _MINE
+        assert ConfigLimits().processes(str(project)) == _MINE
 
     @staticmethod
-    def test_a_config_that_will_not_read_is_said_and_passed_over(tmp_path: Path):
-        said: list[str] = []
+    def test_a_config_that_will_not_read_is_said_and_passed_over(
+        tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         project = _project(tmp_path, "[circle]\nthreads = 2\n")
 
-        assert (
-            ConfigLimits(say=said.append).processes(str(project)) == DEFAULT_PROCESSES
-        )
-        assert len(said) == 1
-        assert said[0].startswith(f"{project / '.vekna.toml'}: ")
-        assert "threads" in said[0]
+        assert ConfigLimits().processes(str(project)) == DEFAULT_PROCESSES
+        [said] = _warned(caplog)
+        assert said.startswith(f"{project / '.vekna.toml'}: ")
+        assert "threads" in said
 
 
 @pytest.mark.usefixtures("config")
 class TestCoding:
     @staticmethod
     def test_no_limit_unless_the_user_says_one():
-        assert ConfigLimits(say=_quiet).coding() is None
+        assert ConfigLimits().coding() is None
 
     @staticmethod
     def test_the_user_s_config_sets_it(config: Path):
         config.write_text(f"[circle]\ncoding = {_CODING}\n", encoding="utf-8")
 
-        assert ConfigLimits(say=_quiet).coding() == _CODING
+        assert ConfigLimits().coding() == _CODING
 
     @staticmethod
-    def test_zero_is_refused(config: Path):
-        said: list[str] = []
+    def test_zero_is_refused(config: Path, caplog: pytest.LogCaptureFixture):
         config.write_text("[circle]\ncoding = 0\n", encoding="utf-8")
 
-        assert ConfigLimits(say=said.append).coding() is None
-        assert said == [
+        assert ConfigLimits().coding() is None
+        assert _warned(caplog) == [
             (
                 f"{config}: circle.coding: Input should be greater than 0"
                 " — [circle] ignored"
@@ -100,7 +96,7 @@ class TestCoding:
 class TestWorktrees:
     @staticmethod
     def test_nothing_configured_is_two_trees_and_no_prepare(tmp_path: Path):
-        limits = ConfigLimits(say=_quiet)
+        limits = ConfigLimits()
         project = str(_project(tmp_path))
 
         assert limits.worktrees(project) == DEFAULT_WORKTREES
@@ -115,7 +111,7 @@ class TestWorktrees:
             tmp_path,
             f'[circle]\nworktrees = {_THE_PROJECT_S_TREES}\nprepare = "ours"\n',
         )
-        limits = ConfigLimits(say=_quiet)
+        limits = ConfigLimits()
 
         assert limits.worktrees(str(project / "deep")) == _THE_PROJECT_S_TREES
         assert limits.prepare(str(project / "deep")) == "ours"
@@ -126,14 +122,15 @@ class TestWorktrees:
     ):
         config.write_text('[circle]\nprepare = "mine"\n', encoding="utf-8")
 
-        assert ConfigLimits(say=_quiet).prepare(str(_project(tmp_path))) == "mine"
+        assert ConfigLimits().prepare(str(_project(tmp_path))) == "mine"
 
     @staticmethod
-    def test_zero_is_refused(config: Path, tmp_path: Path):
-        said: list[str] = []
+    def test_zero_is_refused(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         config.write_text("[circle]\nworktrees = 0\n", encoding="utf-8")
 
-        limits = ConfigLimits(say=said.append)
+        limits = ConfigLimits()
 
         assert limits.worktrees(str(_project(tmp_path))) == DEFAULT_WORKTREES
-        assert len(said) == 1
+        assert len(_warned(caplog)) == 1

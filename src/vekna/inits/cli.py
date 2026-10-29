@@ -339,7 +339,7 @@ def _serve(*, debug: bool = False) -> None:
     # To stderr, which is `daemon.log`.
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(message)s",
+        format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     # Resolved here rather than at import, so the environment a shell exports

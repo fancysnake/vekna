@@ -86,8 +86,6 @@ def _sink(debug: Path | None) -> Callable[[Routed], None]:
     return record
 
 
-# Said into `daemon.log`, which is where a detached daemon's stderr goes: there
-# is no view of its own to say it on.
 _log = logging.getLogger(__name__)
 
 
@@ -124,14 +122,13 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     # Before the socket binds, so nothing is being written while it runs.
     if failed := await asyncio.to_thread(journal.prune, keep=_KEPT):
         _log.warning("could not prune %d old cast(s): %s", len(failed), failed[0])
-    limits = ConfigLimits(say=_log.warning)
+    limits = ConfigLimits()
     spawner = Spawner(command=_CAST_COMMAND, runs=default_runs_root())
     if spawned := await asyncio.to_thread(spawner.left_behind):
         _log.info("holding %d cast(s) left running until they reattach", len(spawned))
     left = LeftBehind(casts=hub, spawned=spawned, alive=pid_alive)
     leasing = Leasing(
         left=left,
-        say=_log.warning,
         spawn=spawner,
         trees=GitTrees(root=default_state_root() / _WORKTREES),
         limits=limits,
@@ -149,7 +146,7 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         if record.hello.cast_id not in running:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
-    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid, say=_log.warning)
+    cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid)
     routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
     server = await serve(path=path, routes=routes)
     _log.info("listening on %s", path)
