@@ -105,12 +105,15 @@ class TestCodingMedium:
         focus = FakeFocus(deltas=("thinking", "editing"))
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[CodingResult]:
+        async def work(_: Entered) -> Done[CodingResult]:
             opts = CodingOpts(model="opus", cwd="/tmp/x")
             return Done(await coding("fix it", opts=opts))
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         result, grimoire = _cast(r)
 
@@ -132,12 +135,15 @@ class TestCodingMedium:
     def test_telemetry_lands_in_medium_rite_result():
         CODING_FOCUS.register(FakeFocus())
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("fix it")
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _, grimoire = _cast(r)
 
@@ -157,11 +163,14 @@ class TestCodingMedium:
         focus = FakeFocus(text='{"port": 9000}')
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[Answer]:
+        async def work(_: Entered) -> Done[Answer]:
             return Done(await coding("start server", output=Answer))
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         result, _ = _cast(r)
 
@@ -172,11 +181,14 @@ class TestCodingMedium:
     def test_invalid_typed_output_raises():
         CODING_FOCUS.register(FakeFocus(text="not json"))
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[Answer]:
+        async def work(_: Entered) -> Done[Answer]:
             return Done(await coding("start server", output=Answer))
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         with pytest.raises(CodingOutputError):
             _cast(r)
@@ -186,12 +198,15 @@ class TestCodingMedium:
         focus = FakeFocus(gate_tools=("bash", "read"))
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r, stdin="n\n")
 
@@ -205,12 +220,15 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
         knobs = Answer(port=8080)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("fix it", opts=CodingOpts(focus_options=knobs))
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r)
 
@@ -233,12 +251,15 @@ class TestCodingMedium:
         )
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("write the test")
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r, stdin="2\n")
 
@@ -251,12 +272,15 @@ class TestCodingMedium:
         )
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("write the test")
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r, stdin="both, in that order\n")
 
@@ -267,12 +291,15 @@ class TestCodingMedium:
         focus = FakeFocus(questions=(("which fixture?", None),))
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("write the test")
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r, stdin="the tmp_path one\n")
 
@@ -292,24 +319,30 @@ class TestCodingMedium:
         # production does — the loader is an integration concern.
         register()
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("fix it")
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
 
 
 def _one_call_ritual(**declaration):
+    class Entered(BaseModel):
+        pass
+
     @step
-    async def work(_: Answer) -> Done[None]:
+    async def work(_: Entered) -> Done[None]:
         await coding("fix it", **declaration)
         return Done(None)
 
-    return entry(payload=Answer(port=1))
+    return entry(payload=Entered())
 
 
 class TestSessionDeclaration:
@@ -320,13 +353,16 @@ class TestSessionDeclaration:
         focus = FakeFocus()
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             for index, (session, key) in enumerate(declarations):
                 await coding(f"call {index}", session=session, key=key)
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _cast(r)
         return [call.resume for call in focus.calls]
@@ -384,13 +420,16 @@ class TestSessionDeclaration:
         focus = FakeFocus(session_id=None)
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[None]:
+        async def work(_: Entered) -> Done[None]:
             await coding("fix it", session=Session.CONTINUE, key="repair")
             await coding("fix it again", session=Session.CONTINUE)
             return Done(None)
 
-        r = entry(payload=Answer(port=1))
+        r = entry(payload=Entered())
 
         _, grimoire = _cast(r)
 
@@ -529,12 +568,15 @@ class TestResumedRites:
             "text": "what it said last time",
         }
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[CodingResult]:
+        async def work(_: Entered) -> Done[CodingResult]:
             return Done(await coding("fix it"))
 
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            entry(payload=Entered()), ledger=journalled(recorded, name="coding")
         )
 
         assert not focus.calls
@@ -549,14 +591,17 @@ class TestResumedRites:
         focus = FakeFocus()
         CODING_FOCUS.register(focus)
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[CodingResult]:
+        async def work(_: Entered) -> Done[CodingResult]:
             await coding("first")
             return Done(await coding("second", session=Session.CONTINUE))
 
         recorded = {"session": "new", "key": None, "session_id": "s9", "text": "done"}
 
-        _cast(entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding"))
+        _cast(entry(payload=Entered()), ledger=journalled(recorded, name="coding"))
 
         assert [call.resume for call in focus.calls] == ["s9"]
 
@@ -564,14 +609,17 @@ class TestResumedRites:
     def test_a_typed_return_is_validated_out_of_the_recorded_text():
         CODING_FOCUS.register(FakeFocus())
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[Answer]:
+        async def work(_: Entered) -> Done[Answer]:
             return Done(await coding("port?", output=Answer))
 
         recorded = {"session": "new", "text": '{"port": 8080}'}
 
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            entry(payload=Entered()), ledger=journalled(recorded, name="coding")
         )
 
         assert result == Answer(port=8080)
@@ -620,12 +668,15 @@ class TestResumedRites:
         register()
         recorded = {"session": "new", "text": "what it said last time"}
 
+        class Entered(BaseModel):
+            pass
+
         @step
-        async def work(_: Answer) -> Done[CodingResult]:
+        async def work(_: Entered) -> Done[CodingResult]:
             return Done(await coding("fix it"))
 
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            entry(payload=Entered()), ledger=journalled(recorded, name="coding")
         )
 
         assert result == CodingResult(text="what it said last time")

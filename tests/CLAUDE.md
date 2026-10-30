@@ -41,10 +41,9 @@ unit: the mediums are `links`.
   payload, or `Done(...)` — and needs no ritual: the unit of a step test.
   `trial.cast(ritual, components)` returns the result model, for a path across
   steps.
-- A payload class is one step's for the whole process. Steps declared inside a
-  test are forgotten with it (the autouse `_own_steps` fixture; a `Trial`
-  scopes the same way), so a throwaway step per case is fine — but not one
-  taking a class a module-level step already takes.
+- A payload class carries its step, so a throwaway step per case declares its
+  own payload class inside the test: a second step on a module-level class is
+  a collision.
 - Script before you act: `trial.shell.replies(when="mise run lint*",
   exit_code=0)`, `trial.coding.replies("wrote a test", uses=["Bash"])`,
   `trial.decide.answers(answer=True, when="*proceed*")`. `when=` is a glob
