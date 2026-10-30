@@ -35,25 +35,32 @@ def _warned(caplog: pytest.LogCaptureFixture) -> list[str]:
 @pytest.mark.usefixtures("config")
 class TestProcesses:
     @staticmethod
-    def test_nothing_configured_is_four(tmp_path: Path):
+    def test_nothing_configured_is_four(
+        tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         assert ConfigLimits().processes(str(_project(tmp_path))) == DEFAULT_PROCESSES
+        assert not caplog.records
 
     @staticmethod
-    def test_the_project_s_own_wins_over_the_user_s(config: Path, tmp_path: Path):
+    def test_the_project_s_own_wins_over_the_user_s(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         config.write_text(f"[circle]\nprocesses = {_MINE}\n", encoding="utf-8")
         project = _project(tmp_path, f"[circle]\nprocesses = {_THE_PROJECT_S}\n")
 
         processes = ConfigLimits().processes(str(project / "deep"))
         assert processes == _THE_PROJECT_S
+        assert not caplog.records
 
     @staticmethod
     def test_the_user_s_counts_where_the_project_says_nothing(
-        config: Path, tmp_path: Path
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
         config.write_text(f"[circle]\nprocesses = {_MINE}\n", encoding="utf-8")
         project = _project(tmp_path, "[rituals]\nfiles = []\n")
 
         assert ConfigLimits().processes(str(project)) == _MINE
+        assert not caplog.records
 
     @staticmethod
     def test_a_config_that_will_not_read_is_said_and_passed_over(
@@ -70,14 +77,16 @@ class TestProcesses:
 @pytest.mark.usefixtures("config")
 class TestCoding:
     @staticmethod
-    def test_no_limit_unless_the_user_says_one():
+    def test_no_limit_unless_the_user_says_one(caplog: pytest.LogCaptureFixture):
         assert ConfigLimits().coding() is None
+        assert not caplog.records
 
     @staticmethod
-    def test_the_user_s_config_sets_it(config: Path):
+    def test_the_user_s_config_sets_it(config: Path, caplog: pytest.LogCaptureFixture):
         config.write_text(f"[circle]\ncoding = {_CODING}\n", encoding="utf-8")
 
         assert ConfigLimits().coding() == _CODING
+        assert not caplog.records
 
     @staticmethod
     def test_zero_is_refused(config: Path, caplog: pytest.LogCaptureFixture):
@@ -95,15 +104,20 @@ class TestCoding:
 @pytest.mark.usefixtures("config")
 class TestWorktrees:
     @staticmethod
-    def test_nothing_configured_is_two_trees_and_no_prepare(tmp_path: Path):
+    def test_nothing_configured_is_two_trees_and_no_prepare(
+        tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         limits = ConfigLimits()
         project = str(_project(tmp_path))
 
         assert limits.worktrees(project) == DEFAULT_WORKTREES
         assert limits.prepare(project) is None
+        assert not caplog.records
 
     @staticmethod
-    def test_the_project_s_own_wins_over_the_user_s(config: Path, tmp_path: Path):
+    def test_the_project_s_own_wins_over_the_user_s(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
         config.write_text(
             '[circle]\nworktrees = 5\nprepare = "mine"\n', encoding="utf-8"
         )
@@ -115,14 +129,16 @@ class TestWorktrees:
 
         assert limits.worktrees(str(project / "deep")) == _THE_PROJECT_S_TREES
         assert limits.prepare(str(project / "deep")) == "ours"
+        assert not caplog.records
 
     @staticmethod
     def test_the_user_s_counts_where_the_project_says_nothing(
-        config: Path, tmp_path: Path
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
         config.write_text('[circle]\nprepare = "mine"\n', encoding="utf-8")
 
         assert ConfigLimits().prepare(str(_project(tmp_path))) == "mine"
+        assert not caplog.records
 
     @staticmethod
     def test_zero_is_refused(
