@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -335,6 +336,12 @@ def _serve(*, debug: bool = False) -> None:
     if os.fork():
         return
     os.setsid()
+    # To stderr, which is `daemon.log`.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     # Resolved here rather than at import, so the environment a shell exports
     # is the one that decides where the log goes.
     where = default_state_root() / _DEBUG_LOG if debug else None

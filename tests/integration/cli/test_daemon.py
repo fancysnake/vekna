@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -398,7 +400,7 @@ class TestPeers:
 
     @staticmethod
     async def test_a_window_s_claim_and_cancel_reach_the_cast(
-        socket_path: Path, capsys: pytest.CaptureFixture[str]
+        socket_path: Path, caplog: pytest.LogCaptureFixture
     ):
         asked = DecideRequested(
             cast_id="c1", request_id="q1", prompt="push?", options=["yes", "no"]
@@ -422,11 +424,11 @@ class TestPeers:
             assert heard == [claimed, cancel]
             surface.close()
             cast_writer.close()
-        assert "cast c1 has no pid to signal" in capsys.readouterr().err
+        assert "cast c1 has no pid to signal" in _said(caplog, logging.WARNING)
 
     @staticmethod
     async def test_a_cancel_of_no_running_cast_is_refused_and_signals_nothing(
-        socket_path: Path, capsys: pytest.CaptureFixture[str]
+        socket_path: Path, caplog: pytest.LogCaptureFixture
     ):
         async with _served(socket_path):
             reader, writer = await attach(socket_path)
@@ -443,7 +445,7 @@ class TestPeers:
             writer.close()
 
         assert refused == CastRefused(reason="not cancelled c1: no such running cast")
-        assert "signal" not in capsys.readouterr().err
+        assert "signal" not in caplog.text
 
     # The handshake this end wrote is the one frame kind that cannot come back,
     # and a peer that took it for a cast would paint one that is not there. The
@@ -488,14 +490,16 @@ class TestServing:
         socket_path: Path,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         async with _served(socket_path):
             monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "elsewhere"))
             assert await serve_daemon() == 1
 
             assert await alive(socket_path)
-        assert f"another daemon holds {socket_path}.lock" in capsys.readouterr().err
+        assert f"another daemon holds {socket_path}.lock" in _said(
+            caplog, logging.WARNING
+        )
 
     # A sandbox that exports a socket of its own runs a daemon of its own,
     # sharing the state root with the one outside.
@@ -571,8 +575,12 @@ class TestServing:
     # command starts a loop of its own.
     @staticmethod
     async def test_serve_as_the_child_detaches_and_logs_where_debug_goes(
-        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        socket_path: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ):
+        caplog.set_level(logging.INFO)
         forks: list[None] = []
         sessions: list[None] = []
 
@@ -592,7 +600,7 @@ class TestServing:
 
         log = tmp_path / "state" / "vekna" / "debug.log"
         assert result.exit_code == 0
-        assert f"logging every event to {log}" in result.stderr
+        assert f"logging every event to {log}" in _said(caplog, logging.INFO)
         assert forks == [None]
         assert sessions == [None]
 
@@ -601,8 +609,9 @@ class TestServing:
 class TestDebug:
     @staticmethod
     async def test_it_logs_every_event_including_the_dropped_ones(
-        socket_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        socket_path: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
+        caplog.set_level(logging.INFO)
         log = tmp_path / "debug.log"
         async with _served(socket_path, debug=log):
             writer = await _say(
@@ -624,7 +633,7 @@ class TestDebug:
         written = log.read_text()
         assert "c1 cast_hello applied" in written
         assert "gone rite_started dropped (no such cast)" in written
-        assert f"logging every event to {log}" in capsys.readouterr().err
+        assert f"logging every event to {log}" in _said(caplog, logging.INFO)
 
     @staticmethod
     async def test_without_the_flag_nothing_is_written(socket_path: Path, tmp_path):
@@ -642,7 +651,7 @@ class TestPruning:
         socket_path: Path,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         monkeypatch.setattr("vekna.inits.daemon._KEPT", 1)
         journal = Journal(tmp_path / "runs")
@@ -660,7 +669,7 @@ class TestPruning:
         async with _served(socket_path):
             assert await alive(socket_path)
 
-        said = capsys.readouterr().err
+        said = _said(caplog, logging.WARNING)
         assert "could not prune 1 old cast(s): " in said
         assert f"{tmp_path / 'runs' / 'c0'}: [Errno 13] Permission denied" in said
 
@@ -670,8 +679,9 @@ class TestLeftBehind:
     # This test's own process stands in for a cast a stopped daemon spawned.
     @staticmethod
     async def test_a_cast_still_running_from_a_stopped_daemon_is_said_held(
-        socket_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        socket_path: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
+        caplog.set_level(logging.INFO)
         mark = tmp_path / "runs" / "c1" / "spawned.json"
         mark.parent.mkdir(parents=True)
         mark.write_text(
@@ -681,7 +691,7 @@ class TestLeftBehind:
         async with _served(socket_path):
             assert await alive(socket_path)
 
-        said = capsys.readouterr().err
+        said = _said(caplog, logging.INFO)
         assert "holding 1 cast(s) left running until they reattach" in said
         assert mark.exists()
 
@@ -839,7 +849,11 @@ class TestTheBareCommand:
         assert stopped.exit_code == 0
         assert stopped.output.strip() == "stopped the daemon"
         assert not asyncio.run(alive(socket_path))
-        assert "listening on" in (tmp_path / "state/vekna/daemon.log").read_text()
+        assert re.search(
+            r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d INFO listening on ",
+            (tmp_path / "state/vekna/daemon.log").read_text(),
+            re.MULTILINE,
+        )
 
     @staticmethod
     def test_purify_starts_a_daemon_says_so_and_says_an_empty_pool_is_empty(
@@ -1049,7 +1063,7 @@ class TestSpawning:
         socket_path: Path,
         rituals: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         del rituals
 
@@ -1065,7 +1079,7 @@ class TestSpawning:
             keys.press("q")
             await peer
 
-        assert "could not queue asker" in capsys.readouterr().err
+        assert "could not queue asker" in _said(caplog, logging.WARNING)
 
     @staticmethod
     async def test_a_tree_that_is_not_there_is_refused(
@@ -1209,7 +1223,7 @@ class TestWorktrees:
 
     @staticmethod
     async def test_a_tree_left_dirty_is_blocked_and_said(
-        repo: Path, capsys: pytest.CaptureFixture[str]
+        repo: Path, caplog: pytest.LogCaptureFixture
     ):
         keys = _Keys()
         async with _served(repo / "vekna.sock"):
@@ -1222,7 +1236,7 @@ class TestWorktrees:
             await peer
 
         assert (_pool_tree(repo) / "left.txt").read_text() == "mine"
-        assert "is blocked after cast" in capsys.readouterr().err
+        assert "is blocked after cast" in _said(caplog, logging.WARNING)
 
 
 _QUEUE_RITUALS = textwrap.dedent("""
@@ -1505,7 +1519,7 @@ class TestQueue:
     async def test_an_enqueue_that_raises_is_refused_and_logged(
         socket_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         child = _hello("c2")
         denied = PermissionError(13, "Permission denied", child.project_root)
@@ -1532,7 +1546,7 @@ class TestQueue:
 
         reason = f"could not queue {child.ritual}: {denied}"
         assert answer == EnqueueRefused(cast_id="c1", request_id="q1", reason=reason)
-        assert reason in capsys.readouterr().err
+        assert reason in _said(caplog, logging.WARNING)
 
     @staticmethod
     async def test_a_withdrawn_await_shows_the_cast_running_again(socket_path: Path):
@@ -1616,6 +1630,12 @@ class TestFollowing:
                 await _drive(["boom"])
 
             await _eventually(lambda: "detached" in log.read_text())
+
+
+def _said(caplog: pytest.LogCaptureFixture, level: int) -> str:
+    return "\n".join(
+        record.getMessage() for record in caplog.records if record.levelno == level
+    )
 
 
 def _drained(capsys: pytest.CaptureFixture[str], said: list[str]) -> str:
