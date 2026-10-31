@@ -32,6 +32,11 @@ when.
   in full, and the borders and the hotkey footer are gone. Casts a cast queued
   now sit under their own ritual, not under the cast that queued them.
   ([#210](https://github.com/fancysnake/vekna/issues/210))
+- **A step lives on its payload class.** `@step` stores the step on each class
+  it takes, so a `Trial` no longer forgets the steps declared inside it. A
+  second step on a class that already has one raises `RitualDefinitionError`,
+  so a throwaway step per test case needs its own payload class.
+  ([#148](https://github.com/fancysnake/vekna/issues/148))
 
 ### Fixed
 

@@ -5,13 +5,7 @@ import pytest
 from pydantic import BaseModel
 
 from vekna.lexicon import Done, RitualDefinitionError, StepBoundaryError, ritual, step
-from vekna.lexicon._mills.engine import (
-    Compendium,
-    register_step,
-    step_for,
-    step_taking,
-    steps_scope,
-)
+from vekna.lexicon._mills.engine import Compendium, register_step, step_for, step_taking
 from vekna.lexicon._pacts import Ritual, RitualSource
 
 
@@ -282,6 +276,20 @@ class TestStepTable:
         assert step_taking(Stray) is None
 
     @staticmethod
+    def test_a_class_holding_something_else_where_a_step_lives_is_none():
+        class Squatter(BaseModel):
+            __vekna_step__ = "not a step"
+
+        assert step_taking(Squatter) is None
+
+    @staticmethod
+    def test_a_subclass_of_a_taken_class_is_taken_by_no_step():
+        class Derived(State):
+            pass
+
+        assert step_taking(Derived) is None
+
+    @staticmethod
     def test_a_payload_no_step_takes_is_a_boundary_error():
         class Stray(BaseModel):
             pass
@@ -338,45 +346,3 @@ class TestStepTable:
             RitualDefinitionError, match=r"'noop' \(.*\) and step 'copy'"
         ):
             register_step(replace(noop, name="copy"))
-
-
-class TestStepsScope:
-    @staticmethod
-    def test_a_step_declared_inside_is_forgotten_at_the_end():
-        class Passing(BaseModel):
-            pass
-
-        with steps_scope():
-
-            @step
-            def fleeting(_: Passing) -> Done[None]:
-                return Done(None)
-
-            inside = step_taking(Passing)
-
-        assert inside is fleeting
-        assert step_taking(Passing) is None
-
-    @staticmethod
-    def test_a_step_declared_before_is_kept():
-        with steps_scope():
-            pass
-
-        assert step_taking(State) is noop
-
-    @staticmethod
-    def test_a_block_that_raises_still_forgets():
-        class Passing(BaseModel):
-            pass
-
-        def declare_and_fail() -> None:
-            @step
-            def fleeting(_: Passing) -> Done[None]:
-                return Done(None)
-
-            raise RuntimeError(fleeting.name)
-
-        with pytest.raises(RuntimeError), steps_scope():
-            declare_and_fail()
-
-        assert step_taking(Passing) is None
