@@ -276,6 +276,13 @@ class TestStepTable:
         assert step_taking(Stray) is None
 
     @staticmethod
+    def test_a_class_holding_something_else_where_a_step_lives_is_none():
+        class Squatter(BaseModel):
+            __vekna_step__ = "not a step"
+
+        assert step_taking(Squatter) is None
+
+    @staticmethod
     def test_a_subclass_of_a_taken_class_is_taken_by_no_step():
         class Derived(State):
             pass

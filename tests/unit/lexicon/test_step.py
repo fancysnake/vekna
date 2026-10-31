@@ -281,12 +281,18 @@ class TestSyncBody:
         class Knock(BaseModel):
             n: int
 
-        def _route(payload: Knock) -> Done[Pong]:
+        class Rap(BaseModel):
+            n: int
+
+        def _route(payload: Knock | Rap) -> Done[Pong]:
             return Done(Pong(n=payload.n))
 
         wrapped = step(_route)
 
-        with pytest.raises(StepBoundaryError):
+        with pytest.raises(
+            StepBoundaryError,
+            match=r"^step '_route' expected Knock \| Rap, got Elsewhere$",
+        ):
             asyncio.run(wrapped.run(Elsewhere(n=1)))
 
     @staticmethod

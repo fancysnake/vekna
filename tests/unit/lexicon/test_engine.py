@@ -72,10 +72,6 @@ class Charge(BaseModel):
     pass
 
 
-class Noted(BaseModel):
-    left: int
-
-
 class Lost(BaseModel):
     pass
 
@@ -772,6 +768,9 @@ class TestSessionBook:
 
     @staticmethod
     def test_one_book_spans_every_rite_of_a_cast_and_no_further():
+        class Noted(BaseModel):
+            left: int
+
         seen = []
 
         @step

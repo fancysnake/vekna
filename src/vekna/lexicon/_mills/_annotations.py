@@ -1,11 +1,13 @@
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType, UnionType
-from typing import Annotated, Any, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
 from vekna.lexicon._pacts import Done, Failure, RitualDefinitionError
+
+_KindT = TypeVar("_KindT")
 
 _NAMELESS = "value"
 
@@ -172,6 +174,6 @@ def _failed_of(cls: type[BaseModel]) -> type[BaseModel] | None:
 
 
 # `vars` hands a class's own namespace back as `Any`, which stays in this module.
-def _own_attribute(cls: type, name: str) -> object:
-    found: object = vars(cls).get(name)
-    return found
+def _own_attribute(*, owner: type, name: str, kind: type[_KindT]) -> _KindT | None:
+    found = vars(owner).get(name)
+    return found if isinstance(found, kind) else None

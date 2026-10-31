@@ -215,8 +215,7 @@ def register_step(the_step: Step) -> None:
 # rituals may each have a `measure`; two steps taking one class is the
 # collision.
 def step_taking(payload: type[BaseModel]) -> Step | None:
-    found = _own_attribute(payload, _STEP_ATTRIBUTE)
-    return found if isinstance(found, Step) else None
+    return _own_attribute(owner=payload, name=_STEP_ATTRIBUTE, kind=Step)
 
 
 def step_for(transition: BaseModel) -> Step:
