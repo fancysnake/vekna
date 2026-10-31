@@ -162,6 +162,15 @@ def _failure_of(payload: type[BaseModel]) -> type[Failure[BaseModel]]:
     return made
 
 
+# The class a `Failure[...]` was made over, read back off pydantic's generic
+# metadata; `None` for any other class, or for a Failure over a union.
+def _failed_of(cls: type[BaseModel]) -> type[BaseModel] | None:
+    metadata = cls.__pydantic_generic_metadata__
+    if metadata["origin"] is not Failure:
+        return None
+    return _as_model(metadata["args"][0])
+
+
 # `vars` hands a class's own namespace back as `Any`, which stays in this module.
 def _own_attribute(cls: type, name: str) -> object:
     found: object = vars(cls).get(name)

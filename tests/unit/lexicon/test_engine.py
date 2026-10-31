@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import io
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -33,6 +34,7 @@ from vekna.lexicon._mills.engine import (
     emit_delta,
     offer_prompt,
     prompt_runner,
+    recovery_for,
     run_cast,
 )
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
@@ -453,6 +455,25 @@ def _cast(the_step_payload: BaseModel, *, channel=None) -> tuple[object, Grimoir
 
 
 class TestFailureRouting:
+    # pydantic caches `Failure[Orphan]` weakly, so nothing but `Orphan` may hold it.
+    @staticmethod
+    def test_a_recovery_step_outlives_a_collection():
+        class Orphan(BaseModel):
+            pass
+
+        def declare() -> None:
+            @step
+            def found(_: Failure[Orphan]) -> Done[None]:
+                return Done(None)
+
+        declare()
+        gc.collect()
+
+        recovered = recovery_for(Orphan)
+
+        assert recovered is not None
+        assert recovered.name == "found"
+
     @staticmethod
     def test_a_raise_routes_to_the_step_taking_its_failure():
         result, _ = _cast(Probe(tag="x"))

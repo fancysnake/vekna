@@ -11,7 +11,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon._mills._annotations import _failure_of, _own_attribute
+from vekna.lexicon._mills._annotations import _failed_of, _failure_of, _own_attribute
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
     CastQueueProtocol,
@@ -184,6 +184,9 @@ class Compendium:
 
 # Where `@step` leaves a step on each class it takes.
 _STEP_ATTRIBUTE = "__vekna_step__"
+# Where a payload class holds its `Failure[...]`, which pydantic caches only
+# weakly: a collection would otherwise take the recovery step with it.
+_FAILURE_ATTRIBUTE = "__vekna_failure__"
 
 
 # Every payload checked before any is written: a step admitting `Lint | Coverage`
@@ -200,6 +203,8 @@ def register_step(the_step: Step) -> None:
             raise RitualDefinitionError(msg)
     for payload in the_step.payloads:
         setattr(payload, _STEP_ATTRIBUTE, the_step)
+        if (failed := _failed_of(payload)) is not None:
+            setattr(failed, _FAILURE_ATTRIBUTE, payload)
 
 
 # A payload class is a step's identity, so the step lives on the class: what a
