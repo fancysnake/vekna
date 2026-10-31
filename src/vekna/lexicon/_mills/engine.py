@@ -11,7 +11,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon._mills._annotations import _STEP_ATTRIBUTE, _failure_of, _step_on
+from vekna.lexicon._mills._annotations import _failure_of, _own_attribute
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
     CastQueueProtocol,
@@ -182,6 +182,10 @@ class Compendium:
         raise RitualDefinitionError(msg)
 
 
+# Where `@step` leaves a step on each class it takes.
+_STEP_ATTRIBUTE = "__vekna_step__"
+
+
 # Every payload checked before any is written: a step admitting `Lint | Coverage`
 # whose second class collides would otherwise leave the first registered to a
 # step this refused, and the sweep swallows the error and carries on.
@@ -199,12 +203,15 @@ def register_step(the_step: Step) -> None:
 
 
 # A payload class is a step's identity, so the step lives on the class: what a
-# step returns is routed by reading its class. Nothing is global, so a class
-# declared and dropped takes its step with it. A step's name routes nothing, so
-# two rituals may each have a `measure`; two steps taking one class is the
+# step returns is routed by reading its class. A step lives as long as its
+# class, so a class that outlives a test keeps its step. Read off the class's
+# own namespace rather than its MRO: a subclass is not an edge the graph can
+# draw, so it is not one the engine takes. A step's name routes nothing, so two
+# rituals may each have a `measure`; two steps taking one class is the
 # collision.
 def step_taking(payload: type[BaseModel]) -> Step | None:
-    return _step_on(payload)
+    found = _own_attribute(payload, _STEP_ATTRIBUTE)
+    return found if isinstance(found, Step) else None
 
 
 def step_for(transition: BaseModel) -> Step:

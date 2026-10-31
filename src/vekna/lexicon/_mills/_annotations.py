@@ -5,7 +5,7 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import Done, Failure, RitualDefinitionError, Step
+from vekna.lexicon._pacts import Done, Failure, RitualDefinitionError
 
 _NAMELESS = "value"
 
@@ -162,12 +162,7 @@ def _failure_of(payload: type[BaseModel]) -> type[Failure[BaseModel]]:
     return made
 
 
-# Where `@step` leaves a step on each class it takes. Read off the class's own
-# namespace rather than its MRO: a subclass is not an edge the graph can draw,
-# so it is not one the engine takes.
-_STEP_ATTRIBUTE = "__vekna_step__"
-
-
-def _step_on(payload: type[BaseModel]) -> Step | None:
-    found = vars(payload).get(_STEP_ATTRIBUTE)
-    return found if isinstance(found, Step) else None
+# `vars` hands a class's own namespace back as `Any`, which stays in this module.
+def _own_attribute(cls: type, name: str) -> object:
+    found: object = vars(cls).get(name)
+    return found
