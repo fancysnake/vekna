@@ -69,6 +69,8 @@
     <text x="140" y="43" class="s" text-anchor="middle">“Write a prompt that fixes the triage…”</text>
   </g>
   <path class="arrow" d="M700,296 L700,326"/>
+  <text x="860" y="262" class="xs">metaprompt changed? → decide: reset (the default) or keep</text>
+  <text x="860" y="279" class="xs">keep lifts the crown · new placeholders force a reset</text>
 
   <rect class="crown" x="610" y="328" width="180" height="40" rx="20"/>
   <text x="700" y="353" class="b" font-weight="700" text-anchor="middle">Crowned?</text>
@@ -139,7 +141,7 @@
     <text x="243" y="91" class="b" text-anchor="middle">runs the step</text>
     <path class="arrow" d="M308,86 L336,86"/>
     <rect class="card" x="338" y="66" width="144" height="40" rx="8"/>
-    <text x="410" y="91" class="b" text-anchor="middle">dynasty gate</text>
+    <text x="410" y="91" class="b" text-anchor="middle">gate, on a diff</text>
   </g>
   <text x="700" y="784" class="h3" text-anchor="middle" style="fill: var(--sigil)">vs</text>
   <g transform="translate(820,714)">
@@ -153,7 +155,7 @@
     <text x="243" y="91" class="b" text-anchor="middle">runs the step</text>
     <path class="arrow" d="M308,86 L336,86"/>
     <rect class="card" x="338" y="66" width="144" height="40" rx="8"/>
-    <text x="410" y="91" class="b" text-anchor="middle">dynasty gate</text>
+    <text x="410" y="91" class="b" text-anchor="middle">gate, on a diff</text>
   </g>
   <text x="700" y="812" class="xs" text-anchor="middle">in parallel</text>
 
@@ -165,8 +167,8 @@
   <g transform="translate(420,876)">
     <rect class="card" width="520" height="112" rx="10" style="stroke: var(--sigil); stroke-width: 1.8"/>
     <text x="18" y="28" class="h3">The judge · blind</text>
-    <text x="18" y="50" class="b">both results as A / B in random order, with each gate's output</text>
-    <text x="18" y="70" class="b">grades elegance, tech debt, readability — never sees a prompt</text>
+    <text x="18" y="50" class="b">outputs as A / B, shuffled: the step's output object, else its diff</text>
+    <text x="18" y="70" class="b">plus the gate output when the tree changed — never sees a prompt</text>
     <text x="18" y="94" class="s">its prompt is yours and never evolves · the verdict is binary: old or new</text>
   </g>
 
