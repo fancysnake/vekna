@@ -323,11 +323,17 @@ class Done(Generic[_ResultT_co]):
 Transition = BaseModel | Done[BaseModel | None]
 
 
+# What `@step` hands its author: the name alone, so the engine's fields stay
+# its own to change.
+class Step(Protocol):
+    name: str
+
+
 # `exits` are the payload classes a body may return, and `ends` whether it may
 # return `Done` — both read off the return annotation at decoration, so the
 # graph `rituals show` draws is the one mypy checked.
 @dataclass(frozen=True, kw_only=True)
-class Step:
+class StepSpec(Step):
     name: str
     # The file it was written in: two sources can claim one payload class, and
     # the import that trips over the second names only itself.
@@ -337,6 +343,13 @@ class Step:
     exits: tuple[type[BaseModel], ...]
     ends: bool
     max_visits: int | None = None
+
+
+def spec_of(the_step: Step) -> StepSpec:
+    if not isinstance(the_step, StepSpec):
+        msg = f"step {the_step.name!r} was not made by @step"
+        raise StepBoundaryError(msg)
+    return the_step
 
 
 class ErrorInfo(BaseModel):

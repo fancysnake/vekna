@@ -31,9 +31,9 @@ from vekna.lexicon._pacts import (
     RitualError,
     RitualSource,
     ShellFocusProtocol,
-    Step,
     StepBoundaryError,
     StepBudgetExceededError,
+    StepSpec,
     StringOutput,
     Transition,
 )
@@ -192,7 +192,7 @@ _FAILURE_ATTRIBUTE = "__vekna_failure__"
 # Every payload checked before any is written: a step admitting `Lint | Coverage`
 # whose second class collides would otherwise leave the first registered to a
 # step this refused, and the sweep swallows the error and carries on.
-def register_step(the_step: Step) -> None:
+def register_step(the_step: StepSpec) -> None:
     for payload in the_step.payloads:
         if (first := step_taking(payload)) is not None and first is not the_step:
             msg = (
@@ -214,11 +214,11 @@ def register_step(the_step: Step) -> None:
 # draw, so it is not one the engine takes. A step's name routes nothing, so two
 # rituals may each have a `measure`; two steps taking one class is the
 # collision.
-def step_taking(payload: type[BaseModel]) -> Step | None:
-    return _own_attribute(owner=payload, name=_STEP_ATTRIBUTE, kind=Step)
+def step_taking(payload: type[BaseModel]) -> StepSpec | None:
+    return _own_attribute(owner=payload, name=_STEP_ATTRIBUTE, kind=StepSpec)
 
 
-def step_for(transition: BaseModel) -> Step:
+def step_for(transition: BaseModel) -> StepSpec:
     if (found := step_taking(type(transition))) is None:
         msg = f"no step takes {type(transition).__name__}"
         raise StepBoundaryError(msg)
@@ -513,7 +513,7 @@ def cast_context(
         _current_rite.reset(token)
 
 
-def recovery_for(payload: type[BaseModel]) -> Step | None:
+def recovery_for(payload: type[BaseModel]) -> StepSpec | None:
     return step_taking(_failure_of(payload))
 
 
@@ -524,7 +524,7 @@ def recovery_for(payload: type[BaseModel]) -> Step | None:
 # failing. Only what the body raised is routed: a rite that never opened is
 # vekna's failure, not the step's.
 async def _taken(
-    the_step: Step, payload: BaseModel, *, failures: Counter[Step]
+    the_step: StepSpec, payload: BaseModel, *, failures: Counter[StepSpec]
 ) -> Transition:
     opened: OpenedRite | None = None
     try:
@@ -569,8 +569,8 @@ async def run_cast(
     ledger: Ledger | None = None,
 ) -> BaseModel | None:
     _admitted(ritual, components)
-    visits: Counter[Step] = Counter()
-    failures: Counter[Step] = Counter()
+    visits: Counter[StepSpec] = Counter()
+    failures: Counter[StepSpec] = Counter()
     with cast_context(grimoire=grimoire, channel=channel, ledger=ledger):
         transition = await ritual.run(components)
         for _ in range(ritual.max_steps):

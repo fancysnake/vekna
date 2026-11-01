@@ -15,7 +15,7 @@ from vekna.lexicon._mills.engine import (
     cast_context,
     run_cast,
 )
-from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
+from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition, spec_of
 
 from ._links import CodingDouble, DecideDouble, QueueDouble, ShellDouble
 from ._mills import Recorder, Script
@@ -121,4 +121,4 @@ class Trial:
         self._entered()
         with cast_context(grimoire=self._grimoire(), channel=self.decide):
             async with _rite(name=step.name, category="step"):
-                return await step.run(payload)
+                return await spec_of(step).run(payload)
