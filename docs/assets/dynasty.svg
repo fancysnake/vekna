@@ -1,0 +1,272 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1560" width="1400" height="1560" role="img" aria-labelledby="t d">
+  <title id="t">Dynasty: prompts that compete for the crown</title>
+  <desc id="d">A ritual step declares a metaprompt. Each cast rolls: a crowned prompt runs or faces a rebellion; otherwise the leader runs or duels a challenger. Duelists run in their own worktrees, a blind judge grades the results, and a ladder of six slots keeps the winners until a human crowns one.</desc>
+  <style>
+    :root {
+      --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+      --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+      --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf; --gold: #8a5d0c; --gold-bg: #f4e7c8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+        --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+        --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21; --gold: #e3b95a; --gold-bg: #362a12;
+      }
+    }
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+    .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+    .lede { font-size: 16px; fill: var(--soft); }
+    .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+    .h3 { font-size: 16px; font-weight: 700; }
+    .b { font-size: 13px; fill: var(--ink); }
+    .s { font-size: 12px; fill: var(--soft); }
+    .xs { font-size: 11px; fill: var(--faint); }
+    .lbl { font-size: 12px; font-weight: 700; fill: var(--soft); }
+    .bg { fill: var(--bg); }
+    .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+    .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+    .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+    .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+    .crown { fill: var(--gold-bg); stroke: var(--gold); stroke-width: 1.6; }
+    .arena { fill: var(--tint); stroke: var(--sigil); stroke-width: 1.6; stroke-dasharray: 7 5; }
+    .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+    .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+    .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+    .dash { stroke-dasharray: 5 4; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+  </defs>
+
+  <rect class="bg" width="1400" height="1560"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">Dynasty · prompts that compete for the crown</text>
+  <text x="40" y="94" class="lede">A ritual step declares a one-line metaprompt instead of a prompt. Vekna breeds prompts from it, now and then duels the</text>
+  <text x="40" y="116" class="lede">leader against a challenger on the real task, keeps the winners on a board of six, and you crown the best.</text>
+
+  <g transform="translate(40,140)">
+    <rect class="hot" width="300" height="34" rx="17"/>
+    <text x="150" y="22" class="b" text-anchor="middle">Off by default · <tspan class="mono">rate = 0</tspan></text>
+    <rect class="hot" x="320" width="360" height="34" rx="17"/>
+    <text x="500" y="22" class="b" text-anchor="middle">The judge sees results, <tspan font-weight="700">never</tspan> prompts</text>
+    <rect class="hot" x="700" width="330" height="34" rx="17"/>
+    <text x="865" y="22" class="b" text-anchor="middle">Prompts live outside the repository</text>
+    <rect class="hot" x="1050" width="270" height="34" rx="17"/>
+    <text x="1185" y="22" class="b" text-anchor="middle">Every prompt has a wizard name</text>
+  </g>
+
+  <!-- ============ THE ROLL ============ -->
+  <text x="40" y="222" class="sec">THE ROLL  ·  every cast, at every metaprompt step</text>
+
+  <g transform="translate(560,240)">
+    <rect class="card" width="280" height="56" rx="10"/>
+    <text x="140" y="24" class="b" font-weight="700" text-anchor="middle">A step with a metaprompt</text>
+    <text x="140" y="43" class="s" text-anchor="middle">“Write a prompt that fixes the triage…”</text>
+  </g>
+  <path class="arrow" d="M700,296 L700,326"/>
+
+  <rect class="crown" x="610" y="328" width="180" height="40" rx="20"/>
+  <text x="700" y="353" class="b" font-weight="700" text-anchor="middle">Crowned?</text>
+
+  <path class="arrow" d="M610,348 L400,348 L400,398"/>
+  <text x="500" y="340" class="lbl" text-anchor="middle">yes</text>
+  <path class="arrow" d="M790,348 L1000,348 L1000,398"/>
+  <text x="900" y="340" class="lbl" text-anchor="middle">no</text>
+
+  <rect class="tint" x="290" y="400" width="220" height="40" rx="20"/>
+  <text x="400" y="425" class="b mono" text-anchor="middle">roll &lt; rebellion ?</text>
+  <rect class="tint" x="890" y="400" width="220" height="40" rx="20"/>
+  <text x="1000" y="425" class="b mono" text-anchor="middle">roll &lt; rate ?</text>
+
+  <path class="arrow-x" d="M330,440 L330,462 L190,462 L190,488"/>
+  <text x="260" y="456" class="lbl" text-anchor="middle">yes</text>
+  <path class="arrow" d="M470,440 L470,462 L520,462 L520,488"/>
+  <text x="500" y="456" class="lbl" text-anchor="middle">no</text>
+  <path class="arrow" d="M930,440 L930,462 L880,462 L880,488"/>
+  <text x="900" y="456" class="lbl" text-anchor="middle">no</text>
+  <path class="arrow-v" d="M1070,440 L1070,462 L1210,462 L1210,488"/>
+  <text x="1140" y="456" class="lbl" text-anchor="middle">yes</text>
+
+  <g transform="translate(40,490)">
+    <rect class="bad" width="300" height="104" rx="10"/>
+    <text x="16" y="28" class="h3" style="fill: var(--ox)">Rebellion</text>
+    <text x="16" y="52" class="b">the crown vs a newcomer</text>
+    <text x="16" y="72" class="s">keeps a crown honest when the</text>
+    <text x="16" y="89" class="s">model under it changes</text>
+  </g>
+  <g transform="translate(370,490)">
+    <rect class="crown" width="300" height="104" rx="10"/>
+    <text x="16" y="28" class="h3" style="fill: var(--gold)">Run the crown</text>
+    <text x="16" y="52" class="b">no games</text>
+    <text x="16" y="72" class="s">the crowned prompt runs every time</text>
+  </g>
+  <g transform="translate(730,490)">
+    <rect class="card" width="300" height="104" rx="10"/>
+    <text x="16" y="28" class="h3">Run the leader</text>
+    <text x="16" y="52" class="b">slot 0 of the board</text>
+    <text x="16" y="72" class="s">empty board → one agent breeds</text>
+    <text x="16" y="89" class="s">the first prompt</text>
+  </g>
+  <g transform="translate(1060,490)">
+    <rect class="hot" width="300" height="104" rx="10"/>
+    <text x="16" y="28" class="h3" style="fill: var(--verd)">Game · roll 1d6 = N</text>
+    <text x="16" y="52" class="b">bench slot N exists, N &lt; 6 → rematch</text>
+    <text x="16" y="72" class="b">otherwise → a newcomer</text>
+    <text x="16" y="91" class="s">bred from the metaprompt alone</text>
+  </g>
+
+  <path class="arrow-x" d="M190,594 L190,676"/>
+  <path class="arrow-v" d="M1210,594 L1210,676"/>
+
+  <!-- ============ THE DUEL ============ -->
+  <rect class="arena" x="40" y="680" width="1320" height="330" rx="14"/>
+  <rect x="60" y="668" width="410" height="24" class="bg"/>
+  <text x="68" y="686" class="sec">THE DUEL  ·  old vs new, on the real task</text>
+
+  <g transform="translate(80,714)">
+    <rect class="crown" width="500" height="126" rx="10"/>
+    <text x="18" y="28" class="h3">Old · Agathys the Wise</text>
+    <text x="18" y="48" class="s">the leader, or the crown in a rebellion</text>
+    <rect class="card" x="18" y="66" width="130" height="40" rx="8"/>
+    <text x="83" y="91" class="b" text-anchor="middle">own worktree</text>
+    <path class="arrow" d="M148,86 L176,86"/>
+    <rect class="card" x="178" y="66" width="130" height="40" rx="8"/>
+    <text x="243" y="91" class="b" text-anchor="middle">runs the step</text>
+    <path class="arrow" d="M308,86 L336,86"/>
+    <rect class="card" x="338" y="66" width="144" height="40" rx="8"/>
+    <text x="410" y="91" class="b" text-anchor="middle">dynasty gate</text>
+  </g>
+  <text x="700" y="784" class="h3" text-anchor="middle" style="fill: var(--sigil)">vs</text>
+  <g transform="translate(820,714)">
+    <rect class="hot" width="500" height="126" rx="10"/>
+    <text x="18" y="28" class="h3">New · Moe the Arcane</text>
+    <text x="18" y="48" class="s">a bench prompt, or a newcomer</text>
+    <rect class="card" x="18" y="66" width="130" height="40" rx="8"/>
+    <text x="83" y="91" class="b" text-anchor="middle">own worktree</text>
+    <path class="arrow" d="M148,86 L176,86"/>
+    <rect class="card" x="178" y="66" width="130" height="40" rx="8"/>
+    <text x="243" y="91" class="b" text-anchor="middle">runs the step</text>
+    <path class="arrow" d="M308,86 L336,86"/>
+    <rect class="card" x="338" y="66" width="144" height="40" rx="8"/>
+    <text x="410" y="91" class="b" text-anchor="middle">dynasty gate</text>
+  </g>
+  <text x="700" y="812" class="xs" text-anchor="middle">in parallel</text>
+
+  <path class="arrow" d="M330,840 L330,920 L418,920"/>
+  <path class="arrow" d="M1070,840 L1070,880 L940,880 L940,918"/>
+  <text x="372" y="910" class="lbl" text-anchor="middle">result A</text>
+  <text x="1010" y="872" class="lbl" text-anchor="middle">result B</text>
+
+  <g transform="translate(420,876)">
+    <rect class="card" width="520" height="112" rx="10" style="stroke: var(--sigil); stroke-width: 1.8"/>
+    <text x="18" y="28" class="h3">The judge · blind</text>
+    <text x="18" y="50" class="b">both results as A / B in random order, with each gate's output</text>
+    <text x="18" y="70" class="b">grades elegance, tech debt, readability — never sees a prompt</text>
+    <text x="18" y="94" class="s">its prompt is yours and never evolves · the verdict is binary: old or new</text>
+  </g>
+
+  <path class="arrow-v" d="M940,960 L1018,960"/>
+  <g transform="translate(1020,920)">
+    <rect class="hot" width="320" height="76" rx="10"/>
+    <text x="16" y="28" class="b" font-weight="700">The winner's tree carries the cast on</text>
+    <text x="16" y="50" class="s">into the ritual's own gate and push</text>
+    <text x="16" y="66" class="xs">the loser's tree is parked</text>
+  </g>
+
+  <!-- ============ THE LADDER ============ -->
+  <text x="40" y="1058" class="sec">THE LADDER  ·  one board per dynasty, six slots  ·  a dynasty takes the project's name unless config names one, so projects can share it</text>
+
+  <g transform="translate(40,1074)">
+    <rect class="crown" width="230" height="88" rx="10"/>
+    <text x="16" y="24" class="lbl" style="fill: var(--gold)">0 · LEADER</text>
+    <text x="16" y="48" class="b" font-weight="700">Agathys the Wise</text>
+    <text x="16" y="70" class="s mono">W 2 in a row · L 0</text>
+  </g>
+  <g transform="translate(290,1074)">
+    <rect class="card" width="170" height="88" rx="10"/>
+    <text x="14" y="24" class="lbl">1</text>
+    <text x="14" y="48" class="b" font-weight="700">Moe the Arcane</text>
+    <text x="14" y="70" class="s mono">L 1</text>
+  </g>
+  <g transform="translate(474,1074)">
+    <rect class="card" width="170" height="88" rx="10"/>
+    <text x="14" y="24" class="lbl">2</text>
+    <text x="14" y="48" class="b" font-weight="700">Ilsa Emberquill</text>
+    <text x="14" y="70" class="s mono">L 2</text>
+  </g>
+  <g transform="translate(658,1074)">
+    <rect class="card" width="170" height="88" rx="10" style="stroke-dasharray: 5 4"/>
+    <text x="14" y="24" class="lbl">3</text>
+    <text x="14" y="48" class="s">empty → newcomer</text>
+  </g>
+  <g transform="translate(842,1074)">
+    <rect class="card" width="170" height="88" rx="10" style="stroke-dasharray: 5 4"/>
+    <text x="14" y="24" class="lbl">4</text>
+    <text x="14" y="48" class="s">empty → newcomer</text>
+  </g>
+  <g transform="translate(1026,1074)">
+    <rect class="card" width="170" height="88" rx="10" style="stroke-dasharray: 5 4"/>
+    <text x="14" y="24" class="lbl">5</text>
+    <text x="14" y="48" class="s">empty → newcomer</text>
+  </g>
+  <path class="arrow-x dash" d="M1196,1118 L1224,1118"/>
+  <g transform="translate(1226,1074)">
+    <rect class="bad" width="134" height="88" rx="10"/>
+    <text x="14" y="24" class="lbl" style="fill: var(--ox)">6 · NEWCOMER</text>
+    <text x="14" y="48" class="s">always a newcomer;</text>
+    <text x="14" y="66" class="s">a full bench drops</text>
+    <text x="14" y="82" class="s">its oldest</text>
+  </g>
+  <text x="290" y="1180" class="xs">bench · former leaders only, oldest last</text>
+
+  <g transform="translate(40,1200)">
+    <rect class="hot" width="420" height="152" rx="12"/>
+    <text x="20" y="30" class="h3" style="fill: var(--verd)">Challenger wins</text>
+    <text x="20" y="58" class="b">· takes slot 0 with +1 win</text>
+    <text x="20" y="82" class="b">· the old leader takes the challenger's slot, +1 loss</text>
+    <text x="20" y="106" class="b">· a newcomer pushes the bench down a slot;</text>
+    <text x="32" y="126" class="b">past slot 5 the oldest falls</text>
+  </g>
+  <g transform="translate(490,1200)">
+    <rect class="bad" width="420" height="152" rx="12"/>
+    <text x="20" y="30" class="h3" style="fill: var(--ox)">Challenger loses</text>
+    <text x="20" y="58" class="b">· +1 loss, keeps its slot</text>
+    <text x="20" y="82" class="b">· a losing newcomer is discarded,</text>
+    <text x="32" y="102" class="b">kept in history, never on the board</text>
+    <text x="20" y="126" class="b">· the leader +1 win</text>
+  </g>
+  <g transform="translate(940,1200)">
+    <rect class="crown" width="420" height="152" rx="12"/>
+    <text x="20" y="30" class="h3" style="fill: var(--gold)">Streaks and the crown</text>
+    <text x="20" y="58" class="b">· 3 losses, ever → off the board, no fourth chance</text>
+    <text x="20" y="82" class="b">· 3 wins in a row → proposed for the crown</text>
+    <text x="20" y="106" class="b">· rebel wins → crown lifted; the rebel leads with 1 win;</text>
+    <text x="32" y="126" class="b">the old crown joins the bench, record reset, 1 loss</text>
+  </g>
+
+  <!-- ============ THE HUMAN ============ -->
+  <text x="40" y="1402" class="sec">THE HUMAN  ·  the final word, like merging a pull request</text>
+  <g transform="translate(40,1418)">
+    <rect class="crown" width="230" height="52" rx="10"/>
+    <text x="16" y="22" class="b" font-weight="700">confirm a crown</text>
+    <text x="16" y="40" class="s">a streak only proposes</text>
+    <rect class="card" x="250" width="200" height="52" rx="10"/>
+    <text x="266" y="22" class="b" font-weight="700">uncrown</text>
+    <text x="266" y="40" class="s">games resume</text>
+    <rect class="card" x="470" width="270" height="52" rx="10"/>
+    <text x="486" y="22" class="b" font-weight="700">amend a prompt</text>
+    <text x="486" y="40" class="s">the edit joins as a newcomer</text>
+    <rect class="card" x="760" width="270" height="52" rx="10"/>
+    <text x="776" y="22" class="b" font-weight="700">export · import</text>
+    <text x="776" y="40" class="s">the backup is yours to keep</text>
+    <rect class="card" x="1050" width="270" height="52" rx="10"/>
+    <text x="1066" y="22" class="b" font-weight="700">board · show · history</text>
+    <text x="1066" y="40" class="s">append-only; nothing is edited</text>
+  </g>
+  <text x="40" y="1520" class="xs">Not planned: mutation (every challenger is bred from the metaprompt alone) · an evolving judge · automatic crowning</text>
+</svg>
