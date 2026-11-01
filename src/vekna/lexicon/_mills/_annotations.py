@@ -1,11 +1,13 @@
 import inspect
 from collections.abc import Awaitable, Callable, Coroutine
 from types import NoneType, UnionType
-from typing import Annotated, Any, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
 from vekna.lexicon._pacts import Done, Failure, RitualDefinitionError
+
+_KindT = TypeVar("_KindT")
 
 _NAMELESS = "value"
 
@@ -160,3 +162,18 @@ def _failure_of(payload: type[BaseModel]) -> type[Failure[BaseModel]]:
     erased: Any = Failure
     made: type[Failure[BaseModel]] = erased[payload]
     return made
+
+
+# The class a `Failure[...]` was made over, read back off pydantic's generic
+# metadata; `None` for any other class, or for a Failure over a union.
+def _failed_of(cls: type[BaseModel]) -> type[BaseModel] | None:
+    metadata = cls.__pydantic_generic_metadata__
+    if metadata["origin"] is not Failure:
+        return None
+    return _as_model(metadata["args"][0])
+
+
+# `vars` hands a class's own namespace back as `Any`, which stays in this module.
+def _own_attribute(*, owner: type, name: str, kind: type[_KindT]) -> _KindT | None:
+    found = vars(owner).get(name)
+    return found if isinstance(found, kind) else None

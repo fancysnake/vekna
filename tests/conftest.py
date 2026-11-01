@@ -1,6 +1,6 @@
 import asyncio
 import io
-from collections.abc import Awaitable, Iterator
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -9,7 +9,6 @@ import pytest
 from pydantic import BaseModel, JsonValue
 
 from vekna.lexicon import NoComponents
-from vekna.lexicon._mills.engine import steps_scope
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import Resumption, Ritual, Transition
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
@@ -43,16 +42,6 @@ class Tty(io.StringIO):
     @staticmethod
     def isatty() -> bool:
         return True
-
-
-# A payload class is one step's identity for the whole process, and a test that
-# declares a throwaway step per case would hand the same class to the next
-# case's step. Steps declared inside a test are forgotten with it; the ones a
-# module declares at import stay.
-@pytest.fixture(autouse=True)
-def _own_steps() -> Iterator[None]:
-    with steps_scope():
-        yield
 
 
 # Most tests need a ritual only to reach the step they are actually about — an

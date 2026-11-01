@@ -11,7 +11,7 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, JsonValue
 
-from vekna.lexicon._mills._annotations import _failure_of
+from vekna.lexicon._mills._annotations import _failed_of, _failure_of, _own_attribute
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import (
     CastQueueProtocol,
@@ -182,12 +182,11 @@ class Compendium:
         raise RitualDefinitionError(msg)
 
 
-# A payload class is a step's identity, so this is the routing table: what a
-# step returns is looked up here to find what runs next. Process-level and
-# filled at decoration, like a `FocusSlot`, because the trial drives a ritual
-# with no compendium in hand. A step's name routes nothing, so two rituals may
-# each have a `measure`; two steps taking one class is the collision.
-_steps: dict[type[BaseModel], Step] = {}
+# Where `@step` leaves a step on each class it takes.
+_STEP_ATTRIBUTE = "__vekna_step__"
+# Where a payload class holds its `Failure[...]`, which pydantic caches only
+# weakly: a collection would otherwise take the recovery step with it.
+_FAILURE_ATTRIBUTE = "__vekna_failure__"
 
 
 # Every payload checked before any is written: a step admitting `Lint | Coverage`
@@ -195,38 +194,32 @@ _steps: dict[type[BaseModel], Step] = {}
 # step this refused, and the sweep swallows the error and carries on.
 def register_step(the_step: Step) -> None:
     for payload in the_step.payloads:
-        if (first := _steps.get(payload)) is not None and first is not the_step:
+        if (first := step_taking(payload)) is not None and first is not the_step:
             msg = (
                 f"{payload.__name__} is the payload of both step {first.name!r}"
                 f" ({first.source}) and step {the_step.name!r} ({the_step.source})"
                 " — one payload class, one step"
             )
             raise RitualDefinitionError(msg)
-    _steps.update(dict.fromkeys(the_step.payloads, the_step))
+    for payload in the_step.payloads:
+        setattr(payload, _STEP_ATTRIBUTE, the_step)
+        if (failed := _failed_of(payload)) is not None:
+            setattr(failed, _FAILURE_ATTRIBUTE, payload)
 
 
+# A payload class is a step's identity, so the step lives on the class: what a
+# step returns is routed by reading its class. A step lives as long as its
+# class, so a class that outlives a test keeps its step. Read off the class's
+# own namespace rather than its MRO: a subclass is not an edge the graph can
+# draw, so it is not one the engine takes. A step's name routes nothing, so two
+# rituals may each have a `measure`; two steps taking one class is the
+# collision.
 def step_taking(payload: type[BaseModel]) -> Step | None:
-    return _steps.get(payload)
+    return _own_attribute(owner=payload, name=_STEP_ATTRIBUTE, kind=Step)
 
 
-# Steps decorated inside the block are forgotten at its end. A test that
-# declares a throwaway step per case would otherwise hand the same payload
-# class to a second step on the next case, which is the collision above — and
-# steps declared at module level, before the block, are kept.
-@contextlib.contextmanager
-def steps_scope() -> Generator[None]:
-    kept = dict(_steps)
-    try:
-        yield
-    finally:
-        _steps.clear()
-        _steps.update(kept)
-
-
-# Exact class, not isinstance: a subclass is not an edge the graph can draw, so
-# it is not one the engine takes.
 def step_for(transition: BaseModel) -> Step:
-    if (found := _steps.get(type(transition))) is None:
+    if (found := step_taking(type(transition))) is None:
         msg = f"no step takes {type(transition).__name__}"
         raise StepBoundaryError(msg)
     return found
@@ -521,7 +514,7 @@ def cast_context(
 
 
 def recovery_for(payload: type[BaseModel]) -> Step | None:
-    return _steps.get(_failure_of(payload))
+    return step_taking(_failure_of(payload))
 
 
 # One step, run in its rite. A raise becomes the next transition when some step

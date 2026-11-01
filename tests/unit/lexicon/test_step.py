@@ -33,7 +33,8 @@ class Elsewhere(BaseModel):
 
 # Deliberately `async def`: it is what keeps the wrapper's awaiting path under
 # test, against `TestSyncBody` covering the other one.
-async def _emit(payload: Ping) -> Done[Pong]:
+@step
+async def emit(payload: Ping) -> Done[Pong]:
     await asyncio.sleep(0)
     return Done(Pong(n=payload.n + 1))
 
@@ -41,27 +42,31 @@ async def _emit(payload: Ping) -> Done[Pong]:
 class TestStepDecorator:
     @staticmethod
     def test_runs_body_and_returns_transition():
-        wrapped = step(_emit)
-
-        result = asyncio.run(wrapped.run(Ping(n=1)))
+        result = asyncio.run(emit.run(Ping(n=1)))
 
         assert result == Done(Pong(n=2))
 
     @staticmethod
     def test_captures_payload_exits_and_name():
-        def _hop(payload: Ping) -> Pong | Elsewhere | Done[None]:
+        class Knock(BaseModel):
+            n: int
+
+        def _hop(payload: Knock) -> Pong | Elsewhere | Done[None]:
             return Done(None) if payload.n else Pong(n=1)
 
         wrapped = step(_hop)
 
         assert wrapped.name == "_hop"
-        assert wrapped.payloads == (Ping,)
+        assert wrapped.payloads == (Knock,)
         assert wrapped.exits == (Pong, Elsewhere)
         assert wrapped.ends is True
 
     @staticmethod
     def test_a_step_that_never_finishes_does_not_end():
-        def _forward(payload: Ping) -> Pong:
+        class Knock(BaseModel):
+            n: int
+
+        def _forward(payload: Knock) -> Pong:
             return Pong(n=payload.n)
 
         wrapped = step(_forward)
@@ -71,17 +76,13 @@ class TestStepDecorator:
 
     @staticmethod
     def test_rejects_wrong_payload_type():
-        wrapped = step(_emit)
-
         with pytest.raises(StepBoundaryError, match="expected Ping, got str"):
-            asyncio.run(wrapped.run("not a ping"))
+            asyncio.run(emit.run("not a ping"))
 
     @staticmethod
     def test_rejects_an_absent_payload():
-        wrapped = step(_emit)
-
         with pytest.raises(StepBoundaryError, match="expected Ping, got NoneType"):
-            asyncio.run(wrapped.run(None))
+            asyncio.run(emit.run(None))
 
     @staticmethod
     def test_rejects_function_without_single_param():
@@ -171,27 +172,36 @@ class TestStepDecorator:
 class TestStepOptions:
     @staticmethod
     def test_a_single_visit_is_a_cap_it_keeps():
-        def _once(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        def _once(payload: Knock) -> Done[Pong]:
             return Done(Pong(n=payload.n))
 
         wrapped = step(max_visits=1)(_once)
 
         assert wrapped.max_visits == 1
-        assert asyncio.run(wrapped.run(Ping(n=1))) == Done(Pong(n=1))
+        assert asyncio.run(wrapped.run(Knock(n=1))) == Done(Pong(n=1))
 
     @staticmethod
     def test_a_visit_within_a_fraction_of_a_second_finishes():
-        def _quick(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        def _quick(payload: Knock) -> Done[Pong]:
             return Done(Pong(n=payload.n))
 
         wrapped = step(timeout=0.5)(_quick)
 
         assert wrapped.max_visits is None
-        assert asyncio.run(wrapped.run(Ping(n=3))) == Done(Pong(n=3))
+        assert asyncio.run(wrapped.run(Knock(n=3))) == Done(Pong(n=3))
 
     @staticmethod
     def test_a_visit_past_its_timeout_fails_naming_the_step():
-        async def _stalls(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        async def _stalls(payload: Knock) -> Done[Pong]:
             await asyncio.sleep(1)
             return Done(Pong(n=payload.n))
 
@@ -200,7 +210,7 @@ class TestStepOptions:
         with pytest.raises(
             RiteTimeoutError, match=r"^step '_stalls' timed out after 0\.01s$"
         ):
-            asyncio.run(wrapped.run(Ping(n=4)))
+            asyncio.run(wrapped.run(Knock(n=4)))
 
 
 class TestRitualOptions:
@@ -222,30 +232,25 @@ class TestRitualOptions:
 
 
 # A step two others transition into admits either shape.
+@step
+def merge(payload: Pong | Elsewhere) -> Done[Pong]:
+    return Done(Pong(n=payload.n))
+
+
 class TestUnionPayload:
     @staticmethod
-    def _merge(payload: Ping | Pong) -> Done[Pong]:
-        return Done(Pong(n=payload.n))
+    def test_captures_every_member_as_a_payload():
+        assert merge.payloads == (Pong, Elsewhere)
 
-    @classmethod
-    def test_captures_every_member_as_a_payload(cls):
-        wrapped = step(cls._merge)
+    @staticmethod
+    def test_admits_either_member():
+        assert asyncio.run(merge.run(Pong(n=1))) == Done(Pong(n=1))
+        assert asyncio.run(merge.run(Elsewhere(n=2))) == Done(Pong(n=2))
 
-        assert wrapped.payloads == (Ping, Pong)
-
-    @classmethod
-    def test_admits_either_member(cls):
-        wrapped = step(cls._merge)
-
-        assert asyncio.run(wrapped.run(Ping(n=1))) == Done(Pong(n=1))
-        assert asyncio.run(wrapped.run(Pong(n=2))) == Done(Pong(n=2))
-
-    @classmethod
-    def test_rejects_a_shape_outside_the_union(cls):
-        wrapped = step(cls._merge)
-
-        with pytest.raises(StepBoundaryError, match=r"expected Ping \| Pong"):
-            asyncio.run(wrapped.run(Elsewhere(n=1)))
+    @staticmethod
+    def test_rejects_a_shape_outside_the_union():
+        with pytest.raises(StepBoundaryError, match=r"expected Pong \| Elsewhere"):
+            asyncio.run(merge.run(Ping(n=1)))
 
     @staticmethod
     def test_rejects_a_union_with_a_non_model_member():
@@ -261,21 +266,33 @@ class TestUnionPayload:
 class TestSyncBody:
     @staticmethod
     def test_runs_a_step_that_only_routes():
-        def _route(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        def _route(payload: Knock) -> Done[Pong]:
             return Done(Pong(n=payload.n))
 
         wrapped = step(_route)
 
-        assert asyncio.run(wrapped.run(Ping(n=3))) == Done(Pong(n=3))
+        assert asyncio.run(wrapped.run(Knock(n=3))) == Done(Pong(n=3))
 
     @staticmethod
     def test_still_checks_the_payload_of_a_step_that_only_routes():
-        def _route(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        class Rap(BaseModel):
+            n: int
+
+        def _route(payload: Knock | Rap) -> Done[Pong]:
             return Done(Pong(n=payload.n))
 
         wrapped = step(_route)
 
-        with pytest.raises(StepBoundaryError):
+        with pytest.raises(
+            StepBoundaryError,
+            match=r"^step '_route' expected Knock \| Rap, got Elsewhere$",
+        ):
             asyncio.run(wrapped.run(Elsewhere(n=1)))
 
     @staticmethod
@@ -294,16 +311,19 @@ class TestSyncBody:
     # switching the wrapper to `iscoroutinefunction` would take that away.
     @staticmethod
     def test_awaits_a_coroutine_a_sync_body_hands_back():
-        async def _later(payload: Ping) -> Done[Pong]:
+        class Knock(BaseModel):
+            n: int
+
+        async def _later(payload: Knock) -> Done[Pong]:
             await asyncio.sleep(0)
             return Done(Pong(n=payload.n))
 
-        def _defers(payload: Ping) -> Awaitable[Done[Pong]]:
+        def _defers(payload: Knock) -> Awaitable[Done[Pong]]:
             return _later(payload)
 
         wrapped = step(_defers)
 
-        assert asyncio.run(wrapped.run(Ping(n=5))) == Done(Pong(n=5))
+        assert asyncio.run(wrapped.run(Knock(n=5))) == Done(Pong(n=5))
         assert wrapped.ends is True
 
 

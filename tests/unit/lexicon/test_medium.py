@@ -50,10 +50,6 @@ class Whoami(BaseModel):
     pass
 
 
-class Asked(BaseModel):
-    pass
-
-
 class Picked(BaseModel):
     choice: str
 
@@ -163,6 +159,9 @@ class TestMedium:
 # spelled out in the test body is one the linters would refuse to let stand, and
 # an author's rituals.py is a file they may never point a checker at.
 def _caller(call: dict[str, object]):
+    class Asked(BaseModel):
+        pass
+
     @step
     async def ask(_state: Asked) -> Done[None]:
         await pick(**call)

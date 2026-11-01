@@ -99,18 +99,25 @@ def _cast(the_ritual, *, stdin: str = "", ledger=None) -> tuple[object, Grimoire
     return result, grimoire
 
 
+def _ritual_awaiting(body):
+    class Entered(BaseModel):
+        pass
+
+    @step
+    async def work(_: Entered) -> Done[BaseModel | None]:
+        return Done(await body())
+
+    return entry(payload=Entered())
+
+
 class TestCodingMedium:
     @staticmethod
     def test_default_return_is_telemetry_result():
         focus = FakeFocus(deltas=("thinking", "editing"))
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[CodingResult]:
-            opts = CodingOpts(model="opus", cwd="/tmp/x")
-            return Done(await coding("fix it", opts=opts))
-
-        r = entry(payload=Answer(port=1))
+        opts = CodingOpts(model="opus", cwd="/tmp/x")
+        r = _ritual_awaiting(lambda: coding("fix it", opts=opts))
 
         result, grimoire = _cast(r)
 
@@ -132,12 +139,7 @@ class TestCodingMedium:
     def test_telemetry_lands_in_medium_rite_result():
         CODING_FOCUS.register(FakeFocus())
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("fix it")
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("fix it"))
 
         _, grimoire = _cast(r)
 
@@ -157,11 +159,7 @@ class TestCodingMedium:
         focus = FakeFocus(text='{"port": 9000}')
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[Answer]:
-            return Done(await coding("start server", output=Answer))
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("start server", output=Answer))
 
         result, _ = _cast(r)
 
@@ -172,11 +170,7 @@ class TestCodingMedium:
     def test_invalid_typed_output_raises():
         CODING_FOCUS.register(FakeFocus(text="not json"))
 
-        @step
-        async def work(_: Answer) -> Done[Answer]:
-            return Done(await coding("start server", output=Answer))
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("start server", output=Answer))
 
         with pytest.raises(CodingOutputError):
             _cast(r)
@@ -186,12 +180,9 @@ class TestCodingMedium:
         focus = FakeFocus(gate_tools=("bash", "read"))
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(
+            lambda: coding("fix it", opts=CodingOpts(gate_tools=["bash"]))
+        )
 
         _cast(r, stdin="n\n")
 
@@ -205,12 +196,9 @@ class TestCodingMedium:
         CODING_FOCUS.register(focus)
         knobs = Answer(port=8080)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("fix it", opts=CodingOpts(focus_options=knobs))
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(
+            lambda: coding("fix it", opts=CodingOpts(focus_options=knobs))
+        )
 
         _cast(r)
 
@@ -233,12 +221,7 @@ class TestCodingMedium:
         )
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("write the test")
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("write the test"))
 
         _cast(r, stdin="2\n")
 
@@ -251,12 +234,7 @@ class TestCodingMedium:
         )
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("write the test")
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("write the test"))
 
         _cast(r, stdin="both, in that order\n")
 
@@ -267,12 +245,7 @@ class TestCodingMedium:
         focus = FakeFocus(questions=(("which fixture?", None),))
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("write the test")
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("write the test"))
 
         _cast(r, stdin="the tmp_path one\n")
 
@@ -292,24 +265,10 @@ class TestCodingMedium:
         # production does — the loader is an integration concern.
         register()
 
-        @step
-        async def work(_: Answer) -> Done[None]:
-            await coding("fix it")
-            return Done(None)
-
-        r = entry(payload=Answer(port=1))
+        r = _ritual_awaiting(lambda: coding("fix it"))
 
         with pytest.raises(FocusMissingError, match="claude-agent-sdk"):
             _cast(r)
-
-
-def _one_call_ritual(**declaration):
-    @step
-    async def work(_: Answer) -> Done[None]:
-        await coding("fix it", **declaration)
-        return Done(None)
-
-    return entry(payload=Answer(port=1))
 
 
 class TestSessionDeclaration:
@@ -320,15 +279,11 @@ class TestSessionDeclaration:
         focus = FakeFocus()
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
+        async def calls() -> None:
             for index, (session, key) in enumerate(declarations):
                 await coding(f"call {index}", session=session, key=key)
-            return Done(None)
 
-        r = entry(payload=Answer(port=1))
-
-        _cast(r)
+        _cast(_ritual_awaiting(calls))
         return [call.resume for call in focus.calls]
 
     @classmethod
@@ -384,15 +339,11 @@ class TestSessionDeclaration:
         focus = FakeFocus(session_id=None)
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[None]:
+        async def calls() -> None:
             await coding("fix it", session=Session.CONTINUE, key="repair")
             await coding("fix it again", session=Session.CONTINUE)
-            return Done(None)
 
-        r = entry(payload=Answer(port=1))
-
-        _, grimoire = _cast(r)
+        _, grimoire = _cast(_ritual_awaiting(calls))
 
         assert [call.resume for call in focus.calls] == [None, None]
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
@@ -412,7 +363,11 @@ class TestSessionDeclaration:
         # told, and the next call on the thread would resume the wrong id.
         CODING_FOCUS.register(FakeFocus(session_id=None))
 
-        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
+        _, grimoire = _cast(
+            _ritual_awaiting(
+                lambda: coding("fix it", session=Session.CONTINUE, key="repair")
+            )
+        )
 
         deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
         assert deltas == [
@@ -423,7 +378,9 @@ class TestSessionDeclaration:
     def test_an_unkeyed_continue_that_did_not_take_says_so():
         CODING_FOCUS.register(FakeFocus(session_id=None))
 
-        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE))
+        _, grimoire = _cast(
+            _ritual_awaiting(lambda: coding("fix it", session=Session.CONTINUE))
+        )
 
         deltas = [e.delta for e in grimoire.events if isinstance(e, RiteStreamed)]
         assert deltas == [
@@ -436,7 +393,7 @@ class TestSessionDeclaration:
         # never reports ids would otherwise narrate every call it answers.
         CODING_FOCUS.register(FakeFocus(session_id=None))
 
-        _, grimoire = _cast(_one_call_ritual())
+        _, grimoire = _cast(_ritual_awaiting(lambda: coding("fix it")))
 
         assert [e for e in grimoire.events if isinstance(e, RiteStreamed)] == []
 
@@ -446,7 +403,11 @@ class TestSessionDeclaration:
         CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(CodingSessionError, match="key names the thread"):
-            _cast(_one_call_ritual(session=Session.CONTINUE, key=key))
+            _cast(
+                _ritual_awaiting(
+                    lambda: coding("fix it", session=Session.CONTINUE, key=key)
+                )
+            )
 
     @staticmethod
     @pytest.mark.parametrize("session", [None, 3, "repair", " new", "New", ""])
@@ -458,7 +419,7 @@ class TestSessionDeclaration:
         CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(CodingSessionError, match="session takes"):
-            _cast(_one_call_ritual(session=session))
+            _cast(_ritual_awaiting(lambda: coding("fix it", session=session)))
 
     @staticmethod
     @pytest.mark.parametrize("knob", ["session", "key"])
@@ -480,13 +441,17 @@ class TestSessionDeclaration:
         CODING_FOCUS.register(FakeFocus())
 
         with pytest.raises(MediumBoundaryError, match="takes no argument"):
-            _cast(_one_call_ritual(gate_tools=["Bash"]))
+            _cast(_ritual_awaiting(lambda: coding("fix it", gate_tools=["Bash"])))
 
     @staticmethod
     def test_telemetry_names_the_thread_the_author_declared():
         CODING_FOCUS.register(FakeFocus())
 
-        _, grimoire = _cast(_one_call_ritual(session=Session.CONTINUE, key="repair"))
+        _, grimoire = _cast(
+            _ritual_awaiting(
+                lambda: coding("fix it", session=Session.CONTINUE, key="repair")
+            )
+        )
 
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         assert finished[0].result == {
@@ -502,7 +467,7 @@ class TestSessionDeclaration:
     def test_telemetry_carries_a_null_key_when_none_was_declared():
         CODING_FOCUS.register(FakeFocus())
 
-        _, grimoire = _cast(_one_call_ritual())
+        _, grimoire = _cast(_ritual_awaiting(lambda: coding("fix it")))
 
         finished = [e for e in grimoire.events if isinstance(e, RiteEnded)]
         assert finished[0].result == {
@@ -529,12 +494,9 @@ class TestResumedRites:
             "text": "what it said last time",
         }
 
-        @step
-        async def work(_: Answer) -> Done[CodingResult]:
-            return Done(await coding("fix it"))
-
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            _ritual_awaiting(lambda: coding("fix it")),
+            ledger=journalled(recorded, name="coding"),
         )
 
         assert not focus.calls
@@ -549,14 +511,13 @@ class TestResumedRites:
         focus = FakeFocus()
         CODING_FOCUS.register(focus)
 
-        @step
-        async def work(_: Answer) -> Done[CodingResult]:
+        async def calls() -> CodingResult:
             await coding("first")
-            return Done(await coding("second", session=Session.CONTINUE))
+            return await coding("second", session=Session.CONTINUE)
 
         recorded = {"session": "new", "key": None, "session_id": "s9", "text": "done"}
 
-        _cast(entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding"))
+        _cast(_ritual_awaiting(calls), ledger=journalled(recorded, name="coding"))
 
         assert [call.resume for call in focus.calls] == ["s9"]
 
@@ -564,14 +525,11 @@ class TestResumedRites:
     def test_a_typed_return_is_validated_out_of_the_recorded_text():
         CODING_FOCUS.register(FakeFocus())
 
-        @step
-        async def work(_: Answer) -> Done[Answer]:
-            return Done(await coding("port?", output=Answer))
-
         recorded = {"session": "new", "text": '{"port": 8080}'}
 
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            _ritual_awaiting(lambda: coding("port?", output=Answer)),
+            ledger=journalled(recorded, name="coding"),
         )
 
         assert result == Answer(port=8080)
@@ -582,7 +540,7 @@ class TestResumedRites:
 
         with pytest.raises(CodingOutputError, match="journaled as something else"):
             _cast(
-                _one_call_ritual(),
+                _ritual_awaiting(lambda: coding("fix it")),
                 ledger=journalled("not a reply at all", name="coding"),
             )
 
@@ -593,7 +551,10 @@ class TestResumedRites:
 
         # The recorded rite was a `shell`, so this coding rite matches nothing
         # and the ledger is spent rather than misread.
-        _cast(_one_call_ritual(), ledger=journalled({"text": "x"}, name="shell"))
+        _cast(
+            _ritual_awaiting(lambda: coding("fix it")),
+            ledger=journalled({"text": "x"}, name="shell"),
+        )
 
         assert len(focus.calls) == 1
 
@@ -607,7 +568,7 @@ class TestResumedRites:
         recorded = {"session": "new", "text": "what failed"}
 
         _cast(
-            _one_call_ritual(),
+            _ritual_awaiting(lambda: coding("fix it")),
             ledger=journalled(recorded, name="coding", status="error"),
         )
 
@@ -620,12 +581,9 @@ class TestResumedRites:
         register()
         recorded = {"session": "new", "text": "what it said last time"}
 
-        @step
-        async def work(_: Answer) -> Done[CodingResult]:
-            return Done(await coding("fix it"))
-
         result, _ = _cast(
-            entry(payload=Answer(port=1)), ledger=journalled(recorded, name="coding")
+            _ritual_awaiting(lambda: coding("fix it")),
+            ledger=journalled(recorded, name="coding"),
         )
 
         assert result == CodingResult(text="what it said last time")

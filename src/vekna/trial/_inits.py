@@ -14,7 +14,6 @@ from vekna.lexicon._mills.engine import (
     _rite,
     cast_context,
     run_cast,
-    steps_scope,
 )
 from vekna.lexicon._pacts import RiteEvent, Ritual, Step, Transition
 
@@ -56,7 +55,6 @@ class Trial:
 
     def __enter__(self) -> Self:
         installed = contextlib.ExitStack()
-        installed.enter_context(steps_scope())
         installed.enter_context(CODING_FOCUS.scope(self.coding))
         installed.enter_context(SHELL_FOCUS.scope(self.shell))
         installed.enter_context(CAST_QUEUE.scope(self.queue))
