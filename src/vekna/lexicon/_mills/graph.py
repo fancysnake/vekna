@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from vekna.lexicon._pacts import Ritual, RitualDefinitionError, Step
+from vekna.lexicon._pacts import Ritual, RitualDefinitionError, StepSpec
 
 from .engine import recovery_for, step_taking
 
@@ -15,7 +15,7 @@ ON_FAILURE = " (on failure)"
 # An exit no step takes is the one mis-wire mypy cannot see — the annotation
 # is well-typed, it just names a class nothing was decorated with. Refused
 # here, which every load route reaches before a cast starts.
-def _target(*, ritual: str, label: str, exit_type: type[BaseModel]) -> Step:
+def _target(*, ritual: str, label: str, exit_type: type[BaseModel]) -> StepSpec:
     if (found := step_taking(exit_type)) is None:
         msg = (
             f"ritual {ritual!r}: {label} may return {exit_type.__name__}, "
@@ -34,7 +34,7 @@ def step_graph(the_ritual: Ritual) -> list[tuple[str, list[str]]]:
     # The steps already walked, by identity rather than by name: a name routes
     # nothing, so one graph may hold two `measure` steps, and skipping the
     # second as seen would leave its exits unchecked.
-    seen: set[Step] = set()
+    seen: set[StepSpec] = set()
 
     def walk(
         *,

@@ -18,6 +18,7 @@ from vekna.lexicon import (
 )
 from vekna.lexicon._mills.dispatch import component_flags
 from vekna.lexicon._mills.graph import check_exits
+from vekna.lexicon._pacts import spec_of
 
 
 class Ping(BaseModel):
@@ -48,19 +49,38 @@ class TestStepDecorator:
         assert result == Done(Pong(n=2))
 
     @staticmethod
-    def test_captures_payload_exits_and_name():
+    def test_captures_payloads_and_exits():
         class Knock(BaseModel):
             n: int
 
         def _hop(payload: Knock) -> Pong | Elsewhere | Done[None]:
             return Done(None) if payload.n else Pong(n=1)
 
-        wrapped: Step = step(_hop)
+        wrapped = spec_of(step(_hop))
 
-        assert wrapped.name == "_hop"
         assert wrapped.payloads == (Knock,)
         assert wrapped.exits == (Pong, Elsewhere)
         assert wrapped.ends is True
+
+    @staticmethod
+    def test_hands_its_author_a_step_named_for_the_function():
+        class Knock(BaseModel):
+            pass
+
+        def _hop(_: Knock) -> Done[None]:
+            return Done(None)
+
+        wrapped: Step = step(_hop)
+
+        assert wrapped.name == "_hop"
+
+    @staticmethod
+    def test_refuses_a_step_it_did_not_make():
+        class Forged:
+            name = "forged"
+
+        with pytest.raises(StepBoundaryError, match="'forged' was not made by @step"):
+            spec_of(Forged())
 
     @staticmethod
     def test_a_step_that_never_finishes_does_not_end():

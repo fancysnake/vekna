@@ -22,7 +22,7 @@ when.
   blocked mark.
   ([#201](https://github.com/fancysnake/vekna/issues/201))
 - **`Step` is public.** `@step` returns one; import it from `vekna.lexicon`
-  to annotate a step, and key per-step state on its `name`.
+  to annotate a step. It carries only `name`.
   ([#235](https://github.com/fancysnake/vekna/issues/235))
 
 ### Changed

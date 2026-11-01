@@ -10,6 +10,7 @@ from vekna.lexicon._pacts import (
     RitualDefinitionError,
     Step,
     StepBoundaryError,
+    StepSpec,
     Transition,
 )
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS, SUMMARY_WIDTH
@@ -154,7 +155,7 @@ def step(
 
 def _step(
     func: _Written[_PayloadT], *, max_visits: int | None, timeout: float | None
-) -> Step:
+) -> StepSpec:
     name = func.__name__
     erased = cast("_Written[BaseModel]", func)
     exits, ends = _exits(erased, decorator="step")
@@ -172,7 +173,7 @@ def _step(
             _settled(erased(payload)), seconds=timeout, named=f"step {name!r}"
         )
 
-    the_step = Step(
+    the_step = StepSpec(
         name=name,
         source=inspect.getsourcefile(func) or func.__module__,
         run=run,
