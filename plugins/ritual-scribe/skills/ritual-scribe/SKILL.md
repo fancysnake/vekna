@@ -84,6 +84,9 @@ async def measure(state: Uncovered) -> WriteTests | Done[CoverReport]:
 - The engine checks the arriving payload against the parameter annotation **on
   entry** (`StepBoundaryError` on mismatch).
 - Mediums are called in the body. Only there.
+- `@step` returns a `Step` (`from vekna.lexicon import Step`). `.name` is
+  the function's name: key per-step state, such as a retry budget, on it.
+  Nothing else on `Step` is yours to read.
 
 ### Transitions — routing lives in the value
 

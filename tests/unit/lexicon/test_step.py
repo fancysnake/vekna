@@ -11,6 +11,7 @@ from vekna.lexicon import (
     RiteTimeoutError,
     RitualBoundaryError,
     RitualDefinitionError,
+    Step,
     StepBoundaryError,
     ritual,
     step,
@@ -54,7 +55,7 @@ class TestStepDecorator:
         def _hop(payload: Knock) -> Pong | Elsewhere | Done[None]:
             return Done(None) if payload.n else Pong(n=1)
 
-        wrapped = step(_hop)
+        wrapped: Step = step(_hop)
 
         assert wrapped.name == "_hop"
         assert wrapped.payloads == (Knock,)

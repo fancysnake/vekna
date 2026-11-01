@@ -68,6 +68,10 @@ retry loop sooner than the whole budget would. `@step(timeout=600)` bounds one
 visit in seconds: an overrun cancels the step's work and fails it with
 `RiteTimeoutError`, which recovers like any other failure.
 
+`@step` returns a `Step`, importable from `vekna.lexicon` for annotations. Its
+`name` is the function's name, the key for anything you track per step, such
+as a retry budget. The rest of `Step` belongs to the engine.
+
 `@ritual("fix", worktree=True)` asks for a checkout of its own: started from
 the dashboard, the cast runs in a pooled worktree, not in the tree it was asked
 from. [The CLI reference](cli.md#worktrees) has the pool.
