@@ -89,6 +89,9 @@ dev = [
     "cabinet @ git+https://github.com/fancysnake/cabinet.git@v3.0.0 ; python_version < \"3.15\"",
     "mutmut (>=3.8.0,<4.0.0)",
 ]
+security = [
+    "setuptools (>=84.0.0,<85.0.0)"
+]
 
 # Only `site:*` and the site workflow install this one — nothing else needs a
 # static-site generator to run the tests.
