@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1560" width="1400" height="1560" role="img" aria-labelledby="t d">
   <title id="t">Dynasty: prompts that compete for the crown</title>
-  <desc id="d">A ritual step declares a metaprompt. Each cast rolls: a crowned prompt runs or faces a rebellion; otherwise the leader runs or duels a challenger. Duelists run in their own worktrees, a blind judge grades the results, and a ladder of six slots keeps the winners until a human crowns one.</desc>
+  <desc id="d">A ritual step describes its task: what goes in, what comes out. Each cast rolls: a crowned prompt runs or faces a rebellion; otherwise the leader runs or duels a challenger. Duelists run in their own worktrees, a blind judge grades the results, and a ladder of six slots keeps the winners until a human crowns one.</desc>
   <style>
     :root {
       --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
@@ -46,7 +46,7 @@
 
   <!-- ============ HEADER ============ -->
   <text x="40" y="62" class="h1">Dynasty · prompts that compete for the crown</text>
-  <text x="40" y="94" class="lede">A ritual step declares a one-line metaprompt instead of a prompt. Vekna breeds prompts from it, now and then duels the</text>
+  <text x="40" y="94" class="lede">A ritual step describes its task, what goes in and what comes out, instead of writing a prompt. Vekna breeds prompts from it, now and then duels the</text>
   <text x="40" y="116" class="lede">leader against a challenger on the real task, keeps the winners on a board of six, and you crown the best.</text>
 
   <g transform="translate(40,140)">
@@ -61,15 +61,15 @@
   </g>
 
   <!-- ============ THE ROLL ============ -->
-  <text x="40" y="222" class="sec">THE ROLL  ·  every cast, at every metaprompt step</text>
+  <text x="40" y="222" class="sec">THE ROLL  ·  every cast, at every described step</text>
 
   <g transform="translate(560,240)">
     <rect class="card" width="280" height="56" rx="10"/>
-    <text x="140" y="24" class="b" font-weight="700" text-anchor="middle">A step with a metaprompt</text>
-    <text x="140" y="43" class="s" text-anchor="middle">“Write a prompt that fixes the triage…”</text>
+    <text x="140" y="24" class="b" font-weight="700" text-anchor="middle">A step with a task description</text>
+    <text x="140" y="43" class="s" text-anchor="middle">in: triage comments · out: a fixing diff</text>
   </g>
   <path class="arrow" d="M700,296 L700,326"/>
-  <text x="860" y="262" class="xs">metaprompt changed? → decide: reset (the default) or keep</text>
+  <text x="860" y="262" class="xs">description changed? → decide: reset (the default) or keep</text>
   <text x="860" y="279" class="xs">keep lifts the crown · new placeholders force a reset</text>
 
   <rect class="crown" x="610" y="328" width="180" height="40" rx="20"/>
@@ -119,7 +119,7 @@
     <text x="16" y="28" class="h3" style="fill: var(--verd)">Game · roll 1d6 = N</text>
     <text x="16" y="52" class="b">bench slot N exists, N &lt; 6 → rematch</text>
     <text x="16" y="72" class="b">otherwise → a newcomer</text>
-    <text x="16" y="91" class="s">bred from the metaprompt alone</text>
+    <text x="16" y="91" class="s">bred from the description alone</text>
   </g>
 
   <path class="arrow-x" d="M190,594 L190,676"/>
@@ -169,7 +169,7 @@
     <text x="18" y="28" class="h3">The judge · blind</text>
     <text x="18" y="50" class="b">outputs as A / B, shuffled: the step's output object, else its diff</text>
     <text x="18" y="70" class="b">plus the gate output when the tree changed — never sees a prompt</text>
-    <text x="18" y="94" class="s">its prompt is yours and never evolves · the verdict is binary: old or new</text>
+    <text x="18" y="94" class="s">checks each against the task description · its prompt is yours · old or new</text>
   </g>
 
   <path class="arrow-v" d="M940,960 L1018,960"/>
@@ -270,5 +270,5 @@
     <text x="1066" y="22" class="b" font-weight="700">board · show · history</text>
     <text x="1066" y="40" class="s">append-only; nothing is edited</text>
   </g>
-  <text x="40" y="1520" class="xs">Not planned: mutation (every challenger is bred from the metaprompt alone) · an evolving judge · automatic crowning</text>
+  <text x="40" y="1520" class="xs">Not planned: mutation (every challenger is bred from the description alone) · an evolving judge · automatic crowning</text>
 </svg>
