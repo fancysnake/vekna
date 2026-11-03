@@ -13,7 +13,7 @@ import pytest
 from vekna.lexicon._inits import rituals_list, rituals_show
 
 _ROOT = Path(__file__).resolve().parents[3]
-_EXPECTED = ("review", "cover_diff", "merge_ready", "triage", "nap")
+_EXPECTED = ("ci_watch", "cover_diff", "merge_ready", "nap", "pr_fix", "sweep", "tree")
 
 
 def _stand_at_root(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,14 +46,10 @@ class TestProjectRituals:
         rituals_list()
 
         out = capsys.readouterr().out
-        for name in _EXPECTED:
-            assert f"{name}" in out
-        # The flag rendering that broke on 3.11: an optional Annotated component
-        # names the type it validates, not `Optional` or `Annotated`.
-        # A whole line: `review` is a suffix of `cabinet:review`.
         lines = out.splitlines()
-        assert "review  [--base <str>] [--only <Path>] [--focus <str>]" in lines
-        assert "triage  --link <AnyUrl>\n" in out
+        for name in _EXPECTED:
+            assert any(line.startswith(f"{name}  ") for line in lines)
+        assert "sweep  --base-branch <str> [--max-prs <int>]" in lines
 
     # The exit code is checked here, not above: a module that fails to load
     # makes `list` exit 1, and cabinet's does wherever cabinet is not installed.

@@ -40,6 +40,12 @@ when.
   second step on a class that already has one raises `RitualDefinitionError`,
   so a throwaway step per test case needs its own payload class.
   ([#148](https://github.com/fancysnake/vekna/issues/148))
+- **Cabinet is the example library.** The docs send readers to
+  [cabinet](https://cabinet.fancysnake.dev) for real workflows. This
+  repository keeps only the rituals that exercise an engine feature, so
+  `triage` and `review` are gone: cabinet's `identify` and `review` do
+  their jobs.
+  ([#250](https://github.com/fancysnake/vekna/issues/250))
 
 ### Fixed
 

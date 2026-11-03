@@ -106,7 +106,8 @@ to tell it.
   the agent behind them.
 - [Testing rituals](testing.md) — run a ritual with every medium answering from
   a script.
-- [Examples](examples.md) — the rituals this project runs on itself.
+- [Examples](examples.md) — cabinet's real workflows, and the rituals this
+  project keeps to exercise its engine.
 - [Safety](safety.md) — what vekna does not sandbox. Worth reading before your
   first cast.
 

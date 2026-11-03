@@ -10,7 +10,7 @@ _USAGE_EXIT = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Done, NoComponents, ritual, step
+    from vekna.lexicon import Done, File, NoComponents, ritual, step
 
 
     class Tick(BaseModel):
@@ -21,6 +21,7 @@ _RITUALS = textwrap.dedent("""
         start: int
         label: str = "run"
         note: str | None = None
+        only: File | None = None
 
 
     class Pong(BaseModel):
@@ -219,7 +220,12 @@ class TestRitualsList:
 
         out = capsys.readouterr().out
         assert exit_code == 0
-        assert "countdown  --start <int> [--label <str>] [--note <str>]\n" in out
+        # `only` is the flag rendering that broke on 3.11: an optional Annotated
+        # component names the type it validates, not `Optional` or `Annotated`.
+        assert (
+            "countdown  --start <int> [--label <str>] [--note <str>] [--only <Path>]\n"
+            in out
+        )
         assert "ping\n" in out
 
     @staticmethod

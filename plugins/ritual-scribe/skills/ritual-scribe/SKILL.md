@@ -621,19 +621,22 @@ All descend from `RitualError`.
 
 Do not work from a snippet — **read the rituals in `src/rituals/`** (the source
 `.vekna.toml` configures). They are vekna's own, inside mypy's scope, and `mise
-run fullcheck` keeps them correct. Four rituals, four lessons:
+run fullcheck` keeps them correct. Four lessons:
 
 - **`cover_diff`** — the smallest whole shape: entrypoint, measure, repair, and
-  a business budget counted down until it returns `Done`.
-- **`review`** — `output=` on a model the agent fills, which the ritual widens
-  with provenance the agent was never asked to invent.
+  a business budget counted down until it returns `Done`; `gate_tools` on the
+  one call that may run commands.
 - **`merge_ready`** — a union payload routing three failure shapes into one
   repair step, a `TaskGroup` running both gates at once, a keyed session.
-- **`triage`** — untrusted input fenced and read under an allowlist, a `decide`
-  that ends the ritual on two of its three answers, `gate_tools` on the one call
-  that may write.
+- **`ci_watch`** — `await_cast` on a child cast, its result read back
+  through `output=`, the slot given up while it waits.
+- **`pr_fix`** — untrusted input fenced and read under an allowlist, and a
+  `decide` before the one action that leaves the machine.
 
-Copying from there beats copying from here: those four are type-checked on every
+For rituals that outgrow one file, read
+[cabinet](https://github.com/fancysnake/cabinet).
+
+Copying from there beats copying from here: those rituals are type-checked on every
 push, a snippet in this file is checked by nothing. When they disagree with this
 document, they are right — say so.
 
