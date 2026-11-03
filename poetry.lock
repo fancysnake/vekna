@@ -23,7 +23,7 @@ files = [
     {file = "annotated_types-0.8.0-py3-none-any.whl", hash = "sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"},
     {file = "annotated_types-0.8.0.tar.gz", hash = "sha256:13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [[package]]
 name = "anyio"
@@ -36,7 +36,7 @@ files = [
     {file = "anyio-4.15.1-py3-none-any.whl", hash = "sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"},
     {file = "anyio-4.15.1.tar.gz", hash = "sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 idna = ">=2.8"
@@ -135,7 +135,7 @@ files = [
     {file = "attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"},
     {file = "attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [[package]]
 name = "babel"
@@ -248,7 +248,7 @@ description = "A vekna tome: pull request and issue maintenance rituals for GitH
 optional = false
 python-versions = ">=3.11,<3.15"
 groups = ["dev"]
-markers = "python_version < \"3.15\""
+markers = "python_version <= \"3.14\""
 files = []
 develop = false
 
@@ -407,7 +407,7 @@ files = [
     {file = "cffi-2.1.1-cp315-cp315t-win_arm64.whl", hash = "sha256:d18e5ac0f2f03f4f518d3e23db0f0cad7faa1da8620e9c09461d443bbf6e6692"},
     {file = "cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be"},
 ]
-markers = {main = "platform_python_implementation != \"PyPy\"", dev = "platform_python_implementation != \"PyPy\" and python_version < \"3.15\""}
+markers = {main = "platform_python_implementation != \"PyPy\"", dev = "python_version <= \"3.14\" and platform_python_implementation != \"PyPy\""}
 
 [package.dependencies]
 pycparser = {version = "*", markers = "implementation_name != \"PyPy\""}
@@ -677,7 +677,7 @@ files = [
     {file = "claude_agent_sdk-0.2.174-py3-none-win_amd64.whl", hash = "sha256:8be611533b7be210791a39716479d7d692e5e3afe8798529b5262db00f470165"},
     {file = "claude_agent_sdk-0.2.174.tar.gz", hash = "sha256:2380f28ad19c9f95d2de01d75ad4eeffa1ec2008cb4e35e5bc569de6279d85f9"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 anyio = ">=4.0.0"
@@ -928,7 +928,7 @@ files = [
     {file = "cryptography-50.0.2-pp311-pypy311_pp80-win_amd64.whl", hash = "sha256:7b75de3c8b3be1cdb1052747c929440c3eea46c1bc2cb8a6e3a48388e9b7b452"},
     {file = "cryptography-50.0.2.tar.gz", hash = "sha256:7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 cffi = {version = ">=2.0.0", markers = "platform_python_implementation != \"PyPy\""}
@@ -1007,14 +1007,14 @@ tomli = {version = ">=2.0.1", markers = "python_full_version < \"3.15.0\""}
 
 [[package]]
 name = "diff-cover"
-version = "10.6.0"
+version = "11.0.0"
 description = "Run coverage and linting reports on diffs"
 optional = false
-python-versions = ">=3.10"
+python-versions = ">=3.11"
 groups = ["dev"]
 files = [
-    {file = "diff_cover-10.6.0-py3-none-any.whl", hash = "sha256:a701553060f72d59b81f9cb1645b75ef66204427eb9dd99873c91092220e52ce"},
-    {file = "diff_cover-10.6.0.tar.gz", hash = "sha256:8d1194dfb537f70480ac97c9c45dd40721cf4c326c9903fbe997db67a4db6195"},
+    {file = "diff_cover-11.0.0-py3-none-any.whl", hash = "sha256:8b0a5b356d525718ee18c14b163ce179c75ccdc5b8d5474ef22ade6a0e1fa65d"},
+    {file = "diff_cover-11.0.0.tar.gz", hash = "sha256:5450247cc885ac0c252f0d7a4cf91608f454377c6f88e579bc9ead410af50c36"},
 ]
 
 [package.dependencies]
@@ -1022,9 +1022,6 @@ chardet = ">=3.0.0"
 jinja2 = ">=2.7.1"
 pluggy = ">=0.13.1,<2"
 pygments = ">=2.19.1,<3"
-
-[package.extras]
-toml = ["tomli (>=1.2.1)"]
 
 [[package]]
 name = "dill"
@@ -1232,7 +1229,7 @@ files = [
     {file = "h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"},
     {file = "h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1"},
 ]
-markers = {main = "sys_platform != \"emscripten\"", dev = "sys_platform != \"emscripten\" and python_version < \"3.15\""}
+markers = {main = "sys_platform != \"emscripten\"", dev = "python_version <= \"3.14\" and sys_platform != \"emscripten\""}
 
 [[package]]
 name = "httpcore2"
@@ -1245,7 +1242,7 @@ files = [
     {file = "httpcore2-2.16.0-py3-none-any.whl", hash = "sha256:5c4358319f2602d984ad93182c9fee5160f22e9da7babdda870a5e7c4e2dc34f"},
     {file = "httpcore2-2.16.0.tar.gz", hash = "sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643"},
 ]
-markers = {main = "sys_platform != \"emscripten\"", dev = "sys_platform != \"emscripten\" and python_version < \"3.15\""}
+markers = {main = "sys_platform != \"emscripten\"", dev = "python_version <= \"3.14\" and sys_platform != \"emscripten\""}
 
 [package.dependencies]
 h11 = ">=0.16"
@@ -1268,7 +1265,7 @@ files = [
     {file = "httpx2-2.16.0-py3-none-any.whl", hash = "sha256:fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a"},
     {file = "httpx2-2.16.0.tar.gz", hash = "sha256:0d54c98128e8f2ff7fbbde0fca8c359e5f032edeaaaac443cdb7f31f685bcd7f"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 anyio = {version = ">=4.10", markers = "sys_platform != \"emscripten\""}
@@ -1297,7 +1294,7 @@ files = [
     {file = "httpx2_jsfetch-1.0-py3-none-any.whl", hash = "sha256:cb916b707601e69a07721aabc8f3f6659be3a6893bc1ff5c6f9e02241df2da32"},
     {file = "httpx2_jsfetch-1.0.tar.gz", hash = "sha256:70a0e3eabfef7cce5ad9c629f7d01ca05e418f586646f4ddf14782e4c1454c60"},
 ]
-markers = {main = "python_version >= \"3.12\" and sys_platform == \"emscripten\"", dev = "python_version >= \"3.12\" and python_version <= \"3.14\" and sys_platform == \"emscripten\""}
+markers = {main = "sys_platform == \"emscripten\" and python_version >= \"3.12\"", dev = "python_version <= \"3.14\" and sys_platform == \"emscripten\" and python_version >= \"3.12\""}
 
 [[package]]
 name = "identify"
@@ -1445,7 +1442,7 @@ files = [
     {file = "jsonschema-4.26.0-py3-none-any.whl", hash = "sha256:d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce"},
     {file = "jsonschema-4.26.0.tar.gz", hash = "sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 attrs = ">=22.2.0"
@@ -1468,7 +1465,7 @@ files = [
     {file = "jsonschema_specifications-2025.9.1-py3-none-any.whl", hash = "sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe"},
     {file = "jsonschema_specifications-2025.9.1.tar.gz", hash = "sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 referencing = ">=0.31.0"
@@ -1963,7 +1960,7 @@ files = [
     {file = "mcp-2.3.0-py3-none-any.whl", hash = "sha256:dd0c44c089d16453e8ae31a3877a0054d7a2314caaa81f5e0541b9b1734b2377"},
     {file = "mcp-2.3.0.tar.gz", hash = "sha256:8b147a50441cf059dc88c684e0aeed3687f0aa0f39c6cde7b90330effd2b34d8"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 anyio = [
@@ -2002,7 +1999,7 @@ files = [
     {file = "mcp_types-2.3.0-py3-none-any.whl", hash = "sha256:968efdbdaedfab06adae40d378a34395f1090c5921d4be3c9cde283aaf76d91d"},
     {file = "mcp_types-2.3.0.tar.gz", hash = "sha256:d1e46549edb35ee19a94940fcee6d1addd7e589ab7ea92dda83f5d84781fc362"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 pydantic = ">=2.12.0"
@@ -2377,7 +2374,7 @@ files = [
     {file = "opentelemetry_api-1.45.1-py3-none-any.whl", hash = "sha256:b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb"},
     {file = "opentelemetry_api-1.45.1.tar.gz", hash = "sha256:aa38ed19bcc084ba42782a73255b3582283eced7ad6dddbd6695189e69adfb75"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 typing-extensions = ">=4.5.0"
@@ -2594,7 +2591,7 @@ files = [
     {file = "pycparser-3.12-py3-none-any.whl", hash = "sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e"},
     {file = "pycparser-3.12.tar.gz", hash = "sha256:f03387877eab82ce01bbdfd0ba7252ee55a90b1c708d5129e2ce915475cf1db6"},
 ]
-markers = {main = "implementation_name != \"PyPy\" and platform_python_implementation != \"PyPy\"", dev = "platform_python_implementation != \"PyPy\" and implementation_name != \"PyPy\" and python_version < \"3.15\""}
+markers = {main = "implementation_name != \"PyPy\" and platform_python_implementation != \"PyPy\"", dev = "python_version <= \"3.14\" and platform_python_implementation != \"PyPy\" and implementation_name != \"PyPy\""}
 
 [[package]]
 name = "pydantic"
@@ -2607,7 +2604,7 @@ files = [
     {file = "pydantic-2.14.1-py3-none-any.whl", hash = "sha256:9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454"},
     {file = "pydantic-2.14.1.tar.gz", hash = "sha256:94f478203dd03404682a1ada216965651dd74b1d2d5ffd62e00e0837caab5c26"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 annotated-types = ">=0.6.0"
@@ -2765,7 +2762,7 @@ files = [
     {file = "pydantic_core-2.50.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:7f476456ac2bb0d937f75191494a09c83a30765fea4f70f3b404942fe25f6cdf"},
     {file = "pydantic_core-2.50.1.tar.gz", hash = "sha256:e50d7b94baac6c7d09927fa5ca5800a0c7ee5015c7fcff65beb3a1931b5a6e09"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 typing-extensions = ">=4.16.0"
@@ -2796,7 +2793,7 @@ files = [
     {file = "pyjwt-2.15.1-py3-none-any.whl", hash = "sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193"},
     {file = "pyjwt-2.15.1.tar.gz", hash = "sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 cryptography = {version = ">=3.4.0", optional = true, markers = "extra == \"crypto\""}
@@ -2992,7 +2989,7 @@ files = [
     {file = "python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23"},
     {file = "python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [[package]]
 name = "pytokens"
@@ -3079,7 +3076,7 @@ files = [
     {file = "pywin32-312-cp39-cp39-win_amd64.whl", hash = "sha256:dc90147579a905b8635e1b0ec6514967dcb07e6e0d9c42f1477feef14cac23bb"},
     {file = "pywin32-312-cp39-cp39-win_arm64.whl", hash = "sha256:02ebca0f0242b75292e218065004310d6a477407c09fa449bfe4f6022bc0c0fc"},
 ]
-markers = {main = "sys_platform == \"win32\"", dev = "sys_platform == \"win32\" and python_version < \"3.15\""}
+markers = {main = "sys_platform == \"win32\"", dev = "python_version <= \"3.14\" and sys_platform == \"win32\""}
 
 [[package]]
 name = "pyyaml"
@@ -3218,7 +3215,7 @@ files = [
     {file = "referencing-0.37.0-py3-none-any.whl", hash = "sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231"},
     {file = "referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 attrs = ">=22.2.0"
@@ -3418,7 +3415,7 @@ files = [
     {file = "rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:b242c27c8f836305a4a72df9cdd564386ac57b807bd252a063223331c9316b37"},
     {file = "rpds_py-2026.9.1.tar.gz", hash = "sha256:4793ef7f78268b124b73fa933440f01d258bbae01de9fa53e9080c9ab0425a12"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [[package]]
 name = "ruff"
@@ -3617,7 +3614,7 @@ files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [[package]]
 name = "sortedcontainers"
@@ -3642,7 +3639,7 @@ files = [
     {file = "sse_starlette-3.6.0-py3-none-any.whl", hash = "sha256:e4dfa4d237d2712cb2b4d4918eda9b457cd6b44bbecdc838af75de836565bafd"},
     {file = "sse_starlette-3.6.0.tar.gz", hash = "sha256:623151d6c20dc0eebf1b3379c27faae91fff883bac7ab6665f16f46440a88b3a"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 anyio = ">=4.7.0"
@@ -3666,7 +3663,7 @@ files = [
     {file = "starlette-1.10.0-py3-none-any.whl", hash = "sha256:478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4"},
     {file = "starlette-1.10.0.tar.gz", hash = "sha256:b8399098d4c1e3522734f7235dc79b1fc967f96cf139c81e0fa30479e0685f9b"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 anyio = ">=4.0.0,<5"
@@ -3843,7 +3840,7 @@ files = [
     {file = "truststore-0.10.5-py3-none-any.whl", hash = "sha256:9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c"},
     {file = "truststore-0.10.5.tar.gz", hash = "sha256:30d36967ccaded5cbb38d602c433f53600036c79d502f4533a49b60a03bbefcd"},
 ]
-markers = {main = "sys_platform != \"emscripten\"", dev = "sys_platform != \"emscripten\" and python_version < \"3.15\""}
+markers = {main = "sys_platform != \"emscripten\"", dev = "python_version <= \"3.14\" and sys_platform != \"emscripten\""}
 
 [[package]]
 name = "typer"
@@ -3886,7 +3883,7 @@ files = [
     {file = "typing_inspection-0.4.4-py3-none-any.whl", hash = "sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147"},
     {file = "typing_inspection-0.4.4.tar.gz", hash = "sha256:547274fa6b0a561ccf549cc9524b999a578e737d015d8709d021f9d0d13bea47"},
 ]
-markers = {dev = "python_version < \"3.15\""}
+markers = {dev = "python_version <= \"3.14\""}
 
 [package.dependencies]
 typing-extensions = ">=4.15.0"
@@ -3932,7 +3929,7 @@ files = [
     {file = "uvicorn-0.54.0-py3-none-any.whl", hash = "sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf"},
     {file = "uvicorn-0.54.0.tar.gz", hash = "sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620"},
 ]
-markers = {main = "sys_platform != \"emscripten\"", dev = "sys_platform != \"emscripten\" and python_version < \"3.15\""}
+markers = {main = "sys_platform != \"emscripten\"", dev = "python_version <= \"3.14\" and sys_platform != \"emscripten\""}
 
 [package.dependencies]
 click = ">=7.0"
@@ -4021,4 +4018,4 @@ trial = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.16"
-content-hash = "e160b104bed30ab61ca6c9d1092c8777035f630e8d25b4d1931e157e697eebbc"
+content-hash = "65d80047d48af8a1c42c8abb534d2d9f82f85cccef11cf2c8483bda1608246de"
