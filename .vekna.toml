@@ -6,11 +6,9 @@
 # in the repo finds the same source.
 [rituals]
 files = ["src/rituals"]
-# The cabinet facades this repo casts, named one by one rather than as the whole
-# package, which also carries a `review` whose ritual name and `gates` step
-# collide with this repo's own. Importing a facade imports the package
-# `__init__`, so cabinet's services are still bound. One not installed is skipped
-# with a warning; this repo's own rituals still load.
+# The cabinet facades this repo casts, named one by one. Importing a facade
+# imports the package `__init__`, so cabinet's services are still bound. One not
+# installed is skipped with a warning; this repo's own rituals still load.
 modules = [
     "cabinet.rituals.cover",
     "cabinet.rituals.labels",
