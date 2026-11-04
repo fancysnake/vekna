@@ -27,7 +27,7 @@ class TestPrFix:
     @staticmethod
     def test_a_committed_fix_is_pushed_once_agreed(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=True, when=_PUSH_IT)
+        trial.decide.answers(answer="push", when=_PUSH_IT)
         trial.shell.replies(when=_PUSH, exit_code=0)
 
         result = trial.cast(pr_fix, _PR_FIX)
@@ -60,7 +60,7 @@ class TestPrFix:
     @staticmethod
     def test_a_declined_push_pushes_nothing(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=False, when=_PUSH_IT)
+        trial.decide.answers(answer="decline", when=_PUSH_IT)
 
         result = trial.cast(pr_fix, _PR_FIX)
 
@@ -92,7 +92,7 @@ class TestPrFix:
     @staticmethod
     def test_a_failed_push_says_so(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=True, when=_PUSH_IT)
+        trial.decide.answers(answer="push", when=_PUSH_IT)
         trial.shell.replies(when=_PUSH, exit_code=1, stderr="rejected")
 
         with pytest.raises(RitualError, match="pushing the fix to #7 failed"):

@@ -10,7 +10,7 @@ _USAGE_EXIT = 2
 _RITUALS = textwrap.dedent("""
     from pydantic import BaseModel
 
-    from vekna.lexicon import Done, File, NoComponents, ritual, step
+    from vekna.lexicon import Done, NoComponents, ritual, step
 
 
     class Tick(BaseModel):
@@ -21,7 +21,6 @@ _RITUALS = textwrap.dedent("""
         start: int
         label: str = "run"
         note: str | None = None
-        only: File | None = None
 
 
     class Pong(BaseModel):
@@ -42,6 +41,25 @@ _RITUALS = textwrap.dedent("""
 
     @ritual("ping", worktree=True)
     async def ping(_: NoComponents) -> Done[Pong]:
+        return Done(Pong(said="pong"))
+    """)
+
+_OPTIONAL_ANNOTATED = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, File, ritual
+
+
+    class Reading(BaseModel):
+        only: File | None = None
+
+
+    class Pong(BaseModel):
+        said: str
+
+
+    @ritual("reading")
+    async def reading(_: Reading) -> Done[Pong]:
         return Done(Pong(said="pong"))
     """)
 
@@ -220,13 +238,20 @@ class TestRitualsList:
 
         out = capsys.readouterr().out
         assert exit_code == 0
-        # `only` is the flag rendering that broke on 3.11: an optional Annotated
-        # component names the type it validates, not `Optional` or `Annotated`.
-        assert (
-            "countdown  --start <int> [--label <str>] [--note <str>] [--only <Path>]\n"
-            in out
-        )
+        assert "countdown  --start <int> [--label <str>] [--note <str>]\n" in out
         assert "ping\n" in out
+
+    @staticmethod
+    def test_an_optional_annotated_flag_names_the_type_it_validates(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_OPTIONAL_ANNOTATED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        assert exit_code == 0
+        assert "reading  [--only <Path>]\n" in capsys.readouterr().out
 
     @staticmethod
     def test_reports_when_no_rituals_are_found(tmp_path, monkeypatch, capsys):

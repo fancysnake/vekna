@@ -43,8 +43,11 @@ when.
 - **Cabinet is the example library.** The docs send readers to
   [cabinet](https://cabinet.fancysnake.dev) for real workflows. This
   repository keeps only the rituals that exercise an engine feature, so
-  `triage` and `review` are gone: cabinet's `identify` and `review` do
-  their jobs.
+  `triage` and `review` are gone. Cabinet's nearest rituals work differently:
+  `identify` takes only `--batch` and types and sizes open issues a page at a
+  time, where `triage` read one issue or pull request; `review` answers a
+  branch's review threads, then commits and pushes, where the old `review`
+  only read a local diff.
   ([#250](https://github.com/fancysnake/vekna/issues/250))
 
 ### Fixed

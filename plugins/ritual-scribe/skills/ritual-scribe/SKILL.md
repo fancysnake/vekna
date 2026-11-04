@@ -631,14 +631,18 @@ run fullcheck` keeps them correct. Four lessons:
 - **`ci_watch`** — `await_cast` on a child cast, its result read back
   through `output=`, the slot given up while it waits.
 - **`pr_fix`** — untrusted input fenced and read under an allowlist, and a
-  `decide` before the one action that leaves the machine.
-
-For rituals that outgrow one file, read
-[cabinet](https://github.com/fancysnake/cabinet).
+  closed `decide(options=...)` before the push, the only write that reaches
+  GitHub.
 
 Copying from there beats copying from here: those rituals are type-checked on every
 push, a snippet in this file is checked by nothing. When they disagree with this
 document, they are right — say so.
+
+For rituals that outgrow one file, read
+[cabinet](https://github.com/fancysnake/cabinet). The `identify_page` step in
+`cabinet.gates.ritual.vekna.identify` shows `coding(output=Model)`: it passes
+`output=Identified` through cabinet's agent wrapper, then keeps only the items
+on the page it asked about.
 
 ---
 

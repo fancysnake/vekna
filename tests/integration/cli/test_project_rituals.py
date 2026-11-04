@@ -49,7 +49,6 @@ class TestProjectRituals:
         lines = out.splitlines()
         for name in _EXPECTED:
             assert any(line.startswith(f"{name}  ") for line in lines)
-        assert "sweep  --base-branch <str> [--max-prs <int>]" in lines
 
     # The exit code is checked here, not above: a module that fails to load
     # makes `list` exit 1, and cabinet's does wherever cabinet is not installed.
