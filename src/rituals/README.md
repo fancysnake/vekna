@@ -1,12 +1,11 @@
 # Vekna's own rituals
 
-This project casts them on itself.
+Each exercises an engine feature, and this project casts them on itself. Real
+workflows live in [cabinet](https://cabinet.fancysnake.dev).
 
 ```bash
 vekna cast cover_diff [--bound N]
-vekna cast review [--base <ref>] [--only <file>] [--focus <text>]
 vekna cast merge_ready [--bound N]
-vekna cast triage --link <url>
 vekna cast nap [--naps N] [--seconds N]
 vekna cast tree [--dirty true]
 vekna cast sweep [--base-branch <ref>] [--max-prs N]
@@ -17,14 +16,8 @@ vekna cast pr_fix --pull-request N --checks <text> [--remote <name>]
 - [`cover_diff`](cover_diff.py) closes the coverage gap on the current
   branch: measure with `mise run test:py:cov:diff`, hand the uncovered lines to
   an agent, measure again.
-- [`review`](review.py) reads the diff this branch adds and
-  returns findings under a schema. Its agent is read-only, enforced by the
-  allowlist rather than asked for in the prompt. Cabinet's own is
-  `cabinet:review`.
 - [`merge_ready`](merge_ready.py) runs both gates at once and babysits them to
   green. Whichever went red picks the payload shape the repair step receives.
-- [`triage`](triage.py) reads a GitHub issue or PR with `gh`, has an agent
-  size it against this codebase, and asks you what it deserves.
 - [`nap`](nap.py) sleeps N times, counting, and does nothing else: a cast to
   watch from the dashboard, stop the daemon under, or kill and `--continue`,
   without paying an agent.

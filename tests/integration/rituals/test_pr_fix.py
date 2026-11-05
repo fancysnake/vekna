@@ -2,7 +2,7 @@ import pytest
 
 from rituals.pr_fix import _FIX_OPTS, CiFix, Fixed, pr_fix
 from vekna.lexicon import RitualError
-from vekna.trial import Trial
+from vekna.trial import Asked, Trial
 
 _FORK = "gh pr view 7 --json isCrossRepository --jq .isCrossRepository"
 _CHECKOUT = "gh pr checkout 7"
@@ -10,6 +10,7 @@ _DIFF = "gh pr diff 7"
 _AHEAD = "git log --oneline @{upstream}..HEAD"
 _PUSH = "git push --end-of-options origin HEAD"
 _PUSH_IT = "push the fix to #7?"
+_ASKED_TO_PUSH = Asked(prompt=_PUSH_IT, options=("push", "decline"))
 
 
 def _fixing(trial: Trial, *, committed: str) -> None:
@@ -27,12 +28,13 @@ class TestPrFix:
     @staticmethod
     def test_a_committed_fix_is_pushed_once_agreed(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=True, when=_PUSH_IT)
+        trial.decide.answers(answer="push", when=_PUSH_IT)
         trial.shell.replies(when=_PUSH, exit_code=0)
 
         result = trial.cast(pr_fix, _PR_FIX)
 
         assert result == Fixed(outcome="pushed")
+        assert trial.decide.asked == [_ASKED_TO_PUSH]
         assert trial.shell.commands == [_FORK, _CHECKOUT, _DIFF, _AHEAD, _PUSH]
         assert "lint fail" in trial.coding.prompts[0]
         assert "+bad line" in trial.coding.prompts[0]
@@ -60,12 +62,13 @@ class TestPrFix:
     @staticmethod
     def test_a_declined_push_pushes_nothing(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=False, when=_PUSH_IT)
+        trial.decide.answers(answer="decline", when=_PUSH_IT)
 
         result = trial.cast(pr_fix, _PR_FIX)
 
         assert result == Fixed(outcome="declined")
-        assert _PUSH not in trial.shell.commands
+        assert trial.decide.asked == [_ASKED_TO_PUSH]
+        assert trial.shell.commands == [_FORK, _CHECKOUT, _DIFF, _AHEAD]
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -92,8 +95,11 @@ class TestPrFix:
     @staticmethod
     def test_a_failed_push_says_so(trial: Trial) -> None:
         _fixing(trial, committed="abc123 fix lint\n")
-        trial.decide.answers(answer=True, when=_PUSH_IT)
+        trial.decide.answers(answer="push", when=_PUSH_IT)
         trial.shell.replies(when=_PUSH, exit_code=1, stderr="rejected")
 
         with pytest.raises(RitualError, match="pushing the fix to #7 failed"):
             trial.cast(pr_fix, _PR_FIX)
+
+        assert trial.decide.asked == [_ASKED_TO_PUSH]
+        assert trial.shell.commands == [_FORK, _CHECKOUT, _DIFF, _AHEAD, _PUSH]

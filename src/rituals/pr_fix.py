@@ -51,6 +51,8 @@ _FIX_OPTS = CodingOpts(
 )
 
 Seconds = Annotated[int, Field(gt=0)]
+Agreed = Literal["push", "decline"]
+_AGREED: tuple[Agreed, ...] = ("push", "decline")
 
 
 class CiFix(BaseModel):
@@ -123,7 +125,8 @@ async def repair_ci(state: CiFix) -> Committed | Done[Fixed]:
 # has no terminal: the question waits on the dashboard, answered by attaching.
 @step
 async def push(state: Committed) -> Done[Fixed]:
-    if not await decide(f"push the fix to #{state.pull_request}?"):
+    agreed = await decide(f"push the fix to #{state.pull_request}?", options=_AGREED)
+    if agreed == "decline":
         return Done(Fixed(outcome="declined"))
     # `HEAD` lands on the branch gh checked out, which is the pull request's
     # head because `repair_ci` refused a fork.

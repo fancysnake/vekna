@@ -44,6 +44,25 @@ _RITUALS = textwrap.dedent("""
         return Done(Pong(said="pong"))
     """)
 
+_OPTIONAL_ANNOTATED = textwrap.dedent("""
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, File, ritual
+
+
+    class Reading(BaseModel):
+        only: File | None = None
+
+
+    class Pong(BaseModel):
+        said: str
+
+
+    @ritual("reading")
+    async def reading(_: Reading) -> Done[Pong]:
+        return Done(Pong(said="pong"))
+    """)
+
 _BROKEN = "import a_module_that_does_not_exist\n"
 
 # The same two rituals as `_RITUALS`, split the way the feature exists to allow:
@@ -221,6 +240,18 @@ class TestRitualsList:
         assert exit_code == 0
         assert "countdown  --start <int> [--label <str>] [--note <str>]\n" in out
         assert "ping\n" in out
+
+    @staticmethod
+    def test_an_optional_annotated_flag_names_the_type_it_validates(
+        tmp_path, monkeypatch, capsys
+    ):
+        (tmp_path / "rituals.py").write_text(_OPTIONAL_ANNOTATED)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = rituals_list()
+
+        assert exit_code == 0
+        assert "reading  [--only <Path>]\n" in capsys.readouterr().out
 
     @staticmethod
     def test_reports_when_no_rituals_are_found(tmp_path, monkeypatch, capsys):
