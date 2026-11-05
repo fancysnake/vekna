@@ -43,7 +43,7 @@ class Ledger:
             event.rite_id: _Entry(name=names[event.rite_id], result=event.result)
             for event in resumption.events
             if isinstance(event, RiteFinished)
-            and event.status == "ok"
+            and event.status in {"ok", "failed"}
             and event.result is not None
             and event.rite_id in names
         }

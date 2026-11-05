@@ -30,7 +30,7 @@ from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to
 from ._links.follow import Follower
 from ._links.loader import load_rituals_module, load_rituals_source, read_config
 from ._links.resume import read_run
-from ._links.standalone import StandaloneRenderer
+from ._links.standalone import StandaloneRenderer, Tail
 from ._links.unattended import UnattendedChannel
 from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
@@ -634,7 +634,7 @@ async def _cast(
             ),
         )
         renderer.notify("done", plan.ritual.name)
-        sys.stdout.write(f"result: {_rendered(result)}\n")
+        renderer.say(f"result: {_rendered(result)}\n")
         return 0
     await link.close(status="error", detail=detail)
     renderer.notify("failed", f"{plan.ritual.name}: {detail}")
@@ -648,7 +648,8 @@ async def _run(plan: _Plan) -> int:
     # is the wire's correlation key, and which cast this one carries on from is
     # a field of its own on the hello.
     cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
-    renderer = StandaloneRenderer()
+    out = Tail(sys.stdout)
+    renderer = StandaloneRenderer(out=out)
     link = DaemonLink(
         socket_path=default_socket_path(),
         hello=await _hello(cast_id=cast_id, plan=plan),
@@ -676,7 +677,9 @@ async def _run(plan: _Plan) -> int:
     await link.attach(backlog=backlog)
     watcher = asyncio.create_task(link.keep_attached(backlog))
     lineage = Lineage(cast_id)
-    follower = await _follower(plan=plan, link=link, lineage=lineage, ask=renderer)
+    follower = await _follower(
+        plan=plan, link=link, lineage=lineage, ask=renderer, out=out
+    )
     try:
         try:
             # The queue the cast's `enqueue` and `await_cast` reach.
@@ -698,7 +701,7 @@ async def _run(plan: _Plan) -> int:
                 await watcher
         if follower is None:
             return code
-        return await _followed(code, follower=follower, lineage=lineage)
+        return await _followed(code, follower=follower, lineage=lineage, out=out)
     finally:
         if follower is not None:
             await follower.close()
@@ -707,14 +710,19 @@ async def _run(plan: _Plan) -> int:
 # Only a cast typed by hand with a daemon to hear from follows: a spawned one has
 # no terminal, and with no daemon it can have queued nothing.
 async def _follower(
-    *, plan: _Plan, link: DaemonLink, lineage: Lineage, ask: StandaloneRenderer
+    *,
+    plan: _Plan,
+    link: DaemonLink,
+    lineage: Lineage,
+    ask: StandaloneRenderer,
+    out: Tail,
 ) -> Follower | None:
     if plan.wired or not plan.follow or not link.attached:
         return None
     follower = Follower(
         socket_path=default_socket_path(),
         lineage=lineage,
-        out=sys.stdout,
+        out=out,
         ask=None if plan.unattended else ask,
     )
     return follower if await follower.attach() else None
@@ -723,13 +731,15 @@ async def _follower(
 # The worst of how this cast and the ones it queued ended. Ctrl-C while
 # following leaves them running and keeps this cast's own code: they are the
 # daemon's now, and nothing about them has gone wrong.
-async def _followed(code: int, *, follower: Follower, lineage: Lineage) -> int:
+async def _followed(
+    code: int, *, follower: Follower, lineage: Lineage, out: Tail
+) -> int:
     if not lineage.settled:
-        sys.stdout.write(_FOLLOWING)
+        out.write(_FOLLOWING)
     try:
         settled = await follower.until_settled()
     except asyncio.CancelledError:
-        sys.stdout.write(_LEFT)
+        out.write(_LEFT)
         return code
     if code:
         return code

@@ -331,6 +331,7 @@ def reset_registry() -> None:
 @dataclass
 class RiteOutcome:
     result: JsonValue | None = None
+    failure: str | None = None
 
 
 # A cast's threads of agent memory, by name. The vocabulary that decides which
@@ -370,6 +371,12 @@ class RiteContext:
 
 def record_result(value: JsonValue) -> None:
     current_rite().outcome.result = value
+
+
+# For a medium that returns its failure rather than raising it: the ritual reads
+# the result and decides, and the rite still has to say how the call went.
+def record_failure(reason: str) -> None:
+    current_rite().outcome.failure = reason
 
 
 # What this rite produced the last time round, or None to do the work. Read by
@@ -454,7 +461,7 @@ async def _rite(
     status: RiteEndStatus = "error"
     try:
         yield opened
-        status = "ok"
+        status = "ok" if outcome.failure is None else "failed"
     # Cut by a timeout, a race or Ctrl-C: neither done nor failed. What it had
     # produced by then is its deltas, already in the grimoire.
     except asyncio.CancelledError:
@@ -479,7 +486,7 @@ async def _rite(
             error=(
                 opened.error.message
                 if opened.error is not None and category == "step"
-                else None
+                else outcome.failure
             ),
         )
 

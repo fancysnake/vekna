@@ -15,6 +15,7 @@ from vekna.lexicon import (
     ShellReply,
     emit_delta,
     medium,
+    record_failure,
     record_result,
     replayed,
 )
@@ -191,6 +192,8 @@ async def shell(
             stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
         )
     record_result(_JOURNALLED.validate_json(result.model_dump_json()))
+    if result.exit_code:
+        record_failure(f"exit {result.exit_code}")
     return result
 
 

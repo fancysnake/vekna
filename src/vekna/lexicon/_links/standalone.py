@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import shutil
 import socket
 import sys
 import threading
@@ -20,7 +21,12 @@ from vekna.wire import RiteEndStatus
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
-_MARK: dict[RiteEndStatus, str] = {"ok": "✓", "error": "✗", "cancelled": "⊘"}
+_MARK: dict[RiteEndStatus, str] = {
+    "ok": "✓",
+    "failed": "✗",
+    "error": "✗",
+    "cancelled": "⊘",
+}
 
 # What this renderer raises a desktop notification for. `decide` is any question
 # that stops for a human — the flow medium's own, coding's tool gate, the
@@ -102,29 +108,72 @@ class Out(Protocol):
     def isatty(self) -> bool: ...
 
 
+# Whether a line is still the terminal's last. A cast and the casts it follows
+# share one terminal, so this sits under all their renderers rather than in any
+# one of them, and a line goes back only if no write of anyone's came after it.
+class Tail(Out):
+    def __init__(self, out: Out) -> None:
+        self._out = out
+        self._mark = 0
+        self._last = ""
+
+    @property
+    def mark(self) -> int:
+        return self._mark
+
+    def write(self, text: str, /) -> int:
+        self._mark += 1
+        self._last = text
+        return self._out.write(text)
+
+    def flush(self) -> None:
+        self._out.flush()
+
+    def isatty(self) -> bool:
+        return self._out.isatty()
+
+    # shortcut: counts characters as one cell and reads the width now, so a wide
+    # summary or a resize since can leave a stale row. Upgrade if that shows up.
+    def overwrite(self, mark: int, text: str) -> bool:
+        if mark != self.mark or not self.isatty():
+            return False
+        columns = shutil.get_terminal_size().columns
+        rows = (len(self._last.rstrip("\n")) - 1) // columns + 1
+        self._out.write(f"\x1b[{rows}A\r\x1b[J")
+        self.write(text)
+        return True
+
+
 @dataclass
 class _Rite:
-    name: str
+    label: str
     depth: int
     parent_id: str | None
-    summary: str | None = None
+    # The line that opened it, and where on the terminal if it went there.
+    opened: str = ""
+    shown: int | None = None
     # Where this rite's lines go: None to print live, otherwise the rite whose
     # buffer collects them until it ends.
     sink: str | None = None
     buffer: list[str] = field(default_factory=list)
 
 
-# A step may hold two mediums at once, and this sink is a plain stream — no
+# A step may hold two mediums at once, and this sink may be a plain stream — no
 # cursor, no re-render. Interleaving two rites' output into it would leave no way
 # to tell which said what, since indentation is all a line carries. So a rite
 # with a live sibling keeps its output until it finishes, and then emits it in
 # one block just before its own ✓. A rite running alone streams as it always
 # did, which is every rite in a ritual that holds nothing concurrently. A
 # surface that *can* re-render — the TUI — wants the opposite and will say so
-# itself; that decision belongs to the sink, not here.
+# itself; that decision belongs to the sink, not here. At a terminal a rite
+# whose opening line is still the last one ends on that line, so an entry is one
+# line unless something printed inside it. A stream keeps both, which is how a
+# log shows a call that never ended.
 class StandaloneRenderer(Channel):
     def __init__(self, *, out: Out | None = None, inp: TextIO | None = None) -> None:
-        self._out: Out = out if out is not None else sys.stdout
+        self._out = (
+            out if isinstance(out, Tail) else Tail(sys.stdout if out is None else out)
+        )
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
@@ -133,7 +182,7 @@ class StandaloneRenderer(Channel):
         # stdin, and two reads at once would split one answer between them.
         self._asking = asyncio.Lock()
 
-    def _say(self, line: str) -> None:
+    def say(self, line: str) -> None:
         self._out.write(line)
         self._out.flush()
 
@@ -143,7 +192,7 @@ class StandaloneRenderer(Channel):
     def notify(self, event: NotifyEvent, body: str) -> None:
         if not self._out.isatty():
             return
-        self._say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
+        self.say(f"\x1b]777;notify;{_NOTIFY_TITLES[event]};{_one_line(body)}\x07")
 
     # EOF is the channel closing, not a bad answer: `readline` returns "" only
     # there, an empty line being "\n". Raising here rather than in each prompt
@@ -169,7 +218,7 @@ class StandaloneRenderer(Channel):
 
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:
-            self._say(block + "\n")
+            self.say(block + "\n")
         else:
             self._rites[sink].buffer.append(block)
 
@@ -179,12 +228,11 @@ class StandaloneRenderer(Channel):
         parent = self._rites.get(parent_id)
         return 1 if parent is None else parent.depth + 1
 
-    # The summary rides both lines: two gates running at once end as two ✓
-    # shell lines, and the command is the only thing telling them apart.
+    # The summary rides every line of a rite: two gates running at once end as
+    # two ✓ shell lines, and the command is the only thing telling them apart.
     @staticmethod
     def _headline(mark: str, rite: _Rite) -> str:
-        tail = f"  {rite.summary}" if rite.summary else ""
-        return f"{'  ' * rite.depth}{mark} {rite.name}{tail}"
+        return f"{'  ' * rite.depth}{mark} {rite.label}"
 
     def _open_siblings(self, rite_id: str, parent_id: str | None) -> list[str]:
         return [
@@ -198,14 +246,14 @@ class StandaloneRenderer(Channel):
     # both gates are visibly under way.
     def _began(self, event: RiteBegan) -> None:
         rite = _Rite(
-            name=event.name,
+            label=f"{event.name}  {event.summary}" if event.summary else event.name,
             depth=self._depth(event.parent_id),
             parent_id=event.parent_id,
-            summary=event.summary,
         )
         self._rites[event.rite_id] = rite
         self._open.add(event.rite_id)
         line = self._headline("▶" if event.category == "step" else "↳", rite)
+        rite.opened = line
         parent = self._rites.get(event.parent_id) if event.parent_id else None
         if parent is not None and parent.sink is not None:
             rite.sink = parent.sink
@@ -215,7 +263,8 @@ class StandaloneRenderer(Channel):
         for sibling in self._open_siblings(event.rite_id, event.parent_id):
             self._rites[sibling].sink = sibling
             rite.sink = event.rite_id
-        self._say(line + "\n")
+        self.say(line + "\n")
+        rite.shown = self._out.mark
 
     def _streamed(self, event: RiteStreamed) -> None:
         rite = self._rites.get(event.rite_id)
@@ -228,18 +277,33 @@ class StandaloneRenderer(Channel):
         self._open.discard(event.rite_id)
         mark = _MARK[event.status]
         if (rite := self._rites.get(event.rite_id)) is None:
-            self._say(f"{mark} {event.rite_id}\n")
+            self.say(f"{mark} {event.rite_id}\n")
             return
         line = self._headline(mark, rite)
         if event.error is not None:
             line = f"{line}  — {event.error}"
         if rite.sink != event.rite_id:
-            self._emit(rite.sink, line)
+            if not self._took_back(rite, line):
+                self._emit(rite.sink, line)
             return
         for block in rite.buffer:
-            self._say(block + "\n")
+            self.say(block + "\n")
         rite.buffer.clear()
-        self._say(line + "\n")
+        if not self._took_back(rite, line):
+            self.say(line + "\n")
+
+    def _took_back(self, rite: _Rite, line: str) -> bool:
+        if rite.shown is not None:
+            taken = self._out.overwrite(rite.shown, line + "\n")
+            self._out.flush()
+            return taken
+        if rite.sink is None or not self._out.isatty():
+            return False
+        buffer = self._rites[rite.sink].buffer
+        if not buffer or buffer[-1] is not rite.opened:
+            return False
+        buffer[-1] = line
+        return True
 
     # RiteEvent is closed, so the three branches are exhaustive — there is no
     # unknown-event fallback to write.
@@ -259,7 +323,7 @@ class StandaloneRenderer(Channel):
             try:
                 return await self._asked(prompt=prompt, options=options, free=free)
             except asyncio.CancelledError:
-                self._say(f"\nwithdrawn: {prompt}\n")
+                self.say(f"\nwithdrawn: {prompt}\n")
                 raise
 
     async def _asked(
@@ -274,11 +338,11 @@ class StandaloneRenderer(Channel):
         return await self._confirm(prompt)
 
     async def _choose(self, prompt: str, options: Sequence[str]) -> str:
-        self._say(_menu(prompt, options))
+        self.say(_menu(prompt, options))
         for _ in range(_MAX_PROMPT_ATTEMPTS):
             if (picked := _picked(await self._readline(), options)) is not None:
                 return picked
-            self._say("invalid choice; try again\n")
+            self.say("invalid choice; try again\n")
         msg = "no valid choice provided"
         raise StandalonePromptError(msg)
 
@@ -287,23 +351,23 @@ class StandaloneRenderer(Channel):
     # here can be answered wrongly, so there is no retry, no attempt cap and no
     # error — a bare return answers with nothing, which is itself an answer.
     async def _suggest(self, prompt: str, options: Sequence[str]) -> str:
-        self._say(_menu(prompt, options) + "  or answer in your own words\n")
+        self.say(_menu(prompt, options) + "  or answer in your own words\n")
         answer = await self._readline()
         picked = _picked(answer, options)
         return answer if picked is None else picked
 
     async def _confirm(self, prompt: str) -> str:
-        self._say(f"{prompt} [y/n] ")
+        self.say(f"{prompt} [y/n] ")
         for _ in range(_MAX_PROMPT_ATTEMPTS):
             answer = (await self._readline()).lower()
             if answer in {"y", "yes"}:
                 return "yes"
             if answer in {"n", "no"}:
                 return "no"
-            self._say("please answer y or n\n")
+            self.say("please answer y or n\n")
         msg = "no yes/no answer provided"
         raise StandalonePromptError(msg)
 
     async def _free_text(self, prompt: str) -> str:
-        self._say(prompt + "\n")
+        self.say(prompt + "\n")
         return await self._readline()

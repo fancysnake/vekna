@@ -109,7 +109,9 @@ safety net is distinct from *business* bounds like `fix_demo`'s `budget`, which
 a step decides for itself. Time is bounded per rite, not by the trampoline:
 `timeout(…, seconds=N)` and `race(…)` in `folio/flow`, and `@step(timeout=N)`
 over a whole step, cancel the work — its processes included — and a timeout
-arrives as a `Failure`. A cut rite ends `cancelled`, beside `ok` and `error`.
+arrives as a `Failure`. A cut rite ends `cancelled`, beside `ok`, `error` for
+one that raised, and `failed` for one that came back saying it failed, such as a
+shell's non-zero exit.
 
 **Failure is a transition.** A step that raises goes to the step taking
 `Failure[P]`, `P` the payload that entered it, or ends the cast if none does.

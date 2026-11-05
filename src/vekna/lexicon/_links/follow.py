@@ -3,6 +3,8 @@ import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from typing_extensions import override
+
 from vekna.lexicon._pacts import (
     Channel,
     LineageProtocol,
@@ -32,32 +34,35 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import Out, StandaloneRenderer
+from .standalone import Out, StandaloneRenderer, Tail
 
 _MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
 
 
 # Every line a cast's renderer writes, under the name of the cast that said it:
 # several casts stream into one terminal, and indentation is all a line carries.
-class _Prefixed(Out):
-    def __init__(self, out: Out, label: str) -> None:
-        self._out = out
+class _Prefixed(Tail):
+    def __init__(self, out: Tail, label: str) -> None:
+        super().__init__(out)
+        self._tail = out
         self._label = f"[{label}] "
         self._fresh = True
 
+    @override
     def write(self, text: str, /) -> int:
         for line in text.splitlines(keepends=True):
-            if self._fresh:
-                self._out.write(self._label)
-            self._out.write(line)
+            self._tail.write(f"{self._label}{line}" if self._fresh else line)
             self._fresh = line.endswith("\n")
         return len(text)
 
-    def flush(self) -> None:
-        self._out.flush()
+    @property
+    @override
+    def mark(self) -> int:
+        return self._tail.mark
 
-    def isatty(self) -> bool:
-        return self._out.isatty()
+    @override
+    def overwrite(self, mark: int, text: str) -> bool:
+        return self._tail.overwrite(mark, f"{self._label}{text}")
 
 
 # One followed cast: its renderer, and the rites it has already shown, so a
@@ -104,7 +109,7 @@ class Follower:
     ) -> None:
         self._wire = _Wire(path=socket_path)
         self._lineage = lineage
-        self._out = out
+        self._out = out if isinstance(out, Tail) else Tail(out)
         self._ask = ask
         self._followed: dict[str, _Followed] = {}
         self._prompts = _Prompts()

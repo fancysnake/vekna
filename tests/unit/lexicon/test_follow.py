@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing_extensions import override
 
 from vekna.lexicon._links.follow import _Prefixed
+from vekna.lexicon._links.standalone import Tail
 from vekna.lexicon._mills.follow import Lineage
 from vekna.wire import CastGoodbye, CastHello
 
@@ -104,7 +105,7 @@ class TestPrefixed:
     @staticmethod
     def test_a_line_written_in_pieces_is_named_once():
         out = io.StringIO()
-        prefixed = _Prefixed(out, "ci_watch child000")
+        prefixed = _Prefixed(Tail(out), "ci_watch child000")
 
         prefixed.write("checks ")
         prefixed.write("red\nnext\n")
@@ -115,4 +116,17 @@ class TestPrefixed:
 
     @staticmethod
     def test_whether_it_is_a_terminal_is_the_terminal_s_answer():
-        assert _Prefixed(_Terminal(), "ci_watch child000").isatty()
+        assert _Prefixed(Tail(_Terminal()), "ci_watch child000").isatty()
+
+    @staticmethod
+    def test_a_line_taken_back_stays_under_its_name():
+        out = _Terminal()
+        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+
+        prefixed.write("▶ watch\n")
+        prefixed.overwrite(prefixed.mark, "✓ watch\n")
+
+        assert out.getvalue() == (
+            "[ci_watch child000] ▶ watch\n"
+            "\x1b[1A\r\x1b[J[ci_watch child000] ✓ watch\n"
+        )

@@ -58,6 +58,16 @@ A medium's line quotes its first argument when that is a string, whitespace
 collapsed and cut to 60 characters, on the line that opens the rite and the one
 that closes it.
 
+At a terminal those are one line when nothing printed in between: the `↳` turns
+into `✓`, `✗` or `⊘` where it stands. A rite that printed, or that something else
+printed after, closes on its own line as above. Output sent to a file or a pipe
+always keeps both lines and carries no cursor codes.
+
+A shell command that exits non-zero ends in `✗` with its code, as in
+`✗ shell  make check  — exit 2`. The mark reports the call; the ritual still
+reads the exit code and decides, so the cast carries on, and a resumed cast
+takes the result off the journal rather than running the command again.
+
 The last line is the result as JSON, or `null` for a ritual that finishes
 without one.
 
