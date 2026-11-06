@@ -369,14 +369,13 @@ class RiteContext:
     replay: JsonValue | None = None
 
 
-def record_result(value: JsonValue) -> None:
-    current_rite().outcome.result = value
-
-
-# For a medium that returns its failure rather than raising it: the ritual reads
-# the result and decides, and the rite still has to say how the call went.
-def record_failure(reason: str) -> None:
-    current_rite().outcome.failure = reason
+# `failure` is for a medium that returns its failure rather than raising it: the
+# ritual reads the result and decides, and the rite still has to say how the call
+# went. It rides the result because a resume replays only a rite that has one.
+def record_result(value: JsonValue, *, failure: str | None = None) -> None:
+    outcome = current_rite().outcome
+    outcome.result = value
+    outcome.failure = failure
 
 
 # What this rite produced the last time round, or None to do the work. Read by
@@ -461,7 +460,7 @@ async def _rite(
     status: RiteEndStatus = "error"
     try:
         yield opened
-        status = "ok" if outcome.failure is None else "failed"
+        status = "ok" if outcome.failure is None else "reported"
     # Cut by a timeout, a race or Ctrl-C: neither done nor failed. What it had
     # produced by then is its deltas, already in the grimoire.
     except asyncio.CancelledError:

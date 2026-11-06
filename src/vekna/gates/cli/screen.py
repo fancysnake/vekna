@@ -26,7 +26,7 @@ _CAST_GLYPH = {
 _RITE_GLYPH: dict[RiteStatus, str] = {
     "running": "▶",
     "ok": "✓",
-    "failed": "✗",
+    "reported": "✗",
     "error": "✗",
     "cancelled": "⊘",
 }
@@ -173,10 +173,7 @@ def _rite_lines(view: CastView) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
-        medium = rite.started.category == "medium" and rite.status not in {
-            "cancelled",
-            "failed",
-        }
+        medium = rite.started.category == "medium" and rite.status in {"running", "ok"}
         mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
         said = "" if rite.error is None else f"  — {rite.error}"
         lines.append(f" {pad}{mark} {rite.started.name}{said}")

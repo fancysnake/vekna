@@ -23,7 +23,7 @@ _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
 _MARK: dict[RiteEndStatus, str] = {
     "ok": "✓",
-    "failed": "✗",
+    "reported": "✗",
     "error": "✗",
     "cancelled": "⊘",
 }
@@ -108,22 +108,39 @@ class Out(Protocol):
     def isatty(self) -> bool: ...
 
 
+# An Out that can take back its last line: `mark` names that line's write, and
+# `overwrite` says whether it went.
+class Revisable(Out, Protocol):
+    @property
+    def mark(self) -> int: ...
+
+    def overwrite(self, mark: int, text: str) -> bool: ...
+
+
 # Whether a line is still the terminal's last. A cast and the casts it follows
 # share one terminal, so this sits under all their renderers rather than in any
-# one of them, and a line goes back only if no write of anyone's came after it.
-class Tail(Out):
+# one of them, and a line goes back only if no write of anyone's came after it,
+# and only if it began its row: text left of it, such as a question still
+# waiting, would go back with it.
+class Tail(Revisable):
     def __init__(self, out: Out) -> None:
         self._out = out
         self._mark = 0
         self._last = ""
+        self._row_empty = True
+        self._began_row = True
 
     @property
     def mark(self) -> int:
         return self._mark
 
+    # `print` writes its `end` even when empty, and that moves no cursor.
     def write(self, text: str, /) -> int:
-        self._mark += 1
-        self._last = text
+        if text:
+            self._mark += 1
+            self._last = text
+            self._began_row = self._row_empty
+            self._row_empty = text.endswith("\n")
         return self._out.write(text)
 
     def flush(self) -> None:
@@ -135,7 +152,7 @@ class Tail(Out):
     # shortcut: counts characters as one cell and reads the width now, so a wide
     # summary or a resize since can leave a stale row. Upgrade if that shows up.
     def overwrite(self, mark: int, text: str) -> bool:
-        if mark != self.mark or not self.isatty():
+        if mark != self.mark or not self._began_row or not self.isatty():
             return False
         columns = shutil.get_terminal_size().columns
         rows = (len(self._last.rstrip("\n")) - 1) // columns + 1
@@ -170,10 +187,8 @@ class _Rite:
 # line unless something printed inside it. A stream keeps both, which is how a
 # log shows a call that never ended.
 class StandaloneRenderer(Channel):
-    def __init__(self, *, out: Out | None = None, inp: TextIO | None = None) -> None:
-        self._out = (
-            out if isinstance(out, Tail) else Tail(sys.stdout if out is None else out)
-        )
+    def __init__(self, *, out: Revisable, inp: TextIO | None = None) -> None:
+        self._out = out
         self._inp: TextIO = inp if inp is not None else sys.stdin
         self._rites: dict[str, _Rite] = {}
         self._open: set[str] = set()
@@ -282,15 +297,13 @@ class StandaloneRenderer(Channel):
         line = self._headline(mark, rite)
         if event.error is not None:
             line = f"{line}  — {event.error}"
-        if rite.sink != event.rite_id:
-            if not self._took_back(rite, line):
-                self._emit(rite.sink, line)
-            return
-        for block in rite.buffer:
-            self.say(block + "\n")
-        rite.buffer.clear()
+        if rite.sink == event.rite_id:
+            for block in rite.buffer:
+                self.say(block + "\n")
+            rite.buffer.clear()
+            rite.sink = None
         if not self._took_back(rite, line):
-            self.say(line + "\n")
+            self._emit(rite.sink, line)
 
     def _took_back(self, rite: _Rite, line: str) -> bool:
         if rite.shown is not None:

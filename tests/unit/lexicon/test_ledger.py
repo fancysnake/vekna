@@ -89,7 +89,7 @@ class TestWhatReplays:
     def test_a_rite_that_came_back_saying_it_failed_is_replayed():
         ledger = _ledger(
             _started("r1", name="shell"),
-            _finished("r1", result={"exit_code": 1}, status="failed"),
+            _finished("r1", result={"exit_code": 1}, status="reported"),
         )
 
         assert ledger.take(rite_id="r1", name="shell") == {"exit_code": 1}

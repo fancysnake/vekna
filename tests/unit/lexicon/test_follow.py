@@ -115,6 +115,20 @@ class TestPrefixed:
         )
 
     @staticmethod
+    def test_an_empty_write_leaves_the_next_line_named():
+        out = io.StringIO()
+        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+
+        prefixed.write("")
+        prefixed.write("checks\n")
+        prefixed.write("")
+        prefixed.write("red\n")
+
+        assert out.getvalue() == (
+            "[ci_watch child000] checks\n[ci_watch child000] red\n"
+        )
+
+    @staticmethod
     def test_whether_it_is_a_terminal_is_the_terminal_s_answer():
         assert _Prefixed(Tail(_Terminal()), "ci_watch child000").isatty()
 
@@ -129,4 +143,18 @@ class TestPrefixed:
         assert out.getvalue() == (
             "[ci_watch child000] ▶ watch\n"
             "\x1b[1A\r\x1b[J[ci_watch child000] ✓ watch\n"
+        )
+
+    @staticmethod
+    def test_every_line_taken_back_stays_under_its_name():
+        out = _Terminal()
+        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+
+        prefixed.write("▶ watch\n")
+        prefixed.overwrite(prefixed.mark, "✗ watch  — one\ntwo\n")
+
+        assert out.getvalue() == (
+            "[ci_watch child000] ▶ watch\n"
+            "\x1b[1A\r\x1b[J[ci_watch child000] ✗ watch  — one\n"
+            "[ci_watch child000] two\n"
         )

@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import io
 import logging
 import os
 import re
@@ -14,6 +15,7 @@ from pathlib import Path
 import click
 import pytest
 from click.testing import CliRunner
+from typing_extensions import override
 
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
@@ -977,6 +979,7 @@ _ASKER = textwrap.dedent("""
     """)
 # A spawned cast is a fresh interpreter importing pydantic and the lexicon.
 _SPAWN_PATIENCE = 3000
+_FLUSHED = "<flushed>"
 
 
 async def _spawned(ready: Callable[[], bool]) -> None:
@@ -1569,10 +1572,38 @@ class TestQueue:
             await peer
 
 
+# A pipe holds a line until flushed, so the order of the two is what shows.
+class _Flushes(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[str] = []
+
+    @override
+    def write(self, text: str, /) -> int:
+        self.calls.append(text)
+        return super().write(text)
+
+    @override
+    def flush(self) -> None:
+        self.calls.append(_FLUSHED)
+
+
 # The hand cast in this process, so what it does once its own steps end is
 # measured: a subprocess's lines are not.
 @pytest.mark.asyncio
 class TestFollowing:
+    @staticmethod
+    async def test_it_flushes_the_following_line_before_it_waits(
+        socket_path: Path, queue_rituals: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        out = _Flushes()
+        monkeypatch.setattr(sys, "stdout", out)
+        (queue_rituals / "release").touch()
+        async with _served(socket_path):
+            await _drive(["hold_one"])
+
+        assert out.calls[out.calls.index(_FOLLOWING) + 1] == _FLUSHED
+
     @staticmethod
     async def test_it_says_it_is_following_and_ends_with_the_child(
         socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]

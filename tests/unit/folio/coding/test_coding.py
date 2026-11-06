@@ -25,7 +25,7 @@ from vekna.lexicon import (
     MediumBoundaryError,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, reset_registry, run_cast
 from vekna.lexicon._pacts import RiteEnded, RiteStreamed
 
@@ -85,7 +85,7 @@ def _isolated_registry():
 
 
 def _cast(the_ritual, *, stdin: str = "", ledger=None) -> tuple[object, Grimoire]:
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO(stdin))
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO(stdin))
     grimoire = Grimoire(clock=_fixed_clock)
     result = asyncio.run(
         run_cast(

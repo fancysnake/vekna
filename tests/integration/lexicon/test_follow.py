@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from vekna.lexicon._links.follow import Follower
+from vekna.lexicon._links.standalone import Tail
 from vekna.lexicon._mills.follow import Lineage
 from vekna.lexicon._pacts import StandalonePromptError
 from vekna.links.socket_server import serve
@@ -130,7 +131,9 @@ class TestFollowing:
         lineage = Lineage("root")
         lineage.expect("child0000")
         out = io.StringIO()
-        follower = Follower(socket_path=socket_path, lineage=lineage, out=out, ask=None)
+        follower = Follower(
+            socket_path=socket_path, lineage=lineage, out=Tail(out), ask=None
+        )
         await follower.attach()
         hub.apply(_hello("stranger", by=None, ritual="other"))
         hub.apply(_hello("child0000", by="root"))
@@ -171,7 +174,9 @@ class TestFollowing:
         lineage = Lineage("root")
         lineage.expect("child0000")
         out = io.StringIO()
-        follower = Follower(socket_path=socket_path, lineage=lineage, out=out, ask=None)
+        follower = Follower(
+            socket_path=socket_path, lineage=lineage, out=Tail(out), ask=None
+        )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
         hub.apply(_hello("child0000", by="root"))
@@ -206,7 +211,7 @@ class TestFollowing:
         out = io.StringIO()
         asker = _Asker()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, out=out, ask=asker
+            socket_path=socket_path, lineage=lineage, out=Tail(out), ask=asker
         )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
@@ -239,7 +244,7 @@ class TestFollowing:
         lineage = Lineage("root")
         lineage.expect("child0000")
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, out=io.StringIO(), ask=None
+            socket_path=socket_path, lineage=lineage, out=Tail(io.StringIO()), ask=None
         )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
@@ -265,7 +270,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=None,
         )
         with warnings.catch_warnings(record=True) as warned:
@@ -283,7 +288,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=None,
         )
 
@@ -303,7 +308,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=asker,
         )
         await follower.attach()
@@ -332,7 +337,7 @@ class TestPrompts:
         asker = _Asker()
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=Lineage("root"), out=out, ask=asker
+            socket_path=socket_path, lineage=Lineage("root"), out=Tail(out), ask=asker
         )
         await follower.attach()
         hub.apply(_hello("child0000", by="root"))
@@ -359,7 +364,7 @@ class TestPrompts:
         server = await serve(path=socket_path, routes=hub)
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=Lineage("root"), out=out, ask=None
+            socket_path=socket_path, lineage=Lineage("root"), out=Tail(out), ask=None
         )
         await follower.attach()
         hub.apply(_hello("child0000", by="root"))
@@ -383,7 +388,9 @@ class TestPrompts:
         lineage = Lineage("root")
         lineage.expect("child0000")
         out = io.StringIO()
-        follower = Follower(socket_path=socket_path, lineage=lineage, out=out, ask=None)
+        follower = Follower(
+            socket_path=socket_path, lineage=lineage, out=Tail(out), ask=None
+        )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
         hub.apply(_hello("child0000", by="root"))
@@ -410,7 +417,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=asker,
         )
         await follower.attach()
@@ -438,7 +445,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=asker,
         )
         await follower.attach()
@@ -461,7 +468,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            out=io.StringIO(),
+            out=Tail(io.StringIO()),
             ask=asker,
         )
         await follower.attach()
@@ -487,7 +494,10 @@ class TestPrompts:
         peer = _Peer()
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=Lineage("root"), out=out, ask=_Refuser()
+            socket_path=socket_path,
+            lineage=Lineage("root"),
+            out=Tail(out),
+            ask=_Refuser(),
         )
         await follower.attach()
         hub.open_cast("child0000", peer)

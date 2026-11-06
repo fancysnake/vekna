@@ -24,7 +24,7 @@ from vekna.lexicon import (
     ritual,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._links.unattended import UnattendedChannel
 from vekna.lexicon._mills.engine import (
     FocusSlot,
@@ -45,7 +45,7 @@ def _fixed_clock() -> datetime:
 
 
 def _channel() -> StandaloneRenderer:
-    return StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+    return StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
 
 
 class Tick(BaseModel):
@@ -326,7 +326,7 @@ class TestFailedRiteIsJournaled:
     @classmethod
     def test_renderer_marks_a_failed_rite(cls):
         out = io.StringIO()
-        renderer = StandaloneRenderer(out=out, inp=io.StringIO())
+        renderer = StandaloneRenderer(out=Tail(out), inp=io.StringIO())
         grimoire = Grimoire(clock=_fixed_clock, on_event=renderer.render)
         with pytest.raises(BoomError):
             asyncio.run(

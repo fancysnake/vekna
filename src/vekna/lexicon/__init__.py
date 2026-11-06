@@ -19,7 +19,6 @@ from ._mills.engine import (
     current_rite,
     emit_delta,
     offer_prompt,
-    record_failure,
     record_result,
     replayed,
 )
@@ -112,7 +111,6 @@ __all__ = [
     "medium",
     "offer_prompt",
     "race",
-    "record_failure",
     "record_result",
     "replayed",
     "ritual",

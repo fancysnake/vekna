@@ -19,7 +19,7 @@ def _renderer(
     text: str, *, tty: bool = False
 ) -> tuple[StandaloneRenderer, io.StringIO]:
     out = Tty() if tty else io.StringIO()
-    return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
+    return StandaloneRenderer(out=Tail(out), inp=io.StringIO(text)), out
 
 
 class TestRender:
@@ -247,7 +247,7 @@ class TestOneLinePerRite:
         renderer.render(
             RiteEnded(
                 rite_id="r2",
-                status="failed",
+                status="reported",
                 result=None,
                 finished_at=datetime(2026, 1, 1, tzinfo=UTC),
                 error="exit 3",
@@ -347,6 +347,44 @@ class TestOneLinePerRite:
         renderer.render(_ended("r2"))
 
         assert out.getvalue() == "  ↳ shell\n  ↳ git\n  ✓ shell\n"
+
+    @staticmethod
+    def test_a_rite_landing_on_an_unanswered_prompt_leaves_the_prompt():
+        out = Tty()
+        tail = Tail(out)
+        renderer = StandaloneRenderer(out=tail, inp=io.StringIO())
+
+        tail.write("proceed? [y/n] ")
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == "proceed? [y/n]   ↳ shell\n  ✓ shell\n"
+
+    @staticmethod
+    def test_an_empty_write_says_nothing_about_the_row():
+        out = Tty()
+        tail = Tail(out)
+
+        tail.write("proceed? [y/n] ")
+        tail.write("")
+        tail.write("  ↳ shell\n")
+
+        assert not tail.overwrite(tail.mark, "  ✓ shell\n")
+
+    @staticmethod
+    def test_a_rite_that_ended_its_held_block_prints_what_arrives_late():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r1", name="gates"),
+            _began("r2", parent="r1"),
+            _began("r3", parent="r1"),
+            _ended("r3"),
+            RiteStreamed(rite_id="r3", delta="late"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue().endswith("    late\n")
 
     @staticmethod
     def test_a_log_keeps_both_lines_and_collects_no_cursor_codes():
@@ -468,7 +506,7 @@ class TestPromptEndOfInput:
     def test_a_closed_input_raises_out_of_the_question():
         inp = io.StringIO("y\n")
         inp.close()
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
 
         with pytest.raises(ValueError, match="closed file"):
             asyncio.run(asyncio.wait_for(renderer.decide(prompt="ok?"), timeout=5))
@@ -562,7 +600,7 @@ class TestWithdrawnPrompt:
 
         async def ask_twice() -> str:
             with os.fdopen(read_fd, encoding="utf-8") as inp:
-                renderer = StandaloneRenderer(out=out, inp=inp)
+                renderer = StandaloneRenderer(out=Tail(out), inp=inp)
                 first = asyncio.create_task(renderer.decide(prompt="first?", free=True))
                 await asyncio.sleep(0.05)
                 first.cancel()
@@ -585,7 +623,7 @@ class TestWithdrawnPrompt:
         inp = os.fdopen(read_fd, encoding="utf-8")
 
         async def ask_and_withdraw() -> None:
-            renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+            renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
             asked = asyncio.create_task(renderer.decide(prompt="first?", free=True))
             await asyncio.sleep(0.05)
             asked.cancel()

@@ -8,7 +8,7 @@ import sys
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, TextIO
 from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
@@ -641,14 +641,28 @@ async def _cast(
     return code
 
 
+# A step's print goes through the tail, or its line would count as still the
+# terminal's last and go back over what was printed. stderr joins only when both
+# streams reach a terminal: piped, no line goes back, and they stay apart.
+# shortcut: a child process inheriting the terminal writes past the tail, so its
+# last line can still go. Upgrade if a ritual runs one outside the shell medium.
+async def _run(plan: _Plan) -> int:
+    out = Tail(sys.stdout)
+    err: TextIO = sys.stderr
+    with (
+        contextlib.redirect_stdout(out),
+        contextlib.redirect_stderr(out if out.isatty() and err.isatty() else err),
+    ):
+        return await _run_on(plan, out)
+
+
 # The renderer and the wire both, in that order: what the operator sees does not
 # wait on a socket, and a cast with no daemon behaves exactly as it did.
-async def _run(plan: _Plan) -> int:
+async def _run_on(plan: _Plan, out: Tail) -> int:
     # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
     # is the wire's correlation key, and which cast this one carries on from is
     # a field of its own on the hello.
     cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
-    out = Tail(sys.stdout)
     renderer = StandaloneRenderer(out=out)
     link = DaemonLink(
         socket_path=default_socket_path(),
@@ -701,7 +715,9 @@ async def _run(plan: _Plan) -> int:
                 await watcher
         if follower is None:
             return code
-        return await _followed(code, follower=follower, lineage=lineage, out=out)
+        return await _followed(
+            code, follower=follower, lineage=lineage, renderer=renderer
+        )
     finally:
         if follower is not None:
             await follower.close()
@@ -732,14 +748,14 @@ async def _follower(
 # following leaves them running and keeps this cast's own code: they are the
 # daemon's now, and nothing about them has gone wrong.
 async def _followed(
-    code: int, *, follower: Follower, lineage: Lineage, out: Tail
+    code: int, *, follower: Follower, lineage: Lineage, renderer: StandaloneRenderer
 ) -> int:
     if not lineage.settled:
-        out.write(_FOLLOWING)
+        renderer.say(_FOLLOWING)
     try:
         settled = await follower.until_settled()
     except asyncio.CancelledError:
-        out.write(_LEFT)
+        renderer.say(_LEFT)
         return code
     if code:
         return code

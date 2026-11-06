@@ -468,6 +468,73 @@ class TestCastConfig:
         assert "cannot import rituals from" in capsys.readouterr().err
 
 
+_PRINTER = textwrap.dedent("""
+    import sys
+
+    from pydantic import BaseModel
+
+    from vekna.lexicon import Done, NoComponents, ritual, step
+
+
+    class Build(BaseModel):
+        pass
+
+
+    @step
+    async def build(_: Build) -> Done[None]:
+        print("build failed")
+        print("see the log", file=sys.stderr)
+        return Done(None)
+
+
+    @ritual("printer")
+    async def printer(_: NoComponents) -> Build:
+        return Build()
+    """)
+
+
+class TestCastPrinting:
+    @staticmethod
+    def test_a_step_s_print_at_a_terminal_survives_its_rite_ending(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_PRINTER)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stderr", Tty())
+
+        tty = _cast_on_a_tty(["printer"], monkeypatch)
+
+        assert "build failed\nsee the log\n" in tty.getvalue()
+        assert "\x1b[1A" not in tty.getvalue()
+
+    @staticmethod
+    def test_stderr_stays_apart_when_only_stdout_is_a_terminal(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_PRINTER)
+        monkeypatch.chdir(tmp_path)
+
+        tty = _cast_on_a_tty(["printer"], monkeypatch)
+
+        assert "see the log" not in tty.getvalue()
+        assert "see the log" in capsys.readouterr().err
+
+    @staticmethod
+    def test_a_piped_cast_keeps_its_two_streams_apart(tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        (tmp_path / "rituals.py").write_text(_PRINTER)
+        monkeypatch.chdir(tmp_path)
+
+        main(["printer"])
+
+        captured = capsys.readouterr()
+        assert "build failed" in captured.out
+        assert "see the log" not in captured.out
+        assert "see the log" in captured.err
+
+
 # stdout as the terminal it is in real use: the notification is an escape
 # sequence written only to a tty, and pytest's capture is not one.
 def _cast_on_a_tty(argv: list[str], monkeypatch) -> Tty:

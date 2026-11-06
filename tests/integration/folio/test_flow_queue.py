@@ -8,7 +8,7 @@ from pydantic import BaseModel, JsonValue
 from tests.conftest import entry, journalled
 from vekna.folio.flow import await_cast, enqueue
 from vekna.lexicon import CAST_QUEUE, CastFailedError, Done, RitualError, step
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import Resumption
@@ -124,7 +124,9 @@ class TestEnqueue:
                     ritual=ritual,
                     components=ritual.components(),
                     grimoire=Grimoire(),
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                     ledger=journalled("c9", name="enqueue"),
                 )
             )
@@ -142,7 +144,9 @@ class TestEnqueue:
                     ritual=ritual,
                     components=ritual.components(),
                     grimoire=Grimoire(),
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                     ledger=journalled(7, name="enqueue"),
                 )
             )
@@ -197,7 +201,9 @@ class TestResumedAwait:
                     ritual=ritual,
                     components=ritual.components(),
                     grimoire=Grimoire(),
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                     ledger=_replayed(
                         ("r2", "enqueue", "c9"), ("r3", "awaited", {"commits": 5})
                     ),

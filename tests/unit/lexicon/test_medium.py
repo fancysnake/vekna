@@ -19,7 +19,7 @@ from vekna.lexicon import (
     ritual,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, cast_context, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
@@ -107,7 +107,7 @@ class TestMedium:
     @staticmethod
     def test_prompts_via_channel_and_returns_choice():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("b\n"))
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("b\n"))
 
         result = asyncio.run(
             run_cast(
@@ -123,7 +123,7 @@ class TestMedium:
     @staticmethod
     def test_medium_rite_nests_under_its_step():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("a\n"))
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("a\n"))
 
         asyncio.run(
             run_cast(
@@ -171,7 +171,7 @@ def _caller(call: dict[str, object]):
 
 
 def _cast(the_ritual, grimoire):
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("a\n"))
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("a\n"))
     return asyncio.run(
         run_cast(
             ritual=the_ritual,
@@ -278,7 +278,7 @@ class TestEmitDelta:
     @staticmethod
     def test_inside_a_medium_it_hangs_off_the_medium_rite():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
 
         asyncio.run(
             run_cast(
@@ -297,7 +297,7 @@ class TestEmitDelta:
     @staticmethod
     def test_at_the_cast_root_it_raises():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
 
         with pytest.raises(RitualError, match="no rite is running"):
             asyncio.run(
@@ -311,7 +311,7 @@ class TestEmitDelta:
 
 
 def _call_within_cast(grimoire: Grimoire, work: Callable[[], Awaitable[str]]) -> str:
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
     with cast_context(grimoire=grimoire, channel=renderer):
         return asyncio.run(_awaited(work))
 

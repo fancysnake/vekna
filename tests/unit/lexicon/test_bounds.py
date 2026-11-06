@@ -18,7 +18,7 @@ from vekna.lexicon import (
     step,
     timeout,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded
 
@@ -93,7 +93,7 @@ def _cast(payload: BaseModel) -> tuple[BaseModel | None, Grimoire]:
             ritual=the_ritual,
             components=the_ritual.components(),
             grimoire=grimoire,
-            channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+            channel=StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO()),
         )
     )
     return result, grimoire
@@ -129,7 +129,9 @@ class TestTimeout:
                     ritual=the_ritual,
                     components=the_ritual.components(),
                     grimoire=grimoire,
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                 )
             )
 
