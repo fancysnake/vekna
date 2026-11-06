@@ -62,12 +62,12 @@ class OwnTimeout(BaseModel):
 
 @step
 async def slow(_: Slow) -> Done[str]:
-    return Done(await timeout(nap(60), seconds=0.01))
+    return Done(await timeout(nap(1), seconds=0.01))
 
 
 @step(timeout=0.01)
 async def bounded(_: Bounded) -> Done[str]:
-    return Done(await nap(60))
+    return Done(await nap(1))
 
 
 @step
@@ -77,7 +77,7 @@ def recover(failure: Failure[Bounded]) -> Done[Recovered]:
 
 @step(timeout=0.01)
 async def unrouted(_: Unrouted) -> Done[str]:
-    return Done(await nap(60))
+    return Done(await nap(1))
 
 
 @step

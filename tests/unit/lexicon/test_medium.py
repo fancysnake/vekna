@@ -16,6 +16,7 @@ from vekna.lexicon import (
     current_rite,
     emit_delta,
     medium,
+    record_result,
     ritual,
     step,
 )
@@ -96,6 +97,14 @@ async def identify(_state: Whoami) -> Done[None]:
 identifier = entry(name="identifier", payload=Whoami())
 
 
+# `shell`'s shape again: the failure comes back as a value, and nothing raises.
+@medium
+async def flunk() -> str:
+    await asyncio.sleep(0)
+    record_result("output", failure="exit 1")
+    return "output"
+
+
 # The ritual body itself runs at the cast root, outside any rite.
 @ritual("rootless")
 def rootless(_: NoComponents) -> Done[None]:
@@ -139,6 +148,20 @@ class TestMedium:
         medium_rite = next(e for e in started if e.name == "pick")
         assert medium_rite.category == "medium"
         assert medium_rite.parent_id == step_rite.rite_id
+
+    @staticmethod
+    def test_a_failure_it_returns_is_said_when_its_rite_ends():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        returned = _call_within_cast(grimoire, flunk)
+
+        ended = next(e for e in grimoire.events if isinstance(e, RiteEnded))
+        assert returned == "output"
+        assert (ended.status, ended.result, ended.error) == (
+            "reported",
+            "output",
+            "exit 1",
+        )
 
     @staticmethod
     def test_a_decorated_medium_introspects_as_itself():
