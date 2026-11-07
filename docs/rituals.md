@@ -234,7 +234,8 @@ in for every component its enqueuer left unset.
 ```
 
 A key the ritual does not take fails the cast, naming the file, the ritual and
-the key. A table for a ritual not installed here is ignored, so a global config
+the key. A value of the wrong type fails `vekna rituals show` too, naming the
+same. A table for a ritual not installed here is ignored, so a global config
 can hold defaults for tomes some projects lack. Secrets stay out: `.vekna.toml`
 is committed, so pass a credential as a flag.
 

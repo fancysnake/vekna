@@ -27,6 +27,11 @@ groups by category, not by release: there is no timeline across the tracks and
 none inside one, so reading them in order buys nothing. Order is decided when
 work starts.
 
+The names come from the Vecna lore the project is named for. **Reborn** is the
+pivot from a tmux focus-switcher to rituals and casts, **Eye** the surfaces that
+watch, **Hand** what a ritual can do when things go wrong and what it can be
+held to. A release takes from any of them and carries no name of its own.
+
 High Magic is the exception that says so out loud. It is a path rather than a
 category, and a path is a sequence, so its epic
 ([#142](https://github.com/fancysnake/vekna/issues/142)) orders it: sub-issues
@@ -42,23 +47,3 @@ other issue edited to say where it sits.
   something else shipped, not because the order moved.
 - **Shipped closes the issue.** `CHANGELOG.md` is the record of what actually
   happened; a shipped plan is not kept.
-
-## Release names
-
-Every major release carries a name, and the name comes before the version does.
-Contents move, and while they move a version number is a guess. A name is not.
-
-Names come from the Vecna lore the project is named for, and each says what its
-release is about: **Reborn**, the pivot from a tmux focus-switcher to rituals
-and casts; **Eye**, the surfaces that watch; **Hand**, the acting half — what a
-ritual can do when things go wrong, and what it can be held to.
-
-Rules, such as they are:
-
-- One name per **major** release. A `0.x` line is the road to a name, not a
-  series of them.
-- The name is documentation, not packaging. Versions stay semver; the name
-  rides in the changelog heading (`## <version> — Reborn`) and the track's
-  milestone.
-- Name a track when work on it starts. The number attaches at the tag, and
-  which ideas made it in is whatever the changelog says.

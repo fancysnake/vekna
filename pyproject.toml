@@ -1,6 +1,6 @@
 [project]
 name = "vekna"
-version = "0.15.0"
+version = "1.0.0"
 description = "Run coding agents as rituals: ordinary Python programs whose steps you control"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
@@ -24,7 +24,7 @@ keywords = [
 # The Python versions are listed by hand — poetry-core emits `Requires-Python`
 # from the constraint but no classifiers, and those are what PyPI filters on.
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
