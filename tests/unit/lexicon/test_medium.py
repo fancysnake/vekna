@@ -16,10 +16,11 @@ from vekna.lexicon import (
     current_rite,
     emit_delta,
     medium,
+    record_result,
     ritual,
     step,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, cast_context, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
@@ -96,6 +97,14 @@ async def identify(_state: Whoami) -> Done[None]:
 identifier = entry(name="identifier", payload=Whoami())
 
 
+# `shell`'s shape again: the failure comes back as a value, and nothing raises.
+@medium
+async def flunk() -> str:
+    await asyncio.sleep(0)
+    record_result("output", failure="exit 1")
+    return "output"
+
+
 # The ritual body itself runs at the cast root, outside any rite.
 @ritual("rootless")
 def rootless(_: NoComponents) -> Done[None]:
@@ -107,7 +116,7 @@ class TestMedium:
     @staticmethod
     def test_prompts_via_channel_and_returns_choice():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("b\n"))
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("b\n"))
 
         result = asyncio.run(
             run_cast(
@@ -123,7 +132,7 @@ class TestMedium:
     @staticmethod
     def test_medium_rite_nests_under_its_step():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("a\n"))
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("a\n"))
 
         asyncio.run(
             run_cast(
@@ -139,6 +148,20 @@ class TestMedium:
         medium_rite = next(e for e in started if e.name == "pick")
         assert medium_rite.category == "medium"
         assert medium_rite.parent_id == step_rite.rite_id
+
+    @staticmethod
+    def test_a_failure_it_returns_is_said_when_its_rite_ends():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        returned = _call_within_cast(grimoire, flunk)
+
+        ended = next(e for e in grimoire.events if isinstance(e, RiteEnded))
+        assert returned == "output"
+        assert (ended.status, ended.result, ended.error) == (
+            "reported",
+            "output",
+            "exit 1",
+        )
 
     @staticmethod
     def test_a_decorated_medium_introspects_as_itself():
@@ -171,7 +194,7 @@ def _caller(call: dict[str, object]):
 
 
 def _cast(the_ritual, grimoire):
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO("a\n"))
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO("a\n"))
     return asyncio.run(
         run_cast(
             ritual=the_ritual,
@@ -278,7 +301,7 @@ class TestEmitDelta:
     @staticmethod
     def test_inside_a_medium_it_hangs_off_the_medium_rite():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
 
         asyncio.run(
             run_cast(
@@ -297,7 +320,7 @@ class TestEmitDelta:
     @staticmethod
     def test_at_the_cast_root_it_raises():
         grimoire = Grimoire(clock=_fixed_clock)
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
 
         with pytest.raises(RitualError, match="no rite is running"):
             asyncio.run(
@@ -311,7 +334,7 @@ class TestEmitDelta:
 
 
 def _call_within_cast(grimoire: Grimoire, work: Callable[[], Awaitable[str]]) -> str:
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
     with cast_context(grimoire=grimoire, channel=renderer):
         return asyncio.run(_awaited(work))
 

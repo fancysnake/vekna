@@ -192,7 +192,9 @@ result = await shell(
 )
 ```
 
-`ShellResult` is `stdout: str`, `stderr: str`, `exit_code: int`. Runs under
+`ShellResult` is `stdout: str`, `stderr: str`, `exit_code: int`. A non-zero exit
+raises nothing and its rite reads `✗ … — exit <code>`; the step decides what it
+means. Runs under
 `bash -c`. `stream=True` (default) pumps both pipes live into the rite;
 `stream=False` for bulk output that is payload rather than progress. Stdin is
 `/dev/null` — a command that prompts gets EOF.

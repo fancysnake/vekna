@@ -3,6 +3,8 @@ import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from typing_extensions import override
+
 from vekna.lexicon._pacts import (
     Channel,
     LineageProtocol,
@@ -32,32 +34,49 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import Out, StandaloneRenderer
+from .standalone import Revisable, StandaloneRenderer
 
 _MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
 
 
 # Every line a cast's renderer writes, under the name of the cast that said it:
 # several casts stream into one terminal, and indentation is all a line carries.
-class _Prefixed(Out):
-    def __init__(self, out: Out, label: str) -> None:
+class _Prefixed(Revisable):
+    def __init__(self, out: Revisable, label: str) -> None:
         self._out = out
         self._label = f"[{label}] "
         self._fresh = True
 
-    def write(self, text: str, /) -> int:
+    def _labelled(self, text: str, *, fresh: bool) -> str:
+        labelled = []
         for line in text.splitlines(keepends=True):
-            if self._fresh:
-                self._out.write(self._label)
-            self._out.write(line)
-            self._fresh = line.endswith("\n")
+            labelled.append(f"{self._label}{line}" if fresh else line)
+            fresh = line.endswith("\n")
+        return "".join(labelled)
+
+    @override
+    def write(self, text: str, /) -> int:
+        if text:
+            self._out.write(self._labelled(text, fresh=self._fresh))
+            self._fresh = text.endswith("\n")
         return len(text)
 
+    @override
     def flush(self) -> None:
         self._out.flush()
 
+    @override
     def isatty(self) -> bool:
         return self._out.isatty()
+
+    @property
+    @override
+    def mark(self) -> int:
+        return self._out.mark
+
+    @override
+    def overwrite(self, mark: int, text: str) -> bool:
+        return self._out.overwrite(mark, self._labelled(text, fresh=True))
 
 
 # One followed cast: its renderer, and the rites it has already shown, so a
@@ -99,7 +118,7 @@ class Follower:
         *,
         socket_path: Path,
         lineage: LineageProtocol,
-        out: Out,
+        out: Revisable,
         ask: Channel | None,
     ) -> None:
         self._wire = _Wire(path=socket_path)

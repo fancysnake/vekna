@@ -85,6 +85,15 @@ class TestWhatReplays:
 
         assert ledger.take(rite_id="r1", name="shell") is None
 
+    @staticmethod
+    def test_a_rite_that_came_back_saying_it_failed_is_replayed():
+        ledger = _ledger(
+            _started("r1", name="shell"),
+            _finished("r1", result={"exit_code": 1}, status="reported"),
+        )
+
+        assert ledger.take(rite_id="r1", name="shell") == {"exit_code": 1}
+
 
 class TestSpending:
     # Rite ids line up only while the resumed cast walks the path the recorded

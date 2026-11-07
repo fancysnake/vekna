@@ -8,7 +8,7 @@ from pydantic import BaseModel, JsonValue
 from tests.conftest import entry, journalled
 from vekna.folio.flow import decide, race
 from vekna.lexicon import Done, MediumBoundaryError, RitualError, medium, step
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, Ritual
 
@@ -43,7 +43,7 @@ class TestDecideMedium:
     def test_choice_confirm_free_round_trip_via_stdin():
         grimoire = Grimoire(clock=_fixed_clock)
         renderer = StandaloneRenderer(
-            out=io.StringIO(), inp=io.StringIO("y\nyes\nhello\n")
+            out=Tail(io.StringIO()), inp=io.StringIO("y\nyes\nhello\n")
         )
 
         result = asyncio.run(
@@ -126,7 +126,7 @@ def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
             ritual=ritual,
             components=ritual.components(),
             grimoire=grimoire,
-            channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+            channel=StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO()),
             ledger=journalled(recorded, name="decide"),
         )
     )
@@ -185,7 +185,9 @@ class TestEmptyOptions:
                     ritual=emptier,
                     components=emptier.components(),
                     grimoire=grimoire,
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                 )
             )
 
@@ -286,7 +288,7 @@ def _raced(payload: BaseModel) -> tuple[BaseModel | None, Grimoire]:
             ritual=the_ritual,
             components=the_ritual.components(),
             grimoire=grimoire,
-            channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+            channel=StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO()),
         )
     )
     return result, grimoire

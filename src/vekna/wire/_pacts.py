@@ -252,7 +252,9 @@ class RiteDelta(BaseModel):
     delta: str
 
 
-RiteEndStatus = Literal["ok", "error", "cancelled"]
+# "error" raised; "reported" came back and said it had failed, a shell exiting
+# non-zero, so what it recorded stands and a resume replays it.
+RiteEndStatus = Literal["ok", "reported", "error", "cancelled"]
 
 
 class RiteFinished(BaseModel):

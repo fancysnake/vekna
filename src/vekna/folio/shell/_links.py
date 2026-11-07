@@ -190,7 +190,10 @@ async def shell(
         result = ShellResult(
             stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code
         )
-    record_result(_JOURNALLED.validate_json(result.model_dump_json()))
+    record_result(
+        _JOURNALLED.validate_json(result.model_dump_json()),
+        failure=f"exit {result.exit_code}" if result.exit_code else None,
+    )
     return result
 
 

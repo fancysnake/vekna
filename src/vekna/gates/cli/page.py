@@ -27,6 +27,7 @@ _CAST_LOOK = {
 _RITE_LOOK: dict[RiteStatus, Text] = {
     "running": Text("▶", "cyan"),
     "ok": Text("✓", "green"),
+    "reported": Text("✗", "red"),
     "error": Text("✗", "red"),
     "cancelled": Text("⊘", "dim"),
 }

@@ -8,15 +8,18 @@ import pytest
 
 from tests.conftest import Tty
 from vekna.lexicon import StandalonePromptError
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+
+# Up over the line just written, and everything from there down gone.
+_BACK = "\x1b[1A\r\x1b[J"
 
 
 def _renderer(
     text: str, *, tty: bool = False
 ) -> tuple[StandaloneRenderer, io.StringIO]:
     out = Tty() if tty else io.StringIO()
-    return StandaloneRenderer(out=out, inp=io.StringIO(text)), out
+    return StandaloneRenderer(out=Tail(out), inp=io.StringIO(text)), out
 
 
 class TestRender:
@@ -186,6 +189,213 @@ class TestConcurrentRites:
         )
 
 
+class TestOneLinePerRite:
+    @staticmethod
+    def test_a_silent_call_ends_on_the_line_that_opened_it():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.render(_began("r2", parent="r1", summary="true"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == f"  ↳ shell  true\n{_BACK}  ✓ shell  true\n"
+
+    @staticmethod
+    def test_a_step_with_nothing_inside_ends_on_its_own_line_too():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.render(_began("r1", name="gates"))
+        renderer.render(_ended("r1"))
+
+        assert out.getvalue() == f"▶ gates\n{_BACK}✓ gates\n"
+
+    @staticmethod
+    def test_a_step_that_wraps_a_call_closes_on_a_line_of_its_own():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r1", name="gates"),
+            _began("r2", parent="r1"),
+            _ended("r2"),
+            _ended("r1"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue() == f"▶ gates\n  ↳ shell\n{_BACK}  ✓ shell\n✓ gates\n"
+
+    @staticmethod
+    def test_a_failed_call_keeps_its_error_on_its_one_line():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(
+            RiteEnded(
+                rite_id="r2",
+                status="error",
+                result=None,
+                finished_at=datetime(2026, 1, 1, tzinfo=UTC),
+                error="boom",
+            )
+        )
+
+        assert out.getvalue() == f"  ↳ shell\n{_BACK}  ✗ shell  — boom\n"
+
+    @staticmethod
+    def test_a_call_that_reported_failure_is_marked_failed():
+        renderer, out = _renderer("")
+
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(
+            RiteEnded(
+                rite_id="r2",
+                status="reported",
+                result=None,
+                finished_at=datetime(2026, 1, 1, tzinfo=UTC),
+                error="exit 3",
+            )
+        )
+
+        assert out.getvalue() == "  ↳ shell\n  ✗ shell  — exit 3\n"
+
+    @staticmethod
+    def test_a_call_that_printed_closes_beneath_its_output():
+        renderer, out = _renderer("", tty=True)
+
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(RiteStreamed(rite_id="r2", delta="hi"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == "  ↳ shell\n    hi\n  ✓ shell\n"
+
+    @staticmethod
+    def test_a_line_that_wrapped_is_taken_back_whole(monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("COLUMNS", "10")
+        renderer, out = _renderer("", tty=True)
+
+        renderer.render(_began("r1", name="a-name-of-eleven"))
+        renderer.render(_ended("r1"))
+
+        assert out.getvalue() == (
+            "▶ a-name-of-eleven\n\x1b[2A\r\x1b[J✓ a-name-of-eleven\n"
+        )
+
+    @staticmethod
+    def test_calls_running_at_once_each_close_on_their_own_line():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r2", parent="r1", summary="one"),
+            _began("r3", parent="r1", summary="two"),
+            RiteStreamed(rite_id="r2", delta="first"),
+            _ended("r3"),
+            _ended("r2"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue() == (
+            "  ↳ shell  one\n"
+            "  ↳ shell  two\n"
+            f"{_BACK}  ✓ shell  two\n"
+            "    first\n"
+            "  ✓ shell  one\n"
+        )
+
+    @staticmethod
+    def test_a_rite_held_in_a_block_is_one_line_of_it():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r1", name="gates"),
+            _began("r2", parent="r1"),
+            _began("r3", parent="r1"),
+            _began("r4", parent="r2", name="inner"),
+            _ended("r4"),
+            _ended("r2"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue().endswith("    ✓ inner\n  ✓ shell\n")
+        assert "↳ inner" not in out.getvalue()
+
+    @staticmethod
+    def test_a_rite_held_in_a_block_that_printed_closes_beneath_its_output():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r1", name="gates"),
+            _began("r2", parent="r1"),
+            _began("r3", parent="r1"),
+            _began("r4", parent="r2", name="inner"),
+            RiteStreamed(rite_id="r4", delta="deep"),
+            _ended("r4"),
+            _ended("r2"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue().endswith(
+            "    ↳ inner\n      deep\n    ✓ inner\n  ✓ shell\n"
+        )
+
+    @staticmethod
+    def test_another_renderer_writing_on_the_terminal_keeps_the_line():
+        out = Tty()
+        tail = Tail(out)
+        renderer = StandaloneRenderer(out=tail, inp=io.StringIO())
+        other = StandaloneRenderer(out=tail, inp=io.StringIO())
+
+        renderer.render(_began("r2", parent="r1"))
+        other.render(_began("r9", parent="r8", name="git"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == "  ↳ shell\n  ↳ git\n  ✓ shell\n"
+
+    @staticmethod
+    def test_a_rite_landing_on_an_unanswered_prompt_leaves_the_prompt():
+        out = Tty()
+        tail = Tail(out)
+        renderer = StandaloneRenderer(out=tail, inp=io.StringIO())
+
+        tail.write("proceed? [y/n] ")
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == "proceed? [y/n]   ↳ shell\n  ✓ shell\n"
+
+    @staticmethod
+    def test_an_empty_write_says_nothing_about_the_row():
+        out = Tty()
+        tail = Tail(out)
+
+        tail.write("proceed? [y/n] ")
+        tail.write("")
+        tail.write("  ↳ shell\n")
+
+        assert not tail.overwrite(tail.mark, "  ✓ shell\n")
+
+    @staticmethod
+    def test_a_rite_that_ended_its_held_block_prints_what_arrives_late():
+        renderer, out = _renderer("", tty=True)
+
+        for event in (
+            _began("r1", name="gates"),
+            _began("r2", parent="r1"),
+            _began("r3", parent="r1"),
+            _ended("r3"),
+            RiteStreamed(rite_id="r3", delta="late"),
+        ):
+            renderer.render(event)
+
+        assert out.getvalue().endswith("    late\n")
+
+    @staticmethod
+    def test_a_log_keeps_both_lines_and_collects_no_cursor_codes():
+        renderer, out = _renderer("")
+
+        renderer.render(_began("r2", parent="r1"))
+        renderer.render(_ended("r2"))
+
+        assert out.getvalue() == "  ↳ shell\n  ✓ shell\n"
+
+
 class TestDecide:
     @staticmethod
     def test_chooses_by_number():
@@ -296,7 +506,7 @@ class TestPromptEndOfInput:
     def test_a_closed_input_raises_out_of_the_question():
         inp = io.StringIO("y\n")
         inp.close()
-        renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+        renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
 
         with pytest.raises(ValueError, match="closed file"):
             asyncio.run(asyncio.wait_for(renderer.decide(prompt="ok?"), timeout=5))
@@ -390,7 +600,7 @@ class TestWithdrawnPrompt:
 
         async def ask_twice() -> str:
             with os.fdopen(read_fd, encoding="utf-8") as inp:
-                renderer = StandaloneRenderer(out=out, inp=inp)
+                renderer = StandaloneRenderer(out=Tail(out), inp=inp)
                 first = asyncio.create_task(renderer.decide(prompt="first?", free=True))
                 await asyncio.sleep(0.05)
                 first.cancel()
@@ -413,7 +623,7 @@ class TestWithdrawnPrompt:
         inp = os.fdopen(read_fd, encoding="utf-8")
 
         async def ask_and_withdraw() -> None:
-            renderer = StandaloneRenderer(out=io.StringIO(), inp=inp)
+            renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
             asked = asyncio.create_task(renderer.decide(prompt="first?", free=True))
             await asyncio.sleep(0.05)
             asked.cancel()

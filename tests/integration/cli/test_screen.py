@@ -273,6 +273,24 @@ class TestTheList:
         assert "⊘ attempt" in drilled
 
     @staticmethod
+    def test_a_medium_that_reported_failure_is_drawn_failed():
+        view = _running("fix_demo", ago=60)
+        _medium(view, "shell", ago=50, status="reported")
+
+        drilled = paint(listed=[view], focus="fix_demo", project=None, now=_WHEN)
+
+        assert "✗ shell" in drilled
+
+    @staticmethod
+    def test_a_medium_that_raised_is_drawn_failed():
+        view = _running("fix_demo", ago=60)
+        _medium(view, "shell", ago=50, status="error")
+
+        drilled = paint(listed=[view], focus="fix_demo", project=None, now=_WHEN)
+
+        assert "✗ shell" in drilled
+
+    @staticmethod
     def test_a_cut_medium_is_drawn_cancelled_and_a_finished_one_as_a_medium():
         view = _running("fix_demo", ago=60)
         _medium(view, "shell", ago=50, status="cancelled")

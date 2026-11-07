@@ -29,7 +29,7 @@ from vekna.lexicon import (
     step,
     timeout,
 )
-from vekna.lexicon._links.standalone import StandaloneRenderer
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed, Ritual
 
@@ -134,7 +134,7 @@ reads_stdin = entry(name="reads_stdin", payload=ReadsStdin())
 
 def _run(the_ritual: Ritual) -> tuple[ShellResult, Grimoire, io.StringIO]:
     out = io.StringIO()
-    renderer = StandaloneRenderer(out=out, inp=io.StringIO())
+    renderer = StandaloneRenderer(out=Tail(out), inp=io.StringIO())
     grimoire = Grimoire(on_event=renderer.render)
     result = asyncio.run(
         run_cast(
@@ -153,17 +153,54 @@ def _cast(the_ritual: Ritual) -> ShellResult:
     return result
 
 
-def _resumed(recorded: JsonValue) -> object:
-    renderer = StandaloneRenderer(out=io.StringIO(), inp=io.StringIO())
+def _resumed(recorded: JsonValue, *, grimoire: Grimoire | None = None) -> object:
+    renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=io.StringIO())
     return asyncio.run(
         run_cast(
             ritual=echoer,
             components=echoer.components(),
-            grimoire=Grimoire(),
+            grimoire=Grimoire() if grimoire is None else grimoire,
             channel=renderer,
             ledger=journalled(recorded, name="shell"),
         )
     )
+
+
+def _shell_end(grimoire: Grimoire) -> RiteEnded:
+    return next(
+        event
+        for event in grimoire.events
+        if isinstance(event, RiteEnded) and event.result is not None
+    )
+
+
+class TestHowARiteEnds:
+    @staticmethod
+    def test_a_zero_exit_ends_ok():
+        _, grimoire, _ = _run(echoer)
+
+        end = _shell_end(grimoire)
+
+        assert (end.status, end.error) == ("ok", None)
+
+    @staticmethod
+    def test_a_non_zero_exit_ends_failed_and_says_the_code():
+        _, grimoire, out = _run(failing)
+
+        end = _shell_end(grimoire)
+
+        assert (end.status, end.error) == ("reported", f"exit {_FAILURE_EXIT}")
+        assert f"✗ shell  echo oops >&2; exit 3  — exit {_FAILURE_EXIT}" in (
+            out.getvalue()
+        )
+
+    @staticmethod
+    def test_a_non_zero_exit_off_the_journal_ends_failed_again():
+        grimoire = Grimoire()
+
+        _resumed({"stdout": "", "stderr": "", "exit_code": 3}, grimoire=grimoire)
+
+        assert _shell_end(grimoire).status == "reported"
 
 
 class TestResumedRites:
@@ -364,7 +401,9 @@ class TestCancelledShell:
                     ritual=the_ritual,
                     components=the_ritual.components(),
                     grimoire=grimoire,
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                 )
             )
 
@@ -406,7 +445,9 @@ class TestStubbornShell:
                     ritual=the_ritual,
                     components=the_ritual.components(),
                     grimoire=Grimoire(),
-                    channel=StandaloneRenderer(out=io.StringIO(), inp=io.StringIO()),
+                    channel=StandaloneRenderer(
+                        out=Tail(io.StringIO()), inp=io.StringIO()
+                    ),
                 )
             )
 

@@ -27,6 +27,13 @@ when.
 
 ### Changed
 
+- **A cast's entry is one line at a terminal.** A rite that printed nothing
+  turns its `↳` or `▶` into its outcome where it stands, instead of repeating
+  the line. One that printed still closes on its own line, and output sent to a
+  file or a pipe keeps both.
+  A shell command that exits non-zero now ends in `✗` with its code, on every
+  surface, while the cast carries on and a resume still replays it.
+  ([#252](https://github.com/fancysnake/vekna/issues/252))
 - **The TUI is a book.** The left page is a tree of project › ritual › its
   casts by age › rites. By default it shows the running casts, each as `…` and
   the rite it is on, and the failed ones not yet opened. `space` folds a line,
