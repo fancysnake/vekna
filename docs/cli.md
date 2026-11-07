@@ -22,7 +22,8 @@ vekna cast <ritual> [--<component> value ...]
 
 Each of the ritual's component fields is an option. `--flag value` and
 `--flag=value` are both accepted; a flag with no value is an error naming the
-flag rather than swallowing the next one.
+flag rather than swallowing the next one. A flag the ritual does not take is
+refused, with the list of those it does.
 
 ```bash
 vekna cast fix_tests --bound 5
