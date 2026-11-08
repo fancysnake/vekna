@@ -32,7 +32,8 @@ Copy this prompt to set up vekna in your project:
 Set up vekna (https://github.com/fancysnake/vekna) in this project.
 
 1. Add `vekna[trial]` as a dev dependency using this project's package
-   manager.
+   manager. In a non-Python project with a `mise.toml`, add it there instead:
+   `"pipx:vekna" = { version = "latest", extras = "trial" }` under `[tools]`.
 2. Install the ritual-scribe plugin:
    `claude plugin marketplace add fancysnake/vekna`, then
    `claude plugin install ritual-scribe@vekna`. Load the ritual-scribe skill
