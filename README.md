@@ -24,10 +24,8 @@ pip install vekna
 Python 3.11+. Testing your rituals needs the `trial` extra:
 `pip install 'vekna[trial]'` — quoted, because zsh globs the brackets.
 
-## Setup
-
-[Copy this prompt](https://vekna.fancysnake.dev/setup/) to set up vekna
-in your project with Claude Code.
+Or [let Claude Code do all of this](https://vekna.fancysnake.dev/setup/) in
+your project.
 
 ## A ritual
 

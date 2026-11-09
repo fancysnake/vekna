@@ -31,10 +31,18 @@ Python 3.11 or newer. The `coding` medium reaches an agent through the
 [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/setup), which
 installs separately — everything else works without it.
 
-## Setup
+In a project that is not Python, install vekna as a tool with
+[mise](https://mise.jdx.dev), under `[tools]` in `mise.toml`:
 
-[Copy this prompt](setup.md) to set up vekna in your project with
-Claude Code.
+```toml
+pipx = "<version>"
+# --include-deps puts pytest, a dependency of the trial extra, on PATH.
+# uvx = false because mise prefers uvx when uv is installed, and uvx does
+# not accept --include-deps.
+"pipx:vekna" = { version = "<version>", extras = "trial", uvx = false, pipx_args = "--include-deps" }
+```
+
+Or [let Claude Code do all of this](setup.md) in your project.
 
 ## Your first ritual
 

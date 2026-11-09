@@ -6,7 +6,7 @@ Two audiences, kept apart by `mkdocs.yml`'s `exclude_docs`.
 someone who has just run `pip install vekna`: [`index.md`](index.md),
 [`rituals.md`](rituals.md), [`mediums.md`](mediums.md),
 [`testing.md`](testing.md), [`examples.md`](examples.md),
-[`safety.md`](safety.md), [`cli.md`](cli.md), and
+[`safety.md`](safety.md), [`cli.md`](cli.md), [`setup.md`](setup.md), and
 [`architecture.md`](architecture.md), which is published as it stands for
 anyone sending a patch.
 
