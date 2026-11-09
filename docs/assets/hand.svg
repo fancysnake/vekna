@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1480" width="1400" height="1480" role="img" aria-labelledby="t d">
+  <title id="t">Hand: vekna works while the operator is away</title>
+  <desc id="d">The operator steers from Discord. The vekna daemon runs vigils that poll landschaft's inbox and issue board, and casts cabinet's rituals: heal.mine and heal.main for the inbox, fabricate and fabricate.epic for the board, each plan approved through an approval gate. Worktrees are leased per step, and everything holds while Claude's usage limit is hit.</desc>
+  <style>
+    :root {
+      --bg: #f3efe7; --card: #fbf8f3; --ink: #1f241b; --soft: #4b5147; --faint: #767e70;
+      --line: #c9cfbf; --moss: #3b4a2a; --sigil: #4a6127; --verd: #12715a; --verd-bg: #dcebe4;
+      --ox: #8c2230; --ox-bg: #f3dde0; --tint: #e6eadf;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161a13; --card: #1f241b; --ink: #e8e4da; --soft: #b8bcae; --faint: #8b9183;
+        --line: #3c4534; --moss: #a7bd86; --sigil: #b6cc8d; --verd: #5cc6a6; --verd-bg: #173329;
+        --ox: #e58a96; --ox-bg: #3a1c21; --tint: #262c21;
+      }
+    }
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+    .h1 { font-size: 36px; font-weight: 700; fill: var(--moss); letter-spacing: .5px; }
+    .lede { font-size: 16px; fill: var(--soft); }
+    .sec { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: var(--sigil); }
+    .h3 { font-size: 16px; font-weight: 700; }
+    .b { font-size: 13px; fill: var(--ink); }
+    .s { font-size: 12px; fill: var(--soft); }
+    .xs { font-size: 11px; fill: var(--faint); }
+    .code { font-size: 12px; fill: var(--verd); }
+    .warn { fill: var(--ox); }
+    .bg { fill: var(--bg); }
+    .card { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+    .tint { fill: var(--tint); stroke: var(--line); stroke-width: 1; }
+    .daemon { fill: var(--card); stroke: var(--moss); stroke-width: 2.2; }
+    .hot { fill: var(--verd-bg); stroke: var(--verd); stroke-width: 1.4; }
+    .bad { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.4; }
+    .arrow { fill: none; stroke: var(--soft); stroke-width: 1.6; marker-end: url(#a); }
+    .arrow-v { fill: none; stroke: var(--verd); stroke-width: 1.8; marker-end: url(#av); }
+    .arrow-x { fill: none; stroke: var(--ox); stroke-width: 1.6; marker-end: url(#ax); }
+    .dash { stroke-dasharray: 5 4; }
+    .lane { stroke: var(--line); stroke-width: 1; }
+    .bar { fill: var(--verd); }
+    .bar-wait { fill: none; stroke: var(--verd); stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .bar-hold { fill: var(--ox-bg); stroke: var(--ox); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--soft)"/></marker>
+    <marker id="av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--verd)"/></marker>
+    <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--ox)"/></marker>
+  </defs>
+
+  <rect class="bg" width="1400" height="1480"/>
+
+  <!-- ============ HEADER ============ -->
+  <text x="40" y="62" class="h1">Hand · vekna works while you are away</text>
+  <text x="40" y="94" class="lede">Start vekna and leave. Vigils poll landschaft, cabinet's rituals heal pull requests and fabricate new ones,</text>
+  <text x="40" y="116" class="lede">and every question, plan and approval reaches the operator on Discord. Every cast stays attended.</text>
+
+  <!-- ============ 1 · WHO TALKS TO WHOM ============ -->
+  <text x="40" y="170" class="sec">1 · WHO TALKS TO WHOM</text>
+
+  <!-- operator -->
+  <rect x="40" y="186" width="380" height="200" rx="10" class="card"/>
+  <text x="60" y="216" class="h3">Operator, away from the desk</text>
+  <text x="60" y="244" class="b">Discord: a channel per project,</text>
+  <text x="60" y="262" class="b">a thread per cast  <tspan class="code mono">#260</tspan></text>
+  <text x="60" y="290" class="b">discusses each plan until approved  <tspan class="code mono">#266</tspan></text>
+  <text x="60" y="318" class="b">cast · cancel <tspan class="code mono">#243</tspan> · status <tspan class="code mono">#105</tspan></text>
+  <text x="60" y="346" class="b">pause a vigil or one project  <tspan class="code mono">#263</tspan></text>
+  <text x="60" y="372" class="xs">only allowlisted users are heard</text>
+
+  <!-- daemon -->
+  <rect x="510" y="186" width="380" height="200" rx="10" class="daemon"/>
+  <text x="530" y="216" class="h3">vekna daemon</text>
+  <text x="530" y="244" class="b">a user service, back after a crash  <tspan class="code mono">#265</tspan></text>
+  <text x="530" y="272" class="b">vigils poll their source  <tspan class="code mono">#263</tspan></text>
+  <text x="530" y="300" class="b">a circle per project: queue, slots, trees</text>
+  <text x="530" y="328" class="b">repository → checkout map, global  <tspan class="code mono">#267</tspan></text>
+  <text x="530" y="356" class="b">holds all work on a usage limit  <tspan class="code mono">#261</tspan></text>
+  <text x="530" y="374" class="xs">binds only its Unix socket</text>
+
+  <!-- landschaft -->
+  <rect x="980" y="186" width="380" height="200" rx="10" class="card"/>
+  <text x="1000" y="216" class="h3">landschaft · local JSON API</text>
+  <text x="1000" y="244" class="b">inbox: which repos have work,</text>
+  <text x="1000" y="262" class="b">group by group</text>
+  <text x="1000" y="290" class="b">issue board: the next task by rule  <tspan class="code mono">#62</tspan></text>
+  <text x="1000" y="318" class="b">claims per vigil, apart from yours  <tspan class="code mono">#151</tspan></text>
+  <text x="1000" y="346" class="b">reset once every repo had a turn</text>
+  <text x="1000" y="374" class="xs">never writes to GitHub</text>
+
+  <!-- arrows row 1 -->
+  <path d="M424,270 L506,270" class="arrow-v"/>
+  <path d="M506,302 L424,302" class="arrow-v"/>
+  <text x="430" y="262" class="xs">answers</text>
+  <text x="430" y="320" class="xs">questions</text>
+  <path d="M894,270 L976,270" class="arrow"/>
+  <path d="M976,302 L894,302" class="arrow"/>
+  <text x="904" y="262" class="xs">poll, claim</text>
+  <text x="904" y="320" class="xs">work</text>
+
+  <!-- ============ 2 · WHAT A POLL CASTS ============ -->
+  <text x="40" y="440" class="sec">2 · WHAT A POLL CASTS</text>
+
+  <!-- lane A: inbox -->
+  <rect x="40" y="456" width="1320" height="230" rx="10" class="card"/>
+  <text x="60" y="484" class="h3">Inbox → heal</text>
+  <text x="250" y="484" class="s">one cast per project and ritual, skipped while one is queued or running</text>
+
+  <text x="60" y="512" class="xs">INBOX GROUP</text>
+  <text x="290" y="512" class="xs">RITUAL, IN THAT PROJECT</text>
+  <text x="620" y="512" class="xs">WHAT IT DOES</text>
+
+  <rect x="60" y="522" width="190" height="34" rx="6" class="tint"/>
+  <text x="74" y="544" class="b">Heal</text>
+  <path d="M254,539 L286,539" class="arrow"/>
+  <rect x="290" y="522" width="290" height="34" rx="6" class="hot"/>
+  <text x="304" y="544" class="b mono">heal.mine → heal.pr</text>
+  <path d="M584,539 L616,539" class="arrow"/>
+  <text x="620" y="536" class="b">merge, fix CI, answer threads, review, push</text>
+  <text x="620" y="552" class="s">a tree only while a step changes the branch  <tspan class="code mono">cabinet#138</tspan></text>
+
+  <rect x="60" y="566" width="190" height="34" rx="6" class="tint"/>
+  <text x="74" y="588" class="b">Failing job on main</text>
+  <path d="M254,583 L286,583" class="arrow"/>
+  <rect x="290" y="566" width="290" height="34" rx="6" class="hot"/>
+  <text x="304" y="588" class="b mono">heal.main</text>
+  <text x="400" y="588" class="code mono">cabinet#135</text>
+  <path d="M584,583 L616,583" class="arrow"/>
+  <text x="620" y="588" class="b">branch from main, fix, open a pull request; never pushes to main</text>
+
+  <rect x="60" y="610" width="190" height="34" rx="6" class="tint"/>
+  <text x="74" y="632" class="b">Identify</text>
+  <path d="M254,627 L286,627" class="arrow"/>
+  <rect x="290" y="610" width="290" height="34" rx="6" class="hot"/>
+  <text x="304" y="632" class="b mono">identify</text>
+  <path d="M584,627 L616,627" class="arrow"/>
+  <text x="620" y="632" class="b">type and size new issues, so the board can rank them</text>
+
+  <rect x="60" y="654" width="190" height="24" rx="6" class="bad"/>
+  <text x="74" y="671" class="b warn">Ready</text>
+  <path d="M254,666 L286,666" class="arrow-x"/>
+  <text x="292" y="671" class="b warn">no ritual: the operator merges</text>
+
+  <!-- lane B: board -->
+  <rect x="40" y="706" width="1320" height="300" rx="10" class="card"/>
+  <text x="60" y="734" class="h3">Issue board → fabricate</text>
+  <text x="290" y="734" class="s">one task per poll, from a repository the vigil has not claimed yet</text>
+
+  <rect x="60" y="752" width="400" height="76" rx="6" class="tint"/>
+  <text x="74" y="774" class="b">next task  <tspan class="code mono">#62</tspan></text>
+  <text x="74" y="794" class="s">column with the fewest closed issues → lane Epics, L, M, S</text>
+  <text x="74" y="812" class="s">→ oldest first; blocked issues and claimed repos skipped</text>
+  <path d="M464,790 L506,790" class="arrow"/>
+  <rect x="510" y="768" width="200" height="44" rx="6" class="tint"/>
+  <text x="524" y="788" class="b">claim the repository</text>
+  <text x="524" y="804" class="code mono">#151</text>
+
+  <!-- split -->
+  <path d="M714,780 C760,780 760,860 800,860" class="arrow"/>
+  <path d="M714,800 C740,800 740,940 800,940" class="arrow"/>
+  <text x="742" y="850" class="xs">epic</text>
+  <text x="742" y="932" class="xs">issue</text>
+
+  <!-- epic branch -->
+  <rect x="804" y="840" width="536" height="56" rx="6" class="hot"/>
+  <text x="818" y="862" class="b"><tspan class="mono">fabricate.epic</tspan>  <tspan class="code mono">cabinet#137</tspan></text>
+  <text x="818" y="882" class="s">agent proposes the next step: a sub-issue or a related one → approval gate</text>
+  <path d="M1072,896 L1072,918" class="arrow-v dash"/>
+  <text x="1080" y="912" class="xs">queues fabricate in the issue's own project  #267</text>
+
+  <!-- fabricate chain -->
+  <rect x="804" y="922" width="536" height="70" rx="6" class="hot"/>
+  <text x="818" y="944" class="b"><tspan class="mono">fabricate</tspan>  <tspan class="code mono">cabinet#136</tspan></text>
+  <text x="818" y="964" class="s">plan → approval gate <tspan class="code mono">#266</tspan> → build in a leased tree <tspan class="code mono">#264</tspan></text>
+  <text x="818" y="982" class="s">→ gate green → push → open a pull request that closes the issue</text>
+
+  <text x="60" y="862" class="s">The approval gate is a discussion, not a button:</text>
+  <text x="60" y="882" class="s">each reply goes back to the agent, which answers or revises,</text>
+  <text x="60" y="902" class="s">until the operator approves — or rejects, and the cast ends.</text>
+  <text x="60" y="934" class="s">Approval is the operator's explicit word, never the agent's guess.</text>
+
+  <!-- ============ 3 · ONE PROJECT'S CIRCLE ============ -->
+  <text x="40" y="1060" class="sec">3 · WHAT A CAST HOLDS</text>
+
+  <rect x="40" y="1076" width="860" height="200" rx="10" class="card"/>
+  <text x="60" y="1104" class="h3">A fabricate cast over time</text>
+  <text x="60" y="1124" class="s">a worktree is leased for the step that needs one and given back when it ends  <tspan class="code mono">#264</tspan></text>
+
+  <text x="60" y="1164" class="xs">STEP</text>
+  <text x="200" y="1164" class="s">plan</text>
+  <text x="330" y="1164" class="s">approval gate, on Discord</text>
+  <text x="600" y="1164" class="s">build</text>
+  <text x="790" y="1164" class="s">PR</text>
+
+  <line x1="60" y1="1190" x2="880" y2="1190" class="lane"/>
+  <text x="60" y="1200" class="xs">PROCESS SLOT</text>
+  <rect x="200" y="1184" width="660" height="14" rx="3" class="bar"/>
+
+  <line x1="60" y1="1236" x2="880" y2="1236" class="lane"/>
+  <text x="60" y="1246" class="xs">WORKTREE</text>
+  <rect x="200" y="1230" width="120" height="14" rx="3" class="bar-wait"/>
+  <rect x="330" y="1230" width="260" height="14" rx="3" class="bar-wait"/>
+  <rect x="600" y="1230" width="180" height="14" rx="3" class="bar"/>
+  <rect x="790" y="1230" width="70" height="14" rx="3" class="bar-wait"/>
+  <text x="380" y="1266" class="xs">no tree held while the operator thinks</text>
+
+  <rect x="940" y="1076" width="420" height="200" rx="10" class="card"/>
+  <text x="960" y="1104" class="h3">Usage limit  <tspan class="code mono">#261</tspan></text>
+  <text x="960" y="1130" class="b">limit hit → nothing new starts,</text>
+  <text x="960" y="1148" class="b">a cast at an agent call waits, not fails</text>
+  <text x="960" y="1176" class="b">reset → work resumes in order</text>
+  <rect x="960" y="1200" width="110" height="14" rx="3" class="bar"/>
+  <rect x="1076" y="1200" width="150" height="14" rx="3" class="bar-hold"/>
+  <rect x="1232" y="1200" width="108" height="14" rx="3" class="bar"/>
+  <text x="1094" y="1236" class="xs warn">holding until reset</text>
+  <text x="960" y="1260" class="xs">no token budgets, no switching models</text>
+
+  <!-- ============ 4 · THE LOOP ============ -->
+  <text x="40" y="1330" class="sec">4 · THE LOOP</text>
+
+  <rect x="40" y="1346" width="170" height="44" rx="6" class="tint"/>
+  <text x="54" y="1373" class="b">issue on the board</text>
+  <path d="M214,1368 L236,1368" class="arrow"/>
+  <rect x="240" y="1346" width="150" height="44" rx="6" class="hot"/>
+  <text x="254" y="1373" class="b mono">fabricate</text>
+  <path d="M394,1368 L416,1368" class="arrow"/>
+  <rect x="420" y="1346" width="170" height="44" rx="6" class="tint"/>
+  <text x="434" y="1373" class="b">pull request</text>
+  <path d="M594,1368 L616,1368" class="arrow"/>
+  <rect x="620" y="1346" width="170" height="44" rx="6" class="tint"/>
+  <text x="634" y="1373" class="b">inbox · Heal</text>
+  <path d="M794,1368 L816,1368" class="arrow"/>
+  <rect x="820" y="1346" width="150" height="44" rx="6" class="hot"/>
+  <text x="834" y="1373" class="b mono">heal.mine</text>
+  <path d="M974,1368 L996,1368" class="arrow"/>
+  <rect x="1000" y="1346" width="150" height="44" rx="6" class="bad"/>
+  <text x="1014" y="1373" class="b warn">Ready · merged</text>
+  <path d="M1154,1368 L1176,1368" class="arrow"/>
+  <rect x="1180" y="1346" width="180" height="44" rx="6" class="tint"/>
+  <text x="1194" y="1373" class="b">issue closed</text>
+
+  <path d="M1270,1394 L1270,1424 L125,1424 L125,1394" class="arrow dash"/>
+  <text x="400" y="1444" class="xs">a column with more closed issues is picked later, so every category and every repository gets its turn</text>
+
+  <text x="40" y="1468" class="xs">Epic fancysnake/vekna#259 · bare numbers are vekna issues, except #62 and #151, which are landschaft's</text>
+</svg>
