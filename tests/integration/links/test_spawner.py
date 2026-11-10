@@ -4,6 +4,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,8 +35,12 @@ def _hello(project_root: Path) -> CastHello:
 _SAYS = "import os,sys;print(os.getcwd());print('asked',*sys.argv[1:]);sys.exit(3)"
 
 
-# asyncio's child watcher reaps on a thread of its own; this waits that out.
+# asyncio's child watcher reaps on a thread of its own, and only then checks
+# whether the loop is closed; this waits out both.
 def _reaped(pid: int) -> bool:
+    for thread in threading.enumerate():
+        if thread.name.startswith("asyncio-waitpid-"):
+            thread.join(timeout=10)
     for _ in range(1000):
         if not pid_alive(pid):
             return True
@@ -169,6 +174,8 @@ class TestSpawner:
         # Reaped while the loop still runs: a child watcher that finds it closed
         # warns into whichever test the worker runs next.
         assert await asyncio.to_thread(_reaped, left[0].pid)
+        # The watcher's callback is posted to the loop; let it run there.
+        await asyncio.sleep(0)
         assert [spawned.cast_id for spawned in left] == ["c1"]
         assert mark.exists()
 
