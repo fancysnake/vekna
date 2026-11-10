@@ -1,0 +1,9 @@
+---
+extends: default
+
+rules:
+  brackets:
+    max-spaces-inside: 1
+  # SHA-pinned `uses:` lines carry Renovate's `# vN` comment and cannot wrap.
+  line-length:
+    max: 100

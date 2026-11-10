@@ -1,0 +1,71 @@
+amends "package://github.com/jdx/hk/releases/download/v2.10.0/hk@2.10.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.10.0/hk@2.10.0#/Builtins.pkl"
+
+// What `mise run lint:py` does not check: the `check` hook, which `lint:hk`
+// runs after `lint:py`, so the full sweep runs each linter once.
+local sweep: Mapping<String, Step> = new {
+  // File hygiene
+  ["check-added-large-files"] = Builtins.check_added_large_files
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["detect-private-key"] = Builtins.detect_private_key
+  ["end-of-file-fixer"] = Builtins.newlines
+  ["trailing-whitespace"] = Builtins.trailing_whitespace
+
+  // `lint:codespell` reads the Python; this one reads the docs and config
+  ["codespell"] {
+    glob = List("**/*.md", "**/*.toml")
+    exclude = List("**/*.lock")
+    check = "codespell --toml=pyproject.toml {{files}}"
+  }
+
+  // Rules live in `.markdownlint-cli2.jsonc`; `--no-globs` drops its globs, which
+  // would add every Markdown file, ignored ones too, to the files hk names
+  ["markdownlint"] {
+    glob = List("**/*.md")
+    check = "markdownlint-cli2 --no-globs {{files}}"
+    fix = "markdownlint-cli2 --no-globs --fix {{files}}"
+  }
+  ["json"] {
+    glob = List("**/*.json")
+    check = "jq empty {{files}}"
+  }
+
+  // CI
+  ["yamllint"] = Builtins.yamllint
+  ["actionlint"] = Builtins.actionlint
+}
+
+// No pyupgrade: ruff selects "ALL", which takes in its UP rules
+local all: Mapping<String, Step> = (sweep) {
+  // The same tools `mise run lint:py` runs, on the staged files only
+  ["black"] = Builtins.black
+  ["ruff"] = Builtins.ruff
+  ["taplo"] = Builtins.taplo
+  ["codespell"] {
+    glob = List("**/*.py", "**/*.md", "**/*.toml")
+  }
+}
+
+// Top-level `steps` would join every hook, `check` included, so each hook
+// names its own set.
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = all
+  }
+  ["commit-msg"] {
+    steps {
+      ["gitlint"] {
+        check = "gitlint --staged --msg-filename {{commit_msg_file}}"
+      }
+    }
+  }
+  ["fix"] {
+    fix = true
+    steps = all
+  }
+  ["check"] {
+    steps = sweep
+  }
+}

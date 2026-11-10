@@ -7,7 +7,7 @@ name: Site
 # `pyproject.toml` is in the list because it holds the `docs` dependency group,
 # and `mise.toml` because it holds `site:build`: a site can break without a
 # single page changing.
-on:
+"on":
   pull_request:
     paths:
       - "docs/**"
@@ -36,10 +36,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834  # v5
       - run: mise install
       # Builds with `--strict`, so a link to a page that is not there fails
       # here rather than being published.
@@ -48,7 +48,7 @@ jobs:
       # `docs/cli.md` is a documentation-only change, which `ci.yml` ignores.
       # The guard has to run where that change runs.
       - run: mise exec -- pytest tests/integration/cli/test_cli_reference.py
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         with:
           path: site/
 
@@ -66,4 +66,4 @@ jobs:
       id-token: write
     steps:
       - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5

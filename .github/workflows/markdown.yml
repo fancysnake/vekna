@@ -3,7 +3,7 @@ name: Markdown
 
 # A workflow of its own, because `ci.yml` ignores `docs/**` — a docs-only pull
 # request runs none of it, which is exactly the pull request this check is for.
-on:
+"on":
   pull_request:
     paths:
       - "**/*.md"
@@ -34,9 +34,9 @@ jobs:
     steps:
       # The steps below run code the pull request itself supplies, so the
       # checkout token has no business staying behind in `.git/config`.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834  # v5
       - run: mise install markdownlint-cli2 node
       - run: mise run lint:markdown

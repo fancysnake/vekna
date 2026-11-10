@@ -3,19 +3,24 @@
 jobs = 8
 
 [tools]
-# Pinned to the same version `.pre-commit-config.yaml` pins, so the hook and the
-# task cannot disagree about what passes. `node` is here only because the
-# linter is npm-backed and its shim needs one on PATH. `jq` is what
-# `release:bump` edits the plugin manifest with.
+# `node` is here only because markdownlint-cli2 is npm-backed and its shim needs
+# one on PATH. `jq` is what `release:bump` edits the plugin manifest with, and
+# what hk checks JSON with.
+actionlint = "1.7.12"
+hk = "2.10.0"
 jq = "1.8.2"
 markdownlint-cli2 = "0.24.0"
 node = "26"
-pipx = "1.18.4"
+pipx = "1.18.12"
 "pipx:poetry" = "2.5.1"
+pkl = "0.32.2"
 python = "3.11"
+# actionlint hands every `run:` script to shellcheck.
+shellcheck = "0.11.0"
+trivy = "0.76.1"
 
 [hooks]
-enter = "poetry install"
+enter = ["poetry install", "hk install"]
 
 [env]
 # Mise creates and activates this virtualenv automatically
@@ -31,11 +36,24 @@ includes = [
     "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=20e8c1f42f6e2904cef3fa60ba9c64283e2d7ae8",
 ]
 
+# The shared dep:upgrade:py, with lint:trivy in place of its `pip-audit .`; an
+# included task cannot be overridden by name. hk.pkl names hk's pkl packages by
+# release, which `mise upgrade` cannot see, so it follows whichever hk mise just
+# installed.
 [tasks.update]
-run = [{ task = "dep:upgrade:py" }, "pre-commit autoupdate"]
+run = [
+    "mise upgrade --bump --exclude python --minimum-release-age=7d --local",
+    "mise install",
+    'v=$(mise current hk) && sed -i -E "s#v[0-9.]+/hk@[0-9.]+#v$v/hk@$v#" hk.pkl',
+    "pip install -U pip",
+    "poetry update",
+    { task = "lint:deptry" },
+    { task = "lint:trivy" },
+    "poetry show -o",
+]
 
-# Globs and rule config live in `.markdownlint-cli2.jsonc`, which pre-commit
-# reads too — so there is one answer to "does this markdown pass".
+# Globs and rule config live in `.markdownlint-cli2.jsonc`. hk reads its rules
+# too, so there is one answer to "does this markdown pass".
 [tasks."lint:markdown"]
 description = "Check Markdown files"
 run = "markdownlint-cli2"
@@ -46,13 +64,22 @@ run = "deptry src tests"
 
 # Deliberately not in `fullcheck`. What this reports changes when somebody else
 # publishes an advisory, on a day this repository did not change — a gate that
-# goes red on its own schedule, offline never, and always about the development
-# environment rather than about what a user installs. `.github/workflows/
-# audit.yml` runs the version of the question that matters, weekly, against the
-# wheel's own dependency set. This one is here for asking it by hand.
-[tasks."lint:audit"]
-description = "Check installed dependencies against known vulnerabilities"
-run = "pip-audit"
+# goes red on its own schedule, and about the development environment rather
+# than about what a user installs. `.github/workflows/audit.yml` runs the
+# version of the question that matters, weekly, without the dev groups. This
+# one is here for asking it by hand. `.venv` is skipped because a git
+# dependency installs with its own lockfile, whose pins are not ours, and
+# `mutants` because it is mutmut's copy of this tree.
+[tasks."lint:trivy"]
+description = "Scan the project's lockfiles for known vulnerabilities with Trivy"
+run = "trivy fs --scanners vuln --include-dev-deps --skip-dirs .venv --skip-dirs mutants --exit-code 1 --quiet ."
+
+# hk's `check` hook over all files: the steps `lint:py` does not cover. The
+# pre-commit hook adds the steps `lint:py` already runs (black, ruff, taplo,
+# codespell over Python); `hk install` (the enter hook) puts it in place.
+[tasks."lint:hk"]
+description = "Run the hk linters lint:py does not cover on all files"
+run = "hk check --all"
 
 # `lint:py` comes from the shared config and cannot be appended to from here, so
 # `lint:deptry` hangs off `fullcheck` instead — which is the gate that matters.
@@ -64,7 +91,7 @@ run = [
     { task = "format:py" },
     { task = "lint:py" },
     { task = "lint:deptry" },
-    { task = "lint:markdown" },
+    { task = "lint:hk" },
     { task = "test:py:cov:diff" },
     { task = "lint:tingle" },
 ]
