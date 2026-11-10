@@ -59,7 +59,8 @@ when.
 - **hk replaces pre-commit.** `hk.pkl` runs the same hooks; `hk install`, now
   in mise's enter hook, puts them in place. `lint:hk` runs the checks
   `lint:py` does not cover over every file, in `fullcheck` and CI. pyupgrade
-  is gone: ruff's `UP` rules already cover it.
+  is gone: ruff's `UP` rules already cover it. `lint:markdown` is gone too:
+  the Markdown workflow runs hk's `markdownlint` step.
 - **Trivy replaces pip-audit.** `lint:trivy` replaces `lint:audit`, and the
   weekly audit workflow scans `poetry.lock` without the dev groups.
 

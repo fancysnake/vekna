@@ -1,6 +1,10 @@
 ---
 extends: default
 
+# Copier writes this file and rewrites it on `copier update`.
+ignore: |
+  .copier-answers.yml
+
 rules:
   brackets:
     max-spaces-inside: 1

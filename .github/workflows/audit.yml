@@ -28,8 +28,7 @@ jobs:
           install_args: trivy
       - name: Audit what an install brings with it
         run: >-
-          mise exec -- trivy fs --scanners vuln --skip-dirs .venv
-          --exit-code 1 --quiet poetry.lock
+          mise exec -- trivy fs --scanners vuln --exit-code 1 --quiet poetry.lock
         env:
           # `mise exec` installs every tool in mise.toml first by default,
           # which would undo `install_args`

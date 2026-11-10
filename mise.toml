@@ -37,26 +37,17 @@ includes = [
 ]
 
 # The shared dep:upgrade:py, with lint:trivy in place of its `pip-audit .`; an
-# included task cannot be overridden by name. hk.pkl names hk's pkl packages by
-# release, which `mise upgrade` cannot see, so it follows whichever hk mise just
-# installed.
+# included task cannot be overridden by name.
 [tasks.update]
 run = [
     "mise upgrade --bump --exclude python --minimum-release-age=7d --local",
     "mise install",
-    'v=$(mise current hk) && sed -i -E "s#v[0-9.]+/hk@[0-9.]+#v$v/hk@$v#" hk.pkl',
     "pip install -U pip",
     "poetry update",
     { task = "lint:deptry" },
     { task = "lint:trivy" },
     "poetry show -o",
 ]
-
-# Globs and rule config live in `.markdownlint-cli2.jsonc`. hk reads its rules
-# too, so there is one answer to "does this markdown pass".
-[tasks."lint:markdown"]
-description = "Check Markdown files"
-run = "markdownlint-cli2"
 
 [tasks."lint:deptry"]
 description = "Find declared-but-unused and used-but-undeclared dependencies"
@@ -74,16 +65,15 @@ run = "deptry src tests"
 description = "Scan the project's lockfiles for known vulnerabilities with Trivy"
 run = "trivy fs --scanners vuln --include-dev-deps --skip-dirs .venv --skip-dirs mutants --exit-code 1 --quiet ."
 
-# hk's `check` hook over all files: the steps `lint:py` does not cover. The
-# pre-commit hook adds the steps `lint:py` already runs (black, ruff, taplo,
-# codespell over Python); `hk install` (the enter hook) puts it in place.
+# hk's `check` hook over all files, minus the steps `lint:py` already runs.
+# `hk install` (the enter hook) puts the pre-commit hook in place.
 [tasks."lint:hk"]
 description = "Run the hk linters lint:py does not cover on all files"
-run = "hk check --all"
+run = "hk check --all --skip-step black --skip-step ruff --skip-step taplo"
 
 # `lint:py` comes from the shared config and cannot be appended to from here, so
 # `lint:deptry` hangs off `fullcheck` instead — which is the gate that matters.
-# It belongs here and `lint:audit` does not: deptry reads this repository and
+# It belongs here and `lint:trivy` does not: deptry reads this repository and
 # nothing else, so it answers the same on any two days.
 [tasks.fullcheck]
 run = [
