@@ -4,12 +4,13 @@ import signal
 import subprocess
 import sys
 import textwrap
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from vekna.links.spawner import Spawner, signal_pid
+from vekna.links.spawner import Spawner, pid_alive, signal_pid
 from vekna.pacts.circle import Exited, Spawned
 from vekna.wire import CastHello
 
@@ -31,6 +32,15 @@ def _hello(project_root: Path) -> CastHello:
 # Stands in for `vekna cast --wired`: prints where it ran and what it was asked
 # to resume, then exits with a code of its choosing.
 _SAYS = "import os,sys;print(os.getcwd());print('asked',*sys.argv[1:]);sys.exit(3)"
+
+
+# asyncio's child watcher reaps on a thread of its own; this waits that out.
+def _reaped(pid: int) -> bool:
+    for _ in range(1000):
+        if not pid_alive(pid):
+            return True
+        time.sleep(0.01)
+    return False
 
 
 @pytest.mark.asyncio
@@ -156,6 +166,9 @@ class TestSpawner:
 
         left = Spawner(command=[], runs=runs).left_behind()
         os.kill(left[0].pid, signal.SIGKILL)
+        # Reaped while the loop still runs: a child watcher that finds it closed
+        # warns into whichever test the worker runs next.
+        assert await asyncio.to_thread(_reaped, left[0].pid)
         assert [spawned.cast_id for spawned in left] == ["c1"]
         assert mark.exists()
 
