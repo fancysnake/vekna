@@ -42,6 +42,8 @@ pipx = "<version>"
 "pipx:vekna" = { version = "<version>", extras = "trial", uvx = false, pipx_args = "--include-deps" }
 ```
 
+Then run `mise install`.
+
 Or [let Claude Code do all of this](setup.md) in your project.
 
 ## Your first ritual

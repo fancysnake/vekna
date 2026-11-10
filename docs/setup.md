@@ -30,7 +30,8 @@ Set up vekna (https://github.com/fancysnake/vekna) in this project.
    project runs its tests with (task runner, Makefile, package scripts, CI
    config). Add it to the project's `rituals.py` or `rituals/` package, or
    create `rituals.py` at the repo root if there is neither.
-4. Add a trial-based test for that ritual next to the project's other tests.
+4. Add a trial-based test for that ritual next to the project's other tests,
+   and make sure pytest can import the ritual, e.g. `pythonpath = ["."]`.
 5. Check it: `vekna rituals list` shows `fix_tests`, and the new test passes
    (in a non-Python project, run it with the `pytest` from step 1).
 ```
