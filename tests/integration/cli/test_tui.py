@@ -1,5 +1,6 @@
 import asyncio
-from collections.abc import Callable
+import contextlib
+from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -123,6 +124,21 @@ async def _eventually(pilot: Pilot[None], ready: Callable[[], bool]) -> None:
 
 def _at_end(log: Log) -> bool:
     return 0 < log.max_scroll_y == log.scroll_y
+
+
+# A hundred lines of one rite's output, drawn and followed to the end.
+@contextlib.asynccontextmanager
+async def _long_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log]]:
+    hub = Hub()
+    hub.apply(_hello("c1", "ci_watch"))
+    hub.apply(_rite("r1", "watch"))
+    for line in range(100):
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+    app = _app(hub, [])
+    async with app.run_test() as pilot:
+        log = app.query_one("#log", Log)
+        await _eventually(pilot, lambda: _at_end(log))
+        yield hub, app, pilot, log
 
 
 def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
@@ -931,16 +947,7 @@ class TestCancelling:
 class TestFollowing:
     @staticmethod
     async def test_the_output_ends_on_the_newest_line_as_more_arrives():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _long_output() as (hub, app, pilot, log):
             first = (log.scroll_y, log.max_scroll_y)
             hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="newest"))
             app.changed()
@@ -955,16 +962,7 @@ class TestFollowing:
 
     @staticmethod
     async def test_scrolling_up_stops_the_follow_and_the_end_starts_it_again():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _long_output() as (hub, app, pilot, log):
             left = log.max_scroll_y
             log.scroll_to(y=_UP, animate=False, immediate=True)
             hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one more"))
@@ -984,24 +982,26 @@ class TestFollowing:
         assert again[0] == again[1]
 
     # The follow lands a refresh after the repaint that asked for it; the
-    # operator's scroll in between is the newer word.
+    # operator's scroll in between is the newer word. The scroll is made as the
+    # follow is asked for, so it always lands in between; once, as Textual's
+    # own scroll to the end asks for a refresh too.
     @staticmethod
-    async def test_scrolling_up_before_the_follow_lands_stops_it():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+    async def test_scrolling_up_before_the_follow_lands_stops_it(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        async with _long_output() as (hub, app, pilot, log):
             drawn = log.line_count
+            after_refresh = log.call_after_refresh
+
+            def scrolled_first(callback: Callable[..., object], *args: float) -> bool:
+                monkeypatch.undo()
+                log.scroll_to(y=_UP, animate=False, immediate=True)
+                return after_refresh(callback, *args)
+
+            monkeypatch.setattr(log, "call_after_refresh", scrolled_first)
             hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one more"))
             app.changed()
             await _eventually(pilot, lambda: log.line_count != drawn)
-            log.scroll_to(y=_UP, animate=False, immediate=True)
             await pilot.pause(_PAINTED)
 
             held = log.scroll_y
@@ -1010,16 +1010,7 @@ class TestFollowing:
     # Past where the follow last left the end, but short of the new one.
     @staticmethod
     async def test_scrolling_down_short_of_the_end_keeps_the_follow_stopped():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _long_output() as (hub, app, pilot, log):
             left = log.max_scroll_y
             log.scroll_to(y=_UP, animate=False, immediate=True)
             for line in range(_UP):
@@ -1038,16 +1029,7 @@ class TestFollowing:
 
     @staticmethod
     async def test_a_banner_pushing_the_end_down_keeps_the_follow():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _long_output() as (hub, app, pilot, log):
             left = log.max_scroll_y
             hub.apply(
                 DecideRequested(
