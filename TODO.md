@@ -31,3 +31,6 @@
   above it grows in the same frame, so the follow fell short by a line or two
   (#208). Scrolling after refresh fixed it; worth knowing for any pane under
   an `height: auto` sibling.
+- `gh run view --log-failed` and `gh api .../jobs/<id>/logs` both answered
+  `Forbidden` from an agent session, so a failed CI job could be named but not
+  read. The step that failed is in `gh run view --json jobs`; the test is not.

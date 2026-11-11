@@ -575,10 +575,13 @@ class VeknaApp(App[None]):
             log.clear()
             log.write_lines(lines)
         if follow.on:
-            log.call_after_refresh(self._to_end)
+            log.call_after_refresh(self._to_end, log.scroll_y)
 
-    def _to_end(self) -> None:
+    # A scroll the operator made while the refresh was pending stands.
+    def _to_end(self, asked_at: float) -> None:
         log = self._w.log
+        if log.scroll_y != asked_at:
+            return
         log.scroll_end(animate=False, immediate=True)
         self._view.follow.at = log.max_scroll_y
 

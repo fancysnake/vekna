@@ -61,6 +61,8 @@ when.
 
 - The TUI's output follows the newest line, and keeps following when the page
   above it grows. ([#208](https://github.com/fancysnake/vekna/issues/208))
+- Scrolling the TUI's output just as it repaints is no longer undone by the
+  follow.
 - A rite's long error no longer breaks the TUI's layout: its row shows a cut
   first line, and its page shows the whole error.
   ([#205](https://github.com/fancysnake/vekna/issues/205))
