@@ -933,6 +933,26 @@ class TestFollowing:
         assert then[0] == then[1]
 
     @staticmethod
+    async def test_the_output_ends_on_the_newest_line_when_the_window_shrinks():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for line in range(100):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            log = app.query_one("#log", Log)
+            before = log.max_scroll_y
+            await pilot.resize_terminal(80, 16)
+            await pilot.pause(_PAINTED)
+
+            after = (log.scroll_y, log.max_scroll_y)
+        assert after[1] > before
+        assert after[0] == after[1]
+
+    @staticmethod
     async def test_scrolling_up_stops_the_follow_and_the_end_starts_it_again():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))

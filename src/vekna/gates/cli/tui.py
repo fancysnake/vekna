@@ -486,7 +486,12 @@ class VeknaApp(App[None]):
 
     def _repaint(self) -> None:
         # A tick can land while the app is closing and its widgets are gone.
-        if not self._view.dirty or not self._w.contents.is_mounted:
+        mounted = self._w.contents.is_mounted
+        # A layout that lands after the last scroll to the end, or a resized
+        # window, leaves the output short of its newest line.
+        if mounted and not self._view.dirty and self._follows():
+            self._to_end()
+        if not self._view.dirty or not mounted:
             return
         self._view.dirty = False
         listed = self._listed()
@@ -565,10 +570,8 @@ class VeknaApp(App[None]):
         log, follow = self._w.log, self._view.follow
         if (page := None if entry is None else entry.key) != follow.page:
             follow.page, follow.on = page, True
-        elif log.is_vertical_scroll_end:
-            follow.on = True
-        elif log.scroll_y < follow.at:
-            follow.on = False
+        else:
+            self._follows()
         lines = output(entry)
         if list(log.lines) != lines:
             log.auto_scroll = False
@@ -576,6 +579,14 @@ class VeknaApp(App[None]):
             log.write_lines(lines)
         if follow.on:
             log.call_after_refresh(self._to_end)
+
+    def _follows(self) -> bool:
+        log, follow = self._w.log, self._view.follow
+        if log.is_vertical_scroll_end:
+            follow.on = True
+        elif log.scroll_y < follow.at:
+            follow.on = False
+        return follow.on
 
     def _to_end(self) -> None:
         log = self._w.log
