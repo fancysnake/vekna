@@ -1,14 +1,14 @@
 import asyncio
 import contextlib
 from collections.abc import AsyncGenerator, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from textual.pilot import Pilot
 from textual.widgets import Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import AnswerScreen, VeknaApp
+from vekna.gates.cli.tui import AnswerScreen, Opened, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -55,7 +55,10 @@ def _asking(hub: Hub) -> None:
 
 
 # The app over `hub`, keeping what it sends; branches are answered by root.
-def _app(hub: Hub, sent: list[WireMessage]) -> VeknaApp:
+# Every cast here began at `_WHEN`, long ago, so by default none is history.
+def _app(
+    hub: Hub, sent: list[WireMessage], history_after: timedelta = timedelta.max
+) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
 
     async def branch_of(root: str) -> str | None:
@@ -64,8 +67,7 @@ def _app(hub: Hub, sent: list[WireMessage]) -> VeknaApp:
 
     return VeknaApp(
         casts=hub,
-        project="/proj/.git",
-        root="/proj",
+        opened=Opened(project="/proj/.git", root="/proj", history_after=history_after),
         send=sent.append,
         branch_of=branch_of,
     )
@@ -234,7 +236,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
@@ -245,7 +248,7 @@ class TestContents:
         ]
 
     @staticmethod
-    async def test_a_cast_that_ended_still_asking_stays_in_the_running_ones():
+    async def test_a_cast_that_ended_still_asking_says_so():
         hub = Hub()
         hub.apply(_hello("c1", "pr_fix"))
         hub.apply(CastGoodbye(cast_id="c1", status="ok"))
@@ -264,7 +267,7 @@ class TestContents:
         assert lines[2].endswith("  c1  asks")
 
     @staticmethod
-    async def test_every_cast_shows_on_e_and_the_running_ones_again_on_a_second():
+    async def test_an_ended_cast_stays_as_one_line_beside_the_running_ones():
         hub = Hub()
         hub.apply(_hello("c1", "nap"))
         hub.apply(_hello("c2", "sweep"))
@@ -273,19 +276,12 @@ class TestContents:
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            running = _contents(app)
-            await pilot.press("e")
-            await pilot.pause(_PAINTED)
-            every = _contents(app)
-            await pilot.press("e")
-            await pilot.pause(_PAINTED)
 
-            again = _contents(app)
-        assert running == ["proj (1 running)", "  nap", "    ▶ @now  c1"]
-        assert every[3:5] == ["  sweep", every[4]]
-        assert every[4].startswith("    ✓ @")
-        assert every[4].endswith("  c2")
-        assert again == running
+            lines = _contents(app)
+        assert lines[:4] == ["proj (1 running)", "  nap", "    ▶ @now  c1", "  sweep"]
+        assert lines[4].startswith("    ✓ @")
+        assert lines[4].endswith("  c2")
+        assert lines[5:] == []
 
     @staticmethod
     async def test_a_failed_rite_says_the_first_line_of_why():
@@ -304,7 +300,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
@@ -328,7 +325,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
             _to(app, "t:c1:r1")
             await pilot.pause(_PAINTED)
@@ -363,7 +361,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
             _to(app, "c:c1")
             await pilot.pause(_PAINTED)
@@ -381,7 +380,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
             _to(app, "t:c1:r1")
             await pilot.pause(_PAINTED)
@@ -457,7 +457,8 @@ class TestContents:
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
-            await pilot.press("e")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
             _to(app, "t:c1:r1")
             await pilot.pause(_PAINTED)
@@ -495,6 +496,130 @@ class TestContents:
         assert home == ("1 running  (proj)", ["proj (1 running)"])
 
 
+# Two casts that ended two days apart, each with a rite, and one still running.
+def _past() -> Hub:
+    hub = Hub()
+    for cast_id, ritual, days in (("c1", "sweep", 0), ("c2", "nap", 2)):
+        hub.apply(_hello(cast_id, ritual))
+        hub.apply(_rite("r1", "work").model_copy(update={"cast_id": cast_id}))
+        hub.apply(
+            RiteFinished(
+                cast_id=cast_id,
+                rite_id="r1",
+                status="ok",
+                finished_at=_WHEN + timedelta(days=days, hours=1),
+            )
+        )
+        hub.apply(CastGoodbye(cast_id=cast_id, status="ok"))
+    hub.apply(_hello("c3", "ci_watch"))
+    return hub
+
+
+def _day(days: int) -> str:
+    return f"{(_WHEN + timedelta(days=days, hours=1)).astimezone():%Y-%m-%d %a}"
+
+
+def _hour(days: int) -> str:
+    return f"{(_WHEN + timedelta(days=days, hours=1)).astimezone():%H:%M}"
+
+
+@pytest.mark.asyncio
+class TestHistory:
+    @staticmethod
+    async def test_the_tree_view_names_the_casts_the_history_view_has():
+        app = _app(_past(), [], history_after=timedelta(0))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            lines = _contents(app)
+            _to(app, "history")
+            await pilot.pause(_PAINTED)
+
+            head = _text(app, "#head")
+        assert lines == [
+            "proj (1 running)",
+            "  ci_watch",
+            "    ▶ @now  c3",
+            "history · 2 casts · H",
+        ]
+        assert head == "2 ended casts are in the history view — H"
+
+    @staticmethod
+    async def test_h_shows_the_ended_casts_by_day_newest_first_and_goes_back():
+        app = _app(_past(), [], history_after=timedelta(0))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            tree = _contents(app)
+            await pilot.press("H")
+            await pilot.pause(_PAINTED)
+            history = _contents(app)
+            note = _text(app, "#note")
+            await pilot.press("H")
+            await pilot.pause(_PAINTED)
+
+            back = _contents(app)
+        assert history == [
+            _day(2),
+            f"  ▸ ✓ {_hour(2)}  nap  c2",
+            _day(0),
+            f"  ▸ ✓ {_hour(0)}  sweep  c1",
+        ]
+        assert note == "history view"
+        assert back == tree
+
+    @staticmethod
+    async def test_space_on_the_history_line_opens_the_history_view():
+        app = _app(_past(), [], history_after=timedelta(0))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "history")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines[0] == _day(2)
+
+    @staticmethod
+    async def test_a_history_cast_opens_and_its_day_folds_and_lists_its_casts():
+        app = _app(_past(), [], history_after=timedelta(0))
+
+        async with app.run_test() as pilot:
+            await pilot.press("H")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            opened = _contents(app)
+            _to(app, f"d:{_day(2)}")
+            await pilot.pause(_PAINTED)
+            head = _text(app, "#head").splitlines()
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+
+            folded = _contents(app)
+        assert opened[:3] == [_day(2), f"  ✓ {_hour(2)}  nap  c2", "    ✓ work  49h00m"]
+        assert head[0] == _day(2)
+        assert head[1].rstrip().endswith("nap")
+        assert folded[0] == f"▸ {_day(2)}"
+
+    @staticmethod
+    async def test_a_cast_that_ended_within_the_setting_stays_in_the_tree_view():
+        hub = Hub()
+        hub.apply(
+            _hello("c1", "sweep").model_copy(update={"started_at": datetime.now(UTC)})
+        )
+        hub.apply(CastGoodbye(cast_id="c1", status="error"))
+        app = _app(hub, [], history_after=timedelta(days=1))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == ["proj (1 fail)", "  sweep", "    ✗ @now  c1"]
+
+
 @pytest.mark.asyncio
 class TestFolding:
     @staticmethod
@@ -523,29 +648,120 @@ class TestFolding:
         assert len(before) > 1
 
     @staticmethod
-    async def test_a_failure_stays_until_its_cast_has_been_opened_and_left():
+    async def test_a_cast_watched_as_it_fails_stays_when_the_cursor_leaves():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+            hub.apply(
+                RiteFinished(
+                    cast_id="c1",
+                    rite_id="r1",
+                    status="error",
+                    error="boom",
+                    finished_at=_WHEN,
+                )
+            )
+            hub.apply(CastGoodbye(cast_id="c1", status="error"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/proj/.git")
+            await pilot.pause(_PAINTED)
+
+            left = _contents(app)
+        assert left[:2] == ["proj (1 fail)", "  ci_watch"]
+        assert left[2].endswith("  c1")
+
+    @staticmethod
+    async def test_space_on_a_cast_opens_its_whole_rite_tree_and_closes_it_again():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(
+            RiteFinished(cast_id="c1", rite_id="r1", status="ok", finished_at=_WHEN)
+        )
+        hub.apply(_rite("r2", "repair"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "…:c1")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            brief = _contents(app)
+            _to(app, "c:c1")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            whole = _contents(app)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+
+            again = _contents(app)
+        assert [line.strip().split("  ")[0] for line in brief[3:]] == ["…", "▶ repair"]
+        assert [line.strip().split("  ")[0] for line in whole[3:]] == [
+            "✓ watch",
+            "▶ repair",
+        ]
+        assert [line.strip().split("  ")[0] for line in again[3:]] == ["…", "▶ repair"]
+
+    @staticmethod
+    async def test_a_rite_folds_over_the_rites_under_it():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(_rite("r2", "coding", parent="r1"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            folded = _contents(app)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+
+            unfolded = _contents(app)
+        assert [line.strip().split("  ")[0] for line in folded[3:]] == ["▸ ▶ watch"]
+        assert [line.strip().split("  ")[0] for line in unfolded[3:]] == [
+            "▶ watch",
+            "▶ coding",
+        ]
+
+    @staticmethod
+    async def test_space_on_a_failed_cast_opens_its_rites():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(
+            RiteFinished(
+                cast_id="c1",
+                rite_id="r1",
+                status="error",
+                error="boom",
+                finished_at=_WHEN,
+            )
+        )
         hub.apply(CastGoodbye(cast_id="c1", status="error"))
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            unseen = _contents(app)
-            opened = _cursor(app)
-            app.changed()
-            await pilot.pause(_PAINTED)
-            reading = _contents(app)
-            _to(app, "p:/proj/.git")
+            await pilot.press("space")
             await pilot.pause(_PAINTED)
 
-            left = _contents(app)
-        assert unseen[:2] == ["proj (1 fail)", "  ci_watch"]
-        assert unseen[2].startswith("    ✗ @")
-        assert unseen[2].endswith("  c1")
-        assert opened == "c:c1"
-        assert reading == unseen
-        assert left == ["proj"]
+            lines = _contents(app)
+        assert [line.strip().split("  ")[0] for line in lines[3:]] == ["✗ watch"]
 
     @staticmethod
     async def test_a_line_with_nothing_under_it_does_not_fold():

@@ -212,22 +212,41 @@ dropped. A daemon already running is not restarted for it; the window says so.
 
 In a terminal the window is drawn with Textual, as two pages of a book. The left
 page is the contents: a tree of project, ritual, the ritual's casts newest first
-(`@now` while live, `@3h ago` once ended), and their rites. By default it shows
-the running casts, each as `…` and the rite it is on now, or the rite that asks,
-and the failed ones you have not opened yet. The right page is the line under
-the cursor in full: a project's branch and directory, a ritual's casts with
-their flags, a cast's whole rite tree, or a rite's whole error. Below it is the
-output, which follows the newest line until you scroll up. The branch is read
-off git every few seconds, because a cast can switch it.
+(`@now` while live, `@3h ago` once ended), and their rites. This is the tree
+view: every cast that is live, and every cast that ended less than a day ago. A
+cast does not leave it when it ends. A cast is one line; a running one also
+shows `…` and the rite it is on now, or the rite that asks. `space` on a cast
+opens its whole rite tree, and `space` again closes it. The right page is the
+line under the cursor in full: a project's branch and directory, a ritual's
+casts with their flags, a cast's whole rite tree, or a rite's whole error. Below
+it is the output, which follows the newest line until you scroll up. The branch
+is read off git every few seconds, because a cast can switch it.
 
-A fold hides everything under its line, and the line says what still happens
-there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A project line always says it.
-A failure counts until you have opened its cast and moved on.
+On any other line `space` folds: the fold hides everything under the line, and
+the line says what happens there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A
+project line always says it.
+
+`H` turns the left page to the history view, and `H` again turns it back. The
+history view holds the casts that ended a day ago or more, grouped by the day
+they ended, newest first, each with the time it ended and its ritual. The tree
+view's last line says how many it holds: `history · 12 casts · H`. Both views
+show what the daemon has held since it started; `vekna log` has the rest.
+
+How long a cast stays in the tree view after it ends is `history_after`, an
+[ISO 8601 duration](https://en.wikipedia.org/wiki/ISO_8601#Durations), in the
+project's `.vekna.toml` or in `~/.config/vekna/config.toml`, the project first:
+
+```toml
+[window]
+history_after = "P1D"   # the default; "PT12H", "PT30M", "PT0S" for at once
+```
+
+A value that does not read is named in the window's note line and passed over.
 
 | Key | Does |
 | --- | --- |
-| `space` | fold the line under the cursor, or open it again |
-| `e` | every cast and every rite, or the running ones only again |
+| `H` | the history view, or the tree view again |
+| `space` | on a cast, open its whole rite tree or close it; elsewhere, fold the line or open it again |
 | `w` | the next line that asks, a fold included |
 | `j` / `k` / `h` | down, up, to the line above in the tree |
 | `c` | start a ritual here: `c <ritual> [--flag value …]` |
@@ -422,6 +441,26 @@ none.
 
 `◌ gap` is a run whose log the daemon could not finish writing. It is still
 resumable; what it lost is the tail.
+
+With a cast id, or the eight characters of one, it shows that cast: its rites
+with their errors, why the cast ended, and the output of each rite that did not
+end `ok` (the last 200 lines of it).
+
+```bash
+vekna log 91bb0c4d
+```
+
+```text
+vekna — fix_demo  /home/you/vekna  failed  2m10s  91bb0c4d
+
+ ✓ measure
+ ✗ repair  — exit 2
+
+ repair: exit 2
+
+── repair (error) ──
+FAILED tests/test_demo.py::test_it - AssertionError
+```
 
 `damaged` is a run whose `run.json` is missing or cannot be read — a daemon
 killed inside a write, a disk that lost the file. The id is the directory's

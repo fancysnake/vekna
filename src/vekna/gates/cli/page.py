@@ -75,10 +75,13 @@ def line_text(entry: Entry, now: datetime) -> Text:
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, now)
+        text = _cast_label(view, entry.said or ago(view, now))
+    elif entry.kind == "history":
+        text = Text(entry.name, "dim")
     else:
-        text = Text(entry.name, "bold" if entry.kind == "project" else "")
-    if entry.folded or entry.kind == "project":
+        text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
+    # A cast's own glyph already says what its fold would.
+    if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
     # A folded line is drawn as a leaf, which the tree gives no arrow.
     if entry.folded:
@@ -86,11 +89,11 @@ def line_text(entry: Entry, now: datetime) -> Text:
     return text
 
 
-def _cast_label(view: CastView, now: datetime) -> Text:
+def _cast_label(view: CastView, said: str) -> Text:
     text = Text.assemble(
         _CAST_LOOK[word(view)].copy(),
         " ",
-        (ago(view, now), _ASKS if view.waiting else ""),
+        (said, _ASKS if view.waiting else ""),
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
     )
     if view.waiting:
@@ -136,8 +139,10 @@ def head(
         return _rite_head(rite, now)
     if view is not None:
         return _cast_head(view, branches, now)
-    if entry.kind == "ritual":
+    if entry.kind in {"ritual", "day"}:
         return _ritual_head(entry, now)
+    if entry.kind == "history":
+        return Text(f"{len(entry.views)} ended casts are in the history view — H")
     return _project_head(entry, branches)
 
 
@@ -157,6 +162,8 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
         text.append_text(_CAST_LOOK[word(view)].copy())
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
+        if entry.kind == "day":
+            text.append(f"{view.hello.ritual}  ")
         text.append(_flags(view.hello))
     return text
 

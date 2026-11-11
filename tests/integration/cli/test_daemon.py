@@ -43,6 +43,7 @@ from vekna.wire import (
     EnqueueRefused,
     EnqueueRequested,
     PurifyRequested,
+    RiteDelta,
     RiteFinished,
     RiteStarted,
     RunRecord,
@@ -943,6 +944,96 @@ class TestTheLogCommand:
         assert result.exit_code == 0
         assert "fix_demo" in result.output
         assert "c1" in result.output
+
+    @staticmethod
+    def test_a_cast_id_shows_its_rites_and_what_the_failed_one_wrote(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1abcdef99"))
+        for rite_id, name, status, error in (
+            ("r1", "measure", "ok", None),
+            ("r2", "repair", "error", "exit 2"),
+        ):
+            journal.record(
+                RiteStarted(
+                    cast_id="c1abcdef99",
+                    rite_id=rite_id,
+                    parent_id=None,
+                    name=name,
+                    category="step",
+                    started_at=_WHEN,
+                )
+            )
+            journal.record(
+                RiteDelta(cast_id="c1abcdef99", rite_id=rite_id, delta=f"{name} said")
+            )
+            journal.record(
+                RiteFinished(
+                    cast_id="c1abcdef99",
+                    rite_id=rite_id,
+                    status=status,
+                    error=error,
+                    finished_at=_WHEN,
+                )
+            )
+        journal.record(
+            CastGoodbye(cast_id="c1abcdef99", status="error", detail="repair: exit 2")
+        )
+
+        result = CliRunner().invoke(init_command(), ["log", "c1abcdef"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines()[2:] == [
+            " ✓ measure",
+            " ✗ repair  — exit 2",
+            "",
+            " repair: exit 2",
+            "",
+            "── repair (error) ──",
+            "repair said",
+            "",
+        ]
+
+    @staticmethod
+    def test_a_log_cut_mid_frame_shows_what_landed_and_says_so(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+        with (tmp_path / "runs" / "c1" / "events.jsonl").open("a") as events:
+            events.write('{"kind": "rite_st')
+
+        result = CliRunner().invoke(init_command(), ["log", "c1"])
+
+        assert result.exit_code == 0
+        assert "fix_demo" in result.output
+        assert "the log is unreadable past here — line 2" in result.output
+
+    @staticmethod
+    def test_a_cast_with_no_events_says_so(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        (tmp_path / "runs" / "c1").mkdir(parents=True)
+
+        result = CliRunner().invoke(init_command(), ["log", "c1"])
+
+        assert result.exit_code == 1
+        assert "cast 'c1' has no readable events" in result.output
+
+    @staticmethod
+    def test_an_id_naming_no_cast_is_refused(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+
+        result = CliRunner().invoke(init_command(), ["log", "zz"])
+
+        assert result.exit_code == 1
+        assert "cast 'zz' is not in the journal" in result.output
 
     @staticmethod
     def test_nothing_recorded_says_nothing_recorded(

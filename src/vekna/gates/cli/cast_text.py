@@ -109,13 +109,13 @@ def clock(seconds: float) -> str:
 # own: the last rite to finish is when it ended, to within the moment it took to
 # say so. Derived rather than stamped on arrival, because a peer surface is
 # replayed a cast that ended before it attached and would stamp its own clock.
-def _ended_at(view: CastView) -> datetime | None:
+def ended_at(view: CastView) -> datetime | None:
     stamps = [rite.finished_at for rite in view.rites.values() if rite.finished_at]
     return max(stamps) if stamps else None
 
 
 def elapsed(view: CastView, now: datetime) -> str:
-    if (until := now if live(view) else _ended_at(view)) is None:
+    if (until := now if live(view) else ended_at(view)) is None:
         return "—"
     return clock((until - view.hello.started_at).total_seconds())
 

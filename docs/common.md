@@ -358,6 +358,7 @@ vekna                                         # this project's dashboard; starts
 vekna stop                                    # end the daemon; running casts rejoin the next
 vekna purify [--save]                         # clean and park the pooled worktrees no cast holds
 vekna log                                     # list active + recent casts
+vekna log <cast_id>                           # one cast: rites, errors, failed rites' output
 vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal
 vekna --debug                                 # daemon: log every event it processes
 vekna --help

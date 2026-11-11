@@ -13,13 +13,15 @@ import click
 from click import Group
 
 from vekna.gates.cli.commands import purified
+from vekna.gates.cli.contents import HISTORY_AFTER
 from vekna.gates.cli.dashboard import Dashboard
-from vekna.gates.cli.screen import listing
-from vekna.gates.cli.tui import VeknaApp
+from vekna.gates.cli.screen import listing, recorded
+from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.links.terminal import Terminal
+from vekna.links.window_config import history_after
 from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub
 from vekna.pacts.screen import Screen
@@ -169,10 +171,35 @@ async def _spawn_cast(cast_id: str, *, cwd: str, flags: list[str]) -> int:
 # `log` rather than `casts`, which sat one letter from `cast` and did something
 # else entirely: the verb an operator types all day is the one that must not
 # have a near-homograph waiting for a slip of the finger.
-@click.command("log", help="List the casts the daemon has seen, newest first.")
-def _log() -> None:
-    records = Journal(default_runs_root()).recent(limit=_RECENT)
-    click.echo(listing(records), nl=False)
+@click.command(
+    "log",
+    help="List the casts the daemon has seen, newest first. With a cast id,"
+    " show that cast: its rites, why it ended, and what its failed rites wrote.",
+)
+@click.argument("cast_id", required=False)
+def _log(cast_id: str | None) -> None:
+    journal = Journal(default_runs_root())
+    if cast_id is None:
+        click.echo(listing(journal.recent(limit=_RECENT)), nl=False)
+        return
+    found = journal.matching(cast_id)
+    if len(found) != 1:
+        said = f"names {len(found)} casts" if found else "is not in the journal"
+        message = f"cast {cast_id!r} {said} — `vekna log` has the ids"
+        raise click.ClickException(message)
+    # A log that ends in a frame cut mid-write is what a crash leaves, and
+    # what landed before it is what the operator came to read.
+    hub, cut = Hub(), ""
+    try:
+        for event in journal.events(found[0]):
+            if isinstance(event, CastMessage):
+                hub.apply(event)
+    except ValueError as error:
+        cut = f"the log is unreadable past here — {error}\n"
+    if (view := hub.casts.get(found[0])) is None:
+        message = f"cast {cast_id!r} has no readable events {cut}".rstrip()
+        raise click.ClickException(message)
+    click.echo(recorded(view) + cut, nl=False)
 
 
 # Always a fresh process, in the directory the interrupted cast ran in: the
@@ -296,10 +323,14 @@ async def window(*, debug: bool = False, screen: Screen | None = None) -> int:
 async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
     hub = Hub()
     line = await _opened(opening=SurfaceHello(), debug=debug)
+    after, ignored = history_after(Path.cwd())
     app = VeknaApp(
         casts=hub,
-        project=await project_of(Path.cwd()),
-        root=str(Path.cwd()),
+        opened=Opened(
+            project=await project_of(Path.cwd()),
+            root=str(Path.cwd()),
+            history_after=HISTORY_AFTER if after is None else after,
+        ),
         send=line.send,
         branch_of=branch_of,
     )
@@ -315,8 +346,8 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
 
     listening = asyncio.create_task(listen())
     listening.add_done_callback(ended)
-    if line.note:
-        app.call_later(app.say, line.note)
+    if note := " · ".join(said for said in (line.note, ignored) if said):
+        app.call_later(app.say, note)
     try:
         await app.run_async(headless=headless)
     finally:
