@@ -33,9 +33,6 @@ gh auth setup-git
   steps, a prompt with one possible answer — cut it.
 - Don't ignore lint rules globally.
 - No single-line files.
-- Every major release carries a name before it carries a number — Reborn, Eye,
-  Hand. Name a track when work on it starts; attach the number at the tag.
-  [`docs/README.md`](docs/README.md).
 - Hit friction (retried command, flaky tool, stale cache, bad error, gotcha)?
   Log it now, one or two sentences: what you did → what got in the way.
 
@@ -99,8 +96,7 @@ map, layout, patterns, and drift flags:
 
 - [`tests/CLAUDE.md`](tests/CLAUDE.md) — testing conventions, loaded when you
   work under `tests/`
-- [`docs/README.md`](docs/README.md) — docs index, how the ideas work,
-  release names
+- [`docs/README.md`](docs/README.md) — docs index, how the ideas work
 - [`docs/architecture.md`](docs/architecture.md) — layer map, layout, patterns
 - [`docs/common.md`](docs/common.md) — shared context every idea issue
   assumes: premise, vocabulary, process model, wire, CLI surface

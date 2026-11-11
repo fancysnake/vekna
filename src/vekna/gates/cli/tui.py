@@ -490,7 +490,7 @@ class VeknaApp(App[None]):
         # A layout that lands after the last scroll to the end, or a resized
         # window, leaves the output short of its newest line.
         if mounted and not self._view.dirty and self._follows():
-            self._to_end()
+            self._to_end(self._w.log.scroll_y)
         if not self._view.dirty or not mounted:
             return
         self._view.dirty = False
@@ -578,7 +578,7 @@ class VeknaApp(App[None]):
             log.clear()
             log.write_lines(lines)
         if follow.on:
-            log.call_after_refresh(self._to_end)
+            log.call_after_refresh(self._to_end, log.scroll_y)
 
     def _follows(self) -> bool:
         log, follow = self._w.log, self._view.follow
@@ -588,8 +588,12 @@ class VeknaApp(App[None]):
             follow.on = False
         return follow.on
 
-    def _to_end(self) -> None:
+    # A scroll the operator made while the refresh was pending stands; Textual
+    # clamping it onto a shorter page's end is no scroll of theirs.
+    def _to_end(self, asked_at: float) -> None:
         log = self._w.log
+        if log.scroll_y != asked_at and not log.is_vertical_scroll_end:
+            return
         log.scroll_end(animate=False, immediate=True)
         self._view.follow.at = log.max_scroll_y
 
