@@ -1064,6 +1064,37 @@ class TestFollowing:
             end = (log.scroll_y, log.max_scroll_y)
         assert end[0] == end[1]
 
+    @staticmethod
+    async def test_following_keeps_the_column_the_operator_scrolled_to():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for line in range(100):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
+            log.scroll_to(x=_UP, animate=False, immediate=True)
+            await pilot.pause(_PAINTED)
+
+            column = (log.scroll_x, log.max_scroll_x)
+        assert column[0] == _UP
+        assert column[1] > _UP
+
+    # An animated scroll starts within a rounding of the end.
+    @staticmethod
+    async def test_an_upward_scroll_that_has_only_begun_is_not_cancelled():
+        async with _long_output() as (_, _, pilot, log):
+            end = log.max_scroll_y
+            log.scroll_to(y=end - _UP, animate=True, duration=30)
+            await pilot.pause(_PAINTED)
+
+            target = log.scroll_target_y
+        assert target == end - _UP
+
 
 @pytest.mark.asyncio
 class TestPages:

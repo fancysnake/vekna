@@ -582,9 +582,11 @@ class VeknaApp(App[None]):
 
     def _follows(self) -> bool:
         log, follow = self._w.log, self._view.follow
-        if log.is_vertical_scroll_end:
+        # An upward scroll that has only begun still rounds to the end.
+        leaving = log.scroll_target_y < log.scroll_y
+        if log.is_vertical_scroll_end and not leaving:
             follow.on = True
-        elif log.scroll_y < follow.at:
+        elif leaving or log.scroll_y < follow.at:
             follow.on = False
         return follow.on
 
@@ -594,7 +596,7 @@ class VeknaApp(App[None]):
         log = self._w.log
         if log.scroll_y != asked_at and not log.is_vertical_scroll_end:
             return
-        log.scroll_end(animate=False, immediate=True)
+        log.scroll_end(animate=False, immediate=True, x_axis=False)
         self._view.follow.at = log.max_scroll_y
 
     # A prompt answered or withdrawn while its dialog is up closes the dialog:
