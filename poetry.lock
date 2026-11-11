@@ -245,8 +245,9 @@ description = "A vekna tome: pull request and issue maintenance rituals for GitH
 optional = false
 python-versions = ">=3.11,<3.16"
 groups = ["dev"]
-files = []
-develop = false
+files = [
+    {file = "cabinet-5.0.0-py3-none-any.whl", hash = "sha256:091ab7437b3fe0d823f0f7db09386aee8541e0e5a2118be2c3315cf5cd675b59"},
+]
 
 [package.dependencies]
 claude-agent-sdk = ">=0.2,<1.0"
@@ -255,10 +256,8 @@ typing-extensions = ">=4.4,<5.0"
 vekna = {version = ">=0.15.0,<2.0.0", extras = ["trial"]}
 
 [package.source]
-type = "git"
-url = "https://github.com/fancysnake/cabinet.git"
-reference = "v5.0.0"
-resolved_reference = "ee74373e54cd47f4f65bab561b0255ea49210e39"
+type = "url"
+url = "https://github.com/fancysnake/cabinet/releases/download/v5.0.0/cabinet-5.0.0-py3-none-any.whl"
 
 [[package]]
 name = "cachecontrol"
@@ -3999,4 +3998,4 @@ trial = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.16"
-content-hash = "cc76417f363870dfe82e9ee29812ac54f45bce9e8b45d2da39edcea15219d272"
+content-hash = "af98a8a7c0ea62550354272a3538bf8a350fc3b3b2fb832ee704757d249c35f4"
