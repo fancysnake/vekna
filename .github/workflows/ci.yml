@@ -1,7 +1,7 @@
 ---
 name: CI
 
-on:
+"on":
   pull_request:
     paths-ignore: ["docs/**", "mkdocs.yml"]
 
@@ -20,22 +20,23 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834  # v5
       - run: mise install
       - run: mise settings experimental=true
       - run: poetry install
       - run: mise run lint:py
+      - run: mise run lint:hk
 
   mutation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834  # v5
       - run: mise install
       - run: mise settings experimental=true
       - run: poetry install
@@ -50,10 +51,10 @@ jobs:
     env:
       MISE_PYTHON_VERSION: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834 # v5
+      - uses: jdx/mise-action@94c60b39bc2d90ab2f9bab27f38d3cc4812c1834  # v5
       - run: mise install
       - run: mise settings experimental=true
       - run: poetry install
@@ -62,7 +63,7 @@ jobs:
 
       # Combine and upload
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7
         if: ${{ !cancelled() && matrix.python-version == '3.11' }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

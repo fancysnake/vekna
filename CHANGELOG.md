@@ -58,6 +58,13 @@ when.
   branch's review threads, then commits and pushes, where the old `review`
   only read a local diff.
   ([#250](https://github.com/fancysnake/vekna/issues/250))
+- **hk replaces pre-commit.** `hk.pkl` runs the same hooks; `hk install`, now
+  in mise's enter hook, puts them in place. `lint:hk` runs the checks
+  `lint:py` does not cover over every file, in `fullcheck` and CI. pyupgrade
+  is gone: ruff's `UP` rules already cover it. `lint:markdown` is gone too:
+  the Markdown workflow runs hk's `markdownlint` step.
+- **Trivy replaces pip-audit.** `lint:trivy` replaces `lint:audit`, and the
+  weekly audit workflow scans `poetry.lock` without the dev groups.
 - **A refusal names the flag or file at fault.** A flag the ritual does not
   take is refused instead of dropped, a near spelling of a table vekna reads,
   such as `[ritual]`, stops the command, and a badly typed

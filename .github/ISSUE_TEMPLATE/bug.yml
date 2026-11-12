@@ -1,3 +1,4 @@
+---
 name: Bug
 description: Something vekna does differs from what it should do
 labels: ["bug"]
