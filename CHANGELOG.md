@@ -11,6 +11,24 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`vekna log <cast_id>`** shows one recorded cast: its rites with their
+  errors, why it ended, and the output of each rite that did not end `ok`.
+- **`space` on a cast** in the window opens its whole rite tree, and `space`
+  again closes it. A rite with rites under it folds too.
+- **The history view**, on `H` in the window: the casts that ended a day ago
+  or more, grouped by day, newest first. The hint line says how many
+  it holds. `[window] history_after` sets the age as an ISO 8601 duration
+  (`"P1D"` by default, `"PT0S"` for the moment a cast ends).
+
+### Changed
+
+- **A cast no longer leaves the window when it ends, fails, or loses the
+  cursor.** The tree view holds every live cast and every cast that ended less
+  than a day ago, an ended one as one line. The `e` key and its running-only
+  mode are gone.
+
 ## [1.0.0] - 2026-11-07
 
 ### Added

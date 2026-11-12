@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Literal
 from typing import cast as as_type
@@ -5,7 +6,7 @@ from typing import cast as as_type
 import pytest
 from pydantic import BaseModel
 
-from vekna.mills.hub import Hub
+from vekna.mills.hub import Hub, replayed
 from vekna.pacts.routing import Routed, Surface
 from vekna.wire import (
     AwaitEnded,
@@ -1071,3 +1072,35 @@ class TestClaims:
 
         assert hub.casts["c1"].waiting["q1"].claim_id is None
         assert peer.sent == [_claim(), _claim(None)]
+
+
+def _cut(*events: WireMessage) -> Iterator[WireMessage]:
+    yield from events
+    message = "line 3: cut mid-frame"
+    raise ValueError(message)
+
+
+class TestReplayed:
+    @staticmethod
+    def test_the_events_of_a_cast_come_back_as_its_view():
+        view, cut = replayed("c1", [_hello(), CastGoodbye(cast_id="c1", status="ok")])
+
+        assert view is not None
+        assert view.status == "ok"
+        assert cut is None
+
+    @staticmethod
+    def test_a_log_cut_mid_frame_keeps_what_landed_and_says_why():
+        view, cut = replayed("c1", _cut(_hello()))
+
+        assert view is not None
+        assert view.hello.cast_id == "c1"
+        assert view.status == "running"
+        assert cut == "line 3: cut mid-frame"
+
+    @staticmethod
+    def test_events_with_no_cast_of_that_id_come_back_as_no_view():
+        view, cut = replayed("c2", [_hello()])
+
+        assert view is None
+        assert cut is None
