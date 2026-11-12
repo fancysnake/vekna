@@ -71,6 +71,7 @@ markdown_extensions:
 nav:
   - Start here:
       - index.md
+      - setup.md
       - rituals.md
       - mediums.md
   - Going further:
