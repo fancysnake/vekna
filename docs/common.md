@@ -326,7 +326,8 @@ files   = ["scripts/rituals.py", "ops/rituals.py"]
 A config that does not validate stops the command with the path and the
 complaint — `[rituals]` rejects unknown keys, since a misspelt one would load
 nothing and leave the next cast to fail with `no ritual named ...`. Tables
-vekna does not know yet are left alone.
+vekna does not know yet are left alone, unless the name is a near spelling of
+one it reads: `[ritual]` is refused with `did you mean [rituals]?`.
 
 **Component defaults** are the operator's, per ritual: `[defaults.pr_check]
 base_branch = "main"`. Per key, flag → project → global. A key the ritual does

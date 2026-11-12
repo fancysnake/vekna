@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-07
+
 ### Added
 
 - **`vekna purify`** cleans every pooled worktree of the project that no
@@ -31,7 +33,7 @@ when.
   turns its `↳` or `▶` into its outcome where it stands, instead of repeating
   the line. One that printed still closes on its own line, and output sent to a
   file or a pipe keeps both.
-  A shell command that exits non-zero now ends in `✗` with its code, on every
+  A shell command that exits non-zero ends in `✗` with its code, on every
   surface, while the cast carries on and a resume still replays it.
   ([#252](https://github.com/fancysnake/vekna/issues/252))
 - **The TUI is a book.** The left page is a tree of project › ritual › its
@@ -40,7 +42,7 @@ when.
   and a folded line counts what still happens under it: asks, unseen fails,
   running. `e` shows every cast. The right page shows the line under the cursor
   in full, and the borders and the hotkey footer are gone. Casts a cast queued
-  now sit under their own ritual, not under the cast that queued them.
+  sit under their own ritual, not under the cast that queued them.
   ([#210](https://github.com/fancysnake/vekna/issues/210))
 - **A step lives on its payload class.** `@step` stores the step on each class
   it takes, so a `Trial` no longer forgets the steps declared inside it. A
@@ -63,14 +65,36 @@ when.
   the Markdown workflow runs hk's `markdownlint` step.
 - **Trivy replaces pip-audit.** `lint:trivy` replaces `lint:audit`, and the
   weekly audit workflow scans `poetry.lock` without the dev groups.
+- **A refusal names the flag or file at fault.** A flag the ritual does not
+  take is refused instead of dropped, a near spelling of a table vekna reads,
+  such as `[ritual]`, stops the command, and a badly typed
+  `[defaults.<ritual>]` value fails `vekna rituals show` as well as the cast.
+  ([#98](https://github.com/fancysnake/vekna/issues/98))
+- **`daemon.log` lines carry a level** between the time and the message, and
+  refused starts, failed prunes and purify's lines are `WARNING`.
+  ([#164](https://github.com/fancysnake/vekna/issues/164))
+- **`pr_fix`** asks for `push` or `decline` before it pushes.
+- **`ritual-scribe`** teaches `Step`, the `✗` of a non-zero shell exit, and the
+  `ci_watch` and `pr_fix` lessons in place of `triage` and `review`.
 
 ### Fixed
 
 - The TUI's output follows the newest line, and keeps following when the page
   above it grows. ([#208](https://github.com/fancysnake/vekna/issues/208))
+- Scrolling the TUI's output just as it repaints is no longer undone by the
+  follow.
 - A rite's long error no longer breaks the TUI's layout: its row shows a cut
   first line, and its page shows the whole error.
   ([#205](https://github.com/fancysnake/vekna/issues/205))
+- An agent's stream that ends with no result fails the cast instead of returning
+  half a reply, and an error from outside the SDK's hierarchy fails it instead
+  of escaping as a traceback.
+  ([#98](https://github.com/fancysnake/vekna/issues/98))
+- `--continue` names a corrupt frame's line, says when a cast recorded nothing
+  to replay, and names the cast whose components no longer fit.
+  ([#98](https://github.com/fancysnake/vekna/issues/98))
+- `FocusMissingError` names a folio that did not import.
+  ([#98](https://github.com/fancysnake/vekna/issues/98))
 
 ## [0.15.0] - 2026-10-26
 
@@ -961,7 +985,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v0.15.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/fancysnake/vekna/compare/v0.15.0...v1.0.0
 [0.15.0]: https://github.com/fancysnake/vekna/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/fancysnake/vekna/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/fancysnake/vekna/compare/v0.12.0...v0.13.0
