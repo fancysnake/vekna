@@ -320,8 +320,20 @@ class VeknaApp(App[None]):
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
-    # cast that asks, or a fold one hides in — wrapping round to the top.
+    # cast that asks, or a fold one hides in — wrapping round to the top. The
+    # history view never holds a cast that asks, so `w` leaves it for the tree.
     def action_next_waiting(self) -> None:
+        reading = self._view.reading
+        if not reading.history:
+            self._move_to_waiting()
+            return
+        reading.history = False
+        self.say("tree view")
+        self.changed()
+        self._repaint()
+        self._w.contents.call_after_refresh(self._move_to_waiting)
+
+    def _move_to_waiting(self) -> None:
         keys = list(self._view.drawn.nodes)
         cursor = self._view.drawn.cursor
         start = keys.index(cursor) + 1 if cursor in keys else 0

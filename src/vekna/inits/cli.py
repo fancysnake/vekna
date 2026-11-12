@@ -186,6 +186,8 @@ def _log(cast_id: str | None) -> None:
         raise click.ClickException(message)
     view, cut = replayed(found, journal.events(found))
     said = "" if cut is None else f"the log is unreadable past here — {cut}\n"
+    if (record := journal.read(found)) is not None and record.gapped:
+        said += "the daemon could not write part of this log — the cast ran on\n"
     if view is None:
         message = f"cast {cast_id!r} has no readable events {said}".rstrip()
         raise click.ClickException(message)

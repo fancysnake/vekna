@@ -824,6 +824,33 @@ class TestWaiting:
         assert ask.startswith("⏸ push?")
 
     @staticmethod
+    async def test_w_in_the_history_view_returns_to_the_tree_and_the_waiting_cast():
+        hub = _past()
+        hub.apply(_hello("c4", "pr_fix"))
+        hub.apply(DecideRequested(cast_id="c4", request_id="q4", prompt="push?"))
+        app = _app(hub, [], history_after=timedelta(0))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("H")
+            await pilot.pause(_PAINTED)
+            history = _contents(app)
+            await pilot.press("w")
+            await pilot.pause(_PAINTED)
+            await _eventually(pilot, lambda: _cursor(app) == "c:c4")
+
+            note = _text(app, "#note")
+            ask = _text(app, "#ask")
+        assert history == [
+            _day(2),
+            f"  ▸ ✓ {_hour(2)}  nap  c2",
+            _day(0),
+            f"  ▸ ✓ {_hour(0)}  sweep  c1",
+        ]
+        assert note == "tree view"
+        assert ask.startswith("⏸ push?")
+
+    @staticmethod
     async def test_with_no_cast_waiting_w_says_so():
         hub = Hub()
         hub.apply(_hello("c1", "nap"))

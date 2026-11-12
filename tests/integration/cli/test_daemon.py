@@ -1012,6 +1012,30 @@ class TestTheLogCommand:
         assert "fix_demo" in result.output
         assert "the log is unreadable past here — line 2" in result.output
 
+    @staticmethod
+    def test_a_cast_whose_log_has_a_gap_says_so(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+        log = tmp_path / "runs" / "c1" / "events.jsonl"
+        landed = log.read_bytes()
+        log.unlink()
+        log.mkdir()
+        with pytest.raises(IsADirectoryError):
+            journal.record(RiteDelta(cast_id="c1", rite_id="r1", delta="lost"))
+        log.rmdir()
+        log.write_bytes(landed)
+
+        result = CliRunner().invoke(init_command(), ["log", "c1"])
+
+        assert result.exit_code == 0
+        assert "fix_demo" in result.output
+        assert result.output.endswith(
+            "the daemon could not write part of this log — the cast ran on\n"
+        )
+
     # A journal with no goodbye is a cast that crashed, or one still going. It
     # counts to the last time the journal dated, so a read an hour later says the
     # same thing as one a second later.
