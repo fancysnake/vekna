@@ -1012,6 +1012,37 @@ class TestTheLogCommand:
         assert "fix_demo" in result.output
         assert "the log is unreadable past here — line 2" in result.output
 
+    # A journal with no goodbye is a cast that crashed, or one still going. It
+    # counts to the last time the journal dated, so a read an hour later says the
+    # same thing as one a second later.
+    @staticmethod
+    def test_a_cast_with_no_goodbye_says_no_end_was_recorded_and_stops_counting(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_RUNS", str(tmp_path / "runs"))
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+        journal.record(
+            RiteStarted(
+                cast_id="c1",
+                rite_id="r1",
+                parent_id=None,
+                name="measure",
+                category="step",
+                started_at=_WHEN + timedelta(seconds=90),
+            )
+        )
+
+        result = CliRunner().invoke(init_command(), ["log", "c1"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines()[0].split("  ")[2:5] == [
+            "no end recorded",
+            "1m30s",
+            "c1",
+        ]
+        assert " ▶ measure" in result.output
+
     @staticmethod
     def test_a_cast_with_no_events_says_so(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -1,15 +1,14 @@
 from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal, Self
 
 from vekna.pacts.casts import CastView, RiteView
 
-from .cast_text import ended_at, innermost, live, named
+from .cast_text import ended, innermost, live, named
 
-Kind = Literal["project", "ritual", "cast", "more", "rite", "day", "history"]
-
-HISTORY_AFTER = timedelta(days=1)
+Kind = Literal["project", "ritual", "cast", "more", "rite", "day"]
 
 _FAILED = frozenset({"error", "disconnected"})
 
@@ -34,15 +33,13 @@ class Counts:
 # the operator's folds stay on the line they were put on. A folded line keeps
 # its children and is drawn without them, so what `w` and `t` reach into a fold
 # for is still there. A project, ritual or day line holds every cast of its
-# own, newest first, and the tree view's `history` line every cast the history
-# view has. `said` is what a cast line says in place of how long ago it began.
+# own, newest first.
 @dataclass(frozen=True)
 class Entry:  # pylint: disable=too-many-instance-attributes
     key: str
     kind: Kind
     name: str
     counts: Counts
-    said: str = ""
     folded: bool = False
     view: CastView | None = None
     rite: RiteView | None = None
@@ -73,15 +70,15 @@ def cast_key(cast_id: str) -> str:
     return f"c:{cast_id}"
 
 
-# How the contents are read: the lines the operator folded, the casts whose
-# whole rite tree they opened, the tree view or the history view, and how long
-# after it ended a cast moves from the one to the other.
+# How the contents are read: the lines the operator toggled away from how they
+# start — a cast starts closed to one line, every other line starts open — the
+# tree view or the history view, and how long after it ended a cast moves from
+# the one to the other.
 @dataclass
 class Reading:
-    folded: set[str] = field(default_factory=set)
-    whole: set[str] = field(default_factory=set)
+    history_after: timedelta
+    toggled: set[str] = field(default_factory=set)
     history: bool = False
-    history_after: timedelta = HISTORY_AFTER
 
 
 def _named(entry: Entry) -> str:
@@ -92,66 +89,45 @@ def _started(view: CastView) -> datetime:
     return view.hello.started_at
 
 
-def _ended(view: CastView) -> datetime:
-    return ended_at(view) or view.hello.started_at
-
-
 # A cast that asks is the operator's business however long ago it ended.
-def _historic(view: CastView, reading: Reading, now: datetime) -> bool:
+def historic(view: CastView, reading: Reading, now: datetime) -> bool:
     if live(view) or view.waiting:
         return False
-    return now - _ended(view) >= reading.history_after
+    return now - ended(view) >= reading.history_after
 
 
 # The tree view, "how is it going": project > ritual > cast, newest first >
 # rites, holding every cast that is live or ended less than `history_after`
-# ago, and a last line naming how many the history view has. A cast is one line
-# until the operator opens it: a live one also says the rite it is on, after
-# `…` for the rites before it. Opened, it holds its whole rite tree.
+# ago. A cast is one line until the operator opens it: a live one also says the
+# rite it is on, after `…` for the rites before it. Opened, it holds its whole
+# rite tree.
 # The history view, "what happened and when": day > cast, newest first, of the
 # casts that ended longer ago than that.
 def contents(casts: Sequence[CastView], reading: Reading, now: datetime) -> list[Entry]:
-    old = [view for view in casts if _historic(view, reading, now)]
+    recent: list[CastView] = []
+    old: list[CastView] = []
+    for view in casts:
+        (old if historic(view, reading, now) else recent).append(view)
     if reading.history:
         return _days(old, reading)
     by_project: dict[str, list[CastView]] = {}
-    for view in casts:
-        if view not in old:
-            by_project.setdefault(project_key(view), []).append(view)
+    for view in recent:
+        by_project.setdefault(project_key(view), []).append(view)
     projects = [_project(key, views, reading) for key, views in by_project.items()]
-    lines = sorted(projects, key=_named)
-    if old:
-        many = "1 cast" if len(old) == 1 else f"{len(old)} casts"
-        lines.append(
-            Entry(
-                key="history",
-                kind="history",
-                name=f"history · {many} · H",
-                counts=Counts(),
-                views=tuple(old),
-            )
-        )
-    return lines
+    return sorted(projects, key=_named)
 
 
 # A day is the reader's own, like every time the window says.
 def _days(views: list[CastView], reading: Reading) -> list[Entry]:
     by_day: dict[str, list[CastView]] = {}
-    for view in sorted(views, key=_ended, reverse=True):
-        day = f"{_ended(view).astimezone():%Y-%m-%d %a}"
+    for view in sorted(views, key=ended, reverse=True):
+        day = f"{ended(view).astimezone():%Y-%m-%d %a}"
         by_day.setdefault(day, []).append(view)
     return [_day(day, found, reading) for day, found in by_day.items()]
 
 
 def _day(day: str, views: list[CastView], reading: Reading) -> Entry:
-    casts = [
-        _cast(
-            view,
-            reading,
-            said=f"{_ended(view).astimezone():%H:%M}  {view.hello.ritual}",
-        )
-        for view in views
-    ]
+    casts = [_cast(view, reading) for view in views]
     return _fold(
         Entry(
             key=f"d:{day}",
@@ -161,7 +137,7 @@ def _day(day: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(views),
             children=tuple(casts),
         ),
-        reading.folded,
+        reading.toggled,
     )
 
 
@@ -182,7 +158,7 @@ def _project(key: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(rituals),
         ),
-        reading.folded,
+        reading.toggled,
     )
 
 
@@ -198,25 +174,24 @@ def _ritual(key: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(newest),
             children=tuple(casts),
         ),
-        reading.folded,
+        reading.toggled,
     )
 
 
 # A cast with nothing to say of now is folded over its whole rite tree until
 # it is opened; one that has no rites has nothing to open.
-def _cast(view: CastView, reading: Reading, said: str = "") -> Entry:
+def _cast(view: CastView, reading: Reading) -> Entry:
     cast_id = view.hello.cast_id
-    opened = cast_id in reading.whole
+    opened = cast_key(cast_id) in reading.toggled
     now = [] if opened else _now(view)
     return Entry(
         key=cast_key(cast_id),
         kind="cast",
         name=view.hello.ritual,
         counts=_counts(view),
-        said=said,
         folded=not opened and not now and bool(view.rites),
         view=view,
-        children=tuple(now or rite_tree(view, reading.folded)),
+        children=tuple(now or rite_tree(view, reading.toggled)),
     )
 
 
@@ -234,7 +209,7 @@ def _counts(view: CastView) -> Counts:
 def _now(view: CastView) -> list[Entry]:
     if (rite := _asking(view) or innermost(view)) is None:
         return []
-    entries = [_rite(view, rite, (), set())]
+    entries = [_rite(view, rite, (), frozenset())]
     if len(view.rites) > 1:
         cast_id = view.hello.cast_id
         entries.insert(
@@ -257,7 +232,7 @@ def _asking(view: CastView) -> RiteView | None:
 # arrived hangs off the cast rather than going missing, and so does the first
 # rite of a loop with no way in; a loop is cut where it would close, so the
 # tree is its own bound.
-def rite_tree(view: CastView, folded: set[str] | None = None) -> list[Entry]:
+def rite_tree(view: CastView, folded: AbstractSet[str] = frozenset()) -> list[Entry]:
     children: dict[str | None, list[RiteView]] = {}
     for rite in view.rites.values():
         parent = rite.started.parent_id
@@ -271,7 +246,7 @@ def rite_tree(view: CastView, folded: set[str] | None = None) -> list[Entry]:
             for child in children.get(rite.started.rite_id, [])
             if child.started.rite_id not in seen
         ]
-        return _rite(view, rite, tuple(under), folded or set())
+        return _rite(view, rite, tuple(under), folded)
 
     # Checked one at a time, so a rite an earlier one grew is passed over.
     roots = [*children.get(None, []), *view.rites.values()]
@@ -279,7 +254,7 @@ def rite_tree(view: CastView, folded: set[str] | None = None) -> list[Entry]:
 
 
 def _rite(
-    view: CastView, rite: RiteView, under: tuple[Entry, ...], folded: set[str]
+    view: CastView, rite: RiteView, under: tuple[Entry, ...], folded: AbstractSet[str]
 ) -> Entry:
     cast_id = view.hello.cast_id
     return _fold(
@@ -296,7 +271,7 @@ def _rite(
     )
 
 
-def _fold(entry: Entry, folded: set[str]) -> Entry:
+def _fold(entry: Entry, folded: AbstractSet[str]) -> Entry:
     if entry.key not in folded:
         return entry
     return replace(entry, folded=True)

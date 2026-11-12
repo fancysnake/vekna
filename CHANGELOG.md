@@ -18,8 +18,8 @@ when.
 - **`space` on a cast** in the window opens its whole rite tree, and `space`
   again closes it. A rite with rites under it folds too.
 - **The history view**, on `H` in the window: the casts that ended a day ago
-  or more, grouped by day, newest first. The tree view's last line says how
-  many it holds. `[window] history_after` sets the age as an ISO 8601 duration
+  or more, grouped by day, newest first. The hint line says how many
+  it holds. `[window] history_after` sets the age as an ISO 8601 duration
   (`"P1D"` by default, `"PT0S"` for the moment a cast ends).
 
 ### Changed

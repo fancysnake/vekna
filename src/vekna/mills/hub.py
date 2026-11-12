@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import assert_never
 
 from typing_extensions import override
@@ -500,3 +500,21 @@ def _replay_prompts(view: CastView) -> Iterator[WireMessage]:
                 request_id=prompt.request.request_id,
                 claim_id=prompt.claim_id,
             )
+
+
+# A cast read back from the events its journal kept: the view it comes to, and
+# why reading stopped early, if it did. A journal that ends in a frame cut
+# mid-write is what a crash leaves, and what landed before the cut is what a
+# reader came for, so the view is returned beside the error rather than lost to
+# it. No view is a journal with no event of the cast's own to read.
+def replayed(
+    cast_id: str, events: Iterable[WireMessage]
+) -> tuple[CastView | None, str | None]:
+    hub, cut = Hub(), None
+    try:
+        for event in events:
+            if isinstance(event, CastMessage):
+                hub.apply(event)
+    except ValueError as error:
+        cut = str(error)
+    return hub.casts.get(cast_id), cut

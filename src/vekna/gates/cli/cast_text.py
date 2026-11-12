@@ -114,6 +114,10 @@ def ended_at(view: CastView) -> datetime | None:
     return max(stamps) if stamps else None
 
 
+def ended(view: CastView) -> datetime:
+    return ended_at(view) or view.hello.started_at
+
+
 def elapsed(view: CastView, now: datetime) -> str:
     if (until := now if live(view) else ended_at(view)) is None:
         return "—"

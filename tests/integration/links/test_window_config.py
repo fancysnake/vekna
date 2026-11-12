@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.links.window_config import history_after
+from vekna.links.window_config import HISTORY_AFTER, history_after
 
 
 @pytest.fixture(name="config")
@@ -22,9 +22,9 @@ def _project(tmp_path: Path, toml: str) -> Path:
 
 class TestHistoryAfter:
     @staticmethod
-    def test_nothing_configured_is_nothing_said(tmp_path: Path, config: Path):
+    def test_nothing_configured_is_the_default(tmp_path: Path, config: Path):
         assert not config.exists()
-        assert history_after(tmp_path) == (None, "")
+        assert history_after(tmp_path) == (HISTORY_AFTER, "")
 
     @staticmethod
     def test_the_project_s_duration_wins_over_the_user_s(tmp_path: Path, config: Path):

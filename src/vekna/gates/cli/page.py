@@ -6,7 +6,7 @@ from rich.text import Text
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
-from .cast_text import ago, carried, clipped, clock, counted, elapsed, live, word
+from .cast_text import ago, carried, clipped, clock, counted, elapsed, ended, live, word
 from .contents import Counts, Entry, rite_tree, walked
 
 # A tree row holds the first line of an error, cut to this: the whole of it is
@@ -68,16 +68,15 @@ def tally(counts: Counts) -> Text:
     return text
 
 
-def line_text(entry: Entry, now: datetime) -> Text:
+# A cast line says how long ago it began, in the history view when it ended.
+def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     view, rite = entry.view, entry.rite
     if rite is not None and view is not None:
         text = _rite_label(view, rite, now)
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, entry.said or ago(view, now))
-    elif entry.kind == "history":
-        text = Text(entry.name, "dim")
+        text = _cast_label(view, _ended_said(view) if history else ago(view, now))
     else:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
     # A cast's own glyph already says what its fold would.
@@ -87,6 +86,10 @@ def line_text(entry: Entry, now: datetime) -> Text:
     if entry.folded:
         text = Text("▸ ") + text
     return text
+
+
+def _ended_said(view: CastView) -> str:
+    return f"{ended(view).astimezone():%H:%M}  {view.hello.ritual}"
 
 
 def _cast_label(view: CastView, said: str) -> Text:
@@ -139,10 +142,10 @@ def head(
         return _rite_head(rite, now)
     if view is not None:
         return _cast_head(view, branches, now)
-    if entry.kind in {"ritual", "day"}:
+    if entry.kind == "ritual":
         return _ritual_head(entry, now)
-    if entry.kind == "history":
-        return Text(f"{len(entry.views)} ended casts are in the history view — H")
+    if entry.kind == "day":
+        return _day_head(entry, now)
     return _project_head(entry, branches)
 
 
@@ -162,8 +165,17 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
         text.append_text(_CAST_LOOK[word(view)].copy())
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
-        if entry.kind == "day":
-            text.append(f"{view.hello.ritual}  ")
+        text.append(_flags(view.hello))
+    return text
+
+
+def _day_head(entry: Entry, now: datetime) -> Text:
+    text = Text(entry.name, "bold")
+    for view in entry.views:
+        text.append("\n")
+        text.append_text(_CAST_LOOK[word(view)].copy())
+        text.append(f" {_ended_said(view)}  {view.hello.cast_id[:SHORT_ID]}  ")
+        text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
     return text
 

@@ -526,23 +526,16 @@ def _hour(days: int) -> str:
 @pytest.mark.asyncio
 class TestHistory:
     @staticmethod
-    async def test_the_tree_view_names_the_casts_the_history_view_has():
+    async def test_the_hint_counts_the_casts_the_history_view_has():
         app = _app(_past(), [], history_after=timedelta(0))
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            lines = _contents(app)
-            _to(app, "history")
-            await pilot.pause(_PAINTED)
 
-            head = _text(app, "#head")
-        assert lines == [
-            "proj (1 running)",
-            "  ci_watch",
-            "    ▶ @now  c3",
-            "history · 2 casts · H",
-        ]
-        assert head == "2 ended casts are in the history view — H"
+            lines = _contents(app)
+            hint = _text(app, "#hint")
+        assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
+        assert "H history (2)" in hint
 
     @staticmethod
     async def test_h_shows_the_ended_casts_by_day_newest_first_and_goes_back():
@@ -569,20 +562,6 @@ class TestHistory:
         assert back == tree
 
     @staticmethod
-    async def test_space_on_the_history_line_opens_the_history_view():
-        app = _app(_past(), [], history_after=timedelta(0))
-
-        async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            _to(app, "history")
-            await pilot.pause(_PAINTED)
-            await pilot.press("space")
-            await pilot.pause(_PAINTED)
-
-            lines = _contents(app)
-        assert lines[0] == _day(2)
-
-    @staticmethod
     async def test_a_history_cast_opens_and_its_day_folds_and_lists_its_casts():
         app = _app(_past(), [], history_after=timedelta(0))
 
@@ -601,7 +580,7 @@ class TestHistory:
             folded = _contents(app)
         assert opened[:3] == [_day(2), f"  ✓ {_hour(2)}  nap  c2", "    ✓ work  49h00m"]
         assert head[0] == _day(2)
-        assert head[1].rstrip().endswith("nap")
+        assert head[1].startswith(f"✓ {_hour(2)}  nap  c2")
         assert folded[0] == f"▸ {_day(2)}"
 
     @staticmethod

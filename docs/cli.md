@@ -228,8 +228,8 @@ project line always says it.
 
 `H` turns the left page to the history view, and `H` again turns it back. The
 history view holds the casts that ended a day ago or more, grouped by the day
-they ended, newest first, each with the time it ended and its ritual. The tree
-view's last line says how many it holds: `history · 12 casts · H`. Both views
+they ended, newest first, each with the time it ended and its ritual. The hint
+line says how many it holds: `H history (12)`. Both views
 show what the daemon has held since it started; `vekna log` has the rest.
 
 How long a cast stays in the tree view after it ends is `history_after`, an

@@ -27,18 +27,22 @@ from vekna.wire import (
 
 from .cast_text import counted, labelled, live, named
 from .commands import request_cast, send_answer
-from .contents import HISTORY_AFTER, Entry, Reading, contents, walked
+from .contents import Entry, Reading, contents, historic, walked
 from .page import head, holder, line_text, output
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
-_HINT = (
-    "space open/fold · H history · w next asking · t take over · x cancel"
-    " · : command · g/p scope · q quit"
-)
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
+
+
+# `old` is how many ended casts the history view holds.
+def _hint(old: int = 0) -> str:
+    return (
+        f"space open/fold · H history{f' ({old})' if old else ''} · w next asking"
+        " · t take over · x cancel · : command · g/p scope · q quit"
+    )
 
 
 # One prompt, answered here: the answers it allows as buttons, and a line to
@@ -113,7 +117,7 @@ class Contents(Tree[str]):
 class Opened:
     project: str
     root: str
-    history_after: timedelta = HISTORY_AFTER
+    history_after: timedelta
 
 
 # Where the window opened — its project, and the directory a ritual started
@@ -168,7 +172,7 @@ class _Follow:
 # was last seen on, its claims, the contents drawn, and the output's follow.
 @dataclass
 class _View:
-    reading: Reading = field(default_factory=Reading)
+    reading: Reading
     dirty: bool = True
     arming: str | None = None
     branches: dict[str, str | None] = field(default_factory=dict)
@@ -189,7 +193,7 @@ class _Widgets:
     command: Input = field(
         default_factory=lambda: Input(id="command", select_on_focus=False)
     )
-    hint: Static = field(default_factory=lambda: Static(_HINT, id="hint"))
+    hint: Static = field(default_factory=lambda: Static(_hint(0), id="hint"))
 
 
 # A book of the daemon's casts. The left page is the contents: project, ritual,
@@ -305,23 +309,14 @@ class VeknaApp(App[None]):
         self.say("history view" if reading.history else "tree view")
         self.changed()
 
-    # On a cast, its whole rite tree, or back to the one line it was. On the
-    # line that names the history view, that view. On any other line a fold
-    # hides what is under it, and a folded line opens again. `…` and a line
-    # with nothing under it have nothing to fold.
+    # On a cast, its whole rite tree, or back to the one line it was. On any
+    # other line a fold hides what is under it, and a folded line opens again.
+    # `…` and a line with nothing under it have nothing to fold.
     def action_fold(self) -> None:
-        if (entry := self._entry()) is None or entry.kind == "more":
+        if (entry := self._entry()) is None or not entry.children:
             return
-        reading = self._view.reading
-        if entry.kind == "history":
-            self.action_history()
-        elif entry.kind == "cast" and entry.view is not None:
-            # Symmetric difference: in becomes out, out becomes in.
-            reading.whole ^= {entry.view.hello.cast_id}
-        elif entry.key in reading.folded:
-            reading.folded.discard(entry.key)
-        elif entry.children:
-            reading.folded.add(entry.key)
+        # Symmetric difference: a line in the set goes out, one out goes in.
+        self._view.reading.toggled ^= {entry.key}
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
@@ -399,7 +394,7 @@ class VeknaApp(App[None]):
         elif typed.lower().startswith("a "):
             self._answer(typed[2:].strip())
         elif typed:
-            self.say(f"{typed!r} means nothing here — {_HINT}")
+            self.say(f"{typed!r} means nothing here — {_hint()}")
         self.changed()
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[str]) -> None:
@@ -488,6 +483,9 @@ class VeknaApp(App[None]):
         now = datetime.now(UTC)
         where = "all projects" if self._scope.every else named(self._scope.home)
         self.sub_title = f"{counted(listed) or 'no casts'}  ({where})"
+        reading = self._view.reading
+        old = sum(historic(view, reading, now) for view in listed)
+        self._w.hint.update(_hint(old))
         self._paint_contents(listed, now)
         entry = self._entry()
         self._paint_ask(listed, self._focused())
@@ -500,21 +498,22 @@ class VeknaApp(App[None]):
     # cursor goes to the nearest line above it that is still there; with none,
     # to the first cast, which is what a window opens to look at.
     def _paint_contents(self, listed: list[CastView], now: datetime) -> None:
-        drawn = self._view.drawn
-        lines = walked(contents(listed, self._view.reading, now))
+        drawn, reading = self._view.drawn, self._view.reading
+        history = reading.history
+        lines = walked(contents(listed, reading, now))
         entries = {entry.key: entry for entry, _ in lines}
         shape = tuple((entry.key, parent, bool(entry.shown)) for entry, parent in lines)
         if shape == drawn.shape:
             drawn.entries = entries
             for key, node in drawn.nodes.items():
-                node.set_label(line_text(entries[key], now))
+                node.set_label(line_text(entries[key], now, history=history))
             return
         tree = self._w.contents
         tree.clear()
         nodes: dict[str, TreeNode[str]] = {}
         for entry, parent in lines:
             under = nodes[parent] if parent is not None else tree.root
-            text = line_text(entry, now)
+            text = line_text(entry, now, history=history)
             nodes[entry.key] = (
                 under.add(text, data=entry.key, expand=True)
                 if entry.shown

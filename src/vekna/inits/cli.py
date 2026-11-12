@@ -13,7 +13,6 @@ import click
 from click import Group
 
 from vekna.gates.cli.commands import purified
-from vekna.gates.cli.contents import HISTORY_AFTER
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing, recorded
 from vekna.gates.cli.tui import Opened, VeknaApp
@@ -23,7 +22,7 @@ from vekna.links.socket_server import alive, attach
 from vekna.links.terminal import Terminal
 from vekna.links.window_config import history_after
 from vekna.links.worktrees import branch_of
-from vekna.mills.hub import Hub
+from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     CastMessage,
@@ -182,24 +181,26 @@ def _log(cast_id: str | None) -> None:
     if cast_id is None:
         click.echo(listing(journal.recent(limit=_RECENT)), nl=False)
         return
+    if (found := _resolved(journal, cast_id)) is None:
+        message = f"cast {cast_id!r} is not in the journal — `vekna log` has the ids"
+        raise click.ClickException(message)
+    view, cut = replayed(found, journal.events(found))
+    said = "" if cut is None else f"the log is unreadable past here — {cut}\n"
+    if view is None:
+        message = f"cast {cast_id!r} has no readable events {said}".rstrip()
+        raise click.ClickException(message)
+    click.echo(recorded(view) + said, nl=False)
+
+
+# What `vekna log` and the aborted row print is the id cut short, so what comes
+# back here is a prefix rather than the directory's own name: the one cast it
+# names, or `None` for none. Several is not an id yet, and is said as such.
+def _resolved(journal: Journal, cast_id: str) -> str | None:
     found = journal.matching(cast_id)
-    if len(found) != 1:
-        said = f"names {len(found)} casts" if found else "is not in the journal"
-        message = f"cast {cast_id!r} {said} — `vekna log` has the ids"
-        raise click.ClickException(message)
-    # A log that ends in a frame cut mid-write is what a crash leaves, and
-    # what landed before it is what the operator came to read.
-    hub, cut = Hub(), ""
-    try:
-        for event in journal.events(found[0]):
-            if isinstance(event, CastMessage):
-                hub.apply(event)
-    except ValueError as error:
-        cut = f"the log is unreadable past here — {error}\n"
-    if (view := hub.casts.get(found[0])) is None:
-        message = f"cast {cast_id!r} has no readable events {cut}".rstrip()
-        raise click.ClickException(message)
-    click.echo(recorded(view) + cut, nl=False)
+    if len(found) > 1:
+        ambiguous = f"{cast_id!r} names {len(found)} casts — `vekna log` has the ids"
+        raise click.ClickException(ambiguous)
+    return found[0] if found else None
 
 
 # Always a fresh process, in the directory the interrupted cast ran in: the
@@ -211,15 +212,10 @@ def _log(cast_id: str | None) -> None:
 # layer: reaching `--continue` again is how it would spawn itself forever.
 def _continue(cast_id: str, *, flags: list[str]) -> int:
     journal = Journal(default_runs_root())
-    # What `vekna log` and the aborted row print is the id cut short, so what
-    # comes back here is a prefix rather than the directory's own name.
-    found = journal.matching(cast_id)
-    if len(found) > 1:
-        ambiguous = f"{cast_id!r} names {len(found)} casts — `vekna log` has the ids"
-        raise click.ClickException(ambiguous)
+    found = _resolved(journal, cast_id)
     # A prefix that named nothing is read as itself, misses again, and is said
     # back in the sentence as the operator typed it.
-    named = found[0] if found else cast_id
+    named = found or cast_id
     if (record := journal.read(named)) is None:
         # A resolved prefix whose record will not read is the damaged row
         # `vekna log` is printing, and telling the operator the journal never
@@ -329,7 +325,7 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
         opened=Opened(
             project=await project_of(Path.cwd()),
             root=str(Path.cwd()),
-            history_after=HISTORY_AFTER if after is None else after,
+            history_after=after,
         ),
         send=line.send,
         branch_of=branch_of,

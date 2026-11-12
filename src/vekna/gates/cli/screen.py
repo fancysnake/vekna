@@ -169,15 +169,19 @@ def _depth(rite: RiteView, view: CastView) -> int:
     return depth
 
 
-def _rite_lines(view: CastView, *, tail: bool = True) -> list[str]:
+def _rite_line(rite: RiteView, pad: str) -> str:
+    medium = rite.started.category == "medium" and rite.status in {"running", "ok"}
+    mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
+    said = "" if rite.error is None else f"  — {rite.error}"
+    return f" {pad}{mark} {rite.started.name}{said}"
+
+
+def _rite_lines(view: CastView) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
-        medium = rite.started.category == "medium" and rite.status in {"running", "ok"}
-        mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
-        said = "" if rite.error is None else f"  — {rite.error}"
-        lines.append(f" {pad}{mark} {rite.started.name}{said}")
-        if tail and rite.status == "running":
+        lines.append(_rite_line(rite, pad))
+        if rite.status == "running":
             lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
     return lines
 
@@ -212,7 +216,7 @@ def _detail_lines(view: CastView) -> list[str]:
     return ["", *(f" {line}" for line in lines)] if lines else []
 
 
-def _drilled(view: CastView, now: datetime, *, tail: bool = True) -> list[str]:
+def _drilled(view: CastView, now: datetime) -> list[str]:
     header = (
         f"vekna — {view.hello.ritual}  {view.hello.project_root}"
         f"  {word(view)}  {elapsed(view, now)}  {view.hello.cast_id[:SHORT_ID]}"
@@ -221,7 +225,7 @@ def _drilled(view: CastView, now: datetime, *, tail: bool = True) -> list[str]:
     return [
         header,
         "",
-        *_rite_lines(view, tail=tail),
+        *_rite_lines(view),
         *_waiting_lines(view),
         *_detail_lines(view),
         "",
@@ -237,12 +241,37 @@ def listing(records: Sequence[Run]) -> str:
     return "".join(_row(record) for record in records)
 
 
+# The last time the journal puts on the cast: nothing else in it is dated.
+def _last_seen(view: CastView) -> datetime:
+    stamps = [view.hello.started_at]
+    for rite in view.rites.values():
+        stamps += [
+            rite.started.started_at,
+            *([rite.finished_at] if rite.finished_at else []),
+        ]
+    return max(stamps)
+
+
 # `vekna log <cast>`: one cast read back out of the journal, for finding out
 # why it ended as it did. Its rites, why it ended, then what each rite that did
 # not end well wrote — the tail the view keeps of it, which is where a failure
-# says what it was.
+# says what it was. A journal with no goodbye is a cast that crashed, or one
+# still going: it says no end was recorded, and counts to the last thing the
+# journal dated rather than to a clock that would run on with every read.
 def recorded(view: CastView) -> str:
-    lines = _drilled(view, datetime.now(UTC), tail=False)
+    status = "no end recorded" if live(view) else word(view)
+    header = (
+        f"vekna log — {view.hello.ritual}  {view.hello.project_root}"
+        f"  {status}  {elapsed(view, _last_seen(view))}"
+        f"  {view.hello.cast_id[:SHORT_ID]}{carried(view.hello)}"
+    )
+    lines = [
+        header,
+        "",
+        *(_rite_line(rite, "  " * _depth(rite, view)) for rite in view.rites.values()),
+        *_detail_lines(view),
+        "",
+    ]
     for rite in view.rites.values():
         if rite.status != "ok" and rite.deltas:
             lines += [f"── {rite.started.name} ({rite.status}) ──", *rite.deltas, ""]
