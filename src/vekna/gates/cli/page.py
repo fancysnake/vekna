@@ -6,7 +6,7 @@ from rich.text import Text
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
-from .cast_text import ago, carried, clipped, clock, counted, elapsed, live, word
+from .cast_text import ago, carried, clipped, clock, counted, elapsed, ended, live, word
 from .contents import Counts, Entry, rite_tree, walked
 
 # A tree row holds the first line of an error, cut to this: the whole of it is
@@ -68,17 +68,19 @@ def tally(counts: Counts) -> Text:
     return text
 
 
-def line_text(entry: Entry, now: datetime) -> Text:
+# A cast line says how long ago it began, in the history view when it ended.
+def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     view, rite = entry.view, entry.rite
     if rite is not None and view is not None:
         text = _rite_label(view, rite, now)
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, now)
+        text = _cast_label(view, _ended_said(view) if history else ago(view, now))
     else:
-        text = Text(entry.name, "bold" if entry.kind == "project" else "")
-    if entry.folded or entry.kind == "project":
+        text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
+    # A cast's own glyph already says what its fold would.
+    if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
     # A folded line is drawn as a leaf, which the tree gives no arrow.
     if entry.folded:
@@ -86,11 +88,15 @@ def line_text(entry: Entry, now: datetime) -> Text:
     return text
 
 
-def _cast_label(view: CastView, now: datetime) -> Text:
+def _ended_said(view: CastView) -> str:
+    return f"{ended(view).astimezone():%H:%M}  {view.hello.ritual}"
+
+
+def _cast_label(view: CastView, said: str) -> Text:
     text = Text.assemble(
         _CAST_LOOK[word(view)].copy(),
         " ",
-        (ago(view, now), _ASKS if view.waiting else ""),
+        (said, _ASKS if view.waiting else ""),
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
     )
     if view.waiting:
@@ -138,6 +144,8 @@ def head(
         return _cast_head(view, branches, now)
     if entry.kind == "ritual":
         return _ritual_head(entry, now)
+    if entry.kind == "day":
+        return _day_head(entry, now)
     return _project_head(entry, branches)
 
 
@@ -156,6 +164,17 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
         text.append("\n")
         text.append_text(_CAST_LOOK[word(view)].copy())
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
+        text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
+        text.append(_flags(view.hello))
+    return text
+
+
+def _day_head(entry: Entry, now: datetime) -> Text:
+    text = Text(entry.name, "bold")
+    for view in entry.views:
+        text.append("\n")
+        text.append_text(_CAST_LOOK[word(view)].copy())
+        text.append(f" {_ended_said(view)}  {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
     return text
