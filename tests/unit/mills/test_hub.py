@@ -1099,6 +1099,21 @@ class TestReplayed:
         assert cut == "line 3: cut mid-frame"
 
     @staticmethod
+    def test_an_event_that_is_not_a_casts_own_is_passed_over():
+        view, cut = replayed(
+            "c1",
+            [
+                _hello(),
+                CastCancelRequested(cast_id="c1"),
+                CastGoodbye(cast_id="c1", status="ok"),
+            ],
+        )
+
+        assert view is not None
+        assert view.status == "ok"
+        assert cut is None
+
+    @staticmethod
     def test_events_with_no_cast_of_that_id_come_back_as_no_view():
         view, cut = replayed("c2", [_hello()])
 
