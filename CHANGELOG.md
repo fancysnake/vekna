@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
 ### Added
 
 - **`vekna log <cast_id>`** shows one recorded cast: its rites with their
@@ -24,10 +26,25 @@ when.
 
 ### Changed
 
-- **A cast no longer leaves the window when it ends, fails, or loses the
-  cursor.** The tree view holds every live cast and every cast that ended less
-  than a day ago, an ended one as one line. The `e` key and its running-only
-  mode are gone.
+- **A cast stays in the window when it ends, fails, or loses the cursor.** The
+  tree view holds every live cast and every cast that ended less than a day
+  ago, an ended one as one line.
+- **hk replaces pre-commit.** `hk.pkl` runs the same hooks; `hk install`, in
+  mise's enter hook, puts them in place. `lint:hk` runs the checks `lint:py`
+  does not cover over every file, in `fullcheck` and CI. ruff's `UP` rules
+  replace pyupgrade, and the Markdown workflow's `markdownlint` step replaces
+  `lint:markdown`.
+- **Trivy replaces pip-audit.** `lint:trivy` replaces `lint:audit`, and the
+  weekly audit workflow scans `poetry.lock` without the dev groups.
+
+### Removed
+
+- The window's `e` key and its running-only mode.
+
+### Fixed
+
+- The TUI's output keeps a scroll made just as it repaints.
+- The TUI's output reaches its newest line after a first paint or a resize.
 
 ## [1.0.0] - 2026-11-07
 
@@ -76,13 +93,6 @@ when.
   branch's review threads, then commits and pushes, where the old `review`
   only read a local diff.
   ([#250](https://github.com/fancysnake/vekna/issues/250))
-- **hk replaces pre-commit.** `hk.pkl` runs the same hooks; `hk install`, now
-  in mise's enter hook, puts them in place. `lint:hk` runs the checks
-  `lint:py` does not cover over every file, in `fullcheck` and CI. pyupgrade
-  is gone: ruff's `UP` rules already cover it. `lint:markdown` is gone too:
-  the Markdown workflow runs hk's `markdownlint` step.
-- **Trivy replaces pip-audit.** `lint:trivy` replaces `lint:audit`, and the
-  weekly audit workflow scans `poetry.lock` without the dev groups.
 - **A refusal names the flag or file at fault.** A flag the ritual does not
   take is refused instead of dropped, a near spelling of a table vekna reads,
   such as `[ritual]`, stops the command, and a badly typed
@@ -99,8 +109,6 @@ when.
 
 - The TUI's output follows the newest line, and keeps following when the page
   above it grows. ([#208](https://github.com/fancysnake/vekna/issues/208))
-- Scrolling the TUI's output just as it repaints is no longer undone by the
-  follow.
 - A rite's long error no longer breaks the TUI's layout: its row shows a cut
   first line, and its page shows the whole error.
   ([#205](https://github.com/fancysnake/vekna/issues/205))
@@ -1003,7 +1011,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/fancysnake/vekna/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fancysnake/vekna/compare/v0.15.0...v1.0.0
 [0.15.0]: https://github.com/fancysnake/vekna/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/fancysnake/vekna/compare/v0.13.0...v0.14.0
