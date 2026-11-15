@@ -409,8 +409,11 @@ class VeknaApp(App[None]):
             self.say(f"{typed!r} means nothing here — {_hint()}")
         self.changed()
 
+    # A cleared tree highlights its hidden root, which is no line to stand on.
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[str]) -> None:
-        if (key := event.node.data) != self._view.drawn.cursor:
+        if (key := event.node.data) is None:
+            return
+        if key != self._view.drawn.cursor:
             self._view.drawn.cursor = key
             self._view.arming = None
         self.changed()
@@ -595,10 +598,13 @@ class VeknaApp(App[None]):
             follow.on = False
         return follow.on
 
-    # A scroll the operator made while the refresh was pending stands; Textual
-    # clamping it onto a shorter page's end is no scroll of theirs.
+    # A scroll the operator made while the refresh was pending stands, one that
+    # has only begun included; Textual clamping it onto a shorter page's end is
+    # no scroll of theirs.
     def _to_end(self, asked_at: float) -> None:
         log = self._w.log
+        if log.scroll_target_y < log.scroll_y:
+            return
         if log.scroll_y != asked_at and not log.is_vertical_scroll_end:
             return
         log.scroll_end(animate=False, immediate=True, x_axis=False)

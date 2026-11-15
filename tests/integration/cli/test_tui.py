@@ -1306,6 +1306,29 @@ class TestFollowing:
         assert column[0] == _UP
         assert column[1] > _UP
 
+    # Textual highlights the root of a tree it has just cleared, and that
+    # highlight can land after the page is drawn.
+    @staticmethod
+    async def test_a_highlight_of_the_hidden_root_keeps_the_page():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for line in range(100):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            tree: Tree[str] = app.query_one("#contents", Tree)
+            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
+            log.scroll_to(x=_UP, animate=False, immediate=True)
+            tree.post_message(Tree.NodeHighlighted(tree.root))
+            await pilot.pause(_PAINTED)
+
+            column = log.scroll_x
+        assert column == _UP
+
     # An animated scroll starts within a rounding of the end.
     @staticmethod
     async def test_an_upward_scroll_that_has_only_begun_is_not_cancelled():
