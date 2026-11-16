@@ -7,17 +7,17 @@ jobs = 8
 # one on PATH. `jq` is what `release:bump` edits the plugin manifest with, and
 # what hk checks JSON with.
 actionlint = "1.7.12"
-hk = "2.10.0"
+hk = { version = "2.11.1", workflow = "release.yml" }
 jq = "1.8.2"
 markdownlint-cli2 = "0.24.0"
 node = "26"
-pipx = "1.18.12"
+pipx = "1.18.16"
 "pipx:poetry" = "2.5.1"
-pkl = "0.32.2"
+pkl = "0.33.0"
 python = "3.11"
 # actionlint hands every `run:` script to shellcheck.
 shellcheck = "0.11.0"
-trivy = "0.76.1"
+trivy = "0.76.2"
 
 [hooks]
 enter = ["poetry install", "hk install"]

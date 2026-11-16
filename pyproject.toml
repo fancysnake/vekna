@@ -481,11 +481,11 @@ name = "trial-links"
 type = "forbidden"
 source_modules = ["vekna.trial._links"]
 forbidden_modules = [
-    "vekna.trial._gates",
+    # "vekna.trial._gates",  # Doesn't exist now
     "vekna.trial._inits",
     "vekna.trial._mills",
-    "vekna.trial._specs",
-    "vekna.trial._edges",
+    # "vekna.trial._specs",  # Doesn't exist now
+    # "vekna.trial._edges",  # Doesn't exist nows
 ]
 
 
@@ -494,10 +494,10 @@ name = "trial-mills"
 type = "forbidden"
 source_modules = ["vekna.trial._mills"]
 forbidden_modules = [
-    "vekna.trial._gates",
+    # "vekna.trial._gates",  # Doesn't exist now
     "vekna.trial._links",
     "vekna.trial._inits",
-    "vekna.trial._edges",
+    # "vekna.trial._edges",  # Doesn't exist nows
 ]
 
 [[tool.importlinter.contracts]]
@@ -505,12 +505,12 @@ name = "trial-pacts"
 type = "forbidden"
 source_modules = ["vekna.trial._pacts"]
 forbidden_modules = [
-    "vekna.trial._gates",
+    # "vekna.trial._gates",  # Doesn't exist now
     "vekna.trial._links",
     "vekna.trial._inits",
     "vekna.trial._mills",
-    "vekna.trial._specs",
-    "vekna.trial._edges",
+    # "vekna.trial._specs",  # Doesn't exist now
+    # "vekna.trial._edges",  # Doesn't exist nows
 ]
 
 # The one-way door. `vekna.trial` reaches into the lexicon's internals —
