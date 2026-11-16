@@ -40,6 +40,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -318,8 +319,10 @@ class DaemonLink:
     def _heard(self, message: WireMessage) -> None:
         if isinstance(message, DecideResolved):
             self._answered(message)
-        elif isinstance(message, DecideClaimed):
-            self._claimed(message)
+        elif isinstance(message, DecideClaimed | DecideReleased):
+            self._claimed(
+                message.request_id, claimed=isinstance(message, DecideClaimed)
+            )
         elif (
             isinstance(message, CodingSlotGranted)
             and (slot := self._pending.slots.get(message.request_id)) is not None
@@ -365,9 +368,9 @@ class DaemonLink:
         if not awaited.future.done():
             awaited.future.set_result(message.answer)
 
-    def _claimed(self, message: DecideClaimed) -> None:
-        if (awaited := self._pending.answers.get(message.request_id)) is not None:
-            awaited.claim(claimed=message.claim_id is not None)
+    def _claimed(self, request_id: str, *, claimed: bool) -> None:
+        if (awaited := self._pending.answers.get(request_id)) is not None:
+            awaited.claim(claimed=claimed)
 
     def _detach(self) -> None:
         self._writer = None

@@ -19,6 +19,7 @@ from vekna.wire import (
     CastHello,
     CastQueued,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     GrimoireBegin,
@@ -223,9 +224,11 @@ class TestFollowing:
         hub.apply(_hello("child0000", by="root"))
         hub.apply(delta)
         hub.apply(finished)
+        window = _Peer()
         hub.claim(
-            _Peer(), DecideClaimed(cast_id="grand0000", request_id="q1", claim_id="k1")
+            window, DecideClaimed(cast_id="grand0000", request_id="q1", claim_id="k1")
         )
+        hub.release(window, DecideReleased(cast_id="grand0000", request_id="q1"))
         hub.apply(GrimoireBegin(cast_id="grand0000"))
         hub.apply(GrimoireEnd(cast_id="grand0000"))
         hub.apply(CastGoodbye(cast_id="grand0000", status="ok"))

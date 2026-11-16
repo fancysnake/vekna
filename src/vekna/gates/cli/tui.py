@@ -19,6 +19,7 @@ from vekna.pacts.casts import Casts, CastView
 from vekna.wire import (
     CastCancelRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     WireMessage,
@@ -379,10 +380,8 @@ class VeknaApp(App[None]):
             self._view.claims.dialog = None
             if answer is None:
                 self._send(
-                    DecideClaimed(
-                        cast_id=request.cast_id,
-                        request_id=request.request_id,
-                        claim_id=None,
+                    DecideReleased(
+                        cast_id=request.cast_id, request_id=request.request_id
                     )
                 )
             else:

@@ -10,6 +10,7 @@ from vekna.wire import (
     CastMessage,
     CastRequested,
     DecideClaimed,
+    DecideReleased,
     DecideResolved,
     PurifyRequested,
     StopRequested,
@@ -166,9 +167,9 @@ async def _opening(frames: AsyncIterator[WireMessage]) -> WireMessage | None:
     return None
 
 
-# A surface is fanned out to, and says four things back: start a cast, claim
-# a prompt, answer one, and cancel a cast. Anything else it sends is read past,
-# to notice the disconnect.
+# A surface is fanned out to, and says five things back: start a cast, claim
+# a prompt, release its claim, answer a prompt, and cancel a cast. Anything
+# else it sends is read past, to notice the disconnect.
 async def _as_surface(
     frames: AsyncIterator[WireMessage], surface: Surface, *, routes: Routes
 ) -> None:
@@ -182,6 +183,8 @@ async def _as_surface(
                     routes.answer(surface, message)
                 elif isinstance(message, DecideClaimed):
                     routes.claim(surface, message)
+                elif isinstance(message, DecideReleased):
+                    routes.release(surface, message)
                 elif isinstance(message, CastCancelRequested):
                     routes.cancel(surface, message)
     finally:

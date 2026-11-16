@@ -16,6 +16,7 @@ from vekna.wire import (
     CastHello,
     CastRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     RiteDelta,
@@ -1042,10 +1043,7 @@ class TestTakingOver:
             await pilot.pause()
 
         claim = _claim_then(sent)
-        assert sent == [
-            claim,
-            DecideClaimed(cast_id="c1", request_id="q1", claim_id=None),
-        ]
+        assert sent == [claim, DecideReleased(cast_id="c1", request_id="q1")]
 
     @staticmethod
     async def test_a_prompt_answered_elsewhere_closes_its_dialog():
