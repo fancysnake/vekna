@@ -235,9 +235,16 @@ daemon's layers import `vekna.wire` and nothing else of vekna's, while a cast
 process imports the lexicon, folios and the user's `rituals.py`. A `rituals.py`
 never imports `vekna.wire` at all.
 
-`wire` is versioned independently so a cast process and a later daemon share
-compatible message kinds. That only holds because nothing else is built out of
-these types: the grimoire has its own vocabulary (`RiteBegan` / `RiteStreamed` /
+`wire` is versioned with the package: a daemon and whatever talks to it are
+compatible when their major versions match. A minor or patch release may add a
+message kind or an optional field. It may not remove or rename one, make an
+optional field required, or narrow what a field accepts — a new value of a
+`Literal` is such a break when the older end has to read it. Both ends enforce
+the rule with `VersionRequested` before they say anything else
+([`cli.md`](cli.md#compatibility)).
+
+The wire can keep that promise only because nothing else is built out of these
+types: the grimoire has its own vocabulary (`RiteBegan` / `RiteStreamed` /
 `RiteEnded` in `lexicon/_pacts`) and is projected onto the wire at the socket
 edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet.
 
@@ -258,6 +265,7 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
+| `VersionRequested` / `DaemonVersion` | any ↔ daemon | the daemon's package version, asked on a connection of its own before a surface, a cast or a purify opens. A daemon that predates it hangs up without an answer |
 | `PurifyRequested` / `TreesPurified` | surface ↔ daemon | `vekna purify`; cleans and parks every pooled tree no cast holds, saving its work on a branch first with `save`. Refused as `CastRefused` |
 | `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again, by `vekna purify` or a lease; the block is over. Journaled with that cast |
 | `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
@@ -362,6 +370,7 @@ vekna rituals list                            # defined rituals + their Componen
 vekna rituals show <ritual>                   # Component schema + inferred step graph
 vekna                                         # this project's dashboard; starts the daemon if none
 vekna stop                                    # end the daemon; running casts rejoin the next
+vekna version                                 # this vekna's version, and the running daemon's
 vekna purify [--save]                         # clean and park the pooled worktrees no cast holds
 vekna log                                     # list active + recent casts
 vekna log <cast_id>                           # one cast: rites, errors, failed rites' output

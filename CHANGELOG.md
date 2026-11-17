@@ -22,6 +22,15 @@ when.
   scopes.
 - **`config_table`** in `vekna.lexicon` hands a tome its own table merged
   across those places, with the tables that set it.
+- **`vekna version`** prints this vekna's version and the running daemon's.
+  The window shows both at the right of its hint line.
+- **A daemon of another major version is refused.** `vekna`, `vekna cast` and
+  `vekna purify` ask the daemon for its version first and stop with the two
+  ways out: `vekna stop`, or a daemon of their own beside it. A daemon too old
+  to say its version is refused the same way. From here on no minor or patch
+  release breaks the wire.
+- **`VEKNA_STATE`** moves the journal, the logs and the worktree pool, so two
+  daemons can run side by side with `VEKNA_SOCKET`.
 
 ### Fixed
 

@@ -1,6 +1,7 @@
 import asyncio
+import contextlib
 import io
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -12,7 +13,15 @@ from vekna.lexicon import NoComponents
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import Resumption, Ritual, Transition
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
-from vekna.wire import CastHello, RiteFinished, RiteStarted, RunRecord
+from vekna.wire import (
+    VERSION,
+    CastHello,
+    DaemonVersion,
+    RiteFinished,
+    RiteStarted,
+    RunRecord,
+    encode_frame,
+)
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -33,6 +42,41 @@ def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # so the suite reads the same on a machine that sets it as on one that does
     # not — the test that is about the variable sets it itself.
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+
+_Handler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
+
+
+# A stub daemon that says it is this version: every vekna asks on a connection
+# of its own before it opens the one a test is about. Any other connection is
+# `handle`'s, first line included, which is why it is read into a second reader.
+def versioned(handle: _Handler) -> _Handler:
+    async def answering(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        opened = await reader.readline()
+        if b'"version_requested"' in opened:
+            writer.write(encode_frame(DaemonVersion(version=VERSION)))
+            with contextlib.suppress(OSError):
+                await writer.drain()
+            writer.close()
+            return
+        replayed = asyncio.StreamReader()
+        replayed.feed_data(opened)
+
+        async def pump() -> None:
+            with contextlib.suppress(OSError):
+                async for line in reader:
+                    replayed.feed_data(line)
+            replayed.feed_eof()
+
+        pumping = asyncio.create_task(pump())
+        try:
+            await handle(replayed, writer)
+        finally:
+            pumping.cancel()
+
+    return answering
 
 
 # A notification is an escape sequence written only to a tty, and neither

@@ -17,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 from typing_extensions import override
 
+from tests.conftest import versioned
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _DAEMON_WENT, _FOLLOWING, _LEFT, _drive
@@ -27,6 +28,7 @@ from vekna.links.worktrees import GitTrees
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    VERSION,
     AwaitRequested,
     AwaitWithdrawn,
     CastCancelRequested,
@@ -38,6 +40,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DaemonVersion,
     DecideClaimed,
     DecideReleased,
     DecideRequested,
@@ -62,6 +65,7 @@ from vekna.wire import (
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
+_REFUSED = 2
 
 
 # Of the project the test is standing in unless told otherwise, which is the
@@ -373,7 +377,9 @@ class TestPeers:
                 await reader.read()
             writer.close()
 
-        server = await asyncio.start_unix_server(garbled, path=str(socket_path))
+        server = await asyncio.start_unix_server(
+            versioned(garbled), path=str(socket_path)
+        )
 
         assert await asyncio.wait_for(tui_window(headless=True), timeout=10) == 0
         assert "the view stopped: 1 validation error" in capsys.readouterr().err
@@ -472,7 +478,9 @@ class TestPeers:
                     await writer.drain()
             writer.close()
 
-        server = await asyncio.start_unix_server(echoes, path=str(socket_path))
+        server = await asyncio.start_unix_server(
+            versioned(echoes), path=str(socket_path)
+        )
         peer_keys = _Keys()
         peer = asyncio.create_task(window(screen=peer_keys))
         await _eventually(lambda: peer_keys.painted("fix_demo"))
@@ -832,6 +840,94 @@ async def _until_freed(frames: AsyncIterator[WireMessage]) -> list[WireMessage]:
             if isinstance(message, TreeFreed):
                 break
     return heard
+
+
+# A daemon of the major version before this one: it says so and hangs up, and
+# counts every connection that came for anything else.
+@contextlib.asynccontextmanager
+async def _older(socket_path: Path) -> AsyncGenerator[list[bytes]]:
+    heard: list[bytes] = []
+
+    async def older(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        heard.append(await reader.readline())
+        writer.write(encode_frame(DaemonVersion(version="0.15.0")))
+        with contextlib.suppress(OSError):
+            await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_unix_server(older, path=str(socket_path))
+    try:
+        yield heard
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+_ASKED_ITS_VERSION = b'{"kind":"version_requested"}\n'
+
+
+@pytest.mark.asyncio
+class TestVersions:
+    @staticmethod
+    async def test_version_names_this_vekna_and_the_running_daemon(socket_path: Path):
+        async with _served(socket_path):
+            said = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["version"]
+            )
+
+        assert said.exit_code == 0
+        assert said.output == f"vekna {VERSION}\ndaemon {VERSION} on {socket_path}\n"
+
+    @staticmethod
+    async def test_version_with_no_daemon_says_so_and_starts_none(socket_path: Path):
+        said = await asyncio.to_thread(CliRunner().invoke, init_command(), ["version"])
+
+        assert said.exit_code == 0
+        assert said.output == f"vekna {VERSION}\ndaemon: not running\n"
+        assert not await alive(socket_path)
+
+    @staticmethod
+    async def test_version_is_not_refused_by_a_daemon_it_cannot_talk_to(
+        socket_path: Path,
+    ):
+        async with _older(socket_path):
+            said = await asyncio.to_thread(
+                CliRunner().invoke, init_command(), ["version"]
+            )
+
+        assert said.exit_code == 0
+        assert said.output == (
+            f"vekna {VERSION}\n"
+            f"daemon 0.15.0 on {socket_path} — incompatible with this vekna\n"
+        )
+
+    @staticmethod
+    async def test_a_window_is_refused_by_a_daemon_of_another_major_version(
+        socket_path: Path,
+    ):
+        async with _older(socket_path) as heard:
+            with pytest.raises(click.ClickException) as raised:
+                await window(screen=_Keys())
+
+        assert raised.value.message.startswith(
+            f"the daemon on {socket_path} is vekna 0.15.0, and this is vekna {VERSION}"
+        )
+        assert f"VEKNA_SOCKET={socket_path.parent}/vekna-" in raised.value.message
+        assert heard == [_ASKED_ITS_VERSION]
+
+    @staticmethod
+    async def test_a_cast_is_refused_before_it_runs_a_step(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        (queue_rituals / "release").touch()
+        async with _older(socket_path) as heard:
+            code = await _drive(["hold_one"])
+
+        said = capsys.readouterr()
+        assert code == _REFUSED
+        assert said.err.startswith(f"the daemon on {socket_path} is vekna 0.15.0")
+        assert not said.out
+        assert heard == [_ASKED_ITS_VERSION]
 
 
 # The whole path a person takes: a real `vekna`, a daemon in a process of its
