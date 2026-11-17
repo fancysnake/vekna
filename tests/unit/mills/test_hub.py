@@ -137,6 +137,16 @@ class TestCastLifecycle:
 
         assert hub.casts["c1"].waiting == {}
 
+    @staticmethod
+    def test_ending_a_cast_cuts_the_rites_it_left_unfinished():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+
+        hub.apply(CastGoodbye(cast_id="c1", status="disconnected"))
+
+        assert hub.casts["c1"].rites["r1"].status == "cancelled"
+
 
 class TestRites:
     @staticmethod

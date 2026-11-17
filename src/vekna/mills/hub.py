@@ -374,16 +374,22 @@ def _update(view: CastView, message: _Viewed) -> str | None:
         ):
             refused = _update_wait(view, message)
         case CastGoodbye():
-            view.status = message.status
-            view.detail = message.detail
-            # A cast that is gone is not still asking, nor awaiting.
-            view.waiting.clear()
-            view.on_children.clear()
+            _end(view, message)
         case TreeBlocked() | TreeFreed():
             refused = _update_tree(view, message)
         case _:
             assert_never(message)
     return refused
+
+
+# A cast that is gone is not still asking, nor awaiting, nor inside a rite.
+def _end(view: CastView, goodbye: CastGoodbye) -> None:
+    view.status = goodbye.status
+    view.detail = goodbye.detail
+    view.waiting.clear()
+    view.on_children.clear()
+    for rite in view.rites.values():
+        rite.cut = True
 
 
 # Said after the cast is gone, and nothing else about it changes.

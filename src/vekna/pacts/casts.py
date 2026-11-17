@@ -57,10 +57,14 @@ class RiteView:
     started: RiteStarted
     finished: RiteFinished | None = None
     deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
+    # Its cast ended without saying how this rite did.
+    cut: bool = False
 
     @property
     def status(self) -> RiteStatus:
-        return "running" if self.finished is None else self.finished.status
+        if self.finished is not None:
+            return self.finished.status
+        return "cancelled" if self.cut else "running"
 
     @property
     def error(self) -> str | None:
