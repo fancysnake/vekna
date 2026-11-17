@@ -418,6 +418,42 @@ Prints `stopped the daemon` once the socket stops answering, so `vekna stop &&
 vekna` starts a fresh one. With nothing listening, `no daemon running`; both
 exit `0`.
 
+## `vekna version`
+
+Prints this vekna's version, then the version of the daemon on the socket. It
+starts no daemon and is never refused.
+
+```bash
+vekna version
+```
+
+```text
+vekna 1.2.0
+daemon 1.1.0 on /run/user/1000/vekna.sock
+```
+
+With nothing listening the second line is `daemon: not running`. A daemon that
+predates this command cannot say its version, and the line says so. The window
+shows the same versions at the right of its hint line.
+
+### Compatibility
+
+A daemon serves its own major version only. Every `vekna`, `vekna cast` and
+`vekna purify` asks the daemon for its version first. When the major versions
+differ, or the daemon cannot say its version, the command stops before it sends
+anything else and prints both ways out:
+
+- `vekna stop` ends that daemon, and the next `vekna` starts this version's.
+- `VEKNA_SOCKET` and `VEKNA_STATE`, exported for every vekna that should use
+  it, give this version a daemon beside the other. `VEKNA_STATE` moves the
+  journal, the logs and the worktree pool, which two daemons must not share.
+
+A cast already running stays away from a daemon of another major version that
+starts under it, and carries on unwatched.
+
+No minor or patch release may break this: within one major version, any vekna
+talks to any daemon.
+
 ## `vekna log`
 
 The casts the daemon has recorded, newest first — running, finished and gone.

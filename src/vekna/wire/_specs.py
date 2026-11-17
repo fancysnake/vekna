@@ -1,6 +1,20 @@
 from collections.abc import Sequence
+from importlib.metadata import version
 
 _BOOLEAN = ("yes", "no")
+
+VERSION = version("vekna")
+
+
+# The wire's whole compatibility rule: a daemon and whatever talks to it agree
+# when their major versions do. A minor or patch release may add to the wire and
+# may not break it. `None` is a daemon too old to say its version.
+def compatible(theirs: str | None) -> bool:
+    return theirs is not None and major(theirs) == major(VERSION)
+
+
+def major(release: str) -> str:
+    return release.partition(".")[0]
 
 
 # How much of a cast id a person reads: enough to tell the casts on screen apart

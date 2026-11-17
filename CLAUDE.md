@@ -63,6 +63,13 @@ map, layout, patterns, and drift flags:
 ## Rules
 
 - Never touch `.env*` files
+- The wire breaks only in a major release. Within one major version any
+  `vekna`, cast or window must work against any daemon, older or newer: add
+  message kinds and optional fields, never remove or rename one, never make a
+  field required, never add a `Literal` value the older end must read. A change
+  that cannot keep this waits for the next major. `compatible` in
+  `vekna.wire._specs` is the check; `docs/common.md` § Wire protocol has the
+  rule.
 - NEVER add noqa/type ignore/pylint comments or directives without explicit
   per-case approval.
 - `Any` reaching in from a framework object we do not define — an SDK client,

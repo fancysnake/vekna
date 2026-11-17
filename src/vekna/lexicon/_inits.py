@@ -17,6 +17,7 @@ from vekna.wire import (
     NEEDS_TREE,
     CastHello,
     WireMessage,
+    daemon_refusal,
     default_config_path,
     default_socket_path,
     explained,
@@ -801,6 +802,11 @@ async def _drive(argv: list[str]) -> int:
     if _needs_tree(plan):
         sys.stderr.write(_NEEDS_TREE)
         return NEEDS_TREE
+    # Before any step runs: the link would only stay away from this daemon, and
+    # a cast nobody can see is not what was asked for.
+    if (refusal := await daemon_refusal(default_socket_path())) is not None:
+        sys.stderr.write(f"{refusal}\n")
+        return 2
     return await _run(plan)
 
 

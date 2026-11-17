@@ -75,6 +75,19 @@ class StopRequested(BaseModel):
     kind: Literal["stop_requested"] = "stop_requested"
 
 
+# `vekna version`, and every vekna about to talk to a daemon, opens a connection
+# with this and nothing else. A daemon that predates it reads no frame it knows
+# and hangs up, which is an answer too.
+class VersionRequested(BaseModel):
+    kind: Literal["version_requested"] = "version_requested"
+
+
+# Said back down the connection that asked, which then closes.
+class DaemonVersion(BaseModel):
+    kind: Literal["daemon_version"] = "daemon_version"
+    version: str
+
+
 # What a surface asks the daemon for, past its `SurfaceHello`: start a ritual in
 # a directory. The components cross as the strings the operator typed — the
 # daemon loads no ritual, so the cast it spawns is what validates them.
@@ -420,10 +433,10 @@ CastMessage = CastHello | CastUpdate
 
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
-Opening = SurfaceHello | StopRequested | PurifyRequested
+Opening = SurfaceHello | StopRequested | PurifyRequested | VersionRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused | TreesPurified
+Request = CastRequested | CastRefused | TreesPurified | DaemonVersion
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

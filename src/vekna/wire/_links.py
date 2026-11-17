@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import tempfile
 from collections.abc import AsyncIterator, Iterator
@@ -7,8 +8,17 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ._pacts import CastMessage, RunRecord, WireMessage, decode_frame
+from ._pacts import (
+    CastMessage,
+    DaemonVersion,
+    RunRecord,
+    VersionRequested,
+    WireMessage,
+    decode_frame,
+    encode_frame,
+)
 from ._refusals import explained
+from ._specs import VERSION, compatible, major
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -16,10 +26,13 @@ _RUNS_ENV = "VEKNA_RUNS"
 _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
+_OWN_STATE_ENV = "VEKNA_STATE"
 _CONFIG_ENV = "XDG_CONFIG_HOME"
 _PROJECT_CONFIG = ".vekna.toml"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
+_PROBE_SECONDS = 2.0
+_UNSAID = "does not say its version, so it predates this check"
 
 
 async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage]:
@@ -55,7 +68,12 @@ def default_runs_root() -> Path:
 # — history and what survives a restart — and puts it under `~/.local/state`,
 # which is a different directory from `~/.config` on purpose. Both of vekna's
 # are here, so moving the namespace moves them together.
+# `VEKNA_STATE` is read first: a second daemon beside the first needs a journal
+# and a worktree pool of its own, and `XDG_STATE_HOME` would move every other
+# program's state with them.
 def default_state_root() -> Path:
+    if (own := os.environ.get(_OWN_STATE_ENV)) is not None:
+        return Path(own)
     if (named := os.environ.get(_STATE_ENV)) is not None:
         return Path(named) / "vekna"
     return Path.home() / ".local" / "state" / "vekna"
@@ -93,6 +111,58 @@ def default_socket_path() -> Path:
     if (runtime := os.environ.get(_RUNTIME_ENV)) is not None:
         return Path(runtime) / "vekna.sock"
     return _owned(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}") / "vekna.sock"
+
+
+# The version of the daemon listening on `path`, or `None` for one that hangs
+# up, garbles or says nothing in time: all three are a daemon that predates the
+# question. Nobody listening is the `OSError` the connect raised. Bounded both
+# ways, because a wedged daemon would otherwise hang every `vekna` on its probe.
+async def daemon_version(path: Path) -> str | None:
+    async with asyncio.timeout(_PROBE_SECONDS):
+        reader, writer = await asyncio.open_unix_connection(str(path))
+    try:
+        writer.write(encode_frame(VersionRequested()))
+        with contextlib.suppress(OSError, ValueError):
+            async with asyncio.timeout(_PROBE_SECONDS):
+                reply = await anext(read_frames(reader), None)
+            if isinstance(reply, DaemonVersion):
+                return reply.version
+        return None
+    finally:
+        writer.close()
+        with contextlib.suppress(OSError):
+            await writer.wait_closed()
+
+
+# Why this vekna will not talk to the daemon on `path`, and the two ways out, or
+# `None` when it will. A second daemon needs a state directory as well as a
+# socket: two daemons on one journal and one worktree pool each take the
+# other's casts and trees for their own.
+def refused(path: Path, theirs: str | None) -> str | None:
+    if compatible(theirs):
+        return None
+    said = _UNSAID if theirs is None else f"is vekna {theirs}"
+    state = default_state_root()
+    beside = (
+        f"VEKNA_SOCKET={path.with_name(f'vekna-{major(VERSION)}.sock')}"
+        f" VEKNA_STATE={state.with_name(f'{state.name}-{major(VERSION)}')}"
+    )
+    return (
+        f"the daemon on {path} {said}, and this is vekna {VERSION}: a daemon"
+        " serves its own major version only.\n"
+        "`vekna stop` ends it, and the next `vekna` starts this version's.\n"
+        f"To run this version beside it, export for every vekna that uses it:\n"
+        f"  {beside}"
+    )
+
+
+# `refused` for whatever listens on `path` now, and `None` when nothing does.
+async def daemon_refusal(path: Path) -> str | None:
+    try:
+        theirs = await daemon_version(path)
+    except OSError:
+        return None
+    return refused(path, theirs)
 
 
 # What a cast groups under and what a surface filters by, so both ends resolve

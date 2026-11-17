@@ -5,16 +5,19 @@ from pathlib import Path
 
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    VERSION,
     CastCancelRequested,
     CastGoodbye,
     CastMessage,
     CastRequested,
+    DaemonVersion,
     DecideClaimed,
     DecideReleased,
     DecideResolved,
     PurifyRequested,
     StopRequested,
     SurfaceHello,
+    VersionRequested,
     WireMessage,
     cast_frames,
     encode_frame,
@@ -113,9 +116,9 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     stopping = asyncio.Event()
 
     # What a connection opens with is what it is, and that is settled once: a
-    # surface is fanned out to, a stop ends the daemon, a purify is answered,
-    # anything else is a cast and is routed. The first frame is the only place
-    # they can be told apart, so it is the only place that asks.
+    # surface is fanned out to, a stop ends the daemon, a purify and a version
+    # are answered, anything else is a cast and is routed. The first frame is
+    # the only place they can be told apart, so it is the only place that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -127,8 +130,13 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif isinstance(opened, PurifyRequested):
-                writer.write(encode_frame(await routes.purify(opened)))
+            elif isinstance(opened, (PurifyRequested, VersionRequested)):
+                reply = (
+                    DaemonVersion(version=VERSION)
+                    if isinstance(opened, VersionRequested)
+                    else await routes.purify(opened)
+                )
+                writer.write(encode_frame(reply))
                 with contextlib.suppress(OSError):
                     await writer.drain()
             # A request is a surface's to make, after it has said it is one.
