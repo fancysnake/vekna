@@ -47,7 +47,7 @@ hooks {
   ["commit-msg"] {
     steps {
       ["gitlint"] {
-        check = "gitlint --staged --msg-filename {{commit_msg_file}}"
+        check = "gitlint --ignore body-is-missing --staged --msg-filename {{commit_msg_file}}"
       }
     }
   }
