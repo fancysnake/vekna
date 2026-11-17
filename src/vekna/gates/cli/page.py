@@ -104,18 +104,18 @@ def _cast_label(view: CastView, said: str) -> Text:
     return text
 
 
-def _took(rite: RiteView, now: datetime) -> str:
-    until = rite.finished_at or now
+def _took(view: CastView, rite: RiteView, now: datetime) -> str:
+    until = view.rite_finished_at(rite) or now
     return clock((until - rite.started.started_at).total_seconds())
 
 
 def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
     medium = "italic" if rite.started.category == "medium" else ""
     text = Text.assemble(
-        _RITE_LOOK[rite.status].copy(),
+        _RITE_LOOK[view.rite_status(rite)].copy(),
         " ",
         (rite.started.name, medium),
-        (f"  {_took(rite, now)}", "dim"),
+        (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
         text.append(f"  {clipped(rite.error, _ERROR)}", "red")
@@ -138,8 +138,8 @@ def head(
     if entry is None:
         return Text(NO_CAST)
     view, rite = entry.view, entry.rite
-    if rite is not None:
-        return _rite_head(rite, now)
+    if rite is not None and view is not None:
+        return _rite_head(view, rite, now)
     if view is not None:
         return _cast_head(view, branches, now)
     if entry.kind == "ritual":
@@ -202,9 +202,10 @@ def _cast_head(view: CastView, branches: dict[str, str | None], now: datetime) -
     return text
 
 
-def _rite_head(rite: RiteView, now: datetime) -> Text:
+def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
     text = Text.assemble(
-        (rite.started.name, "bold"), f"  {rite.status}  {_took(rite, now)}"
+        (rite.started.name, "bold"),
+        f"  {view.rite_status(rite)}  {_took(view, rite, now)}",
     )
     if rite.error is not None:
         text.append(f"\n{rite.error}", "red")
@@ -228,6 +229,8 @@ def output(entry: Entry | None) -> list[str]:
 
 def _shown_rite(view: CastView) -> RiteView | None:
     rites = list(view.rites.values())
-    talking = [rite for rite in rites if rite.status == "running" and rite.deltas]
+    talking = [
+        rite for rite in rites if view.rite_status(rite) == "running" and rite.deltas
+    ]
     said = talking or [rite for rite in rites if rite.deltas]
     return said[-1] if said else None

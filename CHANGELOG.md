@@ -28,6 +28,7 @@ when.
 - **Selecting text in the window copies it.** Dragging over the output or the
   page head puts the text on the clipboard when the mouse lets go; before, it
   only highlighted and waited for ctrl+c.
+- A rite its cast ended inside shows as cancelled, not as still running.
 
 ### Changed
 
