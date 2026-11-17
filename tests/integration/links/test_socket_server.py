@@ -16,6 +16,7 @@ from vekna.wire import (
     CastRefused,
     CastRequested,
     DecideClaimed,
+    DecideReleased,
     DecideResolved,
     HeldTree,
     PurifyRequested,
@@ -60,7 +61,10 @@ class _Daemon(Routes):
         self.requests: list[CastRequested | PurifyRequested] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
-            tuple[Surface, DecideClaimed | DecideResolved | CastCancelRequested]
+            tuple[
+                Surface,
+                DecideClaimed | DecideReleased | DecideResolved | CastCancelRequested,
+            ]
         ] = []
         self.peers: dict[str, Surface] = {}
         self.closed: list[str] = []
@@ -83,6 +87,9 @@ class _Daemon(Routes):
 
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         self.prompted.append((surface, claimed))
+
+    def release(self, surface: Surface, released: DecideReleased) -> None:
+        self.prompted.append((surface, released))
 
     def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
         self.prompted.append((surface, cancel))
@@ -280,14 +287,16 @@ class TestUncleanExits:
         await server.close()
 
     @staticmethod
-    async def test_a_surface_claims_and_answers_as_itself(socket_path: Path):
+    async def test_a_surface_claims_releases_and_answers_as_itself(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
         _, writer = await attach(socket_path)
         claimed = DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+        released = DecideReleased(cast_id="c1", request_id="q1")
         resolved = DecideResolved(cast_id="c1", request_id="q1", answer="yes")
         writer.write(encode_frame(SurfaceHello()))
         writer.write(encode_frame(claimed))
+        writer.write(encode_frame(released))
         writer.write(encode_frame(resolved))
         await writer.drain()
         await _settle()
@@ -296,7 +305,11 @@ class TestUncleanExits:
         await _settle()
 
         surface = daemon.attached[0]
-        assert daemon.prompted == [(surface, claimed), (surface, resolved)]
+        assert daemon.prompted == [
+            (surface, claimed),
+            (surface, released),
+            (surface, resolved),
+        ]
         await server.close()
 
     @staticmethod

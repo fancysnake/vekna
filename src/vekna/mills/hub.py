@@ -22,6 +22,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -74,6 +75,7 @@ _Viewed = (
     | DecideResolved
     | DecideWithdrawn
     | DecideClaimed
+    | DecideReleased
     | TreeBlocked
     | TreeFreed
     | AwaitRequested
@@ -136,9 +138,7 @@ class Hub(CastBoard, Routes):
         for (cast_id, request_id), holder in list(self._claims.items()):
             if holder is surface:
                 del self._claims[cast_id, request_id]
-                self._claimed(
-                    DecideClaimed(cast_id=cast_id, request_id=request_id, claim_id=None)
-                )
+                self._handed(DecideReleased(cast_id=cast_id, request_id=request_id))
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._peers[cast_id] = peer
@@ -220,25 +220,26 @@ class Hub(CastBoard, Routes):
         view = self._casts.get(claimed.cast_id)
         if view is None or claimed.request_id not in view.waiting:
             self._drop(claimed, reason=_NO_PROMPT)
-        elif claimed.claim_id is None:
-            self._release(surface, claimed)
         else:
             self._claims[claimed.cast_id, claimed.request_id] = surface
-            self._claimed(claimed)
+            self._handed(claimed)
 
     # Only the holder lets go: a claim it did not make is somebody else's.
-    def _release(self, surface: Surface, claimed: DecideClaimed) -> None:
-        if self._claims.get((claimed.cast_id, claimed.request_id)) is not surface:
-            self._drop(claimed, reason="the claim is not this surface's")
-            return
-        del self._claims[claimed.cast_id, claimed.request_id]
-        self._claimed(claimed)
+    def release(self, surface: Surface, released: DecideReleased) -> None:
+        view = self._casts.get(released.cast_id)
+        if view is None or released.request_id not in view.waiting:
+            self._drop(released, reason=_NO_PROMPT)
+        elif self._claims.get((released.cast_id, released.request_id)) is not surface:
+            self._drop(released, reason="the claim is not this surface's")
+        else:
+            del self._claims[released.cast_id, released.request_id]
+            self._handed(released)
 
     # The cast first: a surface the claim finds gone lets go of it on the way
     # out, and the cast has to hear that release after the claim, not before.
-    def _claimed(self, claimed: DecideClaimed) -> None:
-        self.tell(claimed.cast_id, claimed)
-        self.apply(claimed)
+    def _handed(self, message: DecideClaimed | DecideReleased) -> None:
+        self.tell(message.cast_id, message)
+        self.apply(message)
 
     def apply(self, message: CastMessage) -> None:
         view = self._casts.get(message.cast_id)
@@ -368,6 +369,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
             | DecideResolved()
             | DecideWithdrawn()
             | DecideClaimed()
+            | DecideReleased()
             | AwaitRequested()
             | AwaitEnded()
             | AwaitWithdrawn()
@@ -433,6 +435,7 @@ def _update_wait(
         | DecideResolved
         | DecideWithdrawn
         | DecideClaimed
+        | DecideReleased
         | AwaitRequested
         | AwaitEnded
         | AwaitWithdrawn
@@ -447,7 +450,9 @@ def _update_wait(
             if view.waiting.pop(message.request_id, None) is None:
                 return _NO_PROMPT
         case DecideClaimed():
-            return _claim(view, message)
+            return _hold(view, message.request_id, claim_id=message.claim_id)
+        case DecideReleased():
+            return _hold(view, message.request_id, claim_id=None)
         case _:
             if view.on_children.pop(message.request_id, None) is None:
                 return _NO_AWAIT
@@ -488,10 +493,10 @@ def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
             )
 
 
-def _claim(view: CastView, message: DecideClaimed) -> str | None:
-    if (prompt := view.waiting.get(message.request_id)) is None:
+def _hold(view: CastView, request_id: str, *, claim_id: str | None) -> str | None:
+    if (prompt := view.waiting.get(request_id)) is None:
         return _NO_PROMPT
-    prompt.claim_id = message.claim_id
+    prompt.claim_id = claim_id
     return None
 
 

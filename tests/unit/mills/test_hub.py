@@ -21,6 +21,7 @@ from vekna.wire import (
     CastRequested,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -858,8 +859,12 @@ class TestPeers:
         assert routed[-1].reason == "coding slots are the circle's"
 
 
-def _claim(claim_id: str | None = "k1") -> DecideClaimed:
-    return DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim_id)
+def _claim() -> DecideClaimed:
+    return DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+
+
+def _release() -> DecideReleased:
+    return DecideReleased(cast_id="c1", request_id="q1")
 
 
 def _yes() -> DecideResolved:
@@ -912,21 +917,34 @@ class TestClaims:
         assert routed[-1].reason == "another surface has claimed the prompt"
 
     @staticmethod
-    def test_a_claim_on_no_open_prompt_or_with_no_id_is_dropped():
+    def test_a_claim_or_a_release_on_no_open_prompt_is_dropped():
         routed: list[Routed] = []
         hub = Hub(on_routed=routed.append)
         hub.apply(_hello())
+
         hub.claim(_Surface(), _claim())
-        hub.apply(_asked())
+        hub.release(_Surface(), _release())
 
-        hub.claim(_Surface(), _claim(None))
-
-        assert hub.casts["c1"].waiting["q1"].claim_id is None
-        assert [route.reason for route in routed[-3:]] == [
-            "no such prompt",
-            None,
-            "the claim is not this surface's",
+        assert [(route.kind, route.reason) for route in routed[-2:]] == [
+            ("decide_claimed", "no such prompt"),
+            ("decide_released", "no such prompt"),
         ]
+
+    @staticmethod
+    def test_a_release_by_a_surface_that_does_not_hold_the_claim_is_dropped():
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.apply(_asked())
+        peer = _Surface()
+        hub.open_cast("c1", peer)
+        hub.claim(_Surface(), _claim())
+
+        hub.release(_Surface(), _release())
+
+        assert hub.casts["c1"].waiting["q1"].claim_id == "k1"
+        assert peer.sent == [_claim()]
+        assert routed[-1].reason == "the claim is not this surface's"
 
     @staticmethod
     def test_the_claimer_leaving_lets_go_of_its_claims_and_says_so():
@@ -943,8 +961,8 @@ class TestClaims:
         hub.detach_surface(window)
 
         assert hub.casts["c1"].waiting["q1"].claim_id is None
-        assert peer.sent == [_claim(), _claim(None)]
-        assert other.sent == [_claim(None)]
+        assert peer.sent == [_claim(), _release()]
+        assert other.sent == [_release()]
 
     @staticmethod
     def test_another_surface_leaving_keeps_the_claim():
@@ -975,8 +993,8 @@ class TestClaims:
         hub.claim(window, _claim())
 
         assert hub.casts["c1"].waiting["q1"].claim_id is None
-        assert peer.sent == [_claim(), _claim(None)]
-        assert later.sent == [_claim(), _claim(None)]
+        assert peer.sent == [_claim(), _release()]
+        assert later.sent == [_claim(), _release()]
 
     @staticmethod
     def test_another_cast_closing_the_same_request_id_keeps_the_claim():
@@ -995,7 +1013,7 @@ class TestClaims:
         hub.detach_surface(window)
 
         assert hub.casts["c1"].waiting["q1"].claim_id is None
-        assert peer.sent == [_claim(), _claim(None)]
+        assert peer.sent == [_claim(), _release()]
 
     @staticmethod
     def test_a_claim_ends_with_its_prompt_and_is_not_let_go_after():
@@ -1078,10 +1096,10 @@ class TestClaims:
         hub.open_cast("c1", peer)
         hub.claim(window, _claim())
 
-        hub.claim(window, _claim(None))
+        hub.release(window, _release())
 
         assert hub.casts["c1"].waiting["q1"].claim_id is None
-        assert peer.sent == [_claim(), _claim(None)]
+        assert peer.sent == [_claim(), _release()]
 
 
 def _cut(*events: WireMessage) -> Iterator[WireMessage]:

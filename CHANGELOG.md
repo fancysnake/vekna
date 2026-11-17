@@ -13,7 +13,16 @@ when.
 
 ### Fixed
 
+- **Selecting text in the window copies it.** Dragging over the output or the
+  page head puts the text on the clipboard when the mouse lets go; before, it
+  only highlighted and waited for ctrl+c.
 - A rite its cast ended inside shows as cancelled, not as still running.
+
+### Changed
+
+- **`DecideReleased`** on the wire says a window let a prompt go.
+  `DecideClaimed` no longer says it with a null `claim_id`, and a journal that
+  holds such a frame reads as cut at that frame in `vekna log`.
 
 ## [1.1.0] - 2026-11-15
 

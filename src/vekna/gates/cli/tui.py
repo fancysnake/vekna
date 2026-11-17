@@ -19,6 +19,7 @@ from vekna.pacts.casts import Casts, CastView
 from vekna.wire import (
     CastCancelRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     WireMessage,
@@ -379,10 +380,8 @@ class VeknaApp(App[None]):
             self._view.claims.dialog = None
             if answer is None:
                 self._send(
-                    DecideClaimed(
-                        cast_id=request.cast_id,
-                        request_id=request.request_id,
-                        claim_id=None,
+                    DecideReleased(
+                        cast_id=request.cast_id, request_id=request.request_id
                     )
                 )
             else:
@@ -410,6 +409,13 @@ class VeknaApp(App[None]):
         self.changed()
 
     # A cleared tree highlights its hidden root, which is no line to stand on.
+    # A terminal that reports the mouse keeps its own selection off, so what
+    # the operator dragged over is copied the moment they let go.
+    def on_text_selected(self) -> None:
+        if text := self.screen.get_selected_text():
+            self.copy_to_clipboard(text)
+            self.say(f"copied {len(text)} characters")
+
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[str]) -> None:
         if (key := event.node.data) is None:
             return

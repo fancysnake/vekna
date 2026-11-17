@@ -35,6 +35,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideResolved,
     EnqueueAccepted,
     EnqueueRefused,
@@ -302,6 +303,9 @@ class _Daemon(Routes):
 
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         self._hub.claim(surface, claimed)
+
+    def release(self, surface: Surface, released: DecideReleased) -> None:
+        self._hub.release(surface, released)
 
     # Asked over the wire, then made to if it does not listen.
     def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
