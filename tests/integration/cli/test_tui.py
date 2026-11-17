@@ -1410,3 +1410,44 @@ class TestPages:
             note = _text(app, "#note")
         assert head == "no cast here — c starts one"
         assert note == "nothing to answer — pick a waiting cast first"
+
+
+@pytest.mark.asyncio
+class TestCopying:
+    @staticmethod
+    async def test_text_dragged_over_is_copied_when_the_mouse_lets_go():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one two"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+            await pilot.mouse_down("#log", offset=(0, 0))
+            await pilot.hover("#log", offset=(2, 0))
+            await pilot.mouse_up("#log", offset=(2, 0))
+            await pilot.pause(_PAINTED)
+
+            note = _text(app, "#note")
+        assert app.clipboard == "one"
+        assert note == "copied 3 characters"
+
+    @staticmethod
+    async def test_a_click_that_selects_nothing_copies_nothing():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.click("#log")
+            await pilot.pause(_PAINTED)
+
+            note = _text(app, "#note")
+        assert not app.clipboard
+        assert not note

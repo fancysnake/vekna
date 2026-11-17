@@ -23,6 +23,12 @@ when.
 - **`VEKNA_STATE`** moves the journal, the logs and the worktree pool, so two
   daemons can run side by side with `VEKNA_SOCKET`.
 
+### Fixed
+
+- **Selecting text in the window copies it.** Dragging over the output or the
+  page head puts the text on the clipboard when the mouse lets go; before, it
+  only highlighted and waited for ctrl+c.
+
 ### Changed
 
 - **`DecideReleased`** on the wire says a window let a prompt go.

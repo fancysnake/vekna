@@ -417,6 +417,13 @@ class VeknaApp(App[None]):
         self.changed()
 
     # A cleared tree highlights its hidden root, which is no line to stand on.
+    # A terminal that reports the mouse keeps its own selection off, so what
+    # the operator dragged over is copied the moment they let go.
+    def on_text_selected(self) -> None:
+        if text := self.screen.get_selected_text():
+            self.copy_to_clipboard(text)
+            self.say(f"copied {len(text)} characters")
+
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[str]) -> None:
         if (key := event.node.data) is None:
             return
