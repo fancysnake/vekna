@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, PositiveInt
 from typing_extensions import override
 
 from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES, Limits
-from vekna.wire import read_layers
+from vekna.wire import TableRead, read_layers, read_user_layers
 
 _T = TypeVar("_T")
 
@@ -49,14 +49,18 @@ class ConfigLimits(Limits):
     # The machine's, not a project's: only what the user says for every project.
     @override
     def coding(self) -> int | None:
-        return _nearest(None, lambda circle: circle.coding)
+        return _first(read_user_layers(table="circle", model=_File), lambda c: c.coding)
 
 
-def _nearest(directory: Path | None, key: Callable[[_Circle], _T | None]) -> _T | None:
-    files, problems = read_layers(directory=directory, table="circle", model=_File)
-    for problem in problems:
+def _nearest(directory: Path, key: Callable[[_Circle], _T | None]) -> _T | None:
+    found = read_layers(directory=directory, table="circle", model=_File)
+    return _first(found, key)
+
+
+def _first(found: TableRead[_File], key: Callable[[_Circle], _T | None]) -> _T | None:
+    for problem in found.problems:
         _log.warning("%s", problem)
-    for file in files:
+    for file in found.found:
         if (value := key(file.circle)) is not None:
             return value
     return None

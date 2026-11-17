@@ -137,9 +137,8 @@ def load_rituals_source(path: Path) -> list[RitualSource]:
 
 
 # Not a closed set: other tools keep their tables in the same file. `[circle]`
-# is the daemon's, read in its own process; `[projects]` is unwrapped into
-# layers before anything here sees it.
-_TABLES = (*Config.model_fields, "circle", "window", "projects")
+# is the daemon's, read in its own process.
+_TABLES = (*Config.model_fields, "circle", "window")
 
 
 # A table vekna does not read is somebody else's, unless it is a near spelling
@@ -164,18 +163,28 @@ def _layers(directory: Path) -> list[ConfigLayer]:
     return layers
 
 
-# Every config that speaks for `cwd`, the one that wins last. A config that
-# does not parse stops the command: loading no rituals from it would surface
-# later as "no ritual named ...", which names neither the file nor the mistake.
+# Every config that speaks for `cwd`, nearest first. A config that does not
+# parse stops the command: loading no rituals from it would surface later as
+# "no ritual named ...", which names neither the file nor the mistake.
+# The user's table for a project names tomes only. A ritual the project defines
+# lives in its tree, and a path from here would name the checkout where a cast
+# in a pooled worktree must read its own tree.
 def read_configs(cwd: Path) -> list[tuple[ConfigLayer, Config]]:
     configs: list[tuple[ConfigLayer, Config]] = []
-    for layer in reversed(_layers(cwd)):
+    for layer in _layers(cwd):
         _misspelt(layer)
         try:
-            configs.append((layer, Config.model_validate(layer.tables)))
+            config = Config.model_validate(layer.tables)
         except ValidationError as error:
             msg = f"{layer.source}: {explained(error)}"
             raise RitualDefinitionError(msg) from error
+        if layer.project is not None and config.rituals.files:
+            msg = (
+                f"{layer.table('rituals')} takes no files"
+                " — rituals a project defines are named in its own .vekna.toml"
+            )
+            raise RitualDefinitionError(msg)
+        configs.append((layer, config))
     return configs
 
 

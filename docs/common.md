@@ -327,7 +327,8 @@ its `__init__.py` stays empty.
 `[projects.<name>]` table, with a `path`, per checkout. Per key the nearest
 wins: user's project table → project file → user top level. A project is the
 repository `path` is a tree of, so a leased worktree reads its table. A project
-needs no `.vekna.toml`; `[rituals] files` is the one key only that file takes.
+needs no `.vekna.toml`; `[rituals] files` is the one key a project table
+refuses, since a path from the user config would name the checkout.
 Env overrides for one-shots (`VEKNA_STANDALONE_LOCKS=allow`).
 
 ```toml

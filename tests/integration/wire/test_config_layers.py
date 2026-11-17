@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.wire import ConfigLayer, config_layers, merged_table
+from vekna.wire import ConfigLayer, config_layers, user_layers
 
 
 @pytest.fixture(name="user")
@@ -22,6 +22,23 @@ def _repo(tmp_path: Path) -> Path:
     (repo / "deep").mkdir(parents=True)
     _git("init", "-q", cwd=repo)
     return repo
+
+
+def _commit(directory: Path) -> None:
+    _git(
+        "-c",
+        "user.name=vekna",
+        "-c",
+        "user.email=vekna@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "root",
+        cwd=directory,
+    )
 
 
 class TestConfigLayers:
@@ -59,20 +76,7 @@ class TestConfigLayers:
         tmp_path: Path, user: Path
     ):
         repo = _repo(tmp_path)
-        _git(
-            "-c",
-            "user.name=vekna",
-            "-c",
-            "user.email=vekna@example.com",
-            "-c",
-            "commit.gpgsign=false",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "root",
-            cwd=repo,
-        )
+        _commit(repo)
         _git("worktree", "add", "-q", str(tmp_path / "tree"), cwd=repo)
         user.write_text(f'[projects.mine]\npath = "{repo}"\n', encoding="utf-8")
 
@@ -98,7 +102,35 @@ class TestConfigLayers:
         assert not problems
 
     @staticmethod
-    def test_no_directory_reads_only_what_the_user_says_for_every_project(
+    def test_a_submodule_and_its_worktree_are_one_project(tmp_path: Path, user: Path):
+        origin = tmp_path / "origin"
+        origin.mkdir()
+        _git("init", "-q", cwd=origin)
+        _commit(origin)
+        outer = _repo(tmp_path)
+        _git(
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            str(origin),
+            "sub",
+            cwd=outer,
+        )
+        _commit(outer / "sub")
+        _git("worktree", "add", "-q", str(tmp_path / "tree"), cwd=outer / "sub")
+        user.write_text(
+            f'[projects.mine]\npath = "{outer / "sub"}"\n', encoding="utf-8"
+        )
+
+        layers, problems = config_layers(tmp_path / "tree")
+
+        assert layers == [ConfigLayer(user, {}, "mine"), ConfigLayer(user, {})]
+        assert not problems
+
+    @staticmethod
+    def test_the_user_layers_read_only_what_the_user_says_for_every_project(
         tmp_path: Path, user: Path
     ):
         user.write_text(
@@ -106,10 +138,7 @@ class TestConfigLayers:
             encoding="utf-8",
         )
 
-        assert config_layers(None) == (
-            [ConfigLayer(user, {"circle": {"coding": 2}})],
-            [],
-        )
+        assert user_layers() == ([ConfigLayer(user, {"circle": {"coding": 2}})], [])
 
     @staticmethod
     def test_a_home_relative_path_names_the_checkout(
@@ -172,48 +201,3 @@ class TestConfigLayers:
         _, problems = config_layers(tmp_path)
 
         assert problems == [f"{project}: [projects] is read from {user} only"]
-
-
-class TestConfigLayer:
-    @staticmethod
-    def test_a_file_is_named_by_its_path():
-        layer = ConfigLayer(Path("/repo/.vekna.toml"), {})
-
-        assert layer.source == "/repo/.vekna.toml"
-        assert layer.table("defaults.heal") == "/repo/.vekna.toml: [defaults.heal]"
-
-    @staticmethod
-    def test_a_project_table_is_named_as_the_file_spells_it():
-        layer = ConfigLayer(Path("/me/config.toml"), {}, "mine")
-
-        assert layer.source == "/me/config.toml: [projects.mine]"
-        assert layer.table("cabinet") == "/me/config.toml: [projects.mine.cabinet]"
-
-
-class TestMergedTable:
-    @staticmethod
-    def test_a_nearer_key_wins_and_inner_tables_merge():
-        near = ConfigLayer(
-            Path("/near"), {"cabinet": {"gate": "near", "agent": {"effort": "high"}}}
-        )
-        far = ConfigLayer(
-            Path("/far"),
-            {
-                "cabinet": {
-                    "gate": "far",
-                    "coverage": "cov",
-                    "agent": {"effort": "low", "may_not_run": ["x"]},
-                }
-            },
-        )
-        silent = ConfigLayer(Path("/silent"), {"cabinet": 3})
-
-        assert merged_table([near, far, silent], "cabinet") == {
-            "gate": "near",
-            "coverage": "cov",
-            "agent": {"effort": "high", "may_not_run": ["x"]},
-        }
-
-    @staticmethod
-    def test_a_table_nobody_sets_is_empty():
-        assert not merged_table([ConfigLayer(Path("/near"), {})], "cabinet")

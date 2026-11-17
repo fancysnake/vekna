@@ -66,14 +66,14 @@ class TestDefaults:
     def test_a_project_key_overrides_its_global_twin_and_spares_the_rest():
         defaults = Defaults(
             [
-                (GLOBAL, _config({"name": "world", "loud": True})),
                 (PROJECT, _config({"name": "repo"})),
+                (GLOBAL, _config({"name": "world", "loud": True})),
             ]
         )
 
         assert defaults.of(GREET) == {
             "name": Default("repo", PROJECT),
-            "loud": Default(value=True, source=GLOBAL),
+            "loud": Default(value=True, layer=GLOBAL),
         }
 
     @staticmethod
@@ -109,8 +109,8 @@ class TestDefaults:
     def test_a_config_the_whole_model_refuses_names_its_files():
         defaults = Defaults(
             [
-                (GLOBAL, Config.model_validate({"defaults": {"span": {"start": 3}}})),
                 (PROJECT, Config.model_validate({"defaults": {"span": {"stop": 1}}})),
+                (GLOBAL, Config.model_validate({"defaults": {"span": {"start": 3}}})),
             ]
         )
 
@@ -119,7 +119,7 @@ class TestDefaults:
 
         assert str(raised.value) == (
             "span: Value error, start must come before stop"
-            f" (with [defaults.span] from {GLOBAL.source}, {PROJECT.source})"
+            f" (with [defaults.span] from {PROJECT.source}, {GLOBAL.source})"
         )
 
     @staticmethod

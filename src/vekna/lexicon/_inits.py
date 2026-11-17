@@ -227,15 +227,6 @@ def _build_library(cwd: Path) -> _Library:
     configs = read_configs(cwd)
     for layer, read in configs:
         rituals = read.rituals
-        # The user's table for a project names tomes only. A ritual the project
-        # defines lives in its tree, and a path from here would name the
-        # checkout where a cast in a pooled worktree must read its own tree.
-        if layer.project is not None and rituals.files:
-            msg = (
-                f"{layer.table('rituals')} takes no files"
-                " — rituals a project defines are named in its own .vekna.toml"
-            )
-            raise RitualDefinitionError(msg)
         # Relative to the config file, not the cwd: a project .vekna.toml is
         # found by walking parents, and a global one is shared by every
         # directory — resolving against the cwd would mean a different file
@@ -335,7 +326,7 @@ def _component_lines(the_ritual: Ritual, defaults: Mapping[str, Default]) -> lis
     for name, type_name, required in flags:
         flag = f"  {flag_of(name)} <{type_name}>"
         if (default := defaults.get(name)) is not None:
-            lines.append(f"{flag}  = {_shown(default.value)} ({default.source.source})")
+            lines.append(f"{flag}  = {_shown(default.value)} ({default.layer.source})")
         else:
             lines.append(flag + ("" if required else "  (optional)"))
     return lines

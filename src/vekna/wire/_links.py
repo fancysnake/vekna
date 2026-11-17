@@ -5,9 +5,8 @@ import tempfile
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC
 from pathlib import Path
-from typing import NamedTuple, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from ._pacts import (
     CastMessage,
@@ -20,9 +19,6 @@ from ._pacts import (
 )
 from ._refusals import explained
 from ._specs import VERSION, compatible, major
-from ._toml import TomlValue, read_toml
-
-_File = TypeVar("_File", bound=BaseModel)
 
 _EVENTS = "events.jsonl"
 _RUN = "run.json"
@@ -31,8 +27,6 @@ _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
 _OWN_STATE_ENV = "VEKNA_STATE"
-_CONFIG_ENV = "XDG_CONFIG_HOME"
-_PROJECT_CONFIG = ".vekna.toml"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 _PROBE_SECONDS = 2.0
@@ -81,24 +75,6 @@ def default_state_root() -> Path:
     if (named := os.environ.get(_STATE_ENV)) is not None:
         return Path(named) / "vekna"
     return Path.home() / ".local" / "state" / "vekna"
-
-
-# What the user configured, which is the one thing of vekna's that belongs in
-# the config namespace — the journal and the debug log are state and live under
-# `default_state_root()`. Here because the cast reads `[rituals]` from it and
-# the daemon reads `[circle]`.
-def default_config_path() -> Path:
-    if (named := os.environ.get(_CONFIG_ENV)) is not None:
-        return Path(named) / "vekna" / "config.toml"
-    return Path.home() / ".config" / "vekna" / "config.toml"
-
-
-# The project's own config, nearest first, as both ends find it.
-def project_config_path(directory: Path) -> Path | None:
-    for here in (directory, *directory.parents):
-        if (found := here / _PROJECT_CONFIG).is_file():
-            return found
-    return None
 
 
 # Inside a directory of this user's own, which is why this makes one. A socket
@@ -189,157 +165,6 @@ async def project_of(directory: Path) -> str:
         return str(here)
     answer, _ = await git.communicate()
     return answer.decode().strip() if git.returncode == 0 else str(here)
-
-
-# The repository a directory is a tree of, read off the disk the way git lays
-# it out, for a config reader that is called where nothing can be awaited. A
-# checkout holds its `.git` directory; a linked worktree holds a `.git` file
-# naming a directory whose `commondir` points back at the checkout's. Outside
-# any repository a directory is its own.
-def _repository(directory: Path) -> Path:
-    here = directory.resolve()
-    for at in (here, *here.parents):
-        marker = at / ".git"
-        if marker.is_dir():
-            return marker
-        if marker.is_file():
-            return _linked(marker)
-    return here
-
-
-def _linked(marker: Path) -> Path:
-    try:
-        named = marker.read_text(encoding="utf-8").removeprefix("gitdir:").strip()
-        git_dir = (marker.parent / named).resolve()
-        common = (git_dir / "commondir").read_text(encoding="utf-8").strip()
-    except OSError:
-        return marker
-    return (git_dir / common).resolve()
-
-
-# One place a config value can come from: a file, or the table inside the user's
-# file that speaks for one project.
-class ConfigLayer(NamedTuple):
-    path: Path
-    tables: dict[str, TomlValue]
-    project: str | None = None
-
-    # What an error about the whole layer names.
-    @property
-    def source(self) -> str:
-        if self.project is None:
-            return str(self.path)
-        return f"{self.path}: [projects.{self.project}]"
-
-    # What an error about one of its tables names, as the file spells it.
-    def table(self, name: str) -> str:
-        inside = name if self.project is None else f"projects.{self.project}.{name}"
-        return f"{self.path}: [{inside}]"
-
-
-def _tables(path: Path, problems: list[str]) -> dict[str, TomlValue] | None:
-    try:
-        return read_toml(path)
-    except (OSError, ValueError) as error:
-        problems.append(f"{path}: {error}")
-        return None
-
-
-# A project is a checkout, named by its `path`: the table answers for every
-# tree of that repository, so a cast in a pooled worktree reads what a cast
-# typed in the checkout reads.
-def _project_layers(
-    *, user: Path, projects: TomlValue, directory: Path, problems: list[str]
-) -> Iterator[ConfigLayer]:
-    if not isinstance(projects, dict):
-        problems.append(f"{user}: [projects] is not a table")
-        return
-    here = _repository(directory)
-    for name, table in projects.items():
-        source = f"{user}: [projects.{name}]"
-        path = table.get("path") if isinstance(table, dict) else None
-        if not isinstance(table, dict) or not isinstance(path, str):
-            problems.append(f"{source} needs a path, the project's checkout")
-            continue
-        checkout = Path(path).expanduser()
-        if not checkout.is_absolute():
-            problems.append(f"{source} path = {path!r} is not absolute")
-            continue
-        if _repository(checkout) == here:
-            settings = {key: value for key, value in table.items() if key != "path"}
-            yield ConfigLayer(user, settings, name)
-
-
-# Every config that speaks for `directory`, nearest first: the user's table for
-# this project, the project's own `.vekna.toml`, then what the user says for
-# every project. Without a directory only the last is read. A file that will
-# not read is left out and named in the second list; whether that stops the
-# command is the caller's to say.
-def config_layers(directory: Path | None) -> tuple[list[ConfigLayer], list[str]]:
-    layers: list[ConfigLayer] = []
-    problems: list[str] = []
-    user = default_config_path()
-    shared = _tables(user, problems) if user.is_file() else None
-    if directory is not None:
-        if shared is not None and "projects" in shared:
-            layers.extend(
-                _project_layers(
-                    user=user,
-                    projects=shared["projects"],
-                    directory=directory,
-                    problems=problems,
-                )
-            )
-        if (found := project_config_path(directory)) is not None and (
-            tables := _tables(found, problems)
-        ) is not None:
-            if "projects" in tables:
-                problems.append(f"{found}: [projects] is read from {user} only")
-            layers.append(ConfigLayer(found, tables))
-    if shared is not None:
-        everywhere = {key: value for key, value in shared.items() if key != "projects"}
-        layers.append(ConfigLayer(user, everywhere))
-    return layers, problems
-
-
-# The layers read through the one table `model` declares, nearest first. A
-# layer that will not read is passed over and named in the second list: a typo
-# in a key nobody needed must not stop the daemon or keep the window from
-# opening, and the cast that reads the same file refuses it by name.
-def read_layers(
-    *, directory: Path | None, table: str, model: type[_File]
-) -> tuple[list[_File], list[str]]:
-    layers, problems = config_layers(directory)
-    found: list[_File] = []
-    for layer in layers:
-        try:
-            found.append(model.model_validate(layer.tables))
-        except ValidationError as error:
-            problems.append(f"{layer.source}: {explained(error)} — [{table}] ignored")
-    return found, problems
-
-
-# One table across the layers, a nearer layer's key over a farther one's, and a
-# table inside a table merged the same way rather than replaced whole.
-def merged_table(layers: list[ConfigLayer], name: str) -> dict[str, TomlValue]:
-    merged: dict[str, TomlValue] = {}
-    for layer in reversed(layers):
-        if isinstance(table := layer.tables.get(name), dict):
-            merged = _over(merged, table)
-    return merged
-
-
-def _over(
-    under: dict[str, TomlValue], over: dict[str, TomlValue]
-) -> dict[str, TomlValue]:
-    merged = dict(under)
-    for key, value in over.items():
-        below = merged.get(key)
-        if isinstance(value, dict) and isinstance(below, dict):
-            merged[key] = _over(below, value)
-        else:
-            merged[key] = value
-    return merged
 
 
 def _owned(directory: Path) -> Path:
