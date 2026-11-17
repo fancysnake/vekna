@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from vekna.wire import (
     CastHello,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     LockGranted,
@@ -44,6 +48,24 @@ class TestRoundTrip:
 
         assert isinstance(restored, RiteStarted)
         assert restored == message
+
+    @staticmethod
+    def test_decide_released_round_trips():
+        message = DecideReleased(cast_id="c1", request_id="q1")
+
+        restored = decode_frame(encode_frame(message))
+
+        assert isinstance(restored, DecideReleased)
+        assert restored == message
+
+    @staticmethod
+    def test_a_claim_with_no_id_is_refused():
+        frame = (
+            '{"kind":"decide_claimed","cast_id":"c1","request_id":"q1","claim_id":null}'
+        )
+
+        with pytest.raises(ValidationError, match="claim_id"):
+            decode_frame(frame)
 
 
 class TestDiscriminator:

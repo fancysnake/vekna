@@ -39,6 +39,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     EnqueueRefused,
     EnqueueRequested,
@@ -402,20 +403,21 @@ class TestPeers:
             assert await peer == 0
 
     @staticmethod
-    async def test_a_window_s_claim_and_cancel_reach_the_cast(
+    async def test_a_window_s_claim_release_and_cancel_reach_the_cast(
         socket_path: Path, caplog: pytest.LogCaptureFixture
     ):
         asked = DecideRequested(
             cast_id="c1", request_id="q1", prompt="push?", options=["yes", "no"]
         )
         claimed = DecideClaimed(cast_id="c1", request_id="q1", claim_id="k1")
+        released = DecideReleased(cast_id="c1", request_id="q1")
         cancel = CastCancelRequested(cast_id="c1")
         async with _served(socket_path):
             cast_reader, cast_writer = await attach(socket_path)
             for message in (_hello(), asked):
                 cast_writer.write(encode_frame(message))
             await cast_writer.drain()
-            surface = await _say(socket_path, SurfaceHello(), claimed, cancel)
+            surface = await _say(socket_path, SurfaceHello(), claimed, released, cancel)
 
             heard: list[WireMessage] = []
             async with asyncio.timeout(10):
@@ -424,7 +426,7 @@ class TestPeers:
                     if message == cancel:
                         break
 
-            assert heard == [claimed, cancel]
+            assert heard == [claimed, released, cancel]
             surface.close()
             cast_writer.close()
         assert "cast c1 has no pid to signal" in _said(caplog, logging.WARNING)

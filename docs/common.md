@@ -251,7 +251,8 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand asks on its own stdin until a surface claims the prompt; a spawned cast has no terminal, and the hand cast following it, or any surface, answers. A surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open and no other surface has claimed it, the cast takes whichever answer comes first, and the cast's own `DecideResolved` closes it |
 | `DecideWithdrawn` | cast → daemon | a prompt cut before its answer; the daemon drops it from the view and the terminal says it was withdrawn |
-| `DecideClaimed` | surface → daemon → cast and surfaces | a window takes a prompt over (`claim_id`), or lets it go (`None`); only the holder's answer is forwarded, and the terminal that was asking stops |
+| `DecideClaimed` | surface → daemon → cast and surfaces | a window takes a prompt over; only the holder's answer is forwarded, and the terminal that was asking stops. `claim_id` is how a window tells its own claim from another's |
+| `DecideReleased` | surface → daemon → cast and surfaces | the holder lets the prompt go, or the daemon says so for a holder that disconnected; the terminal that was asking asks again |
 | `CodingSlotRequested` / `CodingSlotGranted` / `CodingSlotReleased` | both | the account's coding limit: a cast asks before each agent session, the daemon grants in order, the cast releases when the session ends. Not journaled |
 | `LockAcquireRequested` / `LockGranted` / `LockDenied` | both | colon-hierarchical keys |
 | `LockReleased` | cast → daemon | tied to release token |

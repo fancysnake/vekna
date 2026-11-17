@@ -49,6 +49,7 @@ from vekna.wire import (
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     EnqueueAccepted,
@@ -1301,7 +1302,7 @@ class TestClaimed:
         server = await _replying(
             socket_path,
             lambda request_id: [
-                DecideClaimed(cast_id=_CAST, request_id=request_id, claim_id=None),
+                DecideReleased(cast_id=_CAST, request_id=request_id),
                 DecideResolved(cast_id=_CAST, request_id=request_id, answer="no"),
             ],
         )

@@ -20,6 +20,7 @@ from vekna.wire import (
     CastHello,
     CastMessage,
     DecideClaimed,
+    DecideReleased,
     DecideRequested,
     DecideResolved,
     DecideWithdrawn,
@@ -192,6 +193,8 @@ class Follower:
                 self._prompt(message)
             case DecideClaimed():
                 self._claim(message)
+            case DecideReleased():
+                self._release(message)
             case CastGoodbye():
                 self._goodbye(message)
             case _:
@@ -233,17 +236,20 @@ class Follower:
         self._prompts.claimed.discard(message.request_id)
         self._stop(message.request_id)
 
-    # A claim takes the prompt from this terminal; one let go hands it back.
+    # A claim takes the prompt from this terminal.
     def _claim(self, message: DecideClaimed) -> None:
         if (request := self._prompts.open.get(message.request_id)) is None:
-            return
-        if message.claim_id is None:
-            self._prompts.claimed.discard(message.request_id)
-            self._start(message.request_id)
             return
         self._prompts.claimed.add(message.request_id)
         self._stop(message.request_id)
         self._say(f"{self._label(request)} taken over in `vekna`: {request.prompt}")
+
+    # A release hands the prompt back to this terminal.
+    def _release(self, message: DecideReleased) -> None:
+        if message.request_id not in self._prompts.open:
+            return
+        self._prompts.claimed.discard(message.request_id)
+        self._start(message.request_id)
 
     def _start(self, request_id: str) -> None:
         request = self._prompts.open[request_id]

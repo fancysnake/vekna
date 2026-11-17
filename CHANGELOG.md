@@ -11,6 +11,12 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **`DecideReleased`** on the wire says a window let a prompt go.
+  `DecideClaimed` no longer says it with a null `claim_id`, and a journal that
+  holds such a frame reads as cut at that frame in `vekna log`.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added
