@@ -11,6 +11,12 @@ when.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Selecting text in the window copies it.** Dragging over the output or the
+  page head puts the text on the clipboard when the mouse lets go; before, it
+  only highlighted and waited for ctrl+c.
+
 ### Changed
 
 - **`DecideReleased`** on the wire says a window let a prompt go.
