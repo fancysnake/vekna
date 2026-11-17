@@ -431,7 +431,7 @@ vekna version
 
 ```text
 vekna 1.2.0
-daemon 1.1.0 on /run/user/1000/vekna.sock
+daemon 1.2.0 on /run/user/1000/vekna.sock
 ```
 
 With nothing listening the second line is `daemon: not running`. A daemon that

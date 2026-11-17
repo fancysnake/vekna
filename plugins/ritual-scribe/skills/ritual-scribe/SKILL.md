@@ -162,6 +162,11 @@ and a queued cast takes the defaults where it runs. A key the model does not
 take fails the cast, so rename a field and its tables together. No secrets:
 `.vekna.toml` is committed.
 
+A tome's own settings live in a table named after it. Read it with
+`config_table("<tome>")` from `vekna.lexicon`, inside a step, never by opening
+`.vekna.toml`: `.values` is the table merged across the same places, and
+`.sources` names the tables that set it, for the error over a refused value.
+
 ```toml
 [defaults.sweep]
 base_branch = "main"
