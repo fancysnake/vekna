@@ -234,7 +234,8 @@ show what the daemon has held since it started; `vekna log` has the rest.
 
 How long a cast stays in the tree view after it ends is `history_after`, an
 [ISO 8601 duration](https://en.wikipedia.org/wiki/ISO_8601#Durations), in the
-project's `.vekna.toml` or in `~/.config/vekna/config.toml`, the project first:
+project's `.vekna.toml` or in `~/.config/vekna/config.toml`, the
+[nearest that sets it](scopes.md#which-setting-wins):
 
 ```toml
 [window]
@@ -320,11 +321,12 @@ next one that starts.
 ### The circle
 
 How much runs at once is set under `[circle]`, in the project's `.vekna.toml`
-or in `~/.config/vekna/config.toml`:
+or in `~/.config/vekna/config.toml`, where a `[projects.<name>.circle]` table
+sets it for [one project](scopes.md#one-config-for-every-project):
 
 ```toml
 [circle]
-processes = 4   # casts running at once in this project; the project's own wins
+processes = 4   # casts running at once in this project; the nearest table wins
 coding = 2      # agent sessions at once, across every project; user config only
 ```
 

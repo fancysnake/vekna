@@ -1,8 +1,20 @@
 import pytest
 
 from vekna.lexicon import RitualDefinitionError
-from vekna.lexicon._links.loader import read_config
+from vekna.lexicon._links.loader import read_configs
 from vekna.lexicon._pacts import Config, RitualsConfig, Tome
+
+
+# The one config a directory with only a `.vekna.toml` reads.
+def read_config(config):
+    configs = read_configs(config.parent)
+    assert len(configs) == 1
+    return configs[0][1]
+
+
+@pytest.fixture(autouse=True)
+def _no_user_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "no-config"))
 
 
 class TestReadConfig:

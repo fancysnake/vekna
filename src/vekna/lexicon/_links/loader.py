@@ -5,14 +5,15 @@ import importlib
 import importlib.util
 import pkgutil
 import sys
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from types import ModuleType
+from typing import NamedTuple
 
 from pydantic import ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
-from vekna.wire import explained, read_toml
+from vekna.wire import ConfigLayer, TomlValue, config_layers, explained, merged_table
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -136,35 +137,60 @@ def load_rituals_source(path: Path) -> list[RitualSource]:
 
 
 # Not a closed set: other tools keep their tables in the same file. `[circle]`
-# is the daemon's, read in its own process.
-_TABLES = (*Config.model_fields, "circle", "window")
+# is the daemon's, read in its own process; `[projects]` is unwrapped into
+# layers before anything here sees it.
+_TABLES = (*Config.model_fields, "circle", "window", "projects")
 
 
 # A table vekna does not read is somebody else's, unless it is a near spelling
 # of one vekna does: a `[ritual]` would otherwise load nothing and leave the
 # next cast to fail with "no ritual named ...".
-def _misspelt(path: Path, tables: Iterable[str]) -> None:
-    for table in tables:
+def _misspelt(layer: ConfigLayer) -> None:
+    for table in layer.tables:
         if table in _TABLES:
             continue
         if meant := difflib.get_close_matches(table, _TABLES, n=1, cutoff=0.8):
-            msg = f"{path}: vekna reads no [{table}] table — did you mean [{meant[0]}]?"
+            msg = (
+                f"{layer.source}: vekna reads no [{table}] table"
+                f" — did you mean [{meant[0]}]?"
+            )
             raise RitualDefinitionError(msg)
 
 
-# A config that does not parse stops the command: loading no rituals from it
-# would surface later as "no ritual named ...", which names neither the file
-# nor the mistake. `TOMLDecodeError` is a `ValueError`, and says where in the
-# file but not which file.
-def read_config(path: Path) -> Config:
-    try:
-        data = read_toml(path)
-    except ValueError as error:
-        msg = f"{path}: {error}"
-        raise RitualDefinitionError(msg) from error
-    _misspelt(path, data)
-    try:
-        return Config.model_validate(data)
-    except ValidationError as error:
-        msg = f"{path}: {explained(error)}"
-        raise RitualDefinitionError(msg) from error
+def _layers(directory: Path) -> list[ConfigLayer]:
+    layers, problems = config_layers(directory)
+    if problems:
+        raise RitualDefinitionError("\n".join(problems))
+    return layers
+
+
+# Every config that speaks for `cwd`, the one that wins last. A config that
+# does not parse stops the command: loading no rituals from it would surface
+# later as "no ritual named ...", which names neither the file nor the mistake.
+def read_configs(cwd: Path) -> list[tuple[ConfigLayer, Config]]:
+    configs: list[tuple[ConfigLayer, Config]] = []
+    for layer in reversed(_layers(cwd)):
+        _misspelt(layer)
+        try:
+            configs.append((layer, Config.model_validate(layer.tables)))
+        except ValidationError as error:
+            msg = f"{layer.source}: {explained(error)}"
+            raise RitualDefinitionError(msg) from error
+    return configs
+
+
+# A tome's own table, as every layer that speaks for `directory` sets it: the
+# user's table for the project over the project's `.vekna.toml` over what the
+# user says for every project, key by key. `sources` names each table that
+# contributed, nearest first, for the error a tome raises over a value.
+class ConfigTable(NamedTuple):
+    values: dict[str, TomlValue]
+    sources: tuple[str, ...]
+
+
+def config_table(name: str, directory: Path | None = None) -> ConfigTable:
+    layers = _layers(Path.cwd() if directory is None else directory)
+    said = [layer for layer in layers if name in layer.tables]
+    return ConfigTable(
+        merged_table(said, name), tuple(layer.table(name) for layer in said)
+    )

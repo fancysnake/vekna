@@ -8,9 +8,11 @@ from pydantic import BaseModel, Field, model_validator
 from vekna.lexicon import Done, RitualDefinitionError
 from vekna.lexicon._mills.defaults import Default, Defaults
 from vekna.lexicon._pacts import Config, Ritual, Transition
+from vekna.wire import ConfigLayer
 
-GLOBAL = Path("/home/me/.config/vekna/config.toml")
-PROJECT = Path("/repo/.vekna.toml")
+GLOBAL = ConfigLayer(Path("/home/me/.config/vekna/config.toml"), {})
+PROJECT = ConfigLayer(Path("/repo/.vekna.toml"), {})
+MINE = ConfigLayer(GLOBAL.path, {}, "repo")
 
 
 class _Greeting(BaseModel):
@@ -48,6 +50,18 @@ def _config(table: dict[str, object]) -> Config:
 
 
 class TestDefaults:
+    @staticmethod
+    def test_a_refusal_names_the_user_s_table_for_the_project_as_the_file_spells_it():
+        defaults = Defaults([(MINE, _config({"shout": True}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.of(GREET)
+
+        assert str(refused.value) == (
+            f"{GLOBAL.path}: [projects.repo.defaults.greet] sets 'shout',"
+            " which greet does not take"
+        )
+
     @staticmethod
     def test_a_project_key_overrides_its_global_twin_and_spares_the_rest():
         defaults = Defaults(
@@ -105,7 +119,7 @@ class TestDefaults:
 
         assert str(raised.value) == (
             "span: Value error, start must come before stop"
-            f" (with [defaults.span] from {GLOBAL}, {PROJECT})"
+            f" (with [defaults.span] from {GLOBAL.source}, {PROJECT.source})"
         )
 
     @staticmethod
@@ -150,7 +164,7 @@ class TestDefaults:
 
         assert str(raised.value) == (
             "greet: --name ['you']: Input should be a valid string\n"
-            f'{PROJECT}: [defaults.greet] loud = "very":'
+            f'{PROJECT.source}: [defaults.greet] loud = "very":'
             " Input should be a valid boolean, unable to interpret input"
         )
 
@@ -223,7 +237,7 @@ class TestDefaults:
             defaults.of(nested)
 
         assert str(raised.value) == (
-            f"{PROJECT}: [defaults.nested] shallow = {{}}: x: Field required\n"
-            f'{PROJECT}: [defaults.nested] outer = {{"deep": {{}}}}:'
+            f"{PROJECT.source}: [defaults.nested] shallow = {{}}: x: Field required\n"
+            f'{PROJECT.source}: [defaults.nested] outer = {{"deep": {{}}}}:'
             " deep.x: Field required"
         )

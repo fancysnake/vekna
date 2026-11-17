@@ -11,6 +11,18 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **User scope: one vekna for every checkout.** `~/.config/vekna/config.toml`
+  takes a `[projects.<name>]` table per checkout, named by `path`, holding the
+  tables a `.vekna.toml` would. A project needs no `.vekna.toml` to be cast in.
+  Per key the nearest wins: your table for the project, the project's file,
+  then the top level of the user config. A table speaks for every tree of the
+  repository, a leased worktree included. `docs/scopes.md` describes the three
+  scopes.
+- **`config_table`** in `vekna.lexicon` hands a tome its own table merged
+  across those places, with the tables that set it.
+
 ### Fixed
 
 - **Selecting text in the window copies it.** Dragging over the output or the

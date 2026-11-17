@@ -34,3 +34,9 @@
 - `gh run view --log-failed` and `gh api .../jobs/<id>/logs` both answered
   `Forbidden` from an agent session, so a failed CI job could be named but not
   read. The step that failed is in `gh run view --json jobs`; the test is not.
+- ruff refuses a synchronous `subprocess` call (S404, S607), though the same
+  `git` through `asyncio.create_subprocess_exec` passes. A config reader that
+  cannot await had to find a worktree's repository by reading `.git` and
+  `commondir` off the disk.
+- The `inside-links` contract forbids one `links` module importing another, so
+  the reader `circle_config` and `window_config` share went into `vekna.wire`.

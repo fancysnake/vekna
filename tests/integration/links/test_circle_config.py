@@ -150,3 +150,49 @@ class TestWorktrees:
 
         assert limits.worktrees(str(_project(tmp_path))) == DEFAULT_WORKTREES
         assert len(_warned(caplog)) == 1
+
+
+@pytest.mark.usefixtures("config")
+class TestTheUserSProjectTable:
+    @staticmethod
+    def test_it_wins_over_the_project_s_own_file(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        project = _project(tmp_path, f"[circle]\nprocesses = {_THE_PROJECT_S}\n")
+        config.write_text(
+            f'[projects.mine]\npath = "{project}"\n'
+            f"[projects.mine.circle]\nprocesses = {_MINE}\n",
+            encoding="utf-8",
+        )
+
+        assert ConfigLimits().processes(str(project)) == _MINE
+        assert not caplog.records
+
+    @staticmethod
+    def test_one_that_will_not_read_is_said_and_passed_over(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        project = _project(tmp_path)
+        config.write_text(
+            f'[projects.mine]\npath = "{project}"\n'
+            "[projects.mine.circle]\nthreads = 2\n",
+            encoding="utf-8",
+        )
+
+        assert ConfigLimits().processes(str(project)) == DEFAULT_PROCESSES
+        [said] = _warned(caplog)
+        assert said.startswith(f"{config}: [projects.mine]: circle.threads: ")
+        assert said.endswith(" — [circle] ignored")
+
+    @staticmethod
+    def test_the_coding_limit_is_not_a_project_s_to_set(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        config.write_text(
+            f'[projects.mine]\npath = "{tmp_path}"\n'
+            f"[projects.mine.circle]\ncoding = {_CODING}\n",
+            encoding="utf-8",
+        )
+
+        assert ConfigLimits().coding() is None
+        assert not caplog.records

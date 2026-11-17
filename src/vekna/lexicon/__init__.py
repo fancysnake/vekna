@@ -7,6 +7,7 @@ runtime is reached through `vekna.lexicon._inits`.
 
 from vekna.wire import allowed_answers
 
+from ._links.loader import ConfigTable, config_table
 from ._mills.bounds import race, timeout
 from ._mills.dispatch import medium, ritual, step
 from ._mills.engine import (
@@ -73,6 +74,7 @@ __all__ = [
     "Channel",
     "CodingCall",
     "CodingFocusProtocol",
+    "ConfigTable",
     "Directory",
     "Done",
     "ErrorInfo",
@@ -106,6 +108,7 @@ __all__ = [
     "Url",
     "allowed_answers",
     "attended",
+    "config_table",
     "current_rite",
     "emit_delta",
     "medium",
