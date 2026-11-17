@@ -9,12 +9,14 @@ import pytest
 from vekna.links.socket_server import Serving, alive, attach, serve
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    VERSION,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
     CastMessage,
     CastRefused,
     CastRequested,
+    DaemonVersion,
     DecideClaimed,
     DecideReleased,
     DecideResolved,
@@ -24,6 +26,7 @@ from vekna.wire import (
     StopRequested,
     SurfaceHello,
     TreesPurified,
+    VersionRequested,
     WireMessage,
     encode_frame,
     read_frames,
@@ -246,6 +249,22 @@ class TestServing:
         await _eventually(lambda: bool(daemon.detached))
 
         assert daemon.detached == daemon.attached
+        await server.close()
+
+    @staticmethod
+    async def test_a_version_is_answered_down_its_connection(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        reader, writer = await attach(socket_path)
+        writer.write(encode_frame(VersionRequested()))
+        await writer.drain()
+        reply = [message async for message in read_frames(reader)]
+
+        assert reply == [DaemonVersion(version=VERSION)]
+        assert not daemon.attached
+        assert not daemon.messages
+        writer.close()
         await server.close()
 
 

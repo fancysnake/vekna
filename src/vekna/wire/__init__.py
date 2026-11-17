@@ -1,5 +1,7 @@
 from ._links import (
     cast_frames,
+    daemon_refusal,
+    daemon_version,
     default_config_path,
     default_runs_root,
     default_socket_path,
@@ -10,6 +12,7 @@ from ._links import (
     read_events,
     read_frames,
     read_record,
+    refused,
     run_file,
 )
 from ._pacts import (
@@ -31,6 +34,7 @@ from ._pacts import (
     CodingSlotMessage,
     CodingSlotReleased,
     CodingSlotRequested,
+    DaemonVersion,
     DecideClaimed,
     DecideReleased,
     DecideRequested,
@@ -62,17 +66,19 @@ from ._pacts import (
     TreeBlocked,
     TreeFreed,
     TreesPurified,
+    VersionRequested,
     WireMessage,
     decode_frame,
     encode_frame,
 )
 from ._refusals import Refusal, explained, refusals
-from ._specs import SHORT_ID, allowed_answers, flag_of, parse_flags
+from ._specs import SHORT_ID, VERSION, allowed_answers, compatible, flag_of, parse_flags
 from ._toml import TomlValue, read_toml
 
 __all__ = [
     "NEEDS_TREE",
     "SHORT_ID",
+    "VERSION",
     "AwaitEnded",
     "AwaitMessage",
     "AwaitRequested",
@@ -90,6 +96,7 @@ __all__ = [
     "CodingSlotMessage",
     "CodingSlotReleased",
     "CodingSlotRequested",
+    "DaemonVersion",
     "DecideClaimed",
     "DecideReleased",
     "DecideRequested",
@@ -123,9 +130,13 @@ __all__ = [
     "TreeBlocked",
     "TreeFreed",
     "TreesPurified",
+    "VersionRequested",
     "WireMessage",
     "allowed_answers",
     "cast_frames",
+    "compatible",
+    "daemon_refusal",
+    "daemon_version",
     "decode_frame",
     "default_config_path",
     "default_runs_root",
@@ -143,5 +154,6 @@ __all__ = [
     "read_record",
     "read_toml",
     "refusals",
+    "refused",
     "run_file",
 ]

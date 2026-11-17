@@ -5,7 +5,18 @@ from pathlib import Path
 
 import pytest
 
-from vekna.wire import default_runs_root, default_socket_path, project_of
+from vekna.wire import (
+    VERSION,
+    DaemonVersion,
+    daemon_refusal,
+    daemon_version,
+    default_runs_root,
+    default_socket_path,
+    default_state_root,
+    encode_frame,
+    project_of,
+    refused,
+)
 
 _PERMISSION_BITS = 0o777
 _PRIVATE = 0o700
@@ -41,6 +52,16 @@ class TestRunsRoot:
         monkeypatch.delenv("XDG_STATE_HOME", raising=False)
 
         assert default_runs_root().parts[-4:] == (".local", "state", "vekna", "runs")
+
+    @staticmethod
+    def test_vekna_state_moves_the_state_root_and_the_runs_with_it(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.delenv("VEKNA_RUNS")
+        monkeypatch.setenv("VEKNA_STATE", "/tmp/second")
+
+        assert default_state_root() == Path("/tmp/second")
+        assert default_runs_root() == Path("/tmp/second/runs")
 
 
 class TestSocketPath:
@@ -135,3 +156,105 @@ class TestProject:
         file.touch()
 
         assert asyncio.run(project_of(file)) == str(file.resolve())
+
+
+_OTHER = f"{int(VERSION.partition('.')[0]) + 1}.0.0"
+
+
+# A daemon that answers the version question with `said`, or hangs up on it the
+# way one that predates the question does.
+async def _daemon(path: Path, said: str | None) -> asyncio.Server:
+    async def answer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        await reader.readline()
+        if said is not None:
+            writer.write(encode_frame(DaemonVersion(version=said)))
+            await writer.drain()
+        writer.close()
+
+    return await asyncio.start_unix_server(answer, path=str(path))
+
+
+@pytest.mark.asyncio
+class TestDaemonVersion:
+    @staticmethod
+    async def test_it_is_what_the_daemon_says(tmp_path: Path):
+        path = tmp_path / "vekna.sock"
+        server = await _daemon(path, "7.8.9")
+
+        assert await daemon_version(path) == "7.8.9"
+        server.close()
+
+    @staticmethod
+    async def test_a_daemon_that_hangs_up_has_none(tmp_path: Path):
+        path = tmp_path / "vekna.sock"
+        server = await _daemon(path, None)
+
+        assert await daemon_version(path) is None
+        server.close()
+
+    @staticmethod
+    async def test_a_daemon_that_never_answers_has_none(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("vekna.wire._links._PROBE_SECONDS", 0.05)
+        path = tmp_path / "vekna.sock"
+
+        async def silent(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+            await reader.read()
+            writer.close()
+
+        server = await asyncio.start_unix_server(silent, path=str(path))
+
+        assert await daemon_version(path) is None
+        server.close()
+
+    @staticmethod
+    async def test_nobody_listening_raises(tmp_path: Path):
+        with pytest.raises(FileNotFoundError):
+            await daemon_version(tmp_path / "vekna.sock")
+
+
+@pytest.mark.asyncio
+class TestRefusal:
+    @staticmethod
+    async def test_nobody_listening_refuses_nothing(tmp_path: Path):
+        assert await daemon_refusal(tmp_path / "vekna.sock") is None
+
+    @staticmethod
+    async def test_a_daemon_of_this_version_refuses_nothing(tmp_path: Path):
+        path = tmp_path / "vekna.sock"
+        server = await _daemon(path, VERSION)
+
+        assert await daemon_refusal(path) is None
+        server.close()
+
+    @staticmethod
+    async def test_another_major_version_is_refused_with_both_ways_out(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("VEKNA_STATE", str(tmp_path / "state"))
+        path = tmp_path / "vekna.sock"
+        major = VERSION.partition(".")[0]
+        server = await _daemon(path, _OTHER)
+
+        assert await daemon_refusal(path) == (
+            f"the daemon on {path} is vekna {_OTHER}, and this is vekna {VERSION}:"
+            " a daemon serves its own major version only.\n"
+            "`vekna stop` ends it, and the next `vekna` starts this version's.\n"
+            "To run this version beside it, export for every vekna that uses it:\n"
+            f"  VEKNA_SOCKET={tmp_path}/vekna-{major}.sock"
+            f" VEKNA_STATE={tmp_path}/state-{major}"
+        )
+        server.close()
+
+    @staticmethod
+    async def test_a_daemon_with_no_version_is_said_to_predate_the_check(
+        tmp_path: Path,
+    ):
+        said = refused(tmp_path / "vekna.sock", None)
+
+        assert said is not None
+        assert said.startswith(
+            f"the daemon on {tmp_path}/vekna.sock does not say its version, so it"
+            f" predates this check, and this is vekna {VERSION}:"
+        )

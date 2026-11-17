@@ -7,6 +7,7 @@ from typing import TypeVar
 import pytest
 from pydantic import BaseModel
 
+from tests.conftest import versioned
 from vekna.lexicon._links.daemon import (
     DaemonLink,
     LinkQueue,
@@ -48,6 +49,7 @@ from vekna.wire import (
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
+    DaemonVersion,
     DecideClaimed,
     DecideReleased,
     DecideRequested,
@@ -55,6 +57,7 @@ from vekna.wire import (
     EnqueueAccepted,
     EnqueueRefused,
     EnqueueRequested,
+    VersionRequested,
     WireMessage,
     encode_frame,
     read_frames,
@@ -230,6 +233,30 @@ class TestAttaching:
 
         assert not link.attached
 
+    # The stub fails the test if the link says anything past the version
+    # question: a hello it cannot read is what the old daemon hung up on.
+    @staticmethod
+    async def test_a_daemon_of_another_major_version_is_left_alone(socket_path: Path):
+        heard: list[bytes] = []
+
+        async def other(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            heard.append(await reader.readline())
+            writer.write(encode_frame(DaemonVersion(version="0.15.0")))
+            await writer.drain()
+            writer.close()
+
+        server = await asyncio.start_unix_server(other, path=str(socket_path))
+        link = DaemonLink(socket_path=socket_path, hello=_hello())
+
+        attached = await link.attach()
+
+        assert not attached
+        assert not link.attached
+        assert heard == [encode_frame(VersionRequested())]
+        server.close()
+
     @staticmethod
     async def test_a_daemon_that_goes_away_leaves_the_cast_running(socket_path: Path):
         async def hang_up(
@@ -239,7 +266,9 @@ class TestAttaching:
             writer.close()
             await writer.wait_closed()
 
-        server = await asyncio.start_unix_server(hang_up, path=str(socket_path))
+        server = await asyncio.start_unix_server(
+            versioned(hang_up), path=str(socket_path)
+        )
         link = DaemonLink(socket_path=socket_path, hello=_hello())
         await link.attach()
 
@@ -540,7 +569,7 @@ async def _replying(
         await reader.read()
         writer.close()
 
-    return await asyncio.start_unix_server(reply, path=str(socket_path))
+    return await asyncio.start_unix_server(versioned(reply), path=str(socket_path))
 
 
 @pytest.mark.asyncio
@@ -1071,7 +1100,7 @@ class TestQueue:
             writer.close()
 
         server = await asyncio.start_unix_server(
-            answer_then_garble, path=str(socket_path)
+            versioned(answer_then_garble), path=str(socket_path)
         )
         link = DaemonLink(socket_path=socket_path, hello=_hello())
         await link.attach()

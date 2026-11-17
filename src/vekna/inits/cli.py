@@ -18,13 +18,14 @@ from vekna.gates.cli.screen import listing, recorded
 from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.journal import Journal
-from vekna.links.socket_server import alive, attach
+from vekna.links.socket_server import attach
 from vekna.links.terminal import Terminal
 from vekna.links.window_config import history_after
 from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    VERSION,
     CastMessage,
     CastRefused,
     FailedTree,
@@ -33,12 +34,14 @@ from vekna.wire import (
     SurfaceHello,
     TreesPurified,
     WireMessage,
+    daemon_version,
     default_runs_root,
     default_socket_path,
     default_state_root,
     encode_frame,
     project_of,
     read_frames,
+    refused,
 )
 
 # Docker's rule: what comes before the positional belongs to the outer command,
@@ -253,6 +256,7 @@ class _Line:
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
     note: str
+    daemon: str
 
     def send(self, message: WireMessage) -> None:
         self.writer.write(encode_frame(message))
@@ -265,15 +269,23 @@ class _Line:
 
 async def _opened(*, opening: Opening, debug: bool) -> _Line:
     path = default_socket_path()
-    note = ""
-    if not await alive(path):
+    note = _DEBUG_LATE if debug else ""
+    try:
+        daemon = await daemon_version(path)
+    except OSError:
         await summon(path=path, debug=debug)
-        note = _STARTED
-    elif debug:
-        note = _DEBUG_LATE
+        note, daemon = _STARTED, VERSION
+    if (refusal := refused(path, daemon)) is not None:
+        raise click.ClickException(refusal)
     reader, writer = await attach(path)
     writer.write(encode_frame(opening))
-    return _Line(reader=reader, writer=writer, note=note)
+    return _Line(reader=reader, writer=writer, note=note, daemon=daemon or VERSION)
+
+
+# This vekna's version, and the daemon's only where it is another: within a
+# major version the two may differ, and that is worth a glance.
+def _versions(daemon: str) -> str:
+    return f"vekna {VERSION}" + ("" if daemon == VERSION else f" · daemon {daemon}")
 
 
 # What a daemon sends a surface is what it heard from its casts, and the
@@ -328,6 +340,7 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
             project=await project_of(Path.cwd()),
             root=str(Path.cwd()),
             history_after=after,
+            title=_versions(line.daemon),
         ),
         send=line.send,
         branch_of=branch_of,
@@ -380,6 +393,25 @@ def _serve(*, debug: bool = False) -> None:
 @click.command("stop", help="End the daemon. Running casts rejoin the next one.")
 def _stop() -> None:
     click.echo(asyncio.run(stop_daemon()))
+
+
+# Not through `_opened`: asking what is running must neither start a daemon nor
+# be refused by the one it is asking about.
+@click.command("version", help="Show this vekna's version, and the running daemon's.")
+def _version() -> None:
+    click.echo(f"vekna {VERSION}")
+    click.echo(asyncio.run(_daemon_line()))
+
+
+async def _daemon_line() -> str:
+    path = default_socket_path()
+    try:
+        daemon = await daemon_version(path)
+    except OSError:
+        return "daemon: not running"
+    told = "version unknown, it predates `vekna version`" if daemon is None else daemon
+    fit = "" if refused(path, daemon) is None else " — incompatible with this vekna"
+    return f"daemon {told} on {path}{fit}"
 
 
 @click.command(
@@ -453,6 +485,7 @@ def init_command() -> Group:
     vekna.add_command(_serve)
     vekna.add_command(_stop)
     vekna.add_command(_purify)
+    vekna.add_command(_version)
     return vekna
 
 

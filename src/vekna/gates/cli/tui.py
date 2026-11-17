@@ -113,20 +113,24 @@ class Contents(Tree[str]):
 
 
 # What a window is opened with: its project, the directory a ritual started
-# from it runs in, and how long after it ended a cast moves to the history view.
+# from it runs in, how long after it ended a cast moves to the history view,
+# and the title it shows: the versions of this vekna and of its daemon.
 @dataclass(frozen=True)
 class Opened:
     project: str
     root: str
     history_after: timedelta
+    title: str = "vekna"
 
 
-# Where the window opened — its project, and the directory a ritual started
-# from it runs in — and whether it shows every project instead.
+# Where the window opened — its project, the directory a ritual started from it
+# runs in, and the title it opened with — and whether it shows every project
+# instead.
 @dataclass
 class _Scope:
     home: str
     root: str
+    title: str
     every: bool = False
 
 
@@ -221,7 +225,9 @@ class VeknaApp(App[None]):
     #log { height: 1fr; margin-top: 1; }
     #note { height: auto; padding: 0 1; color: $warning; }
     #command { display: none; border: none; height: 1; }
-    #hint { height: 1; padding: 0 1; color: $text-muted; }
+    #foot { height: 1; }
+    #hint { width: 1fr; padding: 0 1; color: $text-muted; }
+    #version { width: auto; padding: 0 1; color: $text-muted; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "quit"),
@@ -247,7 +253,7 @@ class VeknaApp(App[None]):
     ) -> None:
         super().__init__()
         self._casts = casts
-        self._scope = _Scope(home=opened.project, root=opened.root)
+        self._scope = _Scope(home=opened.project, root=opened.root, title=opened.title)
         self._send = send
         self._branch_of = branch_of
         self._view = _View(reading=Reading(history_after=opened.history_after))
@@ -263,7 +269,9 @@ class VeknaApp(App[None]):
                 yield self._w.log
         yield self._w.note
         yield self._w.command
-        yield self._w.hint
+        with Horizontal(id="foot"):
+            yield self._w.hint
+            yield Static(self._scope.title, id="version", markup=False)
 
     def on_mount(self) -> None:
         tree = self._w.contents

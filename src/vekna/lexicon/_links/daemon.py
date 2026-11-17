@@ -54,6 +54,7 @@ from vekna.wire import (
     RiteStarted,
     WireMessage,
     allowed_answers,
+    daemon_refusal,
     encode_frame,
     read_frames,
 )
@@ -147,9 +148,13 @@ class DaemonLink:
     # process exits. The backlog is read once the connection is up, for the same
     # reason: what is sent while connecting is dropped, so a snapshot taken
     # before it would replay a prompt or rite that settled in between.
+    # A daemon of another major version is left alone, as if nobody listened:
+    # it would hang up on the first frame it cannot read, mid-cast.
     async def attach(
         self, *, backlog: Callable[[], Sequence[WireMessage]] = list
     ) -> bool:
+        if await daemon_refusal(self._path) is not None:
+            return False
         try:
             reader, writer = await asyncio.open_unix_connection(str(self._path))
         except OSError:

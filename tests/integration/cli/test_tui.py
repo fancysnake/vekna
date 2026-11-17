@@ -58,7 +58,11 @@ def _asking(hub: Hub) -> None:
 # The app over `hub`, keeping what it sends; branches are answered by root.
 # Every cast here began at `_WHEN`, long ago, so by default none is history.
 def _app(
-    hub: Hub, sent: list[WireMessage], history_after: timedelta = timedelta.max
+    hub: Hub,
+    sent: list[WireMessage],
+    history_after: timedelta = timedelta.max,
+    *,
+    title: str = "vekna",
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
 
@@ -68,7 +72,9 @@ def _app(
 
     return VeknaApp(
         casts=hub,
-        opened=Opened(project="/proj/.git", root="/proj", history_after=history_after),
+        opened=Opened(
+            project="/proj/.git", root="/proj", history_after=history_after, title=title
+        ),
         send=sent.append,
         branch_of=branch_of,
     )
@@ -522,6 +528,21 @@ def _day(days: int) -> str:
 
 def _hour(days: int) -> str:
     return f"{(_WHEN + timedelta(days=days, hours=1)).astimezone():%H:%M}"
+
+
+@pytest.mark.asyncio
+class TestVersion:
+    @staticmethod
+    async def test_the_version_stands_beside_the_hint():
+        app = _app(Hub(), [], title="vekna 1.2.0 · daemon 1.1.0")
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            version = _text(app, "#version")
+            hint = _text(app, "#hint")
+        assert version == "vekna 1.2.0 · daemon 1.1.0"
+        assert hint.endswith("q quit")
 
 
 @pytest.mark.asyncio
