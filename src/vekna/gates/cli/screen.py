@@ -91,7 +91,7 @@ def _steps_done(view: CastView) -> int:
     return sum(
         1
         for rite in view.rites.values()
-        if rite.started.category == "step" and rite.status != "running"
+        if rite.started.category == "step" and view.rite_status(rite) != "running"
     )
 
 
@@ -169,9 +169,10 @@ def _depth(rite: RiteView, view: CastView) -> int:
     return depth
 
 
-def _rite_line(rite: RiteView, pad: str) -> str:
-    medium = rite.started.category == "medium" and rite.status in {"running", "ok"}
-    mark = _MEDIUM if medium else _RITE_GLYPH[rite.status]
+def _rite_line(view: CastView, rite: RiteView, pad: str) -> str:
+    status = view.rite_status(rite)
+    medium = rite.started.category == "medium" and status in {"running", "ok"}
+    mark = _MEDIUM if medium else _RITE_GLYPH[status]
     said = "" if rite.error is None else f"  — {rite.error}"
     return f" {pad}{mark} {rite.started.name}{said}"
 
@@ -180,8 +181,8 @@ def _rite_lines(view: CastView) -> list[str]:
     lines: list[str] = []
     for rite in view.rites.values():
         pad = "  " * _depth(rite, view)
-        lines.append(_rite_line(rite, pad))
-        if rite.status == "running":
+        lines.append(_rite_line(view, rite, pad))
+        if view.rite_status(rite) == "running":
             lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
     return lines
 
@@ -241,17 +242,6 @@ def listing(records: Sequence[Run]) -> str:
     return "".join(_row(record) for record in records)
 
 
-# The last time the journal puts on the cast: nothing else in it is dated.
-def _last_seen(view: CastView) -> datetime:
-    stamps = [view.hello.started_at]
-    for rite in view.rites.values():
-        stamps += [
-            rite.started.started_at,
-            *([rite.finished_at] if rite.finished_at else []),
-        ]
-    return max(stamps)
-
-
 # `vekna log <cast>`: one cast read back out of the journal, for finding out
 # why it ended as it did. Its rites, why it ended, then what each rite that did
 # not end well wrote — the tail the view keeps of it, which is where a failure
@@ -262,19 +252,26 @@ def recorded(view: CastView) -> str:
     status = "no end recorded" if live(view) else word(view)
     header = (
         f"vekna log — {view.hello.ritual}  {view.hello.project_root}"
-        f"  {status}  {elapsed(view, _last_seen(view))}"
+        f"  {status}  {elapsed(view, view.last_seen)}"
         f"  {view.hello.cast_id[:SHORT_ID]}{carried(view.hello)}"
     )
     lines = [
         header,
         "",
-        *(_rite_line(rite, "  " * _depth(rite, view)) for rite in view.rites.values()),
+        *(
+            _rite_line(view, rite, "  " * _depth(rite, view))
+            for rite in view.rites.values()
+        ),
         *_detail_lines(view),
         "",
     ]
     for rite in view.rites.values():
-        if rite.status != "ok" and rite.deltas:
-            lines += [f"── {rite.started.name} ({rite.status}) ──", *rite.deltas, ""]
+        if view.rite_status(rite) != "ok" and rite.deltas:
+            lines += [
+                f"── {rite.started.name} ({view.rite_status(rite)}) ──",
+                *rite.deltas,
+                "",
+            ]
     return "\n".join(lines) + "\n"
 
 

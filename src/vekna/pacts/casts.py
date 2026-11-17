@@ -57,14 +57,6 @@ class RiteView:
     started: RiteStarted
     finished: RiteFinished | None = None
     deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
-    # Its cast ended without saying how this rite did.
-    cut: bool = False
-
-    @property
-    def status(self) -> RiteStatus:
-        if self.finished is not None:
-            return self.finished.status
-        return "cancelled" if self.cut else "running"
 
     @property
     def error(self) -> str | None:
@@ -99,6 +91,30 @@ class CastView:
     on_children: dict[str, AwaitRequested] = field(default_factory=dict)
     # The pooled tree it left unparkable, if it did.
     blocked: TreeBlocked | None = None
+
+    # The last time the journal puts on the cast: nothing else in it is dated.
+    @property
+    def last_seen(self) -> datetime:
+        stamps = [self.hello.started_at]
+        for rite in self.rites.values():
+            stamps += [
+                rite.started.started_at,
+                *([rite.finished_at] if rite.finished_at else []),
+            ]
+        return max(stamps)
+
+    # A rite its cast ended inside, without saying how it did, was cancelled.
+    def rite_status(self, rite: RiteView) -> RiteStatus:
+        if rite.finished is not None:
+            return rite.finished.status
+        return "running" if self.status in {"running", "queued"} else "cancelled"
+
+    # `CastGoodbye` carries no time, so such a rite's clock stops at the last
+    # time the journal dated.
+    def rite_finished_at(self, rite: RiteView) -> datetime | None:
+        if rite.finished is not None:
+            return rite.finished.finished_at
+        return None if self.rite_status(rite) == "running" else self.last_seen
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator

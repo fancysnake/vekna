@@ -390,8 +390,6 @@ def _end(view: CastView, goodbye: CastGoodbye) -> None:
     view.detail = goodbye.detail
     view.waiting.clear()
     view.on_children.clear()
-    for rite in view.rites.values():
-        rite.cut = True
 
 
 # Said after the cast is gone, and nothing else about it changes.
