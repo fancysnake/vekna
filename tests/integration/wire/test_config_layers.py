@@ -102,6 +102,21 @@ class TestConfigLayers:
         assert not problems
 
     @staticmethod
+    def test_a_git_file_nobody_can_read_still_marks_a_repository(
+        tmp_path: Path, user: Path
+    ):
+        module = tmp_path / "module"
+        (module / "deep").mkdir(parents=True)
+        (module / ".git").write_text("gitdir: ../modules/module\n", encoding="utf-8")
+        (module / ".git").chmod(0)
+        user.write_text(f'[projects.mine]\npath = "{module}"\n', encoding="utf-8")
+
+        layers, problems = config_layers(module / "deep")
+
+        assert layers[0] == ConfigLayer(user, {}, "mine")
+        assert not problems
+
+    @staticmethod
     def test_a_submodule_and_its_worktree_are_one_project(tmp_path: Path, user: Path):
         origin = tmp_path / "origin"
         origin.mkdir()
