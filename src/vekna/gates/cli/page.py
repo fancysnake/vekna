@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -7,7 +6,18 @@ from rich.text import Text
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
-from .cast_text import ago, carried, clipped, clock, counted, elapsed, ended, live, word
+from .cast_text import (
+    ago,
+    carried,
+    clipped,
+    clock,
+    counted,
+    elapsed,
+    ended,
+    live,
+    printable,
+    word,
+)
 from .contents import Counts, Entry, rite_tree, walked
 
 # A tree row holds the first line of an error, cut to this: the whole of it is
@@ -36,14 +46,6 @@ _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
 NO_CAST = "no cast here — c starts one"
-# Log passes a control character above 0x14 through, ESC among them, and the
-# terminal obeys it: one cursor move draws the output outside the pane. A whole
-# escape sequence goes, a control character left alone is shown as `�`. The
-# line breaks are the ones `str.splitlines` cuts at, which Log cuts at too.
-_ESCAPE = re.compile(
-    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[ -/]*[0-~])"
-)
-_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
 
 
 def where(root: str) -> str:
@@ -127,7 +129,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
-        text.append(f"  {clipped(rite.error, _ERROR)}", "red")
+        text.append(f"  {clipped(printable(rite.error), _ERROR)}", "red")
     if any(
         prompt.request.rite_id == rite.started.rite_id
         for prompt in view.waiting.values()
@@ -200,9 +202,8 @@ def _cast_head(view: CastView, branches: dict[str, str | None], now: datetime) -
     if flags := _flags(hello):
         text.append(f"\n{flags}", "dim")
     if view.blocked is not None:
-        text.append(
-            f"\ntree {view.blocked.path} left blocked: {view.blocked.reason}", "red"
-        )
+        blocked, reason = view.blocked, printable(view.blocked.reason)
+        text.append(f"\ntree {blocked.path} left blocked: {reason}", "red")
     depth: dict[str, int] = {}
     for entry, parent in walked(rite_tree(view)):
         depth[entry.key] = depth.get(parent or "", -1) + 1
@@ -217,7 +218,7 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
         f"  {view.rite_status(rite)}  {_took(view, rite, now)}",
     )
     if rite.error is not None:
-        text.append(f"\n{rite.error}", "red")
+        text.append(f"\n{printable(rite.error)}", "red")
     return text
 
 
@@ -231,13 +232,9 @@ def output(entry: Entry | None) -> list[str]:
     rite = entry.rite or _shown_rite(view)
     said = [] if rite is None else list(rite.deltas)
     if entry.rite is None and view.detail and not live(view):
-        said += ["", view.detail]
+        said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
-    return [
-        _CONTROL.sub("�", line) or " "
-        for text in said
-        for line in _ESCAPE.sub("", text).splitlines() or [""]
-    ]
+    return [printable(line) or " " for line in said]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:

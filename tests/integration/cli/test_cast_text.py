@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from vekna.gates.cli.cast_text import ago
+from vekna.gates.cli.cast_text import ago, printable
 from vekna.pacts.casts import CastView
 from vekna.wire import CastHello, CastStatus
 
@@ -39,3 +39,15 @@ class TestAgo:
     @staticmethod
     def test_a_live_cast_is_now_however_long_it_has_run():
         assert ago(_view("running"), _WHEN + timedelta(days=3)) == "@now"
+
+
+class TestPrintable:
+    @staticmethod
+    def test_an_escape_sequence_goes_and_a_stray_control_character_is_shown():
+        said = "\x1b[31mred\x1b[0m \x1b]8;;http://x\x1b\\link\x07 bell\x07 csi\x9b2K"
+
+        assert printable(said) == "red link� bell� csi�2K"
+
+    @staticmethod
+    def test_an_unterminated_sequence_does_not_swallow_the_next_line():
+        assert printable("one \x1b]0;title\ntwo") == "one \ntwo"
