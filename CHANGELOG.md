@@ -11,11 +11,7 @@ when.
 
 ## [Unreleased]
 
-### Fixed
-
-- A rite its cast ended inside shows as cancelled, not as still running.
-
-## [1.2.0] - 2026-11-17
+## [1.2.0] - 2026-11-18
 
 ### Added
 
@@ -48,6 +44,7 @@ when.
 
 - **Selecting text in the window copies it** when the mouse lets go; before,
   it waited for ctrl+c.
+- A rite its cast ended inside shows as cancelled, not as still running.
 
 ## [1.1.0] - 2026-11-15
 
