@@ -1,9 +1,9 @@
 from datetime import timedelta
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from vekna.wire import default_config_path, explained, project_config_path, read_toml
+from vekna.wire import read_layers
 
 # How long after a cast ends the window moves it to the history view, when
 # nothing says otherwise.
@@ -24,20 +24,13 @@ class _File(BaseModel):
 
 
 # How long after a cast ends the window moves it to the history view: the
-# project's config first, then the user's, and `HISTORY_AFTER` when neither
-# says. A config that will not read is passed over and named in what comes back
-# with it, for the window to say: a typo must not keep the window from opening.
+# nearest config layer that says, and `HISTORY_AFTER` when none does. A config
+# that will not read is passed over and named in what comes back with it, for
+# the window to say: a typo must not keep the window from opening.
 def history_after(directory: Path) -> tuple[timedelta, str]:
-    ignored: list[str] = []
-    for path in (project_config_path(directory), default_config_path()):
-        if path is None or not path.is_file():
-            continue
-        try:
-            window = _File.model_validate(read_toml(path)).window
-        except (OSError, ValueError) as error:
-            said = explained(error) if isinstance(error, ValidationError) else error
-            ignored.append(f"{path}: {said} — [window] ignored")
-            continue
-        if window.history_after is not None:
-            return window.history_after, " · ".join(ignored)
-    return HISTORY_AFTER, " · ".join(ignored)
+    files, problems = read_layers(directory=directory, table="window", model=_File)
+    ignored = " · ".join(problems)
+    for file in files:
+        if file.window.history_after is not None:
+            return file.window.history_after, ignored
+    return HISTORY_AFTER, ignored

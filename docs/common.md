@@ -323,8 +323,13 @@ and finds `@ritual('write-tests')`. Every submodule of a package is swept, so
 its `__init__.py` stays empty.
 
 **Configurable.** `./.vekna.toml` (project) or `~/.config/vekna/config.toml`
-(global). Both read; project wins. Env overrides for one-shots
-(`VEKNA_STANDALONE_LOCKS=allow`).
+(user). The user config holds top-level tables for every project and a
+`[projects.<name>]` table, with a `path`, per checkout. Per key the nearest
+wins: user's project table → project file → user top level. A project is the
+repository `path` is a tree of, so a leased worktree reads its table. A project
+needs no `.vekna.toml`; `[rituals] files` is the one key a project table
+refuses, since a path from the user config would name the checkout.
+Env overrides for one-shots (`VEKNA_STANDALONE_LOCKS=allow`).
 
 ```toml
 [rituals]
@@ -339,7 +344,8 @@ vekna does not know yet are left alone, unless the name is a near spelling of
 one it reads: `[ritual]` is refused with `did you mean [rituals]?`.
 
 **Component defaults** are the operator's, per ritual: `[defaults.pr_check]
-base_branch = "main"`. Per key, flag → project → global. A key the ritual does
+base_branch = "main"`. Per key, flag → user's project table → project →
+user. A key the ritual does
 not take fails the cast; a ritual not installed here is ignored.
 
 ## Standalone mode

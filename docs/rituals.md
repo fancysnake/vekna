@@ -187,8 +187,10 @@ Two rules worth knowing before they bite:
   naming both, rather than a precedence rule quietly picking one. A
   half-finished move is the case this exists for.
 
-A `.vekna.toml` (project) or `~/.config/vekna/config.toml` (global) can name
-more, resolved relative to the config file:
+A `.vekna.toml` (project) or `~/.config/vekna/config.toml` (user) can name
+more, resolved relative to the config file. The user config can also hold a
+table per project, so that a project needs no `.vekna.toml` at all:
+[Scopes](scopes.md) covers that way of working.
 
 ```toml
 [rituals]
@@ -223,7 +225,9 @@ max_prs = 3
 depth = 2
 ```
 
-Per key, a flag wins, then the project `.vekna.toml`, then the global config.
+Per key, a flag wins, then your `[projects.<name>]` table for the project in
+the user config, then the project `.vekna.toml`, then the top level of the user
+config ([which setting wins](scopes.md#which-setting-wins)).
 TOML values arrive typed. A queued cast takes the defaults of the repo it runs
 in for every component its enqueuer left unset.
 
@@ -235,7 +239,7 @@ in for every component its enqueuer left unset.
 
 A key the ritual does not take fails the cast, naming the file, the ritual and
 the key. A value of the wrong type fails `vekna rituals show` too, naming the
-same. A table for a ritual not installed here is ignored, so a global config
+same. A table for a ritual not installed here is ignored, so a user config
 can hold defaults for tomes some projects lack. Secrets stay out: `.vekna.toml`
 is committed, so pass a credential as a flag.
 
@@ -280,7 +284,8 @@ A bare name finds the project's own ritual first, then the one tome that
 offers it; offered by two tomes, it is an error naming both. `rituals list`
 prints the project's rituals first, then each tome's, qualified.
 
-The project directory then needs nothing but that `.vekna.toml`. The package is
+The project directory then needs nothing but that `.vekna.toml`, and not even
+that when the [user config](scopes.md) names the tome. The package is
 swept exactly as a local `rituals/` is — every submodule, all the way down — so
 relative imports inside it resolve and `rituals show` draws the whole graph
 rather than stopping at whatever `__init__.py` happened to re-export.
@@ -291,10 +296,15 @@ Two things to know:
   on its own interpreter, and a package your project can import is not
   automatically one that interpreter can. Installing vekna with `pipx` or `uv
   tool` means injecting the ritual package into that same environment rather
-  than into the project's.
+  than into the project's. [One install for every project](scopes.md#install-once)
+  shows the whole arrangement.
 - **Every level still needs an `__init__.py`.** A namespace package has no
   directory for the sweep to walk, so its submodules are invisible — the same
   rule as a local `rituals/`, with the same silence if you skip it.
+
+A tome with settings of its own reads them through
+[`config_table`](scopes.md#for-tome-authors-read-your-table-through-vekna), so
+they can be set wherever vekna reads config.
 
 A tome carries its own test suite — `vekna[trial]` runs against the rituals
 inside it, with no repository that casts them involved.

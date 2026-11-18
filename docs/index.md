@@ -46,6 +46,10 @@ Then run `mise install`.
 
 Or [let Claude Code do all of this](setup.md) in your project.
 
+Installing into a project is one of three ways to use vekna. To install it
+once and cast in every checkout on the machine, with no file committed to any
+of them, read [Scopes](scopes.md).
+
 ## Your first ritual
 
 Put a `rituals.py` in your project:

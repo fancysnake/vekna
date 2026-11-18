@@ -27,8 +27,6 @@ _SOCKET_ENV = "VEKNA_SOCKET"
 _RUNTIME_ENV = "XDG_RUNTIME_DIR"
 _STATE_ENV = "XDG_STATE_HOME"
 _OWN_STATE_ENV = "VEKNA_STATE"
-_CONFIG_ENV = "XDG_CONFIG_HOME"
-_PROJECT_CONFIG = ".vekna.toml"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 _PROBE_SECONDS = 2.0
@@ -77,24 +75,6 @@ def default_state_root() -> Path:
     if (named := os.environ.get(_STATE_ENV)) is not None:
         return Path(named) / "vekna"
     return Path.home() / ".local" / "state" / "vekna"
-
-
-# What the user configured, which is the one thing of vekna's that belongs in
-# the config namespace — the journal and the debug log are state and live under
-# `default_state_root()`. Here because the cast reads `[rituals]` from it and
-# the daemon reads `[circle]`.
-def default_config_path() -> Path:
-    if (named := os.environ.get(_CONFIG_ENV)) is not None:
-        return Path(named) / "vekna" / "config.toml"
-    return Path.home() / ".config" / "vekna" / "config.toml"
-
-
-# The project's own config, nearest first, as both ends find it.
-def project_config_path(directory: Path) -> Path | None:
-    for here in (directory, *directory.parents):
-        if (found := here / _PROJECT_CONFIG).is_file():
-            return found
-    return None
 
 
 # Inside a directory of this user's own, which is why this makes one. A socket

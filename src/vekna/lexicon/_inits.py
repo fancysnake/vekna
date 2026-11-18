@@ -18,18 +18,16 @@ from vekna.wire import (
     CastHello,
     WireMessage,
     daemon_refusal,
-    default_config_path,
     default_socket_path,
     explained,
     flag_of,
     parse_flags,
-    project_config_path,
     project_of,
 )
 
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.follow import Follower
-from ._links.loader import load_rituals_module, load_rituals_source, read_config
+from ._links.loader import load_rituals_module, load_rituals_source, read_configs
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, Tail
 from ._links.unattended import UnattendedChannel
@@ -82,7 +80,8 @@ _LEFT = "left them running — `vekna` shows them\n"
 _DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
-    "no rituals found (create a rituals.py or a rituals/ package in this directory)"
+    "no rituals found (create a rituals.py or a rituals/ package in this directory,"
+    " or name a tome under [rituals] in the user config)"
 )
 _RITUALS_FILE = "rituals.py"
 _RITUALS_PACKAGE = "rituals"
@@ -168,15 +167,6 @@ def _no_rituals(near_miss: Path | None) -> str:
     return f"{_NO_RITUALS}\n({near_miss} is not one — every level needs an __init__.py)"
 
 
-def _config_files(cwd: Path) -> list[Path]:
-    found: list[Path] = []
-    if (global_config := default_config_path()).is_file():
-        found.append(global_config)
-    if (project_config := project_config_path(cwd)) is not None:
-        found.append(project_config)
-    return found
-
-
 class _Library(NamedTuple):
     compendium: Compendium
     # What an empty compendium should say. The walk that discovered nothing is
@@ -234,8 +224,8 @@ def _build_library(cwd: Path) -> _Library:
     discovered = _find_rituals_source(cwd)
     if discovered.source is not None:
         load_source(discovered.source)
-    configs = [(path, read_config(path)) for path in _config_files(cwd)]
-    for config, read in configs:
+    configs = read_configs(cwd)
+    for layer, read in configs:
         rituals = read.rituals
         # Relative to the config file, not the cwd: a project .vekna.toml is
         # found by walking parents, and a global one is shared by every
@@ -246,8 +236,8 @@ def _build_library(cwd: Path) -> _Library:
             # construction; a configured one is a line somebody typed, and the
             # bare `[Errno 2]` the loader would raise names the path it tried
             # without naming the file that asked for it.
-            if not (named := config.parent / relative).exists():
-                msg = f"{config}: [rituals] names {named}, which does not exist"
+            if not (named := layer.path.parent / relative).exists():
+                msg = f"{layer.path}: [rituals] names {named}, which does not exist"
                 raise RitualDefinitionError(msg)
             load_source(named)
         # Per name as well as module: a module the global config lists and a
@@ -290,7 +280,7 @@ def _help_text(cwd: Path) -> str:
         "",
         (
             "Run a ritual defined in rituals.py or a rituals/ package"
-            " (or configured via .vekna.toml)."
+            " (or configured via .vekna.toml or the user config)."
         ),
         "Each ritual's component fields are passed as --options.",
         "",
@@ -336,7 +326,7 @@ def _component_lines(the_ritual: Ritual, defaults: Mapping[str, Default]) -> lis
     for name, type_name, required in flags:
         flag = f"  {flag_of(name)} <{type_name}>"
         if (default := defaults.get(name)) is not None:
-            lines.append(f"{flag}  = {_shown(default.value)} ({default.source})")
+            lines.append(f"{flag}  = {_shown(default.value)} ({default.layer.source})")
         else:
             lines.append(flag + ("" if required else "  (optional)"))
     return lines

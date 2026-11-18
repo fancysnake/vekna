@@ -1,17 +1,16 @@
 import json
 from collections.abc import Iterable, Mapping
-from pathlib import Path
 from typing import NamedTuple
 
 from pydantic import BaseModel, JsonValue, ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError
-from vekna.wire import Refusal, flag_of, refusals
+from vekna.wire import ConfigLayer, Refusal, flag_of, refusals
 
 
 class Default(NamedTuple):
     value: JsonValue
-    source: Path
+    layer: ConfigLayer
 
 
 # Said where the value was set: a flag as the operator typed it, a default with
@@ -27,7 +26,7 @@ def _said(
     if not refusal.loc:
         # A dict for its keys: each file once, in the order the configs came.
         sources = {
-            str(default.source): None
+            default.layer.source: None
             for key, default in found.items()
             if key not in given
         }
@@ -43,7 +42,7 @@ def _said(
         return f"{ritual.name}: {flag_of(key)} {given[key]!r}: {msg}"
     if (default := found.get(key)) is not None:
         return (
-            f"{default.source}: [defaults.{ritual.name}]"
+            f"{default.layer.table(f'defaults.{ritual.name}')}"
             f" {key} = {json.dumps(default.value)}: {msg}"
         )
     if refusal.kind == "missing":
@@ -66,16 +65,16 @@ def _refused(
     )
 
 
-# Per ritual, per key, with the file that said it. Configs come in precedence
-# order, so a project key overrides its global twin and spares the rest.
+# Per ritual, per key, with the file that said it. Configs come nearest first,
+# so a project key overrides its global twin and spares the rest.
 class Defaults:
-    def __init__(self, configs: Iterable[tuple[Path, Config]]) -> None:
+    def __init__(self, configs: Iterable[tuple[ConfigLayer, Config]]) -> None:
         self._tables: dict[str, dict[str, Default]] = {}
-        for path, config in configs:
+        for layer, config in configs:
             for name, table in config.defaults.items():
-                self._tables.setdefault(name, {}).update(
-                    (key, Default(value, path)) for key, value in table.items()
-                )
+                found = self._tables.setdefault(name, {})
+                for key, value in table.items():
+                    found.setdefault(key, Default(value, layer))
 
     # A key the ritual does not take would be dropped by its model, and the
     # operator would watch a ritual ignore a default they believe they set.
@@ -84,7 +83,7 @@ class Defaults:
         for key, default in found.items():
             if key not in ritual.components.model_fields:
                 msg = (
-                    f"{default.source}: [defaults.{ritual.name}] sets {key!r},"
+                    f"{default.layer.table(f'defaults.{ritual.name}')} sets {key!r},"
                     f" which {ritual.name} does not take"
                 )
                 raise RitualDefinitionError(msg)

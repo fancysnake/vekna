@@ -11,30 +11,40 @@ when.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-18
+
 ### Added
 
+- **User scope: one vekna for every checkout.** `~/.config/vekna/config.toml`
+  takes a `[projects.<name>]` table per checkout, named by `path`, holding the
+  tables a `.vekna.toml` would. A project needs no `.vekna.toml` to be cast in.
+  Per key the nearest wins: your table for the project, the project's file,
+  then the top level of the user config. A table speaks for every tree of the
+  repository, a leased worktree included. `docs/scopes.md` describes the three
+  scopes.
+- **`config_table`** in `vekna.lexicon` hands a tome its own table merged
+  across those places, with the tables that set it.
 - **`vekna version`** prints this vekna's version and the running daemon's.
   The window shows both at the right of its hint line.
 - **A daemon of another major version is refused.** `vekna`, `vekna cast` and
-  `vekna purify` ask the daemon for its version first and stop with the two
-  ways out: `vekna stop`, or a daemon of their own beside it. A daemon too old
-  to say its version is refused the same way. From here on no minor or patch
-  release breaks the wire.
+  `vekna purify` stop with the two ways out: `vekna stop`, or a daemon of
+  their own beside it. A daemon too old to say its version, 1.1.0 included, is
+  refused the same way. From here on no minor or patch release breaks the
+  wire.
 - **`VEKNA_STATE`** moves the journal, the logs and the worktree pool, so two
   daemons can run side by side with `VEKNA_SOCKET`.
-
-### Fixed
-
-- **Selecting text in the window copies it.** Dragging over the output or the
-  page head puts the text on the clipboard when the mouse lets go; before, it
-  only highlighted and waited for ctrl+c.
-- A rite its cast ended inside shows as cancelled, not as still running.
 
 ### Changed
 
 - **`DecideReleased`** on the wire says a window let a prompt go.
   `DecideClaimed` no longer says it with a null `claim_id`, and a journal that
   holds such a frame reads as cut at that frame in `vekna log`.
+
+### Fixed
+
+- **Selecting text in the window copies it** when the mouse lets go; before,
+  it waited for ctrl+c.
+- A rite its cast ended inside shows as cancelled, not as still running.
 
 ## [1.1.0] - 2026-11-15
 
@@ -1036,7 +1046,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/fancysnake/vekna/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fancysnake/vekna/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fancysnake/vekna/compare/v0.15.0...v1.0.0
 [0.15.0]: https://github.com/fancysnake/vekna/compare/v0.14.0...v0.15.0

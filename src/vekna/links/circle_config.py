@@ -3,11 +3,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic import BaseModel, ConfigDict, PositiveInt, ValidationError
+from pydantic import BaseModel, ConfigDict, PositiveInt
 from typing_extensions import override
 
 from vekna.pacts.circle import DEFAULT_PROCESSES, DEFAULT_WORKTREES, Limits
-from vekna.wire import default_config_path, explained, project_config_path, read_toml
+from vekna.wire import TableRead, read_layers, read_user_layers
 
 _T = TypeVar("_T")
 
@@ -34,37 +34,33 @@ class _File(BaseModel):
 class ConfigLimits(Limits):
     @override
     def processes(self, project_root: str) -> int:
-        found = _nearest(project_root, lambda circle: circle.processes)
+        found = _nearest(Path(project_root), lambda circle: circle.processes)
         return DEFAULT_PROCESSES if found is None else found
 
     @override
     def worktrees(self, project_root: str) -> int:
-        found = _nearest(project_root, lambda circle: circle.worktrees)
+        found = _nearest(Path(project_root), lambda circle: circle.worktrees)
         return DEFAULT_WORKTREES if found is None else found
 
     @override
     def prepare(self, project_root: str) -> str | None:
-        return _nearest(project_root, lambda circle: circle.prepare)
+        return _nearest(Path(project_root), lambda circle: circle.prepare)
 
+    # The machine's, not a project's: only what the user says for every project.
     @override
     def coding(self) -> int | None:
-        return _read(default_config_path()).coding
+        return _first(read_user_layers(table="circle", model=_File), lambda c: c.coding)
 
 
-# The project's config first, then the user's.
-def _nearest(project_root: str, key: Callable[[_Circle], _T | None]) -> _T | None:
-    for found in (project_config_path(Path(project_root)), default_config_path()):
-        if (value := key(_read(found))) is not None:
+def _nearest(directory: Path, key: Callable[[_Circle], _T | None]) -> _T | None:
+    found = read_layers(directory=directory, table="circle", model=_File)
+    return _first(found, key)
+
+
+def _first(found: TableRead[_File], key: Callable[[_Circle], _T | None]) -> _T | None:
+    for problem in found.problems:
+        _log.warning("%s", problem)
+    for file in found.found:
+        if (value := key(file.circle)) is not None:
             return value
     return None
-
-
-def _read(path: Path | None) -> _Circle:
-    if path is None or not path.is_file():
-        return _Circle()
-    try:
-        return _File.model_validate(read_toml(path)).circle
-    except (OSError, ValueError) as error:
-        said = explained(error) if isinstance(error, ValidationError) else error
-        _log.warning("%s: %s — [circle] ignored", path, said)
-        return _Circle()
