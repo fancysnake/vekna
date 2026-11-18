@@ -16,9 +16,9 @@ when.
 - **A following cast shows a board.** At a terminal, the casts a cast queued
   each get a line with their step and how long they have run, over the latest
   output of one of them. A number moves the view and `l` prints a cast's whole
-  log. A prompt takes the view and holds the screen until it closes; a second
-  one waits. At the end the board leaves a line per cast and each failed cast's
-  log in full.
+  log. A prompt it can answer takes the view and holds the screen until it
+  closes; a second one waits. At the end the board leaves a line per cast and
+  each failed cast's log in full.
 - **To a pipe or a file, followed casts are written one at a time**, in the
   order they arrived, the others held until the one before ends. A notice
   about a prompt is still written at once.

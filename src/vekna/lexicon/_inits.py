@@ -706,6 +706,9 @@ async def _run_on(plan: _Plan, board: Board) -> int:
                     link=link,
                     renderer=renderer,
                 )
+        except Exception:
+            board.ended(cast_id=cast_id, status="error", detail=None)
+            raise
         finally:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):

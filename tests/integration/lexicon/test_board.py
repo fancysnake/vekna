@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import pty
 import shutil
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -54,7 +55,10 @@ class _Typist:
         self._keys = keys
 
     def enter(self, line: str) -> None:
-        self._keys.write(f"{line}\n")
+        self.type(f"{line}\n")
+
+    def type(self, text: str) -> None:
+        self._keys.write(text)
         self._keys.flush()
 
 
@@ -98,16 +102,40 @@ def _began(rite_id: str = "r1") -> RiteBegan:
     )
 
 
+# `shutil.get_terminal_size` reads these first, so the frame does not depend on
+# the terminal the suite runs in.
+@pytest.fixture(autouse=True)
+def _terminal_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setenv("LINES", "24")
+
+
+def _board(inp: TextIO) -> tuple[Board, _Terminal]:
+    terminal = _Terminal()
+    screen = Tail(terminal)
+    board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
+    board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+    return board, terminal
+
+
+# Keys come from a terminal, as they do when somebody is typing.
 @pytest.fixture(name="desk")
 def _desk() -> Iterator[tuple[Board, _Terminal, _Typist]]:
-    read_fd, write_fd = os.pipe()
-    with os.fdopen(read_fd) as inp, os.fdopen(write_fd, "w") as keys:
-        terminal = _Terminal()
-        screen = Tail(terminal)
-        board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
-        board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+    master_fd, slave_fd = pty.openpty()
+    with os.fdopen(slave_fd) as inp, os.fdopen(master_fd, "w") as keys:
+        board, terminal = _board(inp)
         yield board, terminal, _Typist(keys)
         # The read a board leaves behind ends with its input.
+        keys.close()
+
+
+# Answers come down a pipe, as a script or another program gives them.
+@pytest.fixture(name="piped")
+def _piped() -> Iterator[tuple[Board, _Terminal, _Typist]]:
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd) as inp, os.fdopen(write_fd, "w") as keys:
+        board, terminal = _board(inp)
+        yield board, terminal, _Typist(keys)
         keys.close()
 
 
@@ -202,9 +230,11 @@ class TestBoard:
             "▶ repair",
             "  ↳ shell",
             "    no remote",
+            "push refused",
+            "Traceback",
         ]
         board.out.write("after\n")
-        assert terminal.getvalue().endswith("    no remote\nafter\n")
+        assert terminal.getvalue().endswith("Traceback\nafter\n")
 
     @staticmethod
     async def test_when_the_cast_in_view_ends_the_next_running_one_comes_into_view(
@@ -264,6 +294,84 @@ class TestBoard:
         assert "⏸" in terminal.frame.splitlines()[2]
         board.render("b", _began())
         await _eventually(lambda: "⏸" not in terminal.frame.splitlines()[2])
+        await board.close()
+
+    @staticmethod
+    async def test_a_key_typed_but_not_entered_is_not_the_start_of_an_answer(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+        typist.type("2")
+        await asyncio.sleep(_REPAINTED)
+
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+        typist.enter("y")
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        await board.close()
+
+    @staticmethod
+    async def test_a_question_that_fails_to_take_the_screen_leaves_the_board_usable(
+        desk: tuple[Board, _Terminal, _Typist], monkeypatch: pytest.MonkeyPatch
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+        size = shutil.get_terminal_size
+        failures = iter([True])
+
+        def size_once_broken() -> os.terminal_size:
+            if next(failures, False):
+                msg = "no terminal"
+                raise OSError(msg)
+            return size()
+
+        monkeypatch.setattr(shutil, "get_terminal_size", size_once_broken)
+        with pytest.raises(OSError, match="no terminal"):
+            await board.decide(prompt="push?")
+        asking = asyncio.create_task(board.decide(prompt="again?"))
+        await _eventually(lambda: "again? [y/n]" in terminal.frame)
+        typist.enter("y")
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        typist.enter("3")
+
+        await _eventually(lambda: "── heal bbbb ──" in terminal.frame)
+        await board.close()
+
+    @staticmethod
+    async def test_a_failed_cast_keeps_all_its_detail_in_its_log(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, _ = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        board.ended(cast_id="a", status="error", detail="first\nsecond")
+        await board.close()
+
+        left = terminal.getvalue().rpartition(_PLAIN)[2]
+        assert "  2  heal aaaa  ✗ failed: first\n" in left
+        assert "── heal aaaa ──\nfirst\nsecond\n" in left
+
+    @staticmethod
+    async def test_answers_from_a_pipe_are_answers_and_not_keys(
+        piped: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = piped
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        typist.enter("y")
+        await asyncio.sleep(_REPAINTED)
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        board.ended(cast_id="a", status="ok", detail=None)
+        await _eventually(lambda: "heal aaaa  ✓ done" in terminal.frame)
         await board.close()
 
     @staticmethod

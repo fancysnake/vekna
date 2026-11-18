@@ -221,7 +221,7 @@ def _clipped(line: str, columns: int) -> str:
     return line if len(line) <= columns else f"{line[: columns - 1]}…"
 
 
-def _line(index: int, entry: _Entry, now: datetime) -> str:
+def _line(*, index: int, entry: _Entry, now: datetime) -> str:
     if entry.ended is not None:
         said = ended_said(entry.ended, entry.notice)
         return f" {index:>2}  {entry.label}  {said}"
@@ -238,7 +238,7 @@ def frame(
 ) -> str:
     columns, rows = size
     lines = [
-        _line(index, picture.entries[cast_id], now)
+        _line(index=index, entry=picture.entries[cast_id], now=now)
         for index, cast_id in enumerate(picture.shown, 1)
     ]
     if (viewed := picture.entries.get(picture.view)) is not None:
@@ -267,7 +267,10 @@ def summary(picture: Picture, *, now: datetime) -> str:
     ]
     lines = [
         *typed,
-        *(_line(index, entry, now) for index, entry in enumerate(listed, 1)),
+        *(
+            _line(index=index, entry=entry, now=now)
+            for index, entry in enumerate(listed, 1)
+        ),
         *(line for entry in failed for line in _whole_log(entry)),
     ]
     return "".join(f"{line}\n" for line in lines)
@@ -286,7 +289,7 @@ class Board(Display, Channel):
         self.asker = asker
         self._screen = screen
         self._picture = Picture()
-        self._mode = _Mode()
+        self._mode = _Mode(read=asker.interactive)
         self._loops = _Loops()
         # One question at a time, the typed cast's among them: they share one
         # stdin, and a second one waits its turn.
@@ -334,7 +337,10 @@ class Board(Display, Channel):
     def ended(self, *, cast_id: str, status: EndStatus, detail: str | None) -> None:
         entry = self._picture.entries[cast_id]
         entry.ended = status
-        entry.notice = next(iter((detail or "").splitlines()), "")
+        lines = (detail or "").splitlines()
+        entry.notice = next(iter(lines), "")
+        if len(lines) > 1:
+            entry.log.write(f"{detail}\n")
         following = self._picture.next_running(cast_id)
         if self._picture.view == cast_id and following is not None:
             self._picture.view = following
@@ -376,18 +382,20 @@ class Board(Display, Channel):
     @contextlib.asynccontextmanager
     async def _asking(self, cast_id: str | None) -> AsyncGenerator[None]:
         async with self._turn:
-            if self._mode.open:
-                await self._hold(cast_id)
             try:
+                if self._mode.open:
+                    await self._hold(cast_id)
                 yield
             finally:
                 self._let_go()
 
-    # The command read is stopped first, so the answer is not read as a key.
+    # The command read is stopped first, so the answer is not read as a key, and
+    # what was typed for it but not entered is dropped.
     async def _hold(self, cast_id: str | None) -> None:
-        typing = self._loops.tasks.pop(_TYPING)
-        typing.cancel()
-        await asyncio.gather(typing, return_exceptions=True)
+        if (typing := self._loops.tasks.pop(_TYPING, None)) is not None:
+            typing.cancel()
+            await asyncio.gather(typing, return_exceptions=True)
+        self.asker.discard_typed()
         self._resume()
         if cast_id in self._picture.entries:
             self._picture.view = cast_id
@@ -398,9 +406,10 @@ class Board(Display, Channel):
         if self._mode.late:
             self._mode.late = False
             self._open()
-        elif self._mode.held:
+        elif self._mode.open:
             self._mode.held = False
-            self._loops.tasks[_TYPING] = self._watched(self._typing())
+            if _TYPING not in self._loops.tasks:
+                self._loops.tasks[_TYPING] = self._watched(self._typing())
             self._loops.changed.set()
 
     def _open(self) -> None:
@@ -417,7 +426,7 @@ class Board(Display, Channel):
     def _leave(self, *, note: str = "") -> None:
         if not self._mode.open:
             return
-        self._mode = _Mode()
+        self._mode = _Mode(read=self._mode.read)
         self.out.restore()
         self._screen.write(
             _PLAIN + summary(self._picture, now=datetime.now(UTC)) + note
@@ -454,7 +463,8 @@ class Board(Display, Channel):
             if self._mode.paints:
                 self._show()
 
-    # Ends when nobody is typing: the board is still worth painting.
+    # Never starts when stdin is not a terminal, and ends when nobody is typing:
+    # the board is still worth painting.
     async def _typing(self) -> None:
         for _ in itertools.takewhile(lambda _: self._mode.read, itertools.count()):
             if (line := await self.asker.line()) is None:

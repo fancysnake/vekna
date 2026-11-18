@@ -3,6 +3,7 @@ import concurrent.futures
 import shutil
 import socket
 import sys
+import termios
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -196,6 +197,18 @@ class StandaloneRenderer(Channel):
         # One question at a time: a cast and the casts it set going share this
         # stdin, and two reads at once would split one answer between them.
         self._asking = asyncio.Lock()
+
+    # Whether somebody is at the keys: from a pipe, lines are answers, and the
+    # ones that nothing has asked for yet must wait for their question.
+    @property
+    def interactive(self) -> bool:
+        return self._inp.isatty()
+
+    # Half a line typed for the board sits in the terminal's own buffer, where
+    # Enter would join it to the answer of a question that has just opened.
+    def discard_typed(self) -> None:
+        if self.interactive:
+            termios.tcflush(self._inp.fileno(), termios.TCIFLUSH)
 
     def say(self, line: str) -> None:
         self._out.write(line)

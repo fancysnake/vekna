@@ -1582,6 +1582,24 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("boom")
     async def boom(_: NoComponents) -> Boom:
         return Boom()
+
+
+    class Queued(BaseModel):
+        pass
+
+
+    # Queues a cast, then dies once the test has seen the board for it.
+    @step
+    async def queue_then_blow_up(_: Queued) -> Done[Queued]:
+        await enqueue("hold", NoComponents())
+        while not Path("go").exists():
+            await asyncio.sleep(0.05)
+        raise RuntimeError("boom")
+
+
+    @ritual("queue_boom")
+    async def queue_boom(_: NoComponents) -> Queued:
+        return Queued()
     """)
 
 
@@ -1905,6 +1923,33 @@ class TestFollowing:
                 await _drive(["boom"])
 
             await _eventually(lambda: "detached" in log.read_text())
+
+
+class _Screen(io.StringIO):
+    @override
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.asyncio
+class TestBoardOnFailure:
+    @staticmethod
+    async def test_a_cast_that_raises_is_left_on_the_board_as_failed(
+        socket_path: Path, queue_rituals: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        out = _Screen()
+        monkeypatch.setattr(sys, "stdout", out)
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["queue_boom"]))
+            await _spawned(lambda: "\x1b[?1049h" in out.getvalue())
+            (queue_rituals / "go").touch()
+            with pytest.raises(RuntimeError, match="boom"):
+                await cast
+            (queue_rituals / "release").touch()
+
+        left = out.getvalue().rpartition("\x1b[?1049l")[2]
+        assert "✗ failed" in left
+        assert "▶" not in left.splitlines()[0]
 
 
 def _said(caplog: pytest.LogCaptureFixture, level: int) -> str:
