@@ -1,0 +1,414 @@
+import asyncio
+import io
+import os
+import shutil
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TextIO
+
+import pytest
+from typing_extensions import override
+
+from vekna.lexicon._links.board import Board
+from vekna.lexicon._links.follow import Follower
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
+from vekna.lexicon._mills.follow import Lineage
+from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.links.socket_server import serve
+from vekna.mills.hub import Hub
+from vekna.pacts.routing import Surface
+from vekna.wire import (
+    CastGoodbye,
+    CastHello,
+    DecideRequested,
+    DecideResolved,
+    RiteDelta,
+    RiteStarted,
+    WireMessage,
+)
+
+_WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+_PATIENCE = 300
+_TICK = 0.01
+_ALTERNATE = "\x1b[?1049h"
+_PLAIN = "\x1b[?1049l"
+_HOME = "\x1b[H\x1b[2J"
+# Longer than the board waits before it repaints after a change.
+_REPAINTED = 0.3
+_TWICE = 2
+
+
+class _Terminal(io.StringIO):
+    @override
+    def isatty(self) -> bool:
+        return True
+
+    @property
+    def frame(self) -> str:
+        return self.getvalue().rpartition(_HOME)[2]
+
+
+class _Typist:
+    def __init__(self, keys: TextIO) -> None:
+        self._keys = keys
+
+    def enter(self, line: str) -> None:
+        self._keys.write(f"{line}\n")
+        self._keys.flush()
+
+
+class _Peer(Surface):
+    def __init__(self) -> None:
+        self.sent: list[WireMessage] = []
+
+    def send(self, message: WireMessage) -> None:
+        self.sent.append(message)
+
+
+async def _eventually(ready: Callable[[], bool]) -> None:
+    for _ in range(_PATIENCE):
+        if ready():
+            return
+        await asyncio.sleep(_TICK)
+    msg = f"gave up after {_PATIENCE * _TICK:.1f}s"
+    raise AssertionError(msg)
+
+
+def _hello(cast_id: str) -> CastHello:
+    return CastHello(
+        cast_id=cast_id,
+        project_root="/proj",
+        project="/proj/.git",
+        ritual="heal",
+        components={},
+        started_at=_WHEN,
+        wired=True,
+        enqueued_by="root",
+    )
+
+
+def _began(rite_id: str = "r1") -> RiteBegan:
+    return RiteBegan(
+        rite_id=rite_id,
+        parent_id=None,
+        name="repair",
+        category="step",
+        started_at=_WHEN,
+    )
+
+
+@pytest.fixture(name="desk")
+def _desk() -> Iterator[tuple[Board, _Terminal, _Typist]]:
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd) as inp, os.fdopen(write_fd, "w") as keys:
+        terminal = _Terminal()
+        screen = Tail(terminal)
+        board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
+        board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+        yield board, terminal, _Typist(keys)
+        # The read a board leaves behind ends with its input.
+        keys.close()
+
+
+@pytest.mark.asyncio
+class TestBoard:
+    @staticmethod
+    async def test_while_a_question_is_open_no_other_cast_changes_the_screen(
+        desk: tuple[Board, _Terminal, _Typist], tmp_path: Path
+    ):
+        board, terminal, typist = desk
+        hub = Hub()
+        server = await serve(path=tmp_path / "vekna.sock", routes=hub)
+        follower = Follower(
+            socket_path=tmp_path / "vekna.sock",
+            lineage=Lineage("root"),
+            display=board,
+            ask=board.asker,
+        )
+        await follower.attach()
+        peer = _Peer()
+        hub.open_cast("bbbb0000", peer)
+        for cast_id in ("aaaa0000", "bbbb0000", "cccc0000"):
+            hub.apply(_hello(cast_id))
+        await _eventually(lambda: "heal cccc0000" in terminal.frame)
+
+        hub.apply(DecideRequested(cast_id="bbbb0000", request_id="q1", prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+        asked = terminal.getvalue()
+        hub.apply(
+            RiteStarted(
+                cast_id="aaaa0000",
+                rite_id="r1",
+                parent_id=None,
+                name="repair",
+                category="step",
+                started_at=_WHEN,
+            )
+        )
+        hub.apply(RiteDelta(cast_id="aaaa0000", rite_id="r1", delta="checks red"))
+        hub.apply(CastGoodbye(cast_id="cccc0000", status="error", detail="boom"))
+        await asyncio.sleep(_REPAINTED)
+        held = terminal.getvalue()
+        typist.enter("y")
+        await _eventually(lambda: bool(peer.sent))
+        await _eventually(lambda: "✗ failed: boom" in terminal.frame)
+
+        assert held == asked
+        assert "── heal bbbb0000 ──" in asked.rpartition(_HOME)[2]
+        assert peer.sent == [
+            DecideResolved(cast_id="bbbb0000", request_id="q1", answer="yes")
+        ]
+        assert "── heal bbbb0000 ──" in terminal.frame
+        assert "checks red" not in terminal.frame
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_the_typed_cast_s_lines_go_to_its_place_and_come_back_at_the_end(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, _ = desk
+        board.out.write("before the board\n")
+
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.out.write("while the board is up\n")
+        board.out.write("\x1b]777;notify;vekna finished;sweep\x07")
+        board.render("a", _began())
+        board.render(
+            "a",
+            RiteBegan(
+                rite_id="r2",
+                parent_id="r1",
+                name="shell",
+                category="medium",
+                started_at=_WHEN,
+            ),
+        )
+        board.render("a", RiteStreamed(rite_id="r2", delta="no remote"))
+        board.ended(cast_id="root", status="ok", detail=None)
+        board.ended(cast_id="a", status="error", detail="push refused\nTraceback")
+        await _eventually(lambda: "✗ failed: push refused" in terminal.frame)
+        shown = terminal.frame
+        await board.close()
+
+        assert terminal.getvalue().startswith(f"before the board\n{_ALTERNATE}")
+        assert "\x1b]777;notify;vekna finished;sweep\x07" in terminal.getvalue()
+        assert "sweep root" not in shown
+        assert terminal.getvalue().rpartition(_PLAIN)[2].splitlines() == [
+            "while the board is up",
+            "  1  heal aaaa  ✗ failed: push refused",
+            "── heal aaaa ──",
+            "▶ repair",
+            "  ↳ shell",
+            "    no remote",
+        ]
+        board.out.write("after\n")
+        assert terminal.getvalue().endswith("    no remote\nafter\n")
+
+    @staticmethod
+    async def test_when_the_cast_in_view_ends_the_next_running_one_comes_into_view(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, _ = desk
+        board.ended(cast_id="root", status="ok", detail=None)
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        board.ended(cast_id="a", status="ok", detail=None)
+        await _eventually(lambda: "── heal bbbb ──" in terminal.frame)
+        board.ended(cast_id="b", status="ok", detail=None)
+        await asyncio.sleep(_REPAINTED)
+
+        assert "── heal bbbb ──" in terminal.frame
+        await board.close()
+
+    @staticmethod
+    async def test_a_number_moves_the_view_and_l_opens_the_whole_log(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        board.say("b", "⏸ push? — answer it in `vekna`")
+        board.say("stranger", "nobody's line")
+        await _eventually(lambda: "nobody's line" in terminal.frame)
+        noticed = terminal.frame
+
+        typist.enter("3")
+        await _eventually(lambda: "── heal bbbb ──" in terminal.frame)
+        typist.enter("9")
+        await _eventually(lambda: "there is no cast 9" in terminal.frame)
+        typist.enter("what")
+        await _eventually(lambda: "'what' is not a key" in terminal.frame)
+        typist.enter("")
+        typist.enter("l")
+        await _eventually(lambda: "Enter returns" in terminal.getvalue())
+        opened = terminal.getvalue()
+        board.render("a", _began())
+        await asyncio.sleep(_REPAINTED)
+        paused = terminal.getvalue()
+        typist.enter("")
+        await _eventually(lambda: terminal.getvalue().count(_ALTERNATE) == _TWICE)
+
+        assert opened.rpartition(_PLAIN)[2].splitlines() == [
+            "── heal bbbb ──",
+            "⏸ push? — answer it in `vekna`",
+            "— Enter returns to the board —",
+        ]
+        assert paused == opened
+        assert "heal bbbb  ▶" in noticed.splitlines()[2]
+        assert noticed.splitlines()[2].endswith("⏸ push? — answer it in `vekna`")
+        await _eventually(lambda: "repair" in terminal.frame.splitlines()[1])
+        assert "⏸" in terminal.frame.splitlines()[2]
+        board.render("b", _began())
+        await _eventually(lambda: "⏸" not in terminal.frame.splitlines()[2])
+        await board.close()
+
+    @staticmethod
+    async def test_before_any_cast_arrives_the_typed_cast_asks_on_the_plain_terminal(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.getvalue())
+
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await asyncio.sleep(_REPAINTED)
+        waited = terminal.getvalue()
+        typist.enter("y")
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        assert _ALTERNATE not in waited
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+        await board.close()
+
+    @staticmethod
+    async def test_the_typed_cast_s_question_takes_the_view_and_a_second_one_waits(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        async def asked_by_b() -> str:
+            async with board.asking("b"):
+                return await board.asker.decide(prompt="merge?")
+
+        first = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+        second = asyncio.create_task(asked_by_b())
+        await asyncio.sleep(_REPAINTED)
+        one_open = terminal.frame
+        typist.enter("y")
+        await _eventually(lambda: "merge? [y/n]" in terminal.frame)
+        typist.enter("n")
+
+        assert await asyncio.wait_for(first, timeout=2) == "yes"
+        assert await asyncio.wait_for(second, timeout=2) == "no"
+        assert "── sweep root ──" in one_open
+        assert "merge?" not in one_open
+        await board.close()
+
+    @staticmethod
+    async def test_a_question_takes_the_screen_back_from_a_whole_log(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        typist.enter("l")
+        await _eventually(lambda: "Enter returns" in terminal.getvalue())
+
+        async def asked_by_a_stranger() -> str:
+            async with board.asking("stranger"):
+                return await board.asker.decide(prompt="push?")
+
+        asking = asyncio.create_task(asked_by_a_stranger())
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+        typist.enter("y")
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        assert terminal.getvalue().count(_ALTERNATE) == _TWICE
+        assert "── heal aaaa ──" in terminal.frame
+        await board.close()
+
+    @staticmethod
+    async def test_closing_under_a_question_leaves_the_plain_terminal(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, _ = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+
+        asking.cancel()
+        await board.close()
+        await asyncio.gather(asking, return_exceptions=True)
+
+        assert terminal.getvalue().count(_ALTERNATE) == 1
+        assert terminal.getvalue().count(_PLAIN) == 1
+
+    @staticmethod
+    async def test_a_board_that_never_opened_closes_to_nothing(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, _ = desk
+        board.render("root", _began())
+        board.render(
+            "root", RiteEnded(rite_id="r1", status="ok", result=None, finished_at=_WHEN)
+        )
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.getvalue())
+        desk[2].enter("n")
+        answer = await asyncio.wait_for(asking, timeout=2)
+
+        await board.close()
+
+        assert answer == "no"
+        assert terminal.getvalue().endswith("push? [y/n] ")
+        assert _ALTERNATE not in terminal.getvalue()
+
+    @staticmethod
+    async def test_with_nobody_typing_the_board_is_still_painted(tmp_path: Path):
+        terminal = _Terminal()
+        screen = Tail(terminal)
+        with (tmp_path / "empty").open("w+") as inp:
+            board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
+            board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+            board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+            await asyncio.sleep(_REPAINTED)
+
+            board.ended(cast_id="a", status="ok", detail=None)
+            await _eventually(lambda: "heal aaaa  ✓ done" in terminal.frame)
+
+            await board.close()
+
+    @staticmethod
+    async def test_a_board_that_cannot_paint_leaves_the_terminal_and_says_why(
+        desk: tuple[Board, _Terminal, _Typist], monkeypatch: pytest.MonkeyPatch
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        def no_size() -> os.terminal_size:
+            msg = "no terminal"
+            raise OSError(msg)
+
+        monkeypatch.setattr(shutil, "get_terminal_size", no_size)
+        board.ended(cast_id="a", status="ok", detail=None)
+        await _eventually(lambda: _PLAIN in terminal.getvalue())
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.getvalue())
+        typist.enter("y")
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        left = terminal.getvalue().rpartition(_PLAIN)[2]
+        assert (
+            "  2  heal aaaa  ✓ done\nthe board stopped: OSError('no terminal')\n"
+            in left
+        )
+        assert left.endswith("push? [y/n] ")
+        await board.close()

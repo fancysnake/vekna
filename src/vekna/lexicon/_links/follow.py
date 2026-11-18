@@ -1,12 +1,16 @@
 import asyncio
 import contextlib
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from typing_extensions import override
 
 from vekna.lexicon._pacts import (
     Channel,
+    Display,
+    EndStatus,
     LineageProtocol,
     RiteBegan,
     RiteEnded,
@@ -35,9 +39,17 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import Revisable, StandaloneRenderer
+from .standalone import Out, Revisable, StandaloneRenderer
 
-_MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
+_MARK: dict[EndStatus, str] = {
+    "ok": "✓ done",
+    "error": "✗ failed",
+    "disconnected": "⚠ aborted",
+}
+
+
+def ended_said(status: EndStatus, detail: str | None) -> str:
+    return f"{_MARK[status]}: {detail}" if detail else _MARK[status]
 
 
 # Every line a cast's renderer writes, under the name of the cast that said it:
@@ -80,12 +92,125 @@ class _Prefixed(Revisable):
         return self._out.overwrite(mark, self._labelled(text, fresh=True))
 
 
-# One followed cast: its renderer, and the rites it has already shown, so a
-# replay after the cast reattaches says nothing twice.
+# One cast's lines on a stream: straight out on its turn, kept until then. A
+# stream takes no line back, so neither does this.
+class _Held(Revisable):
+    def __init__(self, out: Out) -> None:
+        self._out = out
+        self._kept: list[str] | None = []
+
+    def release(self) -> None:
+        kept, self._kept = self._kept or [], None
+        for text in kept:
+            self._out.write(text)
+        self._out.flush()
+
+    @override
+    def write(self, text: str, /) -> int:
+        if self._kept is None:
+            return self._out.write(text)
+        self._kept.append(text)
+        return len(text)
+
+    @override
+    def flush(self) -> None:
+        if self._kept is None:
+            self._out.flush()
+
+    @override
+    def isatty(self) -> bool:
+        return False
+
+    @property
+    @override
+    def mark(self) -> int:
+        return 0
+
+    @override
+    def overwrite(self, mark: int, text: str) -> bool:
+        return False
+
+
+@dataclass
+class _Turn:
+    label: str
+    held: _Held
+    renderer: StandaloneRenderer
+    spoke: bool = False
+    ended: bool = False
+
+
+# Several casts into one stream, a cast at a time: a pipe or a log file has no
+# cursor to keep them apart with, so the first to arrive speaks until it ends
+# and the others are held, then the next in arrival order. A notice about a
+# question is said at once whoever is speaking, because the cast that asked
+# waits on it.
+class Turns(Display):
+    def __init__(self, out: Out) -> None:
+        self._out = out
+        self._turns: dict[str, _Turn] = {}
+        self._speaker: str | None = None
+
+    @override
+    def entered(self, *, cast_id: str, label: str, started_at: datetime) -> None:
+        held = _Held(self._out)
+        self._turns[cast_id] = _Turn(
+            label=label,
+            held=held,
+            renderer=StandaloneRenderer(out=_Prefixed(held, label)),
+        )
+        self._pass_on()
+
+    @override
+    def render(self, cast_id: str, event: RiteEvent) -> None:
+        self._turns[cast_id].renderer.render(event)
+
+    @override
+    def ended(self, *, cast_id: str, status: EndStatus, detail: str | None) -> None:
+        turn = self._turns[cast_id]
+        turn.held.write(f"[{turn.label}] {ended_said(status, detail)}\n")
+        turn.held.flush()
+        turn.ended = True
+        self._pass_on()
+
+    @override
+    def say(self, cast_id: str, line: str) -> None:
+        turn = self._turns.get(cast_id)
+        label = cast_id[:SHORT_ID] if turn is None else turn.label
+        self._out.write(f"[{label}] {line}\n")
+        self._out.flush()
+
+    @override
+    def asking(self, cast_id: str) -> AbstractAsyncContextManager[None]:
+        return contextlib.nullcontext()
+
+    # Whatever is still held is said: the follow ended first, and a line kept
+    # back would be a line lost.
+    @override
+    async def close(self) -> None:
+        for turn in self._turns.values():
+            turn.held.release()
+
+    def _pass_on(self) -> None:
+        speaker = None if self._speaker is None else self._turns[self._speaker]
+        if speaker is not None and not speaker.ended:
+            return
+        self._speaker = None
+        for cast_id, turn in self._turns.items():
+            if turn.spoke:
+                continue
+            turn.spoke = True
+            turn.held.release()
+            if not turn.ended:
+                self._speaker = cast_id
+                return
+
+
+# One followed cast: its name, and the rites it has already shown, so a replay
+# after the cast reattaches says nothing twice.
 @dataclass
 class _Followed:
     label: str
-    renderer: StandaloneRenderer
     started: set[str] = field(default_factory=set)
     finished: set[str] = field(default_factory=set)
     # The rites already shown when a replay began; their output in it is old.
@@ -109,7 +234,7 @@ class _Prompts:
 
 
 # A cast typed by hand, still at its terminal after its own steps: it watches
-# the casts it set going, prints what each one does under its name, and asks
+# the casts it set going, shows what each one does on its display, and asks
 # their prompts here — until a surface claims one, which takes it over. A
 # surface of the daemon's like any window, so it hears every cast and keeps
 # to the ones its lineage says are this cast's.
@@ -119,12 +244,12 @@ class Follower:
         *,
         socket_path: Path,
         lineage: LineageProtocol,
-        out: Revisable,
+        display: Display,
         ask: Channel | None,
     ) -> None:
         self._wire = _Wire(path=socket_path)
         self._lineage = lineage
-        self._out = out
+        self._display = display
         self._ask = ask
         self._followed: dict[str, _Followed] = {}
         self._prompts = _Prompts()
@@ -156,6 +281,7 @@ class Follower:
             reader.cancel()
             await asyncio.gather(reader, return_exceptions=True)
         await self._hang_up()
+        await self._display.close()
 
     async def _hang_up(self) -> None:
         if (writer := self._wire.writer) is not None:
@@ -204,8 +330,9 @@ class Follower:
         if hello.cast_id in self._followed:
             return
         label = f"{hello.ritual} {hello.cast_id[:SHORT_ID]}"
-        self._followed[hello.cast_id] = _Followed(
-            label=label, renderer=StandaloneRenderer(out=_Prefixed(self._out, label))
+        self._followed[hello.cast_id] = _Followed(label=label)
+        self._display.entered(
+            cast_id=hello.cast_id, label=label, started_at=hello.started_at
         )
 
     def _replay(self, message: GrimoireBegin | GrimoireEnd) -> None:
@@ -217,13 +344,13 @@ class Follower:
         if (followed := self._followed.get(message.cast_id)) is None:
             return
         if (event := _event(message, followed)) is not None:
-            followed.renderer.render(event)
+            self._display.render(message.cast_id, event)
 
     def _goodbye(self, goodbye: CastGoodbye) -> None:
-        if (followed := self._followed.get(goodbye.cast_id)) is None:
-            return
-        said = f": {goodbye.detail}" if goodbye.detail else ""
-        self._say(f"[{followed.label}] {_MARK[goodbye.status]}{said}")
+        if goodbye.cast_id in self._followed:
+            self._display.ended(
+                cast_id=goodbye.cast_id, status=goodbye.status, detail=goodbye.detail
+            )
 
     def _prompt(
         self, message: DecideRequested | DecideResolved | DecideWithdrawn
@@ -242,7 +369,7 @@ class Follower:
             return
         self._prompts.claimed.add(message.request_id)
         self._stop(message.request_id)
-        self._say(f"{self._label(request)} taken over in `vekna`: {request.prompt}")
+        self._say(request, f"taken over in `vekna`: {request.prompt}")
 
     # A release hands the prompt back to this terminal.
     def _release(self, message: DecideReleased) -> None:
@@ -256,9 +383,7 @@ class Follower:
         if request_id in self._prompts.claimed or request_id in self._prompts.asking:
             return
         if (ask := self._ask) is None:
-            self._say(
-                f"{self._label(request)} ⏸ {request.prompt} — answer it in `vekna`"
-            )
+            self._say(request, f"⏸ {request.prompt} — answer it in `vekna`")
             return
         task = asyncio.create_task(self._asked(ask, request))
         self._prompts.asking[request_id] = task
@@ -270,13 +395,14 @@ class Follower:
 
     async def _asked(self, ask: Channel, request: DecideRequested) -> None:
         try:
-            answer = await ask.decide(
-                prompt=f"{self._label(request)} {request.prompt}",
-                options=request.options,
-                free=request.free,
-            )
+            async with self._display.asking(request.cast_id):
+                answer = await ask.decide(
+                    prompt=f"{self._label(request)} {request.prompt}",
+                    options=request.options,
+                    free=request.free,
+                )
         except StandalonePromptError as error:
-            self._say(f"{self._label(request)} {error} — answer it in `vekna`")
+            self._say(request, f"{error} — answer it in `vekna`")
             return
         if (writer := self._wire.writer) is not None:
             writer.write(
@@ -293,9 +419,8 @@ class Follower:
         followed = self._followed.get(request.cast_id)
         return f"[{request.cast_id[:SHORT_ID] if followed is None else followed.label}]"
 
-    def _say(self, line: str) -> None:
-        self._out.write(line + "\n")
-        self._out.flush()
+    def _say(self, request: DecideRequested, line: str) -> None:
+        self._display.say(request.cast_id, line)
 
 
 # What a rite message means to a renderer, or None for what it has shown

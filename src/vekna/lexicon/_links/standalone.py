@@ -231,6 +231,14 @@ class StandaloneRenderer(Channel):
             raise StandalonePromptError(msg)
         return line.strip()
 
+    # A line typed while no question is open, or None once input has ended. It
+    # shares the one read a question takes over, so no answer is read as this.
+    async def line(self) -> str | None:
+        try:
+            return await self._readline()
+        except (StandalonePromptError, OSError, ValueError):
+            return None
+
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:
             self.say(block + "\n")
