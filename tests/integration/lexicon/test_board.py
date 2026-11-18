@@ -3,6 +3,7 @@ import io
 import os
 import pty
 import shutil
+import termios
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ _HOME = "\x1b[H\x1b[2J"
 # Longer than the board waits before it repaints after a change.
 _REPAINTED = 0.3
 _TWICE = 2
+_END_OF_INPUT = "\x04"
 
 
 class _Terminal(io.StringIO):
@@ -351,6 +353,69 @@ class TestBoard:
         typist.enter("3")
 
         await _eventually(lambda: "── heal bbbb ──" in terminal.frame)
+        await board.close()
+
+    @staticmethod
+    async def test_a_question_that_cannot_drop_what_was_typed_leaves_the_keys_read(
+        desk: tuple[Board, _Terminal, _Typist], monkeypatch: pytest.MonkeyPatch
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+        flush = termios.tcflush
+        failures = iter([True])
+
+        def flush_once_broken(fd: int, queue: int) -> None:
+            if next(failures, False):
+                msg = "no terminal"
+                raise termios.error(msg)
+            flush(fd, queue)
+
+        monkeypatch.setattr(termios, "tcflush", flush_once_broken)
+        with pytest.raises(termios.error, match="no terminal"):
+            await board.decide(prompt="push?")
+        typist.enter("3")
+
+        await _eventually(lambda: "── heal bbbb ──" in terminal.frame)
+        await board.close()
+
+    @staticmethod
+    async def test_a_question_opening_as_the_board_closes_is_asked_on_the_terminal(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        # The question has stopped the command read and waits for it to end.
+        await asyncio.sleep(0)
+        await board.close()
+        await _eventually(lambda: terminal.getvalue().endswith("push? [y/n] "))
+        typist.enter("y")
+
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        assert terminal.getvalue().count(_ALTERNATE) == 1
+        assert "push? [y/n]" in terminal.getvalue().rpartition(_PLAIN)[2]
+
+    @staticmethod
+    async def test_once_input_ends_no_key_is_read_and_the_board_is_still_painted(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+
+        typist.type(_END_OF_INPUT)
+        await asyncio.sleep(_REPAINTED)
+        typist.enter("3")
+        await asyncio.sleep(_REPAINTED)
+        board.ended(cast_id="b", status="ok", detail=None)
+        await _eventually(lambda: "heal bbbb  ✓ done" in terminal.frame)
+
+        assert "── heal aaaa ──" in terminal.frame
         await board.close()
 
     @staticmethod

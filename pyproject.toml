@@ -655,6 +655,11 @@ convention = "pep257"
 exclude = []
 min_confidence = 61
 
+# PYTEST
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+
 # COVERAGE
 
 [tool.coverage.run]

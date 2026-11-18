@@ -66,6 +66,9 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
 _REFUSED = 2
+# The version asked before the cast and again as it attaches, then the cast's
+# own connection.
+_UNTIL_THE_CAST_ATTACHED = 3
 
 
 # Of the project the test is standing in unless told otherwise, which is the
@@ -1876,6 +1879,34 @@ class TestFollowing:
 
         assert code == 0
         assert _FOLLOWING in capsys.readouterr().out
+
+    @staticmethod
+    async def test_a_daemon_gone_once_the_cast_attached_is_not_followed(
+        socket_path: Path,
+        queue_rituals: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        connect = asyncio.open_unix_connection
+        reached: list[str] = []
+
+        async def gone_once_attached(
+            path: str,
+        ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+            reached.append(path)
+            if len(reached) > _UNTIL_THE_CAST_ATTACHED:
+                raise ConnectionRefusedError
+            return await connect(path)
+
+        async with _served(socket_path):
+            with monkeypatch.context() as patched:
+                patched.setattr(asyncio, "open_unix_connection", gone_once_attached)
+                code = await _drive(["fan"])
+            await _spawned(lambda: _finished(queue_rituals / "runs", "count"))
+
+        assert code == 0
+        assert _FOLLOWING not in capsys.readouterr().out
+        assert reached == [str(socket_path)] * (_UNTIL_THE_CAST_ATTACHED + 1)
 
     @staticmethod
     async def test_ctrl_c_leaves_the_child_running_and_keeps_the_cast_s_code(

@@ -219,19 +219,21 @@ class Board(Display, Channel):
     async def _asking(self, cast_id: str | None, rows: int) -> AsyncGenerator[None]:
         async with self._turn:
             try:
-                if self._mode.open:
-                    await self._hold(cast_id, rows)
+                # An open board always has a command read.
+                if (typing := self._loops.typing) is not None:
+                    await self._hold(typing=typing, cast_id=cast_id, rows=rows)
                 yield
             finally:
                 self._let_go()
 
     # The command read is stopped first, so the answer is not read as a key, and
     # what was typed for it but not entered is dropped.
-    async def _hold(self, cast_id: str | None, rows: int) -> None:
-        typing, self._loops.typing = self._loops.typing, None
-        if typing is not None:
-            typing.cancel()
-            await asyncio.gather(typing, return_exceptions=True)
+    async def _hold(
+        self, *, typing: asyncio.Task[None], cast_id: str | None, rows: int
+    ) -> None:
+        self._loops.typing = None
+        typing.cancel()
+        await asyncio.gather(typing, return_exceptions=True)
         if not self._mode.open:
             return
         self.asker.discard_typed()
@@ -241,13 +243,15 @@ class Board(Display, Channel):
         self._mode.state = "asking"
         self._show(question_rows=rows)
 
+    # The command read starts again even when the question never took the
+    # screen, or the board would stay open with no keys read.
     def _let_go(self) -> None:
         if self._mode.state == "pending":
             self._open()
-        elif self._mode.state == "asking":
-            self._mode.state = "board"
-            if self._loops.typing is None:
-                self._loops.typing = self._watched(self._typing())
+        elif self._mode.open:
+            if self._mode.state == "asking":
+                self._mode.state = "board"
+            self._loops.typing = self._watched(self._typing())
             self._loops.changed.set()
 
     def _open(self) -> None:
