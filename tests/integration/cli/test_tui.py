@@ -397,6 +397,41 @@ class TestContents:
         assert output == ["one", " ", "two"]
 
     @staticmethod
+    async def test_output_reaches_the_terminal_as_text_only():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        for delta in (
+            "\x1b[60Cmoved \x1b[31mred\x1b[0m \x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\",
+            "10%\r20%\r",
+            "bell\x07 csi\x9b2K",
+            "prose " * 100,
+        ):
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=delta))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+
+            log = app.query_one("#log", Log)
+            output = list(log.lines)
+            drawn = [log.render_line(y) for y in range(len(output))]
+            width = log.size.width
+        assert output == [
+            "moved red link",
+            "10%",
+            "20%",
+            "bell� csi�2K",
+            "prose " * 100,
+        ]
+        assert [strip.cell_length for strip in drawn] == [width] * 5
+        assert [strip.text.isprintable() for strip in drawn] == [True] * 5
+
+    @staticmethod
     async def test_the_cursor_stays_on_its_cast_when_another_arrives():
         hub = Hub()
         hub.apply(_hello("c1", "nap"))

@@ -11,6 +11,13 @@ when.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The window draws a step's output inside its pane.** Output that carried a
+  terminal escape sequence, a cursor move for one, was drawn to the right of
+  the pane and left it empty. The window now drops escape sequences and shows
+  any other control character as `�`. (#296)
+
 ## [1.2.0] - 2026-11-18
 
 ### Added

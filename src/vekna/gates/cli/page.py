@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +36,14 @@ _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
 NO_CAST = "no cast here — c starts one"
+# Log passes a control character above 0x14 through, ESC among them, and the
+# terminal obeys it: one cursor move draws the output outside the pane. A whole
+# escape sequence goes, a control character left alone is shown as `�`. The
+# line breaks are the ones `str.splitlines` cuts at, which Log cuts at too.
+_ESCAPE = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[ -/]*[0-~])"
+)
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
 
 
 def where(root: str) -> str:
@@ -220,11 +229,15 @@ def output(entry: Entry | None) -> list[str]:
         return []
     view = entry.view
     rite = entry.rite or _shown_rite(view)
-    lines = [] if rite is None else list(rite.deltas)
+    said = [] if rite is None else list(rite.deltas)
     if entry.rite is None and view.detail and not live(view):
-        lines += ["", *view.detail.splitlines()]
+        said += ["", view.detail]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
-    return [line or " " for line in lines]
+    return [
+        _CONTROL.sub("�", line) or " "
+        for text in said
+        for line in _ESCAPE.sub("", text).splitlines() or [""]
+    ]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:
