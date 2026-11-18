@@ -6,6 +6,7 @@ import shutil
 import termios
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import TextIO
 
@@ -16,7 +17,12 @@ from vekna.lexicon._links.board import Board
 from vekna.lexicon._links.follow import Follower
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.follow import Lineage
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
+from vekna.lexicon._pacts import (
+    RiteBegan,
+    RiteEnded,
+    RiteStreamed,
+    StandalonePromptError,
+)
 from vekna.links.socket_server import serve
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Surface
@@ -40,6 +46,9 @@ _HOME = "\x1b[H\x1b[2J"
 _REPAINTED = 0.3
 _TWICE = 2
 _END_OF_INPUT = "\x04"
+_ROWS = 24
+_ATTEMPTS = 3
+_LOG_LINES = 40
 
 
 class _Terminal(io.StringIO):
@@ -92,6 +101,10 @@ async def _eventually(ready: Callable[[], bool]) -> None:
     raise AssertionError(msg)
 
 
+def _said(terminal: _Terminal, text: str, times: int) -> bool:
+    return terminal.getvalue().count(text) == times
+
+
 def _hello(cast_id: str) -> CastHello:
     return CastHello(
         cast_id=cast_id,
@@ -120,7 +133,7 @@ def _began(rite_id: str = "r1") -> RiteBegan:
 @pytest.fixture(autouse=True)
 def _terminal_size(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLUMNS", "80")
-    monkeypatch.setenv("LINES", "24")
+    monkeypatch.setenv("LINES", str(_ROWS))
 
 
 def _board(inp: TextIO) -> tuple[Board, _Terminal]:
@@ -497,6 +510,24 @@ class TestBoard:
         await board.close()
 
     @staticmethod
+    async def test_when_the_typed_cast_ends_well_and_nothing_runs_the_view_leaves_it(
+        desk: tuple[Board, _Terminal, _Typist],
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        asking = asyncio.create_task(board.decide(prompt="push?"))
+        await _eventually(lambda: "push? [y/n]" in terminal.frame)
+        typist.enter("y")
+        assert await asyncio.wait_for(asking, timeout=2) == "yes"
+        board.ended(cast_id="a", status="ok", detail=None)
+
+        board.ended(cast_id="root", status="ok", detail=None)
+
+        await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
+        assert "── sweep root ──" not in terminal.frame
+        await board.close()
+
+    @staticmethod
     async def test_a_question_takes_the_screen_back_from_a_whole_log(
         desk: tuple[Board, _Terminal, _Typist],
     ):
@@ -611,4 +642,36 @@ class TestBoard:
 
         left = terminal.getvalue().rpartition(_PLAIN)[2]
         assert left.endswith("the board stopped: OSError('keys gone')\n")
+        await board.close()
+
+
+@pytest.mark.asyncio
+class TestQuestionRows:
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("options", "retry"),
+        [
+            (None, "please answer y or n"),
+            (["a", "b", "c"], "invalid choice; try again"),
+        ],
+    )
+    async def test_every_bad_answer_a_question_allows_fits_the_rows_it_kept(
+        desk: tuple[Board, _Terminal, _Typist], options: list[str] | None, retry: str
+    ):
+        board, terminal, typist = desk
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        for number in range(_LOG_LINES):
+            board.out.write(f"line {number}\n")
+        asking = asyncio.create_task(board.decide(prompt="pick?", options=options))
+        await _eventually(lambda: "pick?" in terminal.frame)
+        for tried in range(1, _ATTEMPTS + 1):
+            typist.enter("x")
+            await _eventually(partial(_said, terminal, retry, tried))
+        asked = terminal.frame
+
+        with pytest.raises(StandalonePromptError):
+            await asyncio.wait_for(asking, timeout=2)
+        # Each answer typed ends in a newline the terminal echoes, which the
+        # output stream never sees.
+        assert asked.count("\n") + _ATTEMPTS + 1 <= _ROWS
         await board.close()

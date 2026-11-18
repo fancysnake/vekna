@@ -13,8 +13,8 @@ from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 # Up over the line just written, and everything from there down gone.
 _BACK = "\x1b[1A\r\x1b[J"
-_CONFIRM_HEIGHT = 4
-_MENU_HEIGHT = 8
+_CONFIRM_HEIGHT = 8
+_MENU_HEIGHT = 12
 
 
 def _renderer(

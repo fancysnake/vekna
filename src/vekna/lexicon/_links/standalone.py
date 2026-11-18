@@ -21,8 +21,10 @@ from vekna.wire import RiteEndStatus
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
+# An answer and the line saying it was wrong for each attempt, and a row for
+# the answer typed last.
+_ANSWER_ROWS = 2 * _MAX_PROMPT_ATTEMPTS + 1
 _NOTIFY_BODY_MAX = 120
-_ANSWER_ROWS = 3
 _MARK: dict[RiteEndStatus, str] = {
     "ok": "✓",
     "reported": "✗",
@@ -55,7 +57,7 @@ def _menu(prompt: str, options: Sequence[str]) -> str:
 
 
 # The rows a question takes on a screen: its prompt, its options, and under them
-# the hint, a retry line and the answer.
+# every attempt it allows with its retry line.
 # shortcut: a line counts as one row, so a prompt wider than the terminal wraps
 # and takes more. Upgrade if that shows up.
 def question_height(prompt: str, options: Sequence[str] | None) -> int:

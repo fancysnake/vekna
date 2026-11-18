@@ -175,9 +175,13 @@ class Board(Display, Channel):
         entry.notice = next(iter(lines), "")
         if len(lines) > 1:
             entry.log.write(f"{detail}\n")
-        following = self._picture.next_running(cast_id)
-        if self._picture.view == cast_id and following is not None:
-            self._picture.view = following
+        if self._picture.view == cast_id:
+            following = self._picture.next_running(cast_id)
+            shown = self._picture.shown
+            if following is not None:
+                self._picture.view = following
+            elif cast_id not in shown:
+                self._picture.view = shown[-1] if shown else ""
         self._loops.changed.set()
 
     @override
