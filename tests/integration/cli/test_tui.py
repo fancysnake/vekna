@@ -1279,8 +1279,9 @@ class TestFollowing:
 
     # The follow lands a refresh after the repaint that asked for it; the
     # operator's scroll in between is the newer word. The scroll is made as the
-    # follow is asked for, so it always lands in between; once, as Textual's
-    # own scroll to the end asks for a refresh too.
+    # follow is asked for, so it always lands in between. Only the follow
+    # passes where it asked from; Textual's own scroll to the end asks for a
+    # refresh too, and passes nothing.
     @staticmethod
     async def test_scrolling_up_before_the_follow_lands_stops_it(
         monkeypatch: pytest.MonkeyPatch,
@@ -1290,8 +1291,9 @@ class TestFollowing:
             after_refresh = log.call_after_refresh
 
             def scrolled_first(callback: Callable[..., object], *args: float) -> bool:
-                monkeypatch.undo()
-                log.scroll_to(y=_UP, animate=False, immediate=True)
+                if args:
+                    monkeypatch.undo()
+                    log.scroll_to(y=_UP, animate=False, immediate=True)
                 return after_refresh(callback, *args)
 
             monkeypatch.setattr(log, "call_after_refresh", scrolled_first)
@@ -1389,6 +1391,32 @@ class TestFollowing:
         async with _long_output() as (_, _, pilot, log):
             end = log.max_scroll_y
             log.scroll_to(y=end - _UP, animate=True, duration=30)
+            await pilot.pause(_PAINTED)
+
+            target = log.scroll_target_y
+        assert target == end - _UP
+
+    @staticmethod
+    async def test_an_upward_scroll_begun_before_the_follow_lands_is_not_cancelled(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        async with _long_output() as (hub, app, pilot, log):
+            drawn = log.line_count
+            end = log.max_scroll_y
+            after_refresh = log.call_after_refresh
+
+            def scrolled_first(callback: Callable[..., object], *args: float) -> bool:
+                if args:
+                    monkeypatch.undo()
+                    log.scroll_to(
+                        y=end - _UP, animate=True, duration=30, immediate=True
+                    )
+                return after_refresh(callback, *args)
+
+            monkeypatch.setattr(log, "call_after_refresh", scrolled_first)
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one more"))
+            app.changed()
+            await _eventually(pilot, lambda: log.line_count != drawn)
             await pilot.pause(_PAINTED)
 
             target = log.scroll_target_y
