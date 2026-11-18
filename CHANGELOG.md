@@ -11,6 +11,10 @@ when.
 
 ## [Unreleased]
 
+### Fixed
+
+- A rite its cast ended inside shows as cancelled, not as still running.
+
 ## [1.2.0] - 2026-11-17
 
 ### Added

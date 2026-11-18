@@ -49,7 +49,8 @@ def innermost(view: CastView, category: str | None = None) -> RiteView | None:
     running = [
         rite
         for rite in view.rites.values()
-        if rite.status == "running" and category in {None, rite.started.category}
+        if view.rite_status(rite) == "running"
+        and category in {None, rite.started.category}
     ]
     return running[-1] if running else None
 
@@ -78,9 +79,9 @@ def _recovering(view: CastView) -> bool:
     finished = [
         rite
         for rite in view.rites.values()
-        if rite.started.category == "step" and rite.status != "running"
+        if rite.started.category == "step" and view.rite_status(rite) != "running"
     ]
-    return bool(finished) and finished[-1].status == "error"
+    return bool(finished) and view.rite_status(finished[-1]) == "error"
 
 
 # Which cast of a ritual this is, by when it began: a live one is happening now

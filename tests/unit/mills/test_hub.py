@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from typing import cast as as_type
 
@@ -138,6 +138,52 @@ class TestCastLifecycle:
 
         assert hub.casts["c1"].waiting == {}
 
+    @staticmethod
+    def test_ending_a_cast_cuts_the_rites_it_left_unfinished():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+
+        hub.apply(CastGoodbye(cast_id="c1", status="disconnected"))
+
+        view = hub.casts["c1"]
+        assert view.rite_status(view.rites["r1"]) == "cancelled"
+
+    @staticmethod
+    def test_ending_a_cast_keeps_the_status_a_rite_finished_with():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(
+            RiteFinished(
+                cast_id="c1", rite_id="r1", status="ok", finished_at=_WHEN, error=None
+            )
+        )
+
+        hub.apply(CastGoodbye(cast_id="c1", status="disconnected"))
+
+        view = hub.casts["c1"]
+        assert view.rite_status(view.rites["r1"]) == "ok"
+
+    @staticmethod
+    def test_a_cut_rites_clock_stops_at_the_last_time_the_journal_dated():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started("r1"))
+        hub.apply(_started("r2"))
+        later = _WHEN + timedelta(seconds=5)
+        hub.apply(
+            RiteFinished(
+                cast_id="c1", rite_id="r2", status="ok", finished_at=later, error=None
+            )
+        )
+        view = hub.casts["c1"]
+        assert view.rite_finished_at(view.rites["r1"]) is None
+
+        hub.apply(CastGoodbye(cast_id="c1", status="disconnected"))
+
+        assert view.rite_finished_at(view.rites["r1"]) == later
+
 
 class TestRites:
     @staticmethod
@@ -163,7 +209,7 @@ class TestRites:
         hub.apply(finished)
 
         rite = hub.casts["c1"].rites["r1"]
-        assert rite.status == "error"
+        assert hub.casts["c1"].rite_status(rite) == "error"
         assert rite.finished == finished
 
     @staticmethod
