@@ -50,12 +50,8 @@ class Diverted(Revisable):
     def restore(self) -> None:
         self._to = self._screen
 
-    # An OSC sequence paints nothing — it is a desktop notification — so it is
-    # the terminal's to hear wherever the lines are going.
     @override
     def write(self, text: str, /) -> int:
-        if text.startswith("\x1b]"):
-            return self._screen.write(text)
         return self._to.write(text)
 
     @override
@@ -76,11 +72,12 @@ class Diverted(Revisable):
         return self._to.overwrite(mark, text)
 
 
-# closed: the plain terminal. pending: a cast arrived while a question was on
-# it, and the board opens after the question. board: painting. asking: a
-# question is on the screen, and nothing else may change there. log: a whole
-# log is on the terminal's own screen, where it can be scrolled.
-_State = Literal["closed", "pending", "board", "asking", "log"]
+# closed: the plain terminal. plain: a question is on it. pending: a cast
+# arrived while that question was on, and the board opens after it. board:
+# painting. asking: a question is on the screen, and nothing else may change
+# there. log: a whole log is on the terminal's own screen, where it can be
+# scrolled.
+_State = Literal["closed", "plain", "pending", "board", "asking", "log"]
 
 
 @dataclass
@@ -118,41 +115,63 @@ class _Loops:
 # shortcut: a repaint wipes what is typed but not yet entered from the screen,
 # though not from the read. Upgrade to a raw-mode read if that gets in the way.
 class Board(Display, Channel):
-    def __init__(self, *, screen: Revisable, asker: StandaloneRenderer) -> None:
+    def __init__(
+        self,
+        *,
+        screen: Revisable,
+        asker: StandaloneRenderer,
+        cast_id: str,
+        label: str,
+        started_at: datetime,
+    ) -> None:
         self.out = Diverted(screen)
+        # The typed cast renders itself: its lines go where `out` sends them.
+        renderer = StandaloneRenderer(out=self.out)
         self.asker = asker
         self._screen = screen
-        self._picture = Picture()
+        self._picture = Picture(
+            entries={
+                cast_id: Entry(
+                    label=label,
+                    started_at=started_at,
+                    log=self.out.log,
+                    renderer=renderer,
+                )
+            },
+            typed=cast_id,
+            view=cast_id,
+        )
         self._mode = _Mode(read=asker.interactive)
         self._loops = _Loops()
         # One question at a time, the typed cast's among them: they share one
         # stdin, and a second one waits its turn.
         self._turn = asyncio.Lock()
 
-    # The typed cast has a place from the start, and is shown once the board is.
-    def typed(self, *, cast_id: str, label: str, started_at: datetime) -> None:
-        self._picture.typed = cast_id
-        self._picture.entries[cast_id] = Entry(
-            label=label, started_at=started_at, log=self.out.log
-        )
+    @property
+    def renderer(self) -> StandaloneRenderer:
+        return self._picture.entries[self._picture.typed].renderer
 
     @override
     def entered(self, *, cast_id: str, label: str, started_at: datetime) -> None:
         log = Log()
+        # The first cast followed takes the view from the typed one.
+        if len(self._picture.entries) == 1:
+            self._picture.view = cast_id
         self._picture.entries[cast_id] = Entry(
             label=label,
             started_at=started_at,
             log=log,
             renderer=StandaloneRenderer(out=log),
         )
-        if not self._picture.view:
-            self._picture.view = cast_id
         if self._mode.open:
             self._loops.changed.set()
-        elif self._turn.locked():
+        elif self._mode.state == "plain":
             self._mode.state = "pending"
         else:
             self._open()
+
+    def finish(self, status: EndStatus) -> None:
+        self.ended(cast_id=self._picture.typed, status=status, detail=None)
 
     @override
     def render(self, cast_id: str, event: RiteEvent) -> None:
@@ -163,8 +182,7 @@ class Board(Display, Channel):
                 entry.steps[event.rite_id] = event.name
         elif isinstance(event, RiteEnded):
             entry.steps.pop(event.rite_id, None)
-        if entry.renderer is not None:
-            entry.renderer.render(event)
+        entry.renderer.render(event)
         self._loops.changed.set()
 
     @override
@@ -180,8 +198,9 @@ class Board(Display, Channel):
             shown = self._picture.shown
             if following is not None:
                 self._picture.view = following
-            elif cast_id not in shown:
-                self._picture.view = shown[-1] if shown else ""
+            # Nothing is shown until the first cast followed arrives.
+            elif shown and cast_id not in shown:
+                self._picture.view = shown[-1]
         self._loops.changed.set()
 
     @override
@@ -220,8 +239,10 @@ class Board(Display, Channel):
         await asyncio.gather(*running, return_exceptions=True)
 
     @contextlib.asynccontextmanager
-    async def _asking(self, cast_id: str | None, rows: int) -> AsyncGenerator[None]:
+    async def _asking(self, cast_id: str, rows: int) -> AsyncGenerator[None]:
         async with self._turn:
+            if self._mode.state == "closed":
+                self._mode.state = "plain"
             try:
                 # An open board always has a command read.
                 if (typing := self._loops.typing) is not None:
@@ -233,7 +254,7 @@ class Board(Display, Channel):
     # The command read is stopped first, so the answer is not read as a key, and
     # what was typed for it but not entered is dropped.
     async def _hold(
-        self, *, typing: asyncio.Task[None], cast_id: str | None, rows: int
+        self, *, typing: asyncio.Task[None], cast_id: str, rows: int
     ) -> None:
         self._loops.typing = None
         typing.cancel()
@@ -252,6 +273,8 @@ class Board(Display, Channel):
     def _let_go(self) -> None:
         if self._mode.state == "pending":
             self._open()
+        elif self._mode.state == "plain":
+            self._mode.state = "closed"
         elif self._mode.open:
             if self._mode.state == "asking":
                 self._mode.state = "board"

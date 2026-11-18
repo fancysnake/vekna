@@ -139,9 +139,17 @@ def _terminal_size(monkeypatch: pytest.MonkeyPatch) -> None:
 def _board(inp: TextIO) -> tuple[Board, _Terminal]:
     terminal = _Terminal()
     screen = Tail(terminal)
-    board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
-    board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
-    return board, terminal
+    return _board_on(screen=screen, inp=inp), terminal
+
+
+def _board_on(*, screen: Tail, inp: TextIO) -> Board:
+    return Board(
+        screen=screen,
+        asker=StandaloneRenderer(out=screen, inp=inp),
+        cast_id="root",
+        label="sweep root",
+        started_at=_WHEN,
+    )
 
 
 # Keys come from a terminal, as they do when somebody is typing.
@@ -227,7 +235,7 @@ class TestBoard:
 
         board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
         board.out.write("while the board is up\n")
-        board.out.write("\x1b]777;notify;vekna finished;sweep\x07")
+        board.asker.notify("done", "sweep")
         board.render("a", _began())
         board.render(
             "a",
@@ -248,6 +256,7 @@ class TestBoard:
 
         assert terminal.getvalue().startswith(f"before the board\n{_ALTERNATE}")
         assert "\x1b]777;notify;vekna finished;sweep\x07" in terminal.getvalue()
+        assert "notify" not in "".join(board.out.log.lines)
         assert "sweep root" not in shown
         assert terminal.getvalue().rpartition(_PLAIN)[2].splitlines() == [
             "while the board is up",
@@ -590,8 +599,7 @@ class TestBoard:
         terminal = _Terminal()
         screen = Tail(terminal)
         with (tmp_path / "empty").open("w+") as inp:
-            board = Board(screen=screen, asker=StandaloneRenderer(out=screen, inp=inp))
-            board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+            board = _board_on(screen=screen, inp=inp)
             board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
             await asyncio.sleep(_REPAINTED)
 
@@ -632,10 +640,7 @@ class TestBoard:
     async def test_a_read_that_fails_leaves_the_terminal_and_says_why():
         terminal = _Terminal()
         screen = Tail(terminal)
-        board = Board(
-            screen=screen, asker=StandaloneRenderer(out=screen, inp=_Broken())
-        )
-        board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+        board = _board_on(screen=screen, inp=_Broken())
 
         board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
         await _eventually(lambda: _PLAIN in terminal.getvalue())

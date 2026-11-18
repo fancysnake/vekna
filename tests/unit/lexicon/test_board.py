@@ -4,9 +4,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from vekna.lexicon._links.board import Diverted
-from vekna.lexicon._links.follow import Turns
 from vekna.lexicon._links.picture import Entry, Log, Picture, frame, summary
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
+from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -112,7 +112,9 @@ class TestFrame:
         running.steps["r1"] = "repair"
         done = _queued("heal bbbb")
         done.ended = "ok"
-        picture = Picture(entries={"a": running, "b": done}, view="a", note="hello")
+        picture = Picture(
+            entries={"a": running, "b": done}, typed="root", view="a", note="hello"
+        )
 
         assert frame(picture, now=_NOW, size=_SIZE).splitlines() == [
             "\x1b[H\x1b[2J  1  heal aaaa  ▶ 1m05s  repair",
@@ -127,7 +129,7 @@ class TestFrame:
     @staticmethod
     def test_the_view_is_cut_to_the_rows_left_and_a_line_to_the_width():
         entry = _queued("heal aaaa", *(f"line {n}" for n in range(30)), "x" * 20)
-        picture = Picture(entries={"a": entry}, view="a")
+        picture = Picture(entries={"a": entry}, typed="root", view="a")
 
         lines = frame(picture, now=_NOW, size=(10, 8)).splitlines()
 
@@ -135,7 +137,9 @@ class TestFrame:
 
     @staticmethod
     def test_while_a_question_is_asked_the_foot_is_left_to_it():
-        picture = Picture(entries={"a": _queued("heal aaaa", "asking")}, view="a")
+        picture = Picture(
+            entries={"a": _queued("heal aaaa", "asking")}, typed="root", view="a"
+        )
 
         lines = frame(picture, now=_NOW, size=_SIZE, question_rows=3).splitlines()
 
@@ -144,7 +148,7 @@ class TestFrame:
     @staticmethod
     def test_a_taller_question_leaves_fewer_rows_to_the_view():
         entry = _queued("heal aaaa", *(f"line {n}" for n in range(30)))
-        picture = Picture(entries={"a": entry}, view="a")
+        picture = Picture(entries={"a": entry}, typed="root", view="a")
 
         short = frame(picture, now=_NOW, size=(80, 20), question_rows=_SHORT_QUESTION)
         tall = frame(picture, now=_NOW, size=(80, 20), question_rows=_TALL_QUESTION)
@@ -157,7 +161,7 @@ class TestFrame:
 
     @staticmethod
     def test_a_cast_s_clock_counts_seconds_then_minutes_then_hours():
-        picture = Picture(entries={"a": _queued("heal aaaa")})
+        picture = Picture(entries={"a": _queued("heal aaaa")}, typed="root", view="a")
 
         clocks = [
             frame(picture, now=_WHEN + timedelta(seconds=took), size=_SIZE)
@@ -170,9 +174,9 @@ class TestFrame:
 
     @staticmethod
     def test_the_typed_cast_leaves_when_it_ends_well_and_stays_when_it_fails():
-        typed = Entry(label="sweep root", started_at=_WHEN)
+        typed = _queued("sweep root")
         picture = Picture(
-            entries={"root": typed, "a": _queued("heal aaaa")}, typed="root"
+            entries={"root": typed, "a": _queued("heal aaaa")}, typed="root", view="a"
         )
         typed.ended = "ok"
         left = picture.shown
@@ -188,7 +192,7 @@ class TestNextRunning:
     def test_it_is_the_next_to_have_arrived_that_still_runs_around_the_end():
         entries = {name: _queued(name) for name in ("a", "b", "c")}
         entries["c"].ended = "ok"
-        picture = Picture(entries=entries)
+        picture = Picture(entries=entries, typed="root", view="a")
 
         assert picture.next_running("a") == "b"
         assert picture.next_running("b") == "a"
@@ -198,13 +202,16 @@ class TestNextRunning:
         entries = {name: _queued(name) for name in ("a", "b")}
         entries["b"].ended = "error"
 
-        assert Picture(entries=entries).next_running("a") is None
+        picture = Picture(entries=entries, typed="root", view="a")
+
+        assert picture.next_running("a") is None
 
 
 class TestSummary:
     @staticmethod
     def test_it_leaves_the_typed_cast_s_lines_a_line_per_cast_and_failed_logs():
-        typed = Entry(label="sweep root", started_at=_WHEN, ended="ok")
+        typed = _queued("sweep root")
+        typed.ended = "ok"
         typed.log.write("result: null\n")
         done = _queued("heal aaaa", "✓ repair")
         done.ended = "ok"
@@ -212,7 +219,9 @@ class TestSummary:
         failed.ended, failed.notice = "error", "push refused"
         going = _queued("heal cccc", "▶ repair")
         picture = Picture(
-            entries={"root": typed, "a": done, "b": failed, "c": going}, typed="root"
+            entries={"root": typed, "a": done, "b": failed, "c": going},
+            typed="root",
+            view="a",
         )
 
         assert summary(picture, now=_NOW).splitlines() == [

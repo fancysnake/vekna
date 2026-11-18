@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from vekna.lexicon._links.follow import Follower, Turns
+from vekna.lexicon._links.follow import Follower
 from vekna.lexicon._links.standalone import Tail
+from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._mills.follow import Lineage
 from vekna.lexicon._pacts import StandalonePromptError
 from vekna.links.socket_server import serve

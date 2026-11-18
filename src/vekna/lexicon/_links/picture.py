@@ -5,9 +5,13 @@ from typing_extensions import override
 
 from vekna.lexicon._pacts import EndStatus
 
-from .follow import ended_said
 from .standalone import Revisable, StandaloneRenderer
 
+_MARK: dict[EndStatus, str] = {
+    "ok": "✓ done",
+    "error": "✗ failed",
+    "disconnected": "⚠ aborted",
+}
 _HOME = "\x1b[H\x1b[2J"
 # The rows under the board that are not the view: a note, the keys, the cursor.
 _FOOT_ROWS = 3
@@ -70,9 +74,8 @@ class Log(Revisable):
 class Entry:
     label: str
     started_at: datetime
-    log: Log = field(default_factory=Log)
-    # None for the typed cast, which renders itself and is diverted here.
-    renderer: StandaloneRenderer | None = None
+    log: Log
+    renderer: StandaloneRenderer
     # The steps it is inside of, in the order they began.
     steps: dict[str, str] = field(default_factory=dict)
     ended: EndStatus | None = None
@@ -81,13 +84,18 @@ class Entry:
     notice: str = ""
 
 
+def ended_said(status: EndStatus, detail: str | None) -> str:
+    return f"{_MARK[status]}: {detail}" if detail else _MARK[status]
+
+
 # What the board shows: the casts in the order they arrived, the typed one
-# among them, and the cast whose latest lines are in view.
+# first, and the cast whose latest lines are in view: the typed one until the
+# first cast it follows arrives.
 @dataclass
 class Picture:
-    entries: dict[str, Entry] = field(default_factory=dict)
-    typed: str | None = None
-    view: str = ""
+    entries: dict[str, Entry]
+    typed: str
+    view: str
     note: str = ""
 
     # The typed cast leaves when it ends well: what it set going is what the
@@ -154,10 +162,10 @@ def frame(
         _line(index=index, entry=picture.entries[cast_id], now=now)
         for index, cast_id in enumerate(picture.shown, 1)
     ]
-    if (viewed := picture.entries.get(picture.view)) is not None:
-        foot = _FOOT_ROWS if question_rows is None else question_rows
-        room = max(1, rows - len(lines) - 1 - foot)
-        lines += [f"── {viewed.label} ──", *viewed.log.lines[-room:]]
+    viewed = picture.entries[picture.view]
+    foot = _FOOT_ROWS if question_rows is None else question_rows
+    room = max(1, rows - len(lines) - 1 - foot)
+    lines += [f"── {viewed.label} ──", *viewed.log.lines[-room:]]
     if question_rows is None:
         lines += [f" {picture.note}" if picture.note else "", f" {KEYS}"]
     return _HOME + "\n".join(_clipped(line, columns) for line in lines) + "\n"
@@ -171,7 +179,7 @@ def whole_log(entry: Entry) -> list[str]:
 # board had the screen, a line per cast, and every failed cast's log in full.
 def summary(picture: Picture, *, now: datetime) -> str:
     entries = picture.entries
-    typed = [] if picture.typed is None else entries[picture.typed].log.lines
+    typed = entries[picture.typed].log.lines
     listed = [entries[cast_id] for cast_id in picture.shown]
     failed = [
         entries[cast_id]

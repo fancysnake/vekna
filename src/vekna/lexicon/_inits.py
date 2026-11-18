@@ -28,10 +28,11 @@ from vekna.wire import (
 
 from ._links.board import Board
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
-from ._links.follow import Follower, Turns
+from ._links.follow import Follower
 from ._links.loader import load_rituals_module, load_rituals_source, read_configs
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, Tail
+from ._links.turns import Turns
 from ._links.unattended import UnattendedChannel
 from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
@@ -50,7 +51,6 @@ from ._mills.ledger import Ledger
 from ._pacts import (
     Channel,
     Done,
-    EndStatus,
     FocusMissingError,
     NoComponents,
     RiteEvent,
@@ -583,29 +583,13 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
-# The cast typed by hand: what it says to, and the board that is told how it ends.
-class _Typed(NamedTuple):
-    renderer: StandaloneRenderer
-    board: Board
-    cast_id: str
-
-    def ended(self, status: EndStatus) -> None:
-        self.board.ended(cast_id=self.cast_id, status=status, detail=None)
-
-
 # Every way a cast can end goes through one notify: an `except` per error type
 # would leave whatever it does not name — the AttributeError a step raises —
 # silent, which is the walked-away-from-the-terminal case the notification
 # exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *,
-    plan: _Plan,
-    grimoire: Grimoire,
-    channel: Channel,
-    link: DaemonLink,
-    typed: _Typed,
+    *, plan: _Plan, grimoire: Grimoire, channel: Channel, link: DaemonLink, board: Board
 ) -> int:
-    renderer = typed.renderer
     try:
         with _throttled(link):
             result = await link.cancellable(
@@ -627,8 +611,8 @@ async def _cast(
     except Exception as error:
         # A rituals.py under development dies here, and its traceback is the
         # whole diagnosis — say it to the desktop, then let it out unchanged.
-        renderer.notify("failed", f"{plan.ritual.name}: {error}")
-        typed.ended("error")
+        board.asker.notify("failed", f"{plan.ritual.name}: {error}")
+        board.finish("error")
         raise
     else:
         await link.close(
@@ -639,13 +623,13 @@ async def _cast(
                 else _RESULT.validate_json(result.model_dump_json())
             ),
         )
-        renderer.notify("done", plan.ritual.name)
-        renderer.say(f"result: {_rendered(result)}\n")
-        typed.ended("ok")
+        board.asker.notify("done", plan.ritual.name)
+        board.renderer.say(f"result: {_rendered(result)}\n")
+        board.finish("ok")
         return 0
     await link.close(status="error", detail=detail)
-    renderer.notify("failed", f"{plan.ritual.name}: {detail}")
-    typed.ended("error")
+    board.asker.notify("failed", f"{plan.ritual.name}: {detail}")
+    board.finish("error")
     return code
 
 
@@ -655,8 +639,19 @@ async def _cast(
 # shortcut: a child process inheriting the terminal writes past the tail, so its
 # last line can still go. Upgrade if a ritual runs one outside the shell medium.
 async def _run(plan: _Plan) -> int:
+    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
+    # is the wire's correlation key, and which cast this one carries on from is
+    # a field of its own on the hello.
+    cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
+    hello = await _hello(cast_id=cast_id, plan=plan)
     screen = Tail(sys.stdout)
-    board = Board(screen=screen, asker=StandaloneRenderer(out=screen))
+    board = Board(
+        screen=screen,
+        asker=StandaloneRenderer(out=screen),
+        cast_id=cast_id,
+        label=f"{hello.ritual} {cast_id[:SHORT_ID]}",
+        started_at=hello.started_at,
+    )
     out = board.out
     err: TextIO = sys.stderr
     with (
@@ -664,26 +659,16 @@ async def _run(plan: _Plan) -> int:
         contextlib.redirect_stderr(out if out.isatty() and err.isatty() else err),
     ):
         try:
-            return await _run_on(plan, board)
+            return await _run_on(plan, board, hello=hello)
         finally:
             await board.close()
 
 
 # The renderer and the wire both, in that order: what the operator sees does not
 # wait on a socket, and a cast with no daemon behaves exactly as it did.
-async def _run_on(plan: _Plan, board: Board) -> int:
-    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
-    # is the wire's correlation key, and which cast this one carries on from is
-    # a field of its own on the hello.
-    cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
-    renderer = StandaloneRenderer(out=board.out)
-    hello = await _hello(cast_id=cast_id, plan=plan)
+async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
+    cast_id = hello.cast_id
     link = DaemonLink(socket_path=default_socket_path(), hello=hello)
-    board.typed(
-        cast_id=cast_id,
-        label=f"{hello.ritual} {cast_id[:SHORT_ID]}",
-        started_at=hello.started_at,
-    )
     tee = TeeChannel(
         inner=None if plan.wired else board,
         link=link,
@@ -693,7 +678,6 @@ async def _run_on(plan: _Plan, board: Board) -> int:
     channel: Channel = UnattendedChannel() if plan.unattended else tee
 
     def emit(event: RiteEvent) -> None:
-        renderer.render(event)
         board.render(cast_id, event)
         link.send(to_wire(event, cast_id=cast_id))
 
@@ -723,7 +707,7 @@ async def _run_on(plan: _Plan, board: Board) -> int:
                     grimoire=grimoire,
                     channel=channel,
                     link=link,
-                    typed=_Typed(renderer=renderer, board=board, cast_id=cast_id),
+                    board=board,
                 )
         finally:
             watcher.cancel()
@@ -732,7 +716,7 @@ async def _run_on(plan: _Plan, board: Board) -> int:
         if follower is None:
             return code
         return await _followed(
-            code, follower=follower, lineage=lineage, renderer=renderer
+            code, follower=follower, lineage=lineage, renderer=board.renderer
         )
 
 

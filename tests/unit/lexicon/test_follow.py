@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 
 from typing_extensions import override
 
-from vekna.lexicon._links.follow import _Prefixed
 from vekna.lexicon._links.standalone import Tail
+from vekna.lexicon._links.turns import _Prefixed
 from vekna.lexicon._mills.follow import Lineage
 from vekna.wire import CastGoodbye, CastHello
 
