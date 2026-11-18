@@ -6,7 +6,18 @@ from rich.text import Text
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
-from .cast_text import ago, carried, clipped, clock, counted, elapsed, ended, live, word
+from .cast_text import (
+    ago,
+    carried,
+    clipped,
+    clock,
+    counted,
+    elapsed,
+    ended,
+    live,
+    printable,
+    word,
+)
 from .contents import Counts, Entry, rite_tree, walked
 
 # A tree row holds the first line of an error, cut to this: the whole of it is
@@ -118,7 +129,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
-        text.append(f"  {clipped(rite.error, _ERROR)}", "red")
+        text.append(f"  {clipped(printable(rite.error), _ERROR)}", "red")
     if any(
         prompt.request.rite_id == rite.started.rite_id
         for prompt in view.waiting.values()
@@ -191,9 +202,8 @@ def _cast_head(view: CastView, branches: dict[str, str | None], now: datetime) -
     if flags := _flags(hello):
         text.append(f"\n{flags}", "dim")
     if view.blocked is not None:
-        text.append(
-            f"\ntree {view.blocked.path} left blocked: {view.blocked.reason}", "red"
-        )
+        blocked, reason = view.blocked, printable(view.blocked.reason)
+        text.append(f"\ntree {blocked.path} left blocked: {reason}", "red")
     depth: dict[str, int] = {}
     for entry, parent in walked(rite_tree(view)):
         depth[entry.key] = depth.get(parent or "", -1) + 1
@@ -208,7 +218,7 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
         f"  {view.rite_status(rite)}  {_took(view, rite, now)}",
     )
     if rite.error is not None:
-        text.append(f"\n{rite.error}", "red")
+        text.append(f"\n{printable(rite.error)}", "red")
     return text
 
 
@@ -220,11 +230,11 @@ def output(entry: Entry | None) -> list[str]:
         return []
     view = entry.view
     rite = entry.rite or _shown_rite(view)
-    lines = [] if rite is None else list(rite.deltas)
+    said = [] if rite is None else list(rite.deltas)
     if entry.rite is None and view.detail and not live(view):
-        lines += ["", *view.detail.splitlines()]
+        said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
-    return [line or " " for line in lines]
+    return [printable(line) or " " for line in said]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:

@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
@@ -53,6 +54,32 @@ def innermost(view: CastView, category: str | None = None) -> RiteView | None:
         and category in {None, rite.started.category}
     ]
     return running[-1] if running else None
+
+
+# A terminal obeys the control characters a ritual or an agent wrote: one cursor
+# move draws text outside its pane. A whole escape sequence goes, and a control
+# character left alone is shown as `�`.
+_ESCAPE = re.compile(
+    r"""
+    \x1b (?:
+        \[ [0-?]* [\x20-/]* [@-~]       # CSI: parameters, intermediates, final byte
+      | \] [^\x07\x1b]* (?:\x07|\x1b\\)?  # OSC: to BEL or ST, or to the line's end
+      | [\x20-/]* [0-~]                 # nF, Fp, Fe, Fs: intermediates, final byte
+    )
+    """,
+    re.VERBOSE,
+)
+# Not \x09-\x0d: tab is text, and the rest are line breaks that `splitlines`
+# cuts at before any line reaches here.
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
+
+
+# Text a ritual wrote with nothing in it a terminal would act on, cleaned line by
+# line so an unterminated sequence cannot swallow the lines after it.
+def printable(text: str) -> str:
+    return "\n".join(
+        _CONTROL.sub("�", _ESCAPE.sub("", line)) for line in text.splitlines()
+    )
 
 
 # Text a ritual wrote, to its first line, cut with `…` where it runs past `width`.
