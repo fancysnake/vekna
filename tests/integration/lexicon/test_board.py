@@ -62,6 +62,17 @@ class _Typist:
         self._keys.flush()
 
 
+class _Broken(io.StringIO):
+    @override
+    def isatty(self) -> bool:
+        return True
+
+    @override
+    def readline(self, size: int | None = -1, /) -> str:
+        msg = "keys gone"
+        raise OSError(msg)
+
+
 class _Peer(Surface):
     def __init__(self) -> None:
         self.sent: list[WireMessage] = []
@@ -261,8 +272,8 @@ class TestBoard:
         board, terminal, typist = desk
         board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
         board.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
-        board.say("b", "⏸ push? — answer it in `vekna`")
-        board.say("stranger", "nobody's line")
+        board.say(cast_id="b", label="heal bbbb", line="⏸ push? — answer it in `vekna`")
+        board.say(cast_id="stranger", label="stranger", line="nobody's line")
         await _eventually(lambda: "nobody's line" in terminal.frame)
         noticed = terminal.frame
 
@@ -402,7 +413,7 @@ class TestBoard:
         await _eventually(lambda: "── heal aaaa ──" in terminal.frame)
 
         async def asked_by_b() -> str:
-            async with board.asking("b"):
+            async with board.asking("b", 4):
                 return await board.asker.decide(prompt="merge?")
 
         first = asyncio.create_task(board.decide(prompt="push?"))
@@ -430,7 +441,7 @@ class TestBoard:
         await _eventually(lambda: "Enter returns" in terminal.getvalue())
 
         async def asked_by_a_stranger() -> str:
-            async with board.asking("stranger"):
+            async with board.asking("stranger", 4):
                 return await board.asker.decide(prompt="push?")
 
         asking = asyncio.create_task(asked_by_a_stranger())
@@ -519,4 +530,20 @@ class TestBoard:
             in left
         )
         assert left.endswith("push? [y/n] ")
+        await board.close()
+
+    @staticmethod
+    async def test_a_read_that_fails_leaves_the_terminal_and_says_why():
+        terminal = _Terminal()
+        screen = Tail(terminal)
+        board = Board(
+            screen=screen, asker=StandaloneRenderer(out=screen, inp=_Broken())
+        )
+        board.typed(cast_id="root", label="sweep root", started_at=_WHEN)
+
+        board.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
+        await _eventually(lambda: _PLAIN in terminal.getvalue())
+
+        left = terminal.getvalue().rpartition(_PLAIN)[2]
+        assert left.endswith("the board stopped: OSError('keys gone')\n")
         await board.close()

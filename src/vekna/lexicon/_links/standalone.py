@@ -22,6 +22,7 @@ from vekna.wire import RiteEndStatus
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
 _NOTIFY_BODY_MAX = 120
+_ANSWER_ROWS = 3
 _MARK: dict[RiteEndStatus, str] = {
     "ok": "✓",
     "reported": "✗",
@@ -51,6 +52,14 @@ def _one_line(text: str) -> str:
 def _menu(prompt: str, options: Sequence[str]) -> str:
     lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
     return "\n".join(lines) + "\n"
+
+
+# The rows a question takes on a screen: its prompt, its options, and under them
+# the hint, a retry line and the answer.
+# shortcut: a line counts as one row, so a prompt wider than the terminal wraps
+# and takes more. Upgrade if that shows up.
+def question_height(prompt: str, options: Sequence[str] | None) -> int:
+    return len(prompt.splitlines() or [""]) + len(options or ()) + _ANSWER_ROWS
 
 
 # `isdigit` is wider than `int` accepts — "²" is a digit and `int` raises on it,
@@ -246,10 +255,12 @@ class StandaloneRenderer(Channel):
 
     # A line typed while no question is open, or None once input has ended. It
     # shares the one read a question takes over, so no answer is read as this.
+    # A read that fails is not the end of input: it is raised, for the caller to
+    # say why it stopped.
     async def line(self) -> str | None:
         try:
             return await self._readline()
-        except (StandalonePromptError, OSError, ValueError):
+        except StandalonePromptError:
             return None
 
     def _emit(self, sink: str | None, block: str) -> None:

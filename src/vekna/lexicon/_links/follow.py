@@ -39,7 +39,7 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import Out, Revisable, StandaloneRenderer
+from .standalone import Out, Revisable, StandaloneRenderer, question_height
 
 _MARK: dict[EndStatus, str] = {
     "ok": "✓ done",
@@ -136,7 +136,6 @@ class _Turn:
     label: str
     held: _Held
     renderer: StandaloneRenderer
-    spoke: bool = False
     ended: bool = False
 
 
@@ -149,7 +148,6 @@ class Turns(Display):
     def __init__(self, out: Out) -> None:
         self._out = out
         self._turns: dict[str, _Turn] = {}
-        self._speaker: str | None = None
 
     @override
     def entered(self, *, cast_id: str, label: str, started_at: datetime) -> None:
@@ -174,35 +172,26 @@ class Turns(Display):
         self._pass_on()
 
     @override
-    def say(self, cast_id: str, line: str) -> None:
-        turn = self._turns.get(cast_id)
-        label = cast_id[:SHORT_ID] if turn is None else turn.label
+    def say(self, *, cast_id: str, label: str, line: str) -> None:
+        del cast_id
         self._out.write(f"[{label}] {line}\n")
         self._out.flush()
 
     @override
-    def asking(self, cast_id: str) -> AbstractAsyncContextManager[None]:
+    def asking(self, cast_id: str, rows: int) -> AbstractAsyncContextManager[None]:
         return contextlib.nullcontext()
 
     # Whatever is still held is said: the follow ended first, and a line kept
-    # back would be a line lost.
+    # back would be a line lost. Whoever made the turns closes them.
     @override
     async def close(self) -> None:
         for turn in self._turns.values():
             turn.held.release()
 
     def _pass_on(self) -> None:
-        speaker = None if self._speaker is None else self._turns[self._speaker]
-        if speaker is not None and not speaker.ended:
-            return
-        self._speaker = None
-        for cast_id, turn in self._turns.items():
-            if turn.spoke:
-                continue
-            turn.spoke = True
+        for turn in self._turns.values():
             turn.held.release()
             if not turn.ended:
-                self._speaker = cast_id
                 return
 
 
@@ -281,7 +270,6 @@ class Follower:
             reader.cancel()
             await asyncio.gather(reader, return_exceptions=True)
         await self._hang_up()
-        await self._display.close()
 
     async def _hang_up(self) -> None:
         if (writer := self._wire.writer) is not None:
@@ -394,12 +382,13 @@ class Follower:
             task.cancel()
 
     async def _asked(self, ask: Channel, request: DecideRequested) -> None:
+        prompt = f"[{self._label(request.cast_id)}] {request.prompt}"
         try:
-            async with self._display.asking(request.cast_id):
+            async with self._display.asking(
+                request.cast_id, question_height(prompt, request.options)
+            ):
                 answer = await ask.decide(
-                    prompt=f"{self._label(request)} {request.prompt}",
-                    options=request.options,
-                    free=request.free,
+                    prompt=prompt, options=request.options, free=request.free
                 )
         except StandalonePromptError as error:
             self._say(request, f"{error} — answer it in `vekna`")
@@ -415,12 +404,15 @@ class Follower:
                 )
             )
 
-    def _label(self, request: DecideRequested) -> str:
-        followed = self._followed.get(request.cast_id)
-        return f"[{request.cast_id[:SHORT_ID] if followed is None else followed.label}]"
+    # The one place a cast not heard from yet gets a name: its short id.
+    def _label(self, cast_id: str) -> str:
+        followed = self._followed.get(cast_id)
+        return cast_id[:SHORT_ID] if followed is None else followed.label
 
     def _say(self, request: DecideRequested, line: str) -> None:
-        self._display.say(request.cast_id, line)
+        self._display.say(
+            cast_id=request.cast_id, label=self._label(request.cast_id), line=line
+        )
 
 
 # What a rite message means to a renderer, or None for what it has shown

@@ -5,7 +5,7 @@ import itertools
 import json
 import os
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import AsyncGenerator, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -50,6 +50,7 @@ from ._mills.ledger import Ledger
 from ._pacts import (
     Channel,
     Done,
+    EndStatus,
     FocusMissingError,
     NoComponents,
     RiteEvent,
@@ -582,6 +583,16 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
+# The cast typed by hand: what it says to, and the board that is told how it ends.
+class _Typed(NamedTuple):
+    renderer: StandaloneRenderer
+    board: Board
+    cast_id: str
+
+    def ended(self, status: EndStatus) -> None:
+        self.board.ended(cast_id=self.cast_id, status=status, detail=None)
+
+
 # Every way a cast can end goes through one notify: an `except` per error type
 # would leave whatever it does not name — the AttributeError a step raises —
 # silent, which is the walked-away-from-the-terminal case the notification
@@ -592,8 +603,9 @@ async def _cast(
     grimoire: Grimoire,
     channel: Channel,
     link: DaemonLink,
-    renderer: StandaloneRenderer,
+    typed: _Typed,
 ) -> int:
+    renderer = typed.renderer
     try:
         with _throttled(link):
             result = await link.cancellable(
@@ -616,6 +628,7 @@ async def _cast(
         # A rituals.py under development dies here, and its traceback is the
         # whole diagnosis — say it to the desktop, then let it out unchanged.
         renderer.notify("failed", f"{plan.ritual.name}: {error}")
+        typed.ended("error")
         raise
     else:
         await link.close(
@@ -628,9 +641,11 @@ async def _cast(
         )
         renderer.notify("done", plan.ritual.name)
         renderer.say(f"result: {_rendered(result)}\n")
+        typed.ended("ok")
         return 0
     await link.close(status="error", detail=detail)
     renderer.notify("failed", f"{plan.ritual.name}: {detail}")
+    typed.ended("error")
     return code
 
 
@@ -648,7 +663,10 @@ async def _run(plan: _Plan) -> int:
         contextlib.redirect_stdout(out),
         contextlib.redirect_stderr(out if out.isatty() and err.isatty() else err),
     ):
-        return await _run_on(plan, board)
+        try:
+            return await _run_on(plan, board)
+        finally:
+            await board.close()
 
 
 # The renderer and the wire both, in that order: what the operator sees does not
@@ -690,8 +708,9 @@ async def _run_on(plan: _Plan, board: Board) -> int:
     await link.attach(backlog=backlog)
     watcher = asyncio.create_task(link.keep_attached(backlog))
     lineage = Lineage(cast_id)
-    follower = await _follower(plan=plan, link=link, lineage=lineage, board=board)
-    try:
+    async with _follower(
+        plan=plan, link=link, lineage=lineage, board=board
+    ) as follower:
         try:
             # The queue the cast's `enqueue` and `await_cast` reach.
             with CAST_QUEUE.scope(
@@ -704,42 +723,47 @@ async def _run_on(plan: _Plan, board: Board) -> int:
                     grimoire=grimoire,
                     channel=channel,
                     link=link,
-                    renderer=renderer,
+                    typed=_Typed(renderer=renderer, board=board, cast_id=cast_id),
                 )
-        except Exception:
-            board.ended(cast_id=cast_id, status="error", detail=None)
-            raise
         finally:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
-        board.ended(cast_id=cast_id, status="error" if code else "ok", detail=None)
         if follower is None:
             return code
         return await _followed(
             code, follower=follower, lineage=lineage, renderer=renderer
         )
-    finally:
-        if follower is not None:
-            await follower.close()
 
 
 # Only a cast typed by hand with a daemon to hear from follows: a spawned one has
 # no terminal, and with no daemon it can have queued nothing. At a terminal the
 # casts it follows go on the board; a pipe or a log file has no screen to paint,
-# and takes them a cast at a time.
+# and takes them a cast at a time. The follower hangs up first, then the turns
+# are said; the board is the caller's, as it made it.
+@contextlib.asynccontextmanager
 async def _follower(
     *, plan: _Plan, link: DaemonLink, lineage: Lineage, board: Board
-) -> Follower | None:
+) -> AsyncGenerator[Follower | None]:
     if plan.wired or not plan.follow or not link.attached:
-        return None
+        yield None
+        return
+    turns = None if board.out.isatty() else Turns(board.out)
     follower = Follower(
         socket_path=default_socket_path(),
         lineage=lineage,
-        display=board if board.out.isatty() else Turns(board.out),
+        display=board if turns is None else turns,
         ask=None if plan.unattended else board.asker,
     )
-    return follower if await follower.attach() else None
+    if not await follower.attach():
+        yield None
+        return
+    try:
+        yield follower
+    finally:
+        await follower.close()
+        if turns is not None:
+            await turns.close()
 
 
 # The worst of how this cast and the ones it queued ended. Ctrl-C while

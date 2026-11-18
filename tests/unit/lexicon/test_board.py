@@ -3,14 +3,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from vekna.lexicon._links.board import Diverted, Picture, _Entry, _Log, frame, summary
+from vekna.lexicon._links.board import Diverted
 from vekna.lexicon._links.follow import Turns
+from vekna.lexicon._links.picture import Entry, Log, Picture, frame, summary
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _NOW = _WHEN + timedelta(seconds=65)
 _SIZE = (80, 24)
+_SHORT_QUESTION = 4
+_TALL_QUESTION = 9
 
 
 def _began(rite_id: str = "r1", name: str = "watch") -> RiteBegan:
@@ -23,11 +26,11 @@ def _ended(rite_id: str = "r1") -> RiteEnded:
     return RiteEnded(rite_id=rite_id, status="ok", result=None, finished_at=_WHEN)
 
 
-def _queued(label: str, *lines: str) -> _Entry:
-    log = _Log()
+def _queued(label: str, *lines: str) -> Entry:
+    log = Log()
     for line in lines:
         log.write(f"{line}\n")
-    return _Entry(
+    return Entry(
         label=label, started_at=_WHEN, log=log, renderer=StandaloneRenderer(out=log)
     )
 
@@ -35,7 +38,7 @@ def _queued(label: str, *lines: str) -> _Entry:
 class TestLog:
     @staticmethod
     def test_a_rite_that_said_nothing_inside_itself_is_one_line():
-        log = _Log()
+        log = Log()
         renderer = StandaloneRenderer(out=log)
 
         renderer.render(_began())
@@ -45,7 +48,7 @@ class TestLog:
 
     @staticmethod
     def test_a_rite_that_said_something_keeps_every_line():
-        log = _Log()
+        log = Log()
         renderer = StandaloneRenderer(out=log)
 
         renderer.render(_began())
@@ -56,7 +59,7 @@ class TestLog:
 
     @staticmethod
     def test_a_mark_the_terminal_gave_takes_nothing_back():
-        log = _Log()
+        log = Log()
         log.write("first\n")
 
         assert not log.overwrite(1, "second\n")
@@ -64,7 +67,7 @@ class TestLog:
 
     @staticmethod
     def test_text_left_of_a_write_keeps_it_from_going_back():
-        log = _Log()
+        log = Log()
         log.write("push? ")
         log.write("yes\n")
 
@@ -134,9 +137,23 @@ class TestFrame:
     def test_while_a_question_is_asked_the_foot_is_left_to_it():
         picture = Picture(entries={"a": _queued("heal aaaa", "asking")}, view="a")
 
-        lines = frame(picture, now=_NOW, size=_SIZE, asking=True).splitlines()
+        lines = frame(picture, now=_NOW, size=_SIZE, question_rows=3).splitlines()
 
         assert lines[1:] == ["── heal aaaa ──", "asking"]
+
+    @staticmethod
+    def test_a_taller_question_leaves_fewer_rows_to_the_view():
+        entry = _queued("heal aaaa", *(f"line {n}" for n in range(30)))
+        picture = Picture(entries={"a": entry}, view="a")
+
+        short = frame(picture, now=_NOW, size=(80, 20), question_rows=_SHORT_QUESTION)
+        tall = frame(picture, now=_NOW, size=(80, 20), question_rows=_TALL_QUESTION)
+
+        assert short.splitlines()[-1] == "line 29"
+        assert (
+            len(short.splitlines()) - len(tall.splitlines())
+            == _TALL_QUESTION - _SHORT_QUESTION
+        )
 
     @staticmethod
     def test_a_cast_s_clock_counts_seconds_then_minutes_then_hours():
@@ -153,8 +170,10 @@ class TestFrame:
 
     @staticmethod
     def test_the_typed_cast_leaves_when_it_ends_well_and_stays_when_it_fails():
-        typed = _Entry(label="sweep root", started_at=_WHEN)
-        picture = Picture(entries={"root": typed, "a": _queued("heal aaaa")})
+        typed = Entry(label="sweep root", started_at=_WHEN)
+        picture = Picture(
+            entries={"root": typed, "a": _queued("heal aaaa")}, typed="root"
+        )
         typed.ended = "ok"
         left = picture.shown
 
@@ -185,7 +204,7 @@ class TestNextRunning:
 class TestSummary:
     @staticmethod
     def test_it_leaves_the_typed_cast_s_lines_a_line_per_cast_and_failed_logs():
-        typed = _Entry(label="sweep root", started_at=_WHEN, ended="ok")
+        typed = Entry(label="sweep root", started_at=_WHEN, ended="ok")
         typed.log.write("result: null\n")
         done = _queued("heal aaaa", "✓ repair")
         done.ended = "ok"
@@ -285,8 +304,12 @@ class TestTurns:
         turns.entered(cast_id="a", label="heal aaaa", started_at=_WHEN)
         turns.entered(cast_id="b", label="heal bbbb", started_at=_WHEN)
 
-        turns.say("b", "⏸ push? — answer it in `vekna`")
-        turns.say("stranger0", "⏸ merge? — answer it in `vekna`")
+        turns.say(cast_id="b", label="heal bbbb", line="⏸ push? — answer it in `vekna`")
+        turns.say(
+            cast_id="stranger0",
+            label="stranger",
+            line="⏸ merge? — answer it in `vekna`",
+        )
 
         assert out.getvalue() == (
             "[heal bbbb] ⏸ push? — answer it in `vekna`\n"
