@@ -66,6 +66,9 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
 _REFUSED = 2
+# The version asked before the cast and again as it attaches, then the cast's
+# own connection.
+_UNTIL_THE_CAST_ATTACHED = 3
 
 
 # Of the project the test is standing in unless told otherwise, which is the
@@ -1582,6 +1585,24 @@ _QUEUE_RITUALS = textwrap.dedent("""
     @ritual("boom")
     async def boom(_: NoComponents) -> Boom:
         return Boom()
+
+
+    class Queued(BaseModel):
+        pass
+
+
+    # Queues a cast, then dies once the test has seen the board for it.
+    @step
+    async def queue_then_blow_up(_: Queued) -> Done[Queued]:
+        await enqueue("hold", NoComponents())
+        while not Path("go").exists():
+            await asyncio.sleep(0.05)
+        raise RuntimeError("boom")
+
+
+    @ritual("queue_boom")
+    async def queue_boom(_: NoComponents) -> Queued:
+        return Queued()
     """)
 
 
@@ -1860,6 +1881,34 @@ class TestFollowing:
         assert _FOLLOWING in capsys.readouterr().out
 
     @staticmethod
+    async def test_a_daemon_gone_once_the_cast_attached_is_not_followed(
+        socket_path: Path,
+        queue_rituals: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        connect = asyncio.open_unix_connection
+        reached: list[str] = []
+
+        async def gone_once_attached(
+            path: str,
+        ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+            reached.append(path)
+            if len(reached) > _UNTIL_THE_CAST_ATTACHED:
+                raise ConnectionRefusedError
+            return await connect(path)
+
+        async with _served(socket_path):
+            with monkeypatch.context() as patched:
+                patched.setattr(asyncio, "open_unix_connection", gone_once_attached)
+                code = await _drive(["fan"])
+            await _spawned(lambda: _finished(queue_rituals / "runs", "count"))
+
+        assert code == 0
+        assert _FOLLOWING not in capsys.readouterr().out
+        assert reached == [str(socket_path)] * (_UNTIL_THE_CAST_ATTACHED + 1)
+
+    @staticmethod
     async def test_ctrl_c_leaves_the_child_running_and_keeps_the_cast_s_code(
         socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
     ):
@@ -1905,6 +1954,33 @@ class TestFollowing:
                 await _drive(["boom"])
 
             await _eventually(lambda: "detached" in log.read_text())
+
+
+class _Screen(io.StringIO):
+    @override
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.asyncio
+class TestBoardOnFailure:
+    @staticmethod
+    async def test_a_cast_that_raises_is_left_on_the_board_as_failed(
+        socket_path: Path, queue_rituals: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        out = _Screen()
+        monkeypatch.setattr(sys, "stdout", out)
+        async with _served(socket_path):
+            cast = asyncio.create_task(_drive(["queue_boom"]))
+            await _spawned(lambda: "\x1b[?1049h" in out.getvalue())
+            (queue_rituals / "go").touch()
+            with pytest.raises(RuntimeError, match="boom"):
+                await cast
+            (queue_rituals / "release").touch()
+
+        left = out.getvalue().rpartition("\x1b[?1049l")[2]
+        assert "✗ failed" in left
+        assert "▶" not in left.splitlines()[0]
 
 
 def _said(caplog: pytest.LogCaptureFixture, level: int) -> str:

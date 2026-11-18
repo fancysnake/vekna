@@ -1,5 +1,6 @@
 import hashlib
 from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -224,6 +225,23 @@ class LineageProtocol(Protocol):
     def settled(self) -> bool: ...
     @property
     def failed(self) -> bool: ...
+
+
+# How a cast the daemon knows of ended, as its goodbye says it.
+EndStatus = Literal["ok", "error", "disconnected"]
+
+
+# Where a terminal following casts puts what they say: a board when it is a
+# terminal, one cast's lines at a time when it is a stream. `asking` is held
+# around a question of `rows` rows asked here, so nothing else changes under it
+# and the question has the room it needs.
+class Display(Protocol):
+    def entered(self, *, cast_id: str, label: str, started_at: datetime) -> None: ...
+    def render(self, cast_id: str, event: RiteEvent) -> None: ...
+    def ended(self, *, cast_id: str, status: EndStatus, detail: str | None) -> None: ...
+    def say(self, *, cast_id: str, label: str, line: str) -> None: ...
+    def asking(self, cast_id: str, rows: int) -> AbstractAsyncContextManager[None]: ...
+    async def close(self) -> None: ...
 
 
 class RitualError(Exception):

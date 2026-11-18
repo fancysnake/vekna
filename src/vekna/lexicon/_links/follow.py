@@ -3,10 +3,9 @@ import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from typing_extensions import override
-
 from vekna.lexicon._pacts import (
     Channel,
+    Display,
     LineageProtocol,
     RiteBegan,
     RiteEnded,
@@ -35,57 +34,14 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import Revisable, StandaloneRenderer
-
-_MARK = {"ok": "✓ done", "error": "✗ failed", "disconnected": "⚠ aborted"}
+from .standalone import question_height
 
 
-# Every line a cast's renderer writes, under the name of the cast that said it:
-# several casts stream into one terminal, and indentation is all a line carries.
-class _Prefixed(Revisable):
-    def __init__(self, out: Revisable, label: str) -> None:
-        self._out = out
-        self._label = f"[{label}] "
-        self._fresh = True
-
-    def _labelled(self, text: str, *, fresh: bool) -> str:
-        labelled = []
-        for line in text.splitlines(keepends=True):
-            labelled.append(f"{self._label}{line}" if fresh else line)
-            fresh = line.endswith("\n")
-        return "".join(labelled)
-
-    @override
-    def write(self, text: str, /) -> int:
-        if text:
-            self._out.write(self._labelled(text, fresh=self._fresh))
-            self._fresh = text.endswith("\n")
-        return len(text)
-
-    @override
-    def flush(self) -> None:
-        self._out.flush()
-
-    @override
-    def isatty(self) -> bool:
-        return self._out.isatty()
-
-    @property
-    @override
-    def mark(self) -> int:
-        return self._out.mark
-
-    @override
-    def overwrite(self, mark: int, text: str) -> bool:
-        return self._out.overwrite(mark, self._labelled(text, fresh=True))
-
-
-# One followed cast: its renderer, and the rites it has already shown, so a
-# replay after the cast reattaches says nothing twice.
+# One followed cast: its name, and the rites it has already shown, so a replay
+# after the cast reattaches says nothing twice.
 @dataclass
 class _Followed:
     label: str
-    renderer: StandaloneRenderer
     started: set[str] = field(default_factory=set)
     finished: set[str] = field(default_factory=set)
     # The rites already shown when a replay began; their output in it is old.
@@ -109,7 +65,7 @@ class _Prompts:
 
 
 # A cast typed by hand, still at its terminal after its own steps: it watches
-# the casts it set going, prints what each one does under its name, and asks
+# the casts it set going, shows what each one does on its display, and asks
 # their prompts here — until a surface claims one, which takes it over. A
 # surface of the daemon's like any window, so it hears every cast and keeps
 # to the ones its lineage says are this cast's.
@@ -119,12 +75,12 @@ class Follower:
         *,
         socket_path: Path,
         lineage: LineageProtocol,
-        out: Revisable,
+        display: Display,
         ask: Channel | None,
     ) -> None:
         self._wire = _Wire(path=socket_path)
         self._lineage = lineage
-        self._out = out
+        self._display = display
         self._ask = ask
         self._followed: dict[str, _Followed] = {}
         self._prompts = _Prompts()
@@ -204,8 +160,9 @@ class Follower:
         if hello.cast_id in self._followed:
             return
         label = f"{hello.ritual} {hello.cast_id[:SHORT_ID]}"
-        self._followed[hello.cast_id] = _Followed(
-            label=label, renderer=StandaloneRenderer(out=_Prefixed(self._out, label))
+        self._followed[hello.cast_id] = _Followed(label=label)
+        self._display.entered(
+            cast_id=hello.cast_id, label=label, started_at=hello.started_at
         )
 
     def _replay(self, message: GrimoireBegin | GrimoireEnd) -> None:
@@ -217,13 +174,13 @@ class Follower:
         if (followed := self._followed.get(message.cast_id)) is None:
             return
         if (event := _event(message, followed)) is not None:
-            followed.renderer.render(event)
+            self._display.render(message.cast_id, event)
 
     def _goodbye(self, goodbye: CastGoodbye) -> None:
-        if (followed := self._followed.get(goodbye.cast_id)) is None:
-            return
-        said = f": {goodbye.detail}" if goodbye.detail else ""
-        self._say(f"[{followed.label}] {_MARK[goodbye.status]}{said}")
+        if goodbye.cast_id in self._followed:
+            self._display.ended(
+                cast_id=goodbye.cast_id, status=goodbye.status, detail=goodbye.detail
+            )
 
     def _prompt(
         self, message: DecideRequested | DecideResolved | DecideWithdrawn
@@ -242,7 +199,7 @@ class Follower:
             return
         self._prompts.claimed.add(message.request_id)
         self._stop(message.request_id)
-        self._say(f"{self._label(request)} taken over in `vekna`: {request.prompt}")
+        self._say(request, f"taken over in `vekna`: {request.prompt}")
 
     # A release hands the prompt back to this terminal.
     def _release(self, message: DecideReleased) -> None:
@@ -256,9 +213,7 @@ class Follower:
         if request_id in self._prompts.claimed or request_id in self._prompts.asking:
             return
         if (ask := self._ask) is None:
-            self._say(
-                f"{self._label(request)} ⏸ {request.prompt} — answer it in `vekna`"
-            )
+            self._say(request, f"⏸ {request.prompt} — answer it in `vekna`")
             return
         task = asyncio.create_task(self._asked(ask, request))
         self._prompts.asking[request_id] = task
@@ -269,14 +224,16 @@ class Follower:
             task.cancel()
 
     async def _asked(self, ask: Channel, request: DecideRequested) -> None:
+        prompt = f"[{self._label(request.cast_id)}] {request.prompt}"
         try:
-            answer = await ask.decide(
-                prompt=f"{self._label(request)} {request.prompt}",
-                options=request.options,
-                free=request.free,
-            )
+            async with self._display.asking(
+                request.cast_id, question_height(prompt, request.options)
+            ):
+                answer = await ask.decide(
+                    prompt=prompt, options=request.options, free=request.free
+                )
         except StandalonePromptError as error:
-            self._say(f"{self._label(request)} {error} — answer it in `vekna`")
+            self._say(request, f"{error} — answer it in `vekna`")
             return
         if (writer := self._wire.writer) is not None:
             writer.write(
@@ -289,13 +246,15 @@ class Follower:
                 )
             )
 
-    def _label(self, request: DecideRequested) -> str:
-        followed = self._followed.get(request.cast_id)
-        return f"[{request.cast_id[:SHORT_ID] if followed is None else followed.label}]"
+    # The one place a cast not heard from yet gets a name: its short id.
+    def _label(self, cast_id: str) -> str:
+        followed = self._followed.get(cast_id)
+        return cast_id[:SHORT_ID] if followed is None else followed.label
 
-    def _say(self, line: str) -> None:
-        self._out.write(line + "\n")
-        self._out.flush()
+    def _say(self, request: DecideRequested, line: str) -> None:
+        self._display.say(
+            cast_id=request.cast_id, label=self._label(request.cast_id), line=line
+        )
 
 
 # What a rite message means to a renderer, or None for what it has shown

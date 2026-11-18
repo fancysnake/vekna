@@ -11,11 +11,28 @@ when.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-18
+
+### Added
+
+- **A following cast shows a board.** At a terminal, the casts a cast queued
+  each get a line with their step and how long they have run, over the latest
+  output of one of them. A number moves the view and `l` prints a cast's whole
+  log. A prompt it can answer takes the view and holds the screen until it
+  closes; a second one waits. At the end the board leaves a line per cast and
+  each failed cast's log in full.
+
+### Changed
+
+- **To a pipe or a file, followed casts are written one at a time**, in the
+  order they arrived, the others held until the one before ends. A notice
+  about a prompt is still written at once.
+
 ### Fixed
 
 - **The window draws a step's output inside its pane.** Output that carried a
   terminal escape sequence, a cursor move for one, was drawn to the right of
-  the pane and left it empty. The window now drops escape sequences and shows
+  the pane and left it empty. The window drops escape sequences and shows
   any other control character as `�`. (#296)
 
 ## [1.2.0] - 2026-11-18
@@ -1053,7 +1070,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v1.2.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/fancysnake/vekna/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/fancysnake/vekna/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fancysnake/vekna/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/fancysnake/vekna/compare/v0.15.0...v1.0.0

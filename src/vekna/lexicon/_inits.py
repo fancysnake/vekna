@@ -5,7 +5,7 @@ import itertools
 import json
 import os
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import AsyncGenerator, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -15,6 +15,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from vekna.wire import (
     NEEDS_TREE,
+    SHORT_ID,
     CastHello,
     WireMessage,
     daemon_refusal,
@@ -25,11 +26,13 @@ from vekna.wire import (
     project_of,
 )
 
+from ._links.board import Board
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.follow import Follower
 from ._links.loader import load_rituals_module, load_rituals_source, read_configs
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, Tail
+from ._links.turns import Turns
 from ._links.unattended import UnattendedChannel
 from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
@@ -585,12 +588,7 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
 # silent, which is the walked-away-from-the-terminal case the notification
 # exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *,
-    plan: _Plan,
-    grimoire: Grimoire,
-    channel: Channel,
-    link: DaemonLink,
-    renderer: StandaloneRenderer,
+    *, plan: _Plan, grimoire: Grimoire, channel: Channel, link: DaemonLink, board: Board
 ) -> int:
     try:
         with _throttled(link):
@@ -613,7 +611,8 @@ async def _cast(
     except Exception as error:
         # A rituals.py under development dies here, and its traceback is the
         # whole diagnosis — say it to the desktop, then let it out unchanged.
-        renderer.notify("failed", f"{plan.ritual.name}: {error}")
+        board.asker.notify("failed", f"{plan.ritual.name}: {error}")
+        board.finish("error")
         raise
     else:
         await link.close(
@@ -624,11 +623,13 @@ async def _cast(
                 else _RESULT.validate_json(result.model_dump_json())
             ),
         )
-        renderer.notify("done", plan.ritual.name)
-        renderer.say(f"result: {_rendered(result)}\n")
+        board.asker.notify("done", plan.ritual.name)
+        board.renderer.say(f"result: {_rendered(result)}\n")
+        board.finish("ok")
         return 0
     await link.close(status="error", detail=detail)
-    renderer.notify("failed", f"{plan.ritual.name}: {detail}")
+    board.asker.notify("failed", f"{plan.ritual.name}: {detail}")
+    board.finish("error")
     return code
 
 
@@ -638,29 +639,38 @@ async def _cast(
 # shortcut: a child process inheriting the terminal writes past the tail, so its
 # last line can still go. Upgrade if a ritual runs one outside the shell medium.
 async def _run(plan: _Plan) -> int:
-    out = Tail(sys.stdout)
+    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
+    # is the wire's correlation key, and which cast this one carries on from is
+    # a field of its own on the hello.
+    cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
+    hello = await _hello(cast_id=cast_id, plan=plan)
+    screen = Tail(sys.stdout)
+    board = Board(
+        screen=screen,
+        asker=StandaloneRenderer(out=screen),
+        cast_id=cast_id,
+        label=f"{hello.ritual} {cast_id[:SHORT_ID]}",
+        started_at=hello.started_at,
+    )
+    out = board.out
     err: TextIO = sys.stderr
     with (
         contextlib.redirect_stdout(out),
         contextlib.redirect_stderr(out if out.isatty() and err.isatty() else err),
     ):
-        return await _run_on(plan, out)
+        try:
+            return await _run_on(plan, board, hello=hello)
+        finally:
+            await board.close()
 
 
 # The renderer and the wire both, in that order: what the operator sees does not
 # wait on a socket, and a cast with no daemon behaves exactly as it did.
-async def _run_on(plan: _Plan, out: Tail) -> int:
-    # Unique per cast, not per ritual, and a resumed cast is a new one: cast_id
-    # is the wire's correlation key, and which cast this one carries on from is
-    # a field of its own on the hello.
-    cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
-    renderer = StandaloneRenderer(out=out)
-    link = DaemonLink(
-        socket_path=default_socket_path(),
-        hello=await _hello(cast_id=cast_id, plan=plan),
-    )
+async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
+    cast_id = hello.cast_id
+    link = DaemonLink(socket_path=default_socket_path(), hello=hello)
     tee = TeeChannel(
-        inner=None if plan.wired else renderer,
+        inner=None if plan.wired else board,
         link=link,
         cast_id=cast_id,
         rite_id=lambda: current_rite().parent_id,
@@ -668,7 +678,7 @@ async def _run_on(plan: _Plan, out: Tail) -> int:
     channel: Channel = UnattendedChannel() if plan.unattended else tee
 
     def emit(event: RiteEvent) -> None:
-        renderer.render(event)
+        board.render(cast_id, event)
         link.send(to_wire(event, cast_id=cast_id))
 
     grimoire = Grimoire(on_event=emit)
@@ -682,10 +692,9 @@ async def _run_on(plan: _Plan, out: Tail) -> int:
     await link.attach(backlog=backlog)
     watcher = asyncio.create_task(link.keep_attached(backlog))
     lineage = Lineage(cast_id)
-    follower = await _follower(
-        plan=plan, link=link, lineage=lineage, ask=renderer, out=out
-    )
-    try:
+    async with _follower(
+        plan=plan, link=link, lineage=lineage, board=board
+    ) as follower:
         try:
             # The queue the cast's `enqueue` and `await_cast` reach.
             with CAST_QUEUE.scope(
@@ -698,7 +707,7 @@ async def _run_on(plan: _Plan, out: Tail) -> int:
                     grimoire=grimoire,
                     channel=channel,
                     link=link,
-                    renderer=renderer,
+                    board=board,
                 )
         finally:
             watcher.cancel()
@@ -707,32 +716,38 @@ async def _run_on(plan: _Plan, out: Tail) -> int:
         if follower is None:
             return code
         return await _followed(
-            code, follower=follower, lineage=lineage, renderer=renderer
+            code, follower=follower, lineage=lineage, renderer=board.renderer
         )
-    finally:
-        if follower is not None:
-            await follower.close()
 
 
 # Only a cast typed by hand with a daemon to hear from follows: a spawned one has
-# no terminal, and with no daemon it can have queued nothing.
+# no terminal, and with no daemon it can have queued nothing. At a terminal the
+# casts it follows go on the board; a pipe or a log file has no screen to paint,
+# and takes them a cast at a time. The follower hangs up first, then the turns
+# are said; the board is the caller's, as it made it.
+@contextlib.asynccontextmanager
 async def _follower(
-    *,
-    plan: _Plan,
-    link: DaemonLink,
-    lineage: Lineage,
-    ask: StandaloneRenderer,
-    out: Tail,
-) -> Follower | None:
+    *, plan: _Plan, link: DaemonLink, lineage: Lineage, board: Board
+) -> AsyncGenerator[Follower | None]:
     if plan.wired or not plan.follow or not link.attached:
-        return None
+        yield None
+        return
+    turns = None if board.out.isatty() else Turns(board.out)
     follower = Follower(
         socket_path=default_socket_path(),
         lineage=lineage,
-        out=out,
-        ask=None if plan.unattended else ask,
+        display=board if turns is None else turns,
+        ask=None if plan.unattended else board.asker,
     )
-    return follower if await follower.attach() else None
+    if not await follower.attach():
+        yield None
+        return
+    try:
+        yield follower
+    finally:
+        await follower.close()
+        if turns is not None:
+            await turns.close()
 
 
 # The worst of how this cast and the ones it queued ended. Ctrl-C while

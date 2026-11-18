@@ -77,26 +77,55 @@ source were wrong, or a medium the ritual calls has no focus registered.
 
 ### Following what it queued
 
-A cast typed with a daemon running stays at its terminal once its own steps
-end, for as long as the casts it queued — and the ones they queued — are still
-going. Each one's rites stream under its name:
+A cast typed with a daemon running stays at its terminal for as long as the
+casts it queued — and the ones they queued — are still going. Once the first of
+them arrives the terminal shows a board: a line per cast with how long it has
+run and the step it is in, then the latest output of one cast.
 
 ```text
-✓ fan_out
-result: {"queued":[…]}
-following the casts this one queued — Ctrl-C leaves them running
-[ci_watch 3f9a2b11] ▶ watch
-[ci_watch 3f9a2b11] ✓ watch
-[pr_fix 91bb0c4d] ▶ repair_ci
-[pr_fix 91bb0c4d] ✓ done
-[ci_watch 3f9a2b11] ✓ done
+  1  ci_watch 3f9a2b11  ▶ 2m05s  watch
+  2  pr_fix 91bb0c4d  ▶ 41s  repair_ci
+  3  ci_watch 77c0e2aa  ✓ done
+── ci_watch 3f9a2b11 ──
+▶ watch
+  ↳ shell  gh pr checks 412
+    lint  pending
+ a number to view a cast · l its whole log · Ctrl-C leaves them running
 ```
 
-Their prompts are asked here, one at a time, under the same name. A prompt
-taken over in `vekna` stops being asked here, and is asked again if that window
-lets it go or closes. The cast exits `1` if any of them failed. Ctrl-C stops
-following and leaves them running; `--no-follow` ends the cast with its own
-steps:
+Type a number and Enter to view another cast. `l` and Enter prints the viewed
+cast's whole log to the terminal's own screen, where it scrolls; Enter returns
+to the board. When the cast in view ends, the next one still running takes its
+place. The typed cast has a line while it runs and leaves the board when it
+ends well; a cast that failed always keeps its line.
+
+A prompt from any of them takes the view: the board shows the asking cast's
+latest output with the question under it, and nothing else changes on screen
+until the question closes. A second question waits its turn. A prompt taken
+over in `vekna` stops being asked here, and is asked again if that window lets
+it go or closes. A prompt this terminal cannot answer — the cast is
+`--unattended`, or input has ended — is noted in its cast's output and holds
+nothing.
+
+When the last cast ends the board leaves the terminal as it found it, then
+prints what the typed cast said meanwhile, a line per cast, and the whole log
+of each cast that failed.
+
+With output to a pipe or a file there is no board. One cast's lines are
+written at a time, each under its name, in the order the casts arrived; the
+others are held until it ends. A notice about a prompt is written at once:
+
+```text
+[ci_watch 3f9a2b11] ▶ watch
+[ci_watch 3f9a2b11] ✓ watch
+[pr_fix 91bb0c4d] ⏸ push? — answer it in `vekna`
+[ci_watch 3f9a2b11] ✓ done
+[pr_fix 91bb0c4d] ▶ repair_ci
+[pr_fix 91bb0c4d] ✓ done
+```
+
+The cast exits `1` if any of them failed. Ctrl-C stops following and leaves
+them running; `--no-follow` ends the cast with its own steps:
 
 ```bash
 vekna cast --no-follow sweep
@@ -430,8 +459,8 @@ vekna version
 ```
 
 ```text
-vekna 1.2.0
-daemon 1.2.0 on /run/user/1000/vekna.sock
+vekna 1.3.0
+daemon 1.3.0 on /run/user/1000/vekna.sock
 ```
 
 With nothing listening the second line is `daemon: not running`. A daemon that
