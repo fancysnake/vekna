@@ -35,3 +35,16 @@ Set up vekna (https://github.com/fancysnake/vekna) in this project.
 5. Check it: `vekna rituals list` shows `fix_tests`, and the new test passes
    (in a non-Python project, run it with the `pytest` from step 1).
 ```
+
+## Badge
+
+A project that casts rituals can say so in its README:
+
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
+
+```markdown
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
+```
+
+The badge is drawn from a file on the vekna site, so the pasted line stays
+current.

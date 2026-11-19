@@ -686,6 +686,17 @@ Then `mise run fullcheck`, green.
 
 ---
 
+## The badge
+
+When the project's README has no vekna badge, offer one, and add it only on a
+yes:
+
+```markdown
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
+```
+
+---
+
 ## Not yet bound
 
 Designed, **not built**. Do not write against any of it.

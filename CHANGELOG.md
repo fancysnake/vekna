@@ -11,6 +11,12 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **A badge for projects that cast rituals.** `rituals | vekna`, with the
+  crowned skull, for a README. The line to paste is on the setup page, and
+  ritual-scribe offers it when a project's README has no vekna badge.
+
 ## [1.3.0] - 2026-11-18
 
 ### Added
