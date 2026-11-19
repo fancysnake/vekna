@@ -29,6 +29,12 @@ _GRACE_TICKS = 100
 # running once their rite stopped waiting — held, as the loop holds tasks weakly.
 _CANCELS_OUTLASTED = 4
 _REAPING: set[asyncio.Task[None]] = set()
+# How long the output is read on once the command and its group are gone. What
+# the command wrote is in the pipe by then, so only a process that left the
+# group and kept the pipe makes this run out.
+_DRAIN_SECONDS = 2.0
+_STOPPED = "vekna: stopped the processes the command left running"
+_HELD = "vekna: stopped reading output a process outside the command still holds"
 # Read through the model and written through it too, so a field added to
 # `ShellResult` cannot land on one side of the round trip only. `model_dump()`
 # hands back `dict[str, Any]`; this is what says the journal holds JSON.
@@ -79,6 +85,20 @@ async def _pump(
             on_line(pending)
 
 
+# What `create_subprocess_exec` stands between the pipes and their readers, and
+# the one thing it does not say: that the command exited. `Process.wait()`
+# cannot say it, because it holds until both pipes have closed too.
+class _Exit(asyncio.subprocess.SubprocessStreamProtocol):
+    def __init__(self) -> None:
+        super().__init__(limit=_CHUNK, loop=asyncio.get_running_loop())
+        self.exited = asyncio.Event()
+
+    @override
+    def process_exited(self) -> None:
+        super().process_exited()
+        self.exited.set()
+
+
 # Closed stdin, not the cast's: a command inheriting the terminal reads the line
 # the operator typed at a `decide` prompt running beside it, and the answer is
 # gone. One that wants input hangs on a terminal nobody is watching anyway, so
@@ -88,8 +108,11 @@ async def run_bash(
     *,
     cwd: str | None = None,
     on_line: Callable[[str], None] | None = None,
+    say: Callable[[str], None] | None = None,
 ) -> tuple[str, str, int]:
-    process = await asyncio.create_subprocess_exec(
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.subprocess_exec(
+        _Exit,
         "bash",
         "-c",
         command,
@@ -99,17 +122,22 @@ async def run_bash(
         cwd=cwd,
         start_new_session=True,
     )
+    process = asyncio.subprocess.Process(transport, protocol, loop)
     out: list[str] = []
     err: list[str] = []
+    # Both pipes are drained concurrently, so `on_line` sees them in arrival
+    # order and neither can fill and block the other.
+    pumps = [
+        asyncio.create_task(_pump(stream=process.stdout, sink=out, on_line=on_line)),
+        asyncio.create_task(_pump(stream=process.stderr, sink=err, on_line=on_line)),
+    ]
     try:
-        # Both pipes are drained concurrently, so `on_line` sees them in
-        # arrival order and neither can fill and block the other.
-        await asyncio.gather(
-            _pump(stream=process.stdout, sink=out, on_line=on_line),
-            _pump(stream=process.stderr, sink=err, on_line=on_line),
+        exit_code, notes = await _ended(
+            process=process, transport=transport, exited=protocol.exited, pumps=pumps
         )
-        return "".join(out), "".join(err), await process.wait()
     except asyncio.CancelledError:
+        for pump in pumps:
+            pump.cancel()
         # A second cancel inside the grace window — a race cut by an outer
         # timeout, a double Ctrl-C — must not stop the reaping before SIGKILL.
         # Past a few, the rite closes and the reaping carries on without it.
@@ -121,6 +149,32 @@ async def run_bash(
                 await asyncio.shield(reaping)
                 break
         raise
+    if say is not None:
+        for note in notes:
+            say(note)
+    return "".join(out), "".join(err), exit_code
+
+
+# The exit code, and what had to be done to end the reading. The command's exit
+# ends the rite, not the end of its output: a process it left behind holds the
+# pipes open for as long as it lives.
+async def _ended(
+    *,
+    process: asyncio.subprocess.Process,
+    transport: asyncio.SubprocessTransport,
+    exited: asyncio.Event,
+    pumps: list[asyncio.Task[None]],
+) -> tuple[int, list[str]]:
+    await exited.wait()
+    exit_code = await process.wait()
+    notes = [_STOPPED] if await _stop_leftovers(process.pid) else []
+    _, held = await asyncio.wait(pumps, timeout=_DRAIN_SECONDS)
+    if held:
+        # Closing this end is what ends the reading, with what was read.
+        transport.close()
+        notes.append(_HELD)
+    await asyncio.gather(*pumps)
+    return exit_code, notes
 
 
 # The whole group, its own session from the start: `bash -c "a & b"` leaves
@@ -129,6 +183,17 @@ async def run_bash(
 async def _reap(process: asyncio.subprocess.Process) -> None:
     await _signal_group(process.pid)
     await process.wait()
+
+
+# Whether anything was left: bash is reaped by now, so its group is still there
+# only if something else is in it.
+async def _stop_leftovers(group: int) -> bool:
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    await _signal_group(group)
+    return True
 
 
 async def _signal_group(group: int) -> None:
@@ -154,8 +219,9 @@ class BashFocus(ShellFocusProtocol):
     async def run(
         self, call: ShellCall, *, on_line: Callable[[str], None] | None
     ) -> ShellReply:
+        # Said whether or not the rite streams: it is not the command's output.
         stdout, stderr, exit_code = await run_bash(
-            call.command, cwd=call.cwd, on_line=on_line
+            call.command, cwd=call.cwd, on_line=on_line, say=emit_delta
         )
         return ShellReply(stdout=stdout, stderr=stderr, exit_code=exit_code)
 

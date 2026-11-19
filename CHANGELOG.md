@@ -17,6 +17,19 @@ when.
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
 
+### Fixed
+
+- **A shell rite ends when its command ends.** A command that exited and left
+  a process running kept the rite open for as long as that process held the
+  output, and with it the cast. The rite now stops what the command left
+  running, says that it did, and returns the exit code and the output. A
+  process that moved out of the command's group cannot be stopped: the rite
+  stops reading its output after two seconds and says so.
+- **A cast with no end recorded stops reading as running.** A cast that ended
+  while no daemon listened stayed `▶` in `vekna log` for good and was never
+  pruned. The next daemon to start records it as disconnected, unless the
+  cast's process is one that daemon still holds.
+
 ## [1.3.0] - 2026-11-18
 
 ### Added

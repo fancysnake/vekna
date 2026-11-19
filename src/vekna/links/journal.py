@@ -195,6 +195,15 @@ class Journal:
             if not isinstance(run, DamagedRun) and run.status == "queued"
         ]
 
+    # No end on the record: a cast still going, or one whose goodbye no daemon
+    # was there to hear.
+    def running(self) -> list[RunRecord]:
+        return [
+            run
+            for run in self._all()
+            if not isinstance(run, DamagedRun) and run.status == "running"
+        ]
+
     def _all(self) -> Iterator[Run]:
         if not self._root.is_dir():
             return
