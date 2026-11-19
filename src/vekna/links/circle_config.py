@@ -64,3 +64,11 @@ def _first(found: TableRead[_File], key: Callable[[_Circle], _T | None]) -> _T |
         if (value := key(file.circle)) is not None:
             return value
     return None
+
+
+# What only the user's top-level `[circle]` may set: `coding` is the machine's.
+MACHINE_KEYS = ("coding",)
+
+
+def circle_problems(directory: Path) -> list[str]:
+    return read_layers(directory=directory, table="circle", model=_File).problems

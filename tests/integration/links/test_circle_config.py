@@ -155,17 +155,18 @@ class TestWorktrees:
 @pytest.mark.usefixtures("config")
 class TestTheUserSProjectTable:
     @staticmethod
-    def test_it_wins_over_the_project_s_own_file(
+    def test_the_project_s_own_file_wins_over_it(
         config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
         project = _project(tmp_path, f"[circle]\nprocesses = {_THE_PROJECT_S}\n")
         config.write_text(
             f'[projects.mine]\npath = "{project}"\n'
-            f"[projects.mine.circle]\nprocesses = {_MINE}\n",
+            f"[projects.mine.circle]\nprocesses = {_MINE}\nworktrees = {_MINE}\n",
             encoding="utf-8",
         )
 
-        assert ConfigLimits().processes(str(project)) == _MINE
+        assert ConfigLimits().processes(str(project)) == _THE_PROJECT_S
+        assert ConfigLimits().worktrees(str(project)) == _MINE
         assert not caplog.records
 
     @staticmethod

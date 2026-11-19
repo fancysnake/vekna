@@ -13,9 +13,23 @@ when.
 
 ### Added
 
+- **`vekna audit` checks the config.** It prints each setting with the file it
+  is taken from, every error in one run, and the settings that change nothing:
+  a `[projects.<name>]` table for a checkout that is gone, an override equal
+  to what it overrides, a `[defaults.<ritual>]` table for a ritual not loaded
+  here. Any error makes the exit code 1.
+
 - **A badge for projects that cast rituals.** `rituals | vekna`, with the
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
+
+### Changed
+
+- **A project's `.vekna.toml` now wins over your `[projects.<name>]` table for
+  it.** Per key the order is the project's file, then your table for the
+  project, then the top level of your user config. Before, your table for the
+  project came first. A key you set there to override the project's file no
+  longer applies: `vekna audit` lists each one.
 
 ## [1.3.0] - 2026-11-18
 

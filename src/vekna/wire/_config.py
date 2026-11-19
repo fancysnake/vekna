@@ -140,14 +140,20 @@ def _project_layers(
             yield ConfigLayer(user, settings, name)
 
 
-# Every config that speaks for `directory`, nearest first: the user's table for
-# this project, the project's own `.vekna.toml`, then what the user says for
+# Every config that speaks for `directory`, nearest first: the project's own
+# `.vekna.toml`, the user's table for this project, then what the user says for
 # every project. A file that will not read is left out and named in the second
 # list; whether that stops the command is the caller's to say.
 def config_layers(directory: Path) -> ConfigRead:
     layers: list[ConfigLayer] = []
     problems: list[str] = []
     user, shared = _user_file(problems)
+    if (found := project_config_path(directory)) is not None and (
+        tables := _tables(found, problems)
+    ) is not None:
+        if "projects" in tables:
+            problems.append(f"{found}: [projects] is read from {user} only")
+        layers.append(ConfigLayer(found, tables))
     if shared is not None and "projects" in shared:
         layers.extend(
             _project_layers(
@@ -157,12 +163,6 @@ def config_layers(directory: Path) -> ConfigRead:
                 problems=problems,
             )
         )
-    if (found := project_config_path(directory)) is not None and (
-        tables := _tables(found, problems)
-    ) is not None:
-        if "projects" in tables:
-            problems.append(f"{found}: [projects] is read from {user} only")
-        layers.append(ConfigLayer(found, tables))
     layers.extend(_everywhere(user, shared))
     return ConfigRead(layers, problems)
 

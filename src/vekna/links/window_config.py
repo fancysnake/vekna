@@ -34,3 +34,7 @@ def history_after(directory: Path) -> tuple[timedelta, str]:
         if file.window.history_after is not None:
             return file.window.history_after, ignored
     return HISTORY_AFTER, ignored
+
+
+def window_problems(directory: Path) -> list[str]:
+    return read_layers(directory=directory, table="window", model=_File).problems

@@ -1,11 +1,12 @@
 import asyncio
 import contextlib
 import importlib
+import io
 import itertools
 import json
 import os
 import sys
-from collections.abc import AsyncGenerator, Iterable, Mapping
+from collections.abc import AsyncGenerator, Collection, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -18,7 +19,9 @@ from vekna.wire import (
     SHORT_ID,
     CastHello,
     WireMessage,
+    config_layers,
     daemon_refusal,
+    default_config_path,
     default_socket_path,
     explained,
     flag_of,
@@ -29,11 +32,18 @@ from vekna.wire import (
 from ._links.board import Board
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.follow import Follower
-from ._links.loader import load_rituals_module, load_rituals_source, read_configs
+from ._links.loader import (
+    idle_projects,
+    load_rituals_module,
+    load_rituals_source,
+    read_config,
+    read_configs,
+)
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, Tail
 from ._links.turns import Turns
 from ._links.unattended import UnattendedChannel
+from ._mills.audit import Evidence, report
 from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
@@ -50,6 +60,7 @@ from ._mills.graph import check_exits, step_graph
 from ._mills.ledger import Ledger
 from ._pacts import (
     Channel,
+    Config,
     Done,
     FocusMissingError,
     NoComponents,
@@ -62,6 +73,7 @@ from ._pacts import (
     Tome,
 )
 
+_UNCHECKED = "[defaults] were not fully checked: the rituals did not all load"
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
@@ -383,6 +395,62 @@ def rituals_show(name: str) -> int:
     if (library := _library_or_usage()) is None:
         return 2
     return _show(library, name)
+
+
+# The rituals the library loads here, or None when it does not load whole: a
+# `[defaults]` table is then checked against nothing. Every ritual's defaults
+# are validated on the way, which `show` does for one. A skipped tome's warning
+# is caught: it is an error of the report's, not a line above it.
+def _audited_rituals(cwd: Path, errors: dict[str, None]) -> Collection[str] | None:
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            library = _build_library(cwd)
+    except _LOAD_ERRORS as error:
+        errors[str(error)] = None
+        return None
+    names = library.compendium.names()
+    for name in names:
+        try:
+            library.defaults.of(library.compendium.ritual(name))
+        except RitualDefinitionError as error:
+            errors[str(error)] = None
+    errors.update((skipped, None) for skipped in library.skipped)
+    return None if library.skipped else names
+
+
+# `problems` and `machine` are the root's word on its own tables, `[circle]`
+# and `[window]`, which the lexicon may not import the models of: what is
+# wrong in them, and which keys of each only the user's top level may set.
+# Every problem is collected rather than raised at the first, and a dict keeps
+# each once: the root's readers and this one name the same unreadable file.
+def audit(problems: list[str], machine: Mapping[str, Collection[str]]) -> int:
+    cwd = Path.cwd()
+    layers, unread = config_layers(cwd)
+    errors: dict[str, None] = {}
+    errors.update((problem, None) for problem in (*unread, *problems))
+    configs: list[Config | None] = []
+    for layer in layers:
+        try:
+            configs.append(read_config(layer))
+        except RitualDefinitionError as error:
+            configs.append(None)
+            errors[str(error)] = None
+    rituals = None
+    if not unread and None not in configs:
+        rituals = _audited_rituals(cwd, errors)
+    if rituals is None:
+        errors[_UNCHECKED] = None
+    evidence = Evidence(
+        layers=layers,
+        configs=configs,
+        user=default_config_path(),
+        machine=machine,
+        rituals=rituals,
+        errors=list(errors),
+        pointless=idle_projects(),
+    )
+    sys.stdout.write(report(evidence))
+    return 1 if errors else 0
 
 
 def _prompt_ritual(prompt: str) -> Ritual:

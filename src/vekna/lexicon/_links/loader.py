@@ -13,7 +13,15 @@ from typing import NamedTuple
 from pydantic import ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
-from vekna.wire import ConfigLayer, TomlValue, config_layers, explained, merged_table
+from vekna.wire import (
+    ConfigLayer,
+    TomlValue,
+    config_layers,
+    default_config_path,
+    explained,
+    merged_table,
+    read_toml,
+)
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -163,33 +171,54 @@ def _layers(directory: Path) -> list[ConfigLayer]:
     return layers
 
 
-# Every config that speaks for `cwd`, nearest first. A config that does not
-# parse stops the command: loading no rituals from it would surface later as
-# "no ritual named ...", which names neither the file nor the mistake.
+# A config that does not parse stops the command: loading no rituals from it
+# would surface later as "no ritual named ...", which names neither the file
+# nor the mistake.
 # The user's table for a project names tomes only. A ritual the project defines
 # lives in its tree, and a path from here would name the checkout where a cast
 # in a pooled worktree must read its own tree.
+def read_config(layer: ConfigLayer) -> Config:
+    _misspelt(layer)
+    try:
+        config = Config.model_validate(layer.tables)
+    except ValidationError as error:
+        msg = f"{layer.source}: {explained(error)}"
+        raise RitualDefinitionError(msg) from error
+    if layer.project is not None and config.rituals.files:
+        msg = (
+            f"{layer.table('rituals')} takes no files"
+            " — rituals a project defines are named in its own .vekna.toml"
+        )
+        raise RitualDefinitionError(msg)
+    return config
+
+
+# Every config that speaks for `cwd`, nearest first.
 def read_configs(cwd: Path) -> list[tuple[ConfigLayer, Config]]:
-    configs: list[tuple[ConfigLayer, Config]] = []
-    for layer in _layers(cwd):
-        _misspelt(layer)
-        try:
-            config = Config.model_validate(layer.tables)
-        except ValidationError as error:
-            msg = f"{layer.source}: {explained(error)}"
-            raise RitualDefinitionError(msg) from error
-        if layer.project is not None and config.rituals.files:
-            msg = (
-                f"{layer.table('rituals')} takes no files"
-                " — rituals a project defines are named in its own .vekna.toml"
+    return [(layer, read_config(layer)) for layer in _layers(cwd)]
+
+
+# What the user's file says for a checkout that is gone.
+# A table `config_layers` refuses is its to name, and is passed over here.
+def idle_projects() -> list[str]:
+    user = default_config_path()
+    try:
+        projects = read_toml(user).get("projects")
+    except (OSError, ValueError):
+        return []
+    idle: list[str] = []
+    for name, table in projects.items() if isinstance(projects, dict) else ():
+        if not isinstance(table, dict) or not isinstance(table.get("path"), str):
+            continue
+        if not Path(str(table["path"])).expanduser().exists():
+            idle.append(
+                f"{user}: [projects.{name}] path = {table['path']!r} does not exist"
             )
-            raise RitualDefinitionError(msg)
-        configs.append((layer, config))
-    return configs
+    return idle
 
 
 # A tome's own table, as every layer that speaks for `directory` sets it: the
-# user's table for the project over the project's `.vekna.toml` over what the
+# project's `.vekna.toml` over the user's table for the project over what the
 # user says for every project, key by key. `sources` names each table that
 # contributed, nearest first, for the error a tome raises over a value.
 class ConfigTable(NamedTuple):
