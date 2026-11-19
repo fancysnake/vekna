@@ -5,6 +5,7 @@
 
 import ast
 import json
+import os
 import re
 import subprocess
 from collections.abc import Iterator
@@ -14,6 +15,7 @@ from vekna.wire import TomlValue, read_toml
 
 _ROOT = Path(__file__).resolve().parents[2]
 _MISE_RUN = re.compile(r"mise run ([^\s`]+)")
+_HOME = os.environ["HOME"]
 
 
 def _strings(value: TomlValue) -> Iterator[str]:
@@ -41,6 +43,9 @@ class TestProjectTasks:
         # mise keeps its trust list under `XDG_STATE_HOME`, which the suite
         # moves to a fresh directory, so the repo's `mise.toml` reads untrusted.
         monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(_ROOT))
+        # The suite moves `HOME` too, and mise's own config and installs are
+        # under the real one.
+        monkeypatch.setenv("HOME", _HOME)
         commands = [*_strings(read_toml(_ROOT / ".vekna.toml")), *_ritual_strings()]
         # The timeout because `mise.toml` includes tasks over `git::https`;
         # `--local` so a global task cannot stand in for a missing repo one.

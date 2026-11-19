@@ -42,6 +42,9 @@ def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # so the suite reads the same on a machine that sets it as on one that does
     # not — the test that is about the variable sets it itself.
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    # `HOME` moves for the same reason: the operator's own config names tomes
+    # the suite's environment need not have, and each one warns on stderr.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
 _Handler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
