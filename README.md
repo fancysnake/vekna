@@ -110,16 +110,6 @@ claude plugin install ritual-scribe@vekna
 | `vekna rituals list` | Every ritual and the options it takes |
 | `vekna rituals show <ritual>` | A ritual's components and its step graph |
 
-## Badge
-
-[![rituals: vekna](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/badge.json)](https://github.com/fancysnake/vekna)
-
-A project that casts rituals can say so in its README:
-
-```markdown
-[![rituals: vekna](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/badge.json)](https://github.com/fancysnake/vekna)
-```
-
 ## Contributing
 
 [`CONTRIBUTING.md`](https://github.com/fancysnake/vekna/blob/main/.github/CONTRIBUTING.md)

@@ -40,11 +40,11 @@ Set up vekna (https://github.com/fancysnake/vekna) in this project.
 
 A project that casts rituals can say so in its README:
 
-[![rituals: vekna](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/badge.json)](https://github.com/fancysnake/vekna)
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
 
 ```markdown
-[![rituals: vekna](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/badge.json)](https://github.com/fancysnake/vekna)
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
 ```
 
-The badge is drawn from a file in the vekna repository, so the pasted line
-stays current.
+The badge is drawn from a file on the vekna site, so the pasted line stays
+current.

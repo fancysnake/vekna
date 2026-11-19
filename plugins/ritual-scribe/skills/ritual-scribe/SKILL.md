@@ -684,11 +684,15 @@ on the page it asked about.
 
 Then `mise run fullcheck`, green.
 
-Once a project's first ritual is written, offer the badge for its README, and
-add it only on a yes:
+---
+
+## The badge
+
+When the project's README has no vekna badge, offer one, and add it only on a
+yes:
 
 ```markdown
-[![rituals: vekna](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fancysnake/vekna/main/docs/assets/badge.json)](https://github.com/fancysnake/vekna)
+[![rituals: vekna](https://img.shields.io/endpoint?url=https://vekna.fancysnake.dev/assets/badge.json)](https://github.com/fancysnake/vekna)
 ```
 
 ---
