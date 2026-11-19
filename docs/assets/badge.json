@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "label": "rituals",
+  "message": "vekna",
+  "color": "4a6127",
+  "logoSvg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024' fill='#f3efe7' fill-rule='evenodd'><polygon points='64,64 128,256 256,64 384,256 512,64 640,256 768,64 896,256 960,64 960,384 64,384'/><path d='M64,448 H960 V640 L768,832 V960 H640 V832 H576 V960 H448 V832 H384 V960 H256 V832 L64,640 Z M192,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z M640,608 a96,96 0 1,0 192,0 a96,96 0 1,0 -192,0 Z M510,576 L574,768 L448,768 Z'/></svg>"
+}
