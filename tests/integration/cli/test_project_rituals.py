@@ -5,7 +5,6 @@
 # can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — most of these rituals call an agent.
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -43,26 +42,13 @@ def _at_root(monkeypatch) -> None:
 class TestProjectRituals:
     @staticmethod
     def test_every_ritual_loads_and_lists_its_flags(capsys):
-        rituals_list()
-
-        out = capsys.readouterr().out
-        lines = out.splitlines()
-        for name in _EXPECTED:
-            assert any(line.startswith(f"{name}  ") for line in lines)
-
-    # The exit code is checked here, not above: a module that fails to load
-    # makes `list` exit 1, and cabinet's does wherever cabinet is not installed.
-    @staticmethod
-    @pytest.mark.skipif(
-        sys.version_info >= (3, 15), reason="pyproject installs cabinet only below 3.15"
-    )
-    def test_cabinet_rituals_load_beside_the_project_ones(capsys):
         exit_code = rituals_list()
 
         out = capsys.readouterr().out
         assert not exit_code
-        # `.vekna.toml` loads cabinet's rituals under their own namespace.
-        assert any(line.startswith("cabinet:review  ") for line in out.splitlines())
+        lines = out.splitlines()
+        for name in _EXPECTED:
+            assert any(line.startswith(f"{name}  ") for line in lines)
 
     @staticmethod
     @pytest.mark.parametrize("name", _EXPECTED)

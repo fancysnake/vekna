@@ -17,6 +17,13 @@ when.
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
 
+### Removed
+
+- **Cabinet as a development dependency.** This repository casts cabinet's
+  rituals from the user-level config now, so `pyproject.toml` no longer pins a
+  cabinet wheel and `.vekna.toml` no longer carries `[rituals] modules` or a
+  `[cabinet]` table. Nothing changes for an installed vekna.
+
 ## [1.3.0] - 2026-11-18
 
 ### Added

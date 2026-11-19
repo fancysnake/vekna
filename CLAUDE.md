@@ -17,10 +17,10 @@ Anything not covered by a task runs through mise: `mise exec -- poetry build -f
 wheel`, `mise exec -- python -c ...`. Bare `poetry`/`python`/`pytest` are denied
 by the global permission rules and will not run.
 
-The rituals that push — cabinet's, cast through `[rituals] modules` — need an
-https remote with a credential helper behind it, because a cast has no terminal
-for ssh to ask a passphrase on. `origin` here is ssh, so a fresh clone makes the
-one `[cabinet] remote` names, once:
+The rituals that push — this project's `pr_fix`, and cabinet's, which the
+user-level config loads — need an https remote with a credential helper behind
+it, because a cast has no terminal for ssh to ask a passphrase on. `origin` here
+is ssh, so a fresh clone makes the one `[defaults.pr_fix] remote` names, once:
 
 ```bash
 git remote add https-origin https://github.com/fancysnake/vekna.git
