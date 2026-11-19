@@ -17,6 +17,16 @@ when.
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
 
+### Fixed
+
+- **A following cast keeps following past a large event.** An event over
+  64 KiB from any cast, a shell result of that size for one, ended the follow:
+  the terminal showed no more of the casts it queued and none of their
+  questions. A cast waiting on a queued cast lost its connection the same way
+  when the result was that large. Both now read what the daemon reads, 32 MiB
+  an event. A follow that still ends on an event it cannot read says so,
+  where it used to say the daemon went away. (#312)
+
 ## [1.3.0] - 2026-11-18
 
 ### Added

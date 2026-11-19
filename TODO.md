@@ -4,6 +4,9 @@
 
 ## Friction
 
+- `git grep ... | head -20` to find a class's tests cut off the one file that
+  held them, and Write then replaced the committed `test_follow.py` instead of
+  refusing; `git status` marking a "new" file as modified is what caught it.
 - `pytest -W error` to catch an unawaited coroutine in new tests failed six
   existing `test_daemon_link.py` tests on a `StreamWriter.__del__` unraisable
   warning, so the flag cannot be used suite-wide; ran it per file instead.

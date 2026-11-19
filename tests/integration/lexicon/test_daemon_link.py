@@ -67,6 +67,7 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c1"
 _PATIENCE = 200
 _TICK = 0.01
+_PAST_DEFAULT = 128 * 1024
 _HeardT = TypeVar("_HeardT")
 
 
@@ -1129,6 +1130,28 @@ class TestQueue:
 
         assert await asyncio.wait_for(awaiting, timeout=2) == ended
         assert asked.child == "c2"
+        await link.close(status="ok")
+        await daemon.stop()
+
+    # A child's result is one frame, past asyncio's 64KiB stream default when
+    # it carries what a command printed.
+    @staticmethod
+    async def test_an_await_returns_a_result_past_the_stream_default(socket_path: Path):
+        hub, daemon, link = await _attached(socket_path)
+
+        awaiting = asyncio.create_task(link.await_end("c2"))
+        await _eventually(lambda: bool(hub.heard))
+        ended = AwaitEnded(
+            cast_id=_CAST,
+            request_id=_first(hub.heard, AwaitRequested).request_id,
+            child="c2",
+            status="ok",
+            result={"printed": "x" * _PAST_DEFAULT},
+        )
+        hub.tell(_CAST, ended)
+
+        assert await asyncio.wait_for(awaiting, timeout=2) == ended
+        assert link.attached
         await link.close(status="ok")
         await daemon.stop()
 
