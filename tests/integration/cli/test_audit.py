@@ -234,6 +234,42 @@ class TestAudit:
         assert code == 1
 
     @staticmethod
+    def test_a_name_collision_keeps_the_skipped_tome_in_the_report(
+        user: Path, repo: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        del user
+        (repo / "one.py").write_text(_TOME, encoding="utf-8")
+        (repo / "two.py").write_text(_TOME, encoding="utf-8")
+        project = repo / ".vekna.toml"
+        project.write_text(
+            '[rituals]\nfiles = ["one.py", "two.py"]\n'
+            'modules = ["vekna_no_such_tome"]\n',
+            encoding="utf-8",
+        )
+
+        code, said = _audit()
+
+        assert said == (
+            "layers, nearest first:\n"
+            f"  1  {project}\n"
+            "\n"
+            "[rituals]\n"
+            "  modules vekna_no_such_tome = vekna_no_such_tome  ← 1\n"
+            f"  files {repo / 'one.py'}  ← 1\n"
+            f"  files {repo / 'two.py'}  ← 1\n"
+            "\n"
+            "errors:\n"
+            "  warning: vekna_no_such_tome failed to import: ModuleNotFoundError:"
+            " No module named 'vekna_no_such_tome' — its rituals are skipped\n"
+            "  name collisions:\n"
+            f"    ritual 'echo' — declared in both {repo / 'one.py'}"
+            f" and {repo / 'two.py'}\n"
+            f"  {_UNCHECKED}\n"
+        )
+        assert code == 1
+        assert not capsys.readouterr().err
+
+    @staticmethod
     def test_no_config_at_all_is_said_and_is_no_error(user: Path, repo: Path):
         del repo
 

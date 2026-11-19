@@ -93,6 +93,24 @@ class TestReport:
         )
 
     @staticmethod
+    def test_a_module_listed_twice_in_one_table_repeats_that_table():
+        said = report(
+            _evidence(
+                ConfigLayer(
+                    USER,
+                    {"rituals": {"modules": ["tome.rituals", "tome.rituals"]}},
+                    "repo",
+                )
+            )
+        )
+
+        assert said.split("\n\n")[2] == (
+            "pointless:\n"
+            f"  {USER}: [projects.repo.rituals] modules tome = tome.rituals"
+            f" repeats {USER}: [projects.repo.rituals]\n"
+        )
+
+    @staticmethod
     def test_the_user_s_table_for_the_project_that_wins_is_not_pointless():
         said = report(
             _evidence(

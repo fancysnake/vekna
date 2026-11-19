@@ -140,11 +140,13 @@ class _Report:
         for said, layers in named.items():
             for index in layers if len(layers) > 1 else ():
                 if self._layers[index].project is not None:
-                    other = next(one for one in layers if one != index)
-                    self.pointless.append(
+                    other = next((one for one in layers if one != index), index)
+                    line = (
                         f"{self._layers[index].table(_RITUALS)} {said}"
                         f" repeats {self._layers[other].table(_RITUALS)}"
                     )
+                    if line not in self.pointless:
+                        self.pointless.append(line)
         lines = [
             f"  {said}  ← {', '.join(str(index + 1) for index in layers)}"
             for said, layers in named.items()

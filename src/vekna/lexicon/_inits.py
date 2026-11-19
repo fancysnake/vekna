@@ -402,10 +402,12 @@ def rituals_show(name: str) -> int:
 # are validated on the way, which `show` does for one. A skipped tome's warning
 # is caught: it is an error of the report's, not a line above it.
 def _audited_rituals(cwd: Path, errors: dict[str, None]) -> Collection[str] | None:
+    warned = io.StringIO()
     try:
-        with contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.redirect_stderr(warned):
             library = _build_library(cwd)
     except _LOAD_ERRORS as error:
+        errors.update((line, None) for line in warned.getvalue().splitlines())
         errors[str(error)] = None
         return None
     names = library.compendium.names()
