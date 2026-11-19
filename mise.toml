@@ -9,7 +9,7 @@ jobs = 8
 actionlint = "1.7.12"
 hk = { version = "2.12.0", workflow = "release.yml" }
 jq = "1.8.2"
-markdownlint-cli2 = "0.24.0"
+markdownlint-cli2 = "0.24.1"
 node = "26"
 pipx = "1.18.16"
 "pipx:poetry" = "2.5.1"
