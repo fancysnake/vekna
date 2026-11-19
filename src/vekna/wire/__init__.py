@@ -1,13 +1,16 @@
 from ._config import (
     ConfigLayer,
     ConfigRead,
+    Said,
     TableRead,
     config_layers,
     default_config_path,
+    idle_projects,
     merged_table,
     project_config_path,
     read_layers,
     read_user_layers,
+    settled,
     user_layers,
 )
 from ._links import (
@@ -136,6 +139,7 @@ __all__ = [
     "RiteFinished",
     "RiteStarted",
     "RunRecord",
+    "Said",
     "StopRequested",
     "SurfaceHello",
     "TableRead",
@@ -160,6 +164,7 @@ __all__ = [
     "events_log",
     "explained",
     "flag_of",
+    "idle_projects",
     "merged_table",
     "parse_flags",
     "project_config_path",
@@ -173,5 +178,6 @@ __all__ = [
     "refusals",
     "refused",
     "run_file",
+    "settled",
     "user_layers",
 ]

@@ -1,6 +1,7 @@
+from dataclasses import replace
 from pathlib import Path
 
-from vekna.lexicon._mills.audit import Evidence, report
+from vekna.lexicon._mills.audit import Audited, Evidence, report
 from vekna.lexicon._pacts import Config
 from vekna.wire import ConfigLayer, TomlValue
 
@@ -10,8 +11,9 @@ PROJECT = Path("/repo/.vekna.toml")
 
 def _evidence(*layers: ConfigLayer, rituals: tuple[str, ...] | None = ()) -> Evidence:
     return Evidence(
-        layers=layers,
-        configs=[Config.model_validate(layer.tables) for layer in layers],
+        layers=[
+            Audited(layer, Config.model_validate(layer.tables)) for layer in layers
+        ],
         user=USER,
         machine={"circle": ("coding",), "window": ()},
         rituals=rituals,
@@ -24,7 +26,7 @@ def _tables(said: str) -> str:
     return said.split("\n\n")[1]
 
 
-def _tome(table: dict[str, TomlValue]) -> dict[str, TomlValue]:
+def _tome(table: TomlValue) -> dict[str, TomlValue]:
     return {"rituals": {"modules": ["tome.rituals"]}, "tome": table}
 
 
@@ -58,6 +60,24 @@ class TestReport:
         assert _tables(said).endswith(
             '[tome]\n  agent = false  ← 1 (over 2: {"tries": 2})'
         )
+
+    @staticmethod
+    def test_a_line_named_twice_is_said_once():
+        evidence = _evidence(ConfigLayer(USER, {}))
+
+        said = report(replace(evidence, errors=["a", "b", "a"], pointless=["c", "c"]))
+
+        assert said.endswith("\nerrors:\n  a\n  b\n\npointless:\n  c\n")
+
+    @staticmethod
+    def test_a_layer_whose_table_is_no_table_is_passed_over_as_the_merge_does():
+        said = report(
+            _evidence(
+                ConfigLayer(PROJECT, _tome(5)), ConfigLayer(USER, _tome({"tries": 2}))
+            )
+        )
+
+        assert _tables(said).endswith("[tome]\n  tries = 2  ← 2")
 
     @staticmethod
     def test_a_default_holding_a_table_is_replaced_whole():

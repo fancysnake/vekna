@@ -44,5 +44,11 @@ class TestMergedTable:
         }
 
     @staticmethod
+    def test_an_empty_inner_table_is_kept():
+        near = ConfigLayer(Path("/near"), {"cabinet": {"agent": {}}})
+
+        assert merged_table([near], "cabinet") == {"agent": {}}
+
+    @staticmethod
     def test_a_table_nobody_sets_is_empty():
         assert not merged_table([ConfigLayer(Path("/near"), {})], "cabinet")

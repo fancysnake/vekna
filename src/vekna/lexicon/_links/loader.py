@@ -13,15 +13,7 @@ from typing import NamedTuple
 from pydantic import ValidationError
 
 from vekna.lexicon._pacts import Config, Ritual, RitualDefinitionError, RitualSource
-from vekna.wire import (
-    ConfigLayer,
-    TomlValue,
-    config_layers,
-    default_config_path,
-    explained,
-    merged_table,
-    read_toml,
-)
+from vekna.wire import ConfigLayer, TomlValue, config_layers, explained, merged_table
 
 
 # The one place a module's namespace is read. Binding it to a declared
@@ -196,25 +188,6 @@ def read_config(layer: ConfigLayer) -> Config:
 # Every config that speaks for `cwd`, nearest first.
 def read_configs(cwd: Path) -> list[tuple[ConfigLayer, Config]]:
     return [(layer, read_config(layer)) for layer in _layers(cwd)]
-
-
-# What the user's file says for a checkout that is gone.
-# A table `config_layers` refuses is its to name, and is passed over here.
-def idle_projects() -> list[str]:
-    user = default_config_path()
-    try:
-        projects = read_toml(user).get("projects")
-    except (OSError, ValueError):
-        return []
-    idle: list[str] = []
-    for name, table in projects.items() if isinstance(projects, dict) else ():
-        if not isinstance(table, dict) or not isinstance(table.get("path"), str):
-            continue
-        if not Path(str(table["path"])).expanduser().exists():
-            idle.append(
-                f"{user}: [projects.{name}] path = {table['path']!r} does not exist"
-            )
-    return idle
 
 
 # A tome's own table, as every layer that speaks for `directory` sets it: the

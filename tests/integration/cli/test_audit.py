@@ -96,6 +96,22 @@ class TestAudit:
         assert code == 0
 
     @staticmethod
+    @pytest.mark.usefixtures("repo")
+    def test_a_relative_project_path_is_refused_not_called_a_missing_checkout(
+        user: Path,
+    ):
+        user.write_text('[projects.near]\npath = "no/such"\n', encoding="utf-8")
+
+        code, said = _audit()
+
+        assert said == (
+            f"layers, nearest first:\n  1  {user}\n\nerrors:\n"
+            f"  {user}: [projects.near] path = 'no/such' is not absolute\n"
+            f"  {_UNCHECKED}\n"
+        )
+        assert code == 1
+
+    @staticmethod
     def test_every_broken_table_is_named_and_the_audit_fails(user: Path, repo: Path):
         user.write_text(
             "[window]\nhistory_after = 3\ntheme = 1\n[projects.bad]\nkey = 1\n",

@@ -1,32 +1,35 @@
 import json
 import sys
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
 from vekna.lexicon._pacts import Config
-from vekna.wire import ConfigLayer, TomlValue
+from vekna.wire import ConfigLayer, Said, TomlValue, settled
 
 _RITUALS = "rituals"
 _DEFAULTS = "defaults"
 
 
-# One layer's word on one key. `layer` indexes `Evidence.layers`.
-class Said(NamedTuple):
-    layer: int
-    value: TomlValue
+# A layer with what it validated as, or None where it did not.
+class Audited(NamedTuple):
+    layer: ConfigLayer
+    config: Config | None
 
 
-# `configs` runs beside `layers`, with None where a layer did not validate.
+def validated(layers: Sequence[Audited]) -> bool:
+    return all(one.config is not None for one in layers)
+
+
 # `machine` names the root's own tables, each with the keys only the user's
 # top-level table may set.
 # `rituals` is None when the library did not load whole, so a `[defaults]`
 # table naming none of them is not evidence of anything.
+# `errors` and `pointless` may name a line twice: the report says each once.
 @dataclass(frozen=True, kw_only=True)
 class Evidence:
-    layers: Sequence[ConfigLayer]
-    configs: Sequence[Config | None]
+    layers: Sequence[Audited]
     user: Path
     machine: Mapping[str, Collection[str]]
     rituals: Collection[str] | None
@@ -46,29 +49,10 @@ def _shown(value: TomlValue) -> str:
     return json.dumps(value, default=str)
 
 
-# The way `merged_table` settles it: a table inside a table is merged key by
-# key, anything else is the nearest layer's whole. `depth` is how many levels
-# are merged, since a `[defaults.<ritual>]` key is replaced whole even when it
-# holds a table.
-def _settled(
-    *, key: tuple[str, ...], said: list[Said], depth: int
-) -> Iterator[tuple[tuple[str, ...], list[Said]]]:
-    if not depth or not isinstance(said[0].value, dict):
-        yield key, said
-        return
-    tables = [(one.layer, one.value) for one in said if isinstance(one.value, dict)]
-    for name in _once(name for _, table in tables for name in table):
-        yield from _settled(
-            key=(*key, name),
-            said=[Said(layer, table[name]) for layer, table in tables if name in table],
-            depth=depth - 1,
-        )
-
-
 class _Report:
     def __init__(self, evidence: Evidence) -> None:
         self._evidence = evidence
-        self._layers = evidence.layers
+        self._layers = [one.layer for one in evidence.layers]
         self.pointless = list(evidence.pointless)
 
     def _table(self, said: Said, table: str) -> str:
@@ -108,7 +92,7 @@ class _Report:
         self, *, table: str, said: list[Said], depth: int = sys.maxsize, tail: str = ""
     ) -> list[str]:
         lines: list[str] = []
-        for path, every in _settled(key=(), said=said, depth=depth):
+        for path, every in settled(said, depth=depth):
             key = ".".join(path)
             if not (heard := self._heard(table=table, key=key, said=every)):
                 continue
@@ -121,7 +105,7 @@ class _Report:
                 if one.value != first.value
             )
             lines.append(
-                f"  {key or '(value)'} = {_shown(first.value)}  ← {first.layer + 1}"
+                f"  {key} = {_shown(first.value)}  ← {first.layer + 1}"
                 + (f" (over {over})" if over else "")
             )
         return [f"[{table}]{tail}", *lines] if lines else []
@@ -129,7 +113,7 @@ class _Report:
     # Additive, unlike every other table: each layer's sources are all loaded.
     def rituals(self) -> list[str]:
         named: dict[str, list[int]] = {}
-        for index, config in enumerate(self._evidence.configs):
+        for index, (_, config) in enumerate(self._evidence.layers):
             if config is None:
                 continue
             for namespace, module in config.rituals.modules:
@@ -141,12 +125,10 @@ class _Report:
             for index in layers if len(layers) > 1 else ():
                 if self._layers[index].project is not None:
                     other = next((one for one in layers if one != index), index)
-                    line = (
+                    self.pointless.append(
                         f"{self._layers[index].table(_RITUALS)} {said}"
                         f" repeats {self._layers[other].table(_RITUALS)}"
                     )
-                    if line not in self.pointless:
-                        self.pointless.append(line)
         lines = [
             f"  {said}  ← {', '.join(str(index + 1) for index in layers)}"
             for said, layers in named.items()
@@ -156,10 +138,9 @@ class _Report:
     def defaults(self, said: list[Said]) -> list[str]:
         loaded = self._evidence.rituals
         lines: list[str] = []
-        # A `defaults` that is no table is the validation's to name.
-        if not (tables := [one for one in said if isinstance(one.value, dict)]):
-            return lines
-        for (name,), heard in _settled(key=(), said=tables, depth=1):
+        # A `defaults` that is no table is passed over, and the validation's to
+        # name.
+        for (name,), heard in settled(said, depth=1):
             absent = loaded is not None and name not in loaded
             table = f"{_DEFAULTS}.{name}"
             # The user's top-level table speaks for every project, and a ritual
@@ -179,14 +160,14 @@ class _Report:
 
     # Other tools keep tables in the same file, so this is a guess, said as one.
     def _unclaimed(self, name: str, said: list[Said]) -> None:
-        configs = self._evidence.configs
-        if name in self._evidence.machine or None in configs:
+        layers = self._evidence.layers
+        if name in self._evidence.machine or not validated(layers):
             return
         tomes = {
             module.partition(".")[0]
-            for config in configs
-            if config is not None
-            for _, module in config.rituals.modules
+            for one in layers
+            if one.config is not None
+            for _, module in one.config.rituals.modules
         }
         if name not in tomes:
             self.pointless += [
@@ -227,18 +208,20 @@ def report(evidence: Evidence) -> str:
     if evidence.layers:
         layers = [
             "layers, nearest first:",
-            *(f"  {n}  {layer.source}" for n, layer in enumerate(evidence.layers, 1)),
+            *(f"  {n}  {one.layer.source}" for n, one in enumerate(evidence.layers, 1)),
         ]
     else:
         nothing = "no config was read: a project's is .vekna.toml, the user's is"
         layers = [f"{nothing} {evidence.user}"]
-    clean = not evidence.errors and not made.pointless
+    errors = _once(evidence.errors)
+    pointless = _once(made.pointless)
+    clean = not errors and not pointless
     lines = [
         *layers,
         *([""] if tables else []),
         *tables,
-        *_listed("errors:", evidence.errors),
-        *_listed("pointless:", made.pointless),
+        *_listed("errors:", errors),
+        *_listed("pointless:", pointless),
         *(["", "no errors, nothing pointless"] if clean else []),
     ]
     return "\n".join(lines) + "\n"
