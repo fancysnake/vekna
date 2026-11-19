@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.lexicon._links.follow import Follower
+from vekna.lexicon._links.follow import DAEMON_WENT, Follower
 from vekna.lexicon._links.standalone import Tail
 from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._mills.follow import Lineage
@@ -34,6 +34,7 @@ from vekna.wire import (
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 200
 _TICK = 0.01
+_PAST_DEFAULT = 128 * 1024
 
 
 def _hello(cast_id: str, *, by: str | None, ritual: str = "ci_watch") -> CastHello:
@@ -262,6 +263,71 @@ class TestFollowing:
         await server.close()
 
         assert not await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert follower.lost == DAEMON_WENT
+        await follower.close()
+
+    # A shell medium's result is one frame, and any cast's reaches every
+    # surface: a stranger's `git diff` must not cost this terminal its own.
+    @staticmethod
+    async def test_a_frame_past_the_stream_default_does_not_end_the_follow(
+        socket_path: Path,
+    ):
+        hub = Hub()
+        server = await serve(path=socket_path, routes=hub)
+        lineage = Lineage("root")
+        lineage.expect("child0000")
+        out = io.StringIO()
+        follower = Follower(
+            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+        )
+        await follower.attach()
+        started, _, _ = _rite("stranger")
+
+        hub.apply(_hello("stranger", by=None, ritual="other"))
+        hub.apply(started)
+        hub.apply(
+            RiteDelta(cast_id="stranger", rite_id="r1", delta="x" * _PAST_DEFAULT)
+        )
+        hub.apply(_hello("child0000", by="root"))
+        hub.apply(CastGoodbye(cast_id="child0000", status="ok"))
+
+        assert await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert out.getvalue().splitlines() == ["[ci_watch child000] ✓ done"]
+        await follower.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_frame_it_cannot_read_ends_the_follow_and_says_why(
+        socket_path: Path,
+    ):
+        async def garbling(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            await reader.readline()
+            writer.write(b"not a frame\n")
+            await writer.drain()
+            await reader.read()
+            writer.close()
+
+        server = await asyncio.start_unix_server(garbling, path=str(socket_path))
+        lineage = Lineage("root")
+        lineage.expect("child0000")
+        follower = Follower(
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(io.StringIO())),
+            ask=None,
+        )
+        await follower.attach()
+
+        assert not await asyncio.wait_for(follower.until_settled(), timeout=2)
+        assert follower.lost.startswith(
+            "stopped following them: the daemon sent a frame this vekna cannot"
+            " read (1 validation error for "
+        )
+        assert follower.lost.endswith(") — `vekna` shows them\n")
+        assert follower.lost.count("\n") == 1
+        server.close()
         await follower.close()
 
     @staticmethod

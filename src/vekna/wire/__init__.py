@@ -11,6 +11,7 @@ from ._config import (
     user_layers,
 )
 from ._links import (
+    FRAME_LIMIT,
     cast_frames,
     daemon_refusal,
     daemon_version,
@@ -86,6 +87,7 @@ from ._specs import SHORT_ID, VERSION, allowed_answers, compatible, flag_of, par
 from ._toml import TomlValue, read_toml
 
 __all__ = [
+    "FRAME_LIMIT",
     "NEEDS_TREE",
     "SHORT_ID",
     "VERSION",

@@ -30,6 +30,7 @@ from vekna.lexicon._pacts import (
     RitualError,
 )
 from vekna.wire import (
+    FRAME_LIMIT,
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
@@ -156,7 +157,9 @@ class DaemonLink:
         if await daemon_refusal(self._path) is not None:
             return False
         try:
-            reader, writer = await asyncio.open_unix_connection(str(self._path))
+            reader, writer = await asyncio.open_unix_connection(
+                str(self._path), limit=FRAME_LIMIT
+            )
         except OSError:
             return False
         if self._closed:

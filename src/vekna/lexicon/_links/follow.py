@@ -14,6 +14,7 @@ from vekna.lexicon._pacts import (
     StandalonePromptError,
 )
 from vekna.wire import (
+    FRAME_LIMIT,
     SHORT_ID,
     CastGoodbye,
     CastHello,
@@ -36,6 +37,12 @@ from vekna.wire import (
 
 from .standalone import question_height
 
+DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
+_UNREAD = (
+    "stopped following them: the daemon sent a frame this vekna cannot read"
+    " ({why}) — `vekna` shows them\n"
+)
+
 
 # One followed cast: its name, and the rites it has already shown, so a replay
 # after the cast reattaches says nothing twice.
@@ -49,11 +56,13 @@ class _Followed:
 
 
 # The connection to the daemon: written to with answers, read for everything.
+# `lost` is why it ended, for a follow that ends short of every cast ending.
 @dataclass
 class _Wire:
     path: Path
     writer: asyncio.StreamWriter | None = None
     reader: asyncio.Task[None] | None = None
+    lost: str = DAEMON_WENT
 
 
 # The prompts of the followed casts, and who is asking each one here.
@@ -88,7 +97,9 @@ class Follower:
 
     async def attach(self) -> bool:
         try:
-            reader, writer = await asyncio.open_unix_connection(str(self._wire.path))
+            reader, writer = await asyncio.open_unix_connection(
+                str(self._wire.path), limit=FRAME_LIMIT
+            )
         except OSError:
             return False
         self._wire.writer = writer
@@ -104,6 +115,10 @@ class Follower:
             self._done.clear()
             await self._done.wait()
         return self._lineage.settled
+
+    @property
+    def lost(self) -> str:
+        return self._wire.lost
 
     async def close(self) -> None:
         for task in self._prompts.asking.values():
@@ -121,15 +136,20 @@ class Follower:
                 await writer.wait_closed()
 
     async def _read(self, reader: asyncio.StreamReader) -> None:
-        with contextlib.suppress(OSError, ValueError):
-            async for message in read_frames(reader):
-                self._lineage.heard(message)
-                self._heard(message)
-                # Only a cast arriving or ending can settle the lineage.
-                if isinstance(message, CastHello | CastGoodbye) and (
-                    self._lineage.settled
-                ):
-                    self._done.set()
+        try:
+            with contextlib.suppress(OSError):
+                async for message in read_frames(reader):
+                    self._lineage.heard(message)
+                    self._heard(message)
+                    # Only a cast arriving or ending can settle the lineage.
+                    if isinstance(message, CastHello | CastGoodbye) and (
+                        self._lineage.settled
+                    ):
+                        self._done.set()
+        # A frame past the ceiling, or one of a kind this vekna predates: the
+        # casts run on, and the first line of the error is the whole reason.
+        except ValueError as error:
+            self._wire.lost = _UNREAD.format(why=str(error).partition("\n")[0])
         await self._hang_up()
         self._done.set()
 
