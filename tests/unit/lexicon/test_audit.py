@@ -93,6 +93,17 @@ class TestReport:
         )
 
     @staticmethod
+    def test_the_user_s_table_for_the_project_that_wins_is_not_pointless():
+        said = report(
+            _evidence(
+                ConfigLayer(USER, {"tome": {"push": False}}, "repo"),
+                ConfigLayer(USER, _tome({"push": True})),
+            )
+        )
+
+        assert said.endswith("no errors, nothing pointless\n")
+
+    @staticmethod
     def test_defaults_are_not_called_unused_when_the_rituals_did_not_load():
         said = report(
             _evidence(

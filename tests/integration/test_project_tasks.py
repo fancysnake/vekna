@@ -5,6 +5,8 @@
 
 import ast
 import json
+import os
+import pwd
 import re
 import subprocess
 from collections.abc import Iterator
@@ -41,6 +43,9 @@ class TestProjectTasks:
         # mise keeps its trust list under `XDG_STATE_HOME`, which the suite
         # moves to a fresh directory, so the repo's `mise.toml` reads untrusted.
         monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(_ROOT))
+        # mise caches the `git::https` task includes under the real home, which
+        # the suite replaces with an empty one.
+        monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)
         commands = [*_strings(read_toml(_ROOT / ".vekna.toml")), *_ritual_strings()]
         # The timeout because `mise.toml` includes tasks over `git::https`;
         # `--local` so a global task cannot stand in for a missing repo one.

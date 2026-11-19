@@ -40,8 +40,11 @@ def _own_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # The global config is `$XDG_CONFIG_HOME/vekna` and `~/.config/vekna` only
     # when nothing exports one, and the tests that check it move `HOME`. Cleared
     # so the suite reads the same on a machine that sets it as on one that does
-    # not — the test that is about the variable sets it itself.
+    # not — the test that is about the variable sets it itself. `HOME` is an
+    # empty directory of its own so the operator's real config, a broken one
+    # included, never reaches a test.
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
 _Handler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
