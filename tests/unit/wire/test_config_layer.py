@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from vekna.wire import ConfigLayer, merged_table
+from vekna.wire import ConfigLayer, Said, merged_table, overruled
 
 
 class TestConfigLayer:
@@ -52,3 +52,21 @@ class TestMergedTable:
     @staticmethod
     def test_a_table_nobody_sets_is_empty():
         assert not merged_table([ConfigLayer(Path("/near"), {})], "cabinet")
+
+
+class TestOverruled:
+    @staticmethod
+    def test_a_value_lost_to_a_nearer_table_is_found_at_any_depth():
+        near = Said(0, {"a": {"b": {"c": 1}}})
+        far = Said(1, {"a": {"b": 5}})
+
+        assert list(overruled([near, far])) == [
+            (("a", "b"), Said(0, {"c": 1}), Said(1, 5))
+        ]
+
+    @staticmethod
+    def test_tables_that_merge_cleanly_overrule_nothing():
+        near = Said(0, {"a": {"b": 1}})
+        far = Said(1, {"a": {"c": 2}})
+
+        assert not list(overruled([near, far]))
