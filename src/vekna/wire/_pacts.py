@@ -121,7 +121,7 @@ NEEDS_TREE = 75
 
 
 # The tree a cast ran in was not parked after it: uncommitted work, or a merge or
-# rebase left open. It stays out of the pool until `vekna altar --fix` or somebody
+# rebase left open. It stays out of the pool until `vekna altar fix` or somebody
 # cleans it, and the cast that left it is who it is reported against.
 class TreeBlocked(BaseModel):
     kind: Literal["tree_blocked"] = "tree_blocked"

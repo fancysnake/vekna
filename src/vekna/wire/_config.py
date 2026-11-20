@@ -1,5 +1,6 @@
 import os
-from collections.abc import Iterator
+import sys
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Generic, NamedTuple, TypeVar
 
@@ -115,16 +116,14 @@ def _everywhere(user: Path, shared: dict[str, TomlValue] | None) -> list[ConfigL
     ]
 
 
-# A project is a checkout, named by its `path`: the table answers for every
-# tree of that repository, so a cast in a pooled worktree reads what a cast
-# typed in the checkout reads.
-def _project_layers(
-    *, user: Path, projects: TomlValue, directory: Path, problems: list[str]
-) -> Iterator[ConfigLayer]:
+# The user's project entries that name a checkout: each with its table and the
+# checkout's absolute path. An entry that does not is named in `problems`.
+def _checkouts(
+    *, user: Path, projects: TomlValue, problems: list[str]
+) -> Iterator[tuple[str, dict[str, TomlValue], Path]]:
     if not isinstance(projects, dict):
         problems.append(f"{user}: [projects] is not a table")
         return
-    here = _repository(directory)
     for name, table in projects.items():
         source = f"{user}: [projects.{name}]"
         path = table.get("path") if isinstance(table, dict) else None
@@ -135,19 +134,53 @@ def _project_layers(
         if not checkout.is_absolute():
             problems.append(f"{source} path = {path!r} is not absolute")
             continue
+        yield name, table, checkout
+
+
+# A project is a checkout, named by its `path`: the table answers for every
+# tree of that repository, so a cast in a pooled worktree reads what a cast
+# typed in the checkout reads.
+def _project_layers(
+    *, user: Path, projects: TomlValue, directory: Path, problems: list[str]
+) -> Iterator[ConfigLayer]:
+    here = _repository(directory)
+    for name, table, checkout in _checkouts(
+        user=user, projects=projects, problems=problems
+    ):
         if _repository(checkout) == here:
             settings = {key: value for key, value in table.items() if key != "path"}
             yield ConfigLayer(user, settings, name)
 
 
-# Every config that speaks for `directory`, nearest first: the user's table for
-# this project, the project's own `.vekna.toml`, then what the user says for
+# The user's project entries whose checkout is gone. An entry that names no
+# checkout is `config_layers`' to name, and is passed over here.
+def idle_projects() -> list[str]:
+    user, shared = _user_file([])
+    if shared is None or "projects" not in shared:
+        return []
+    return [
+        f"{user}: [projects.{name}] path = {table['path']!r} does not exist"
+        for name, table, checkout in _checkouts(
+            user=user, projects=shared["projects"], problems=[]
+        )
+        if not checkout.exists()
+    ]
+
+
+# Every config that speaks for `directory`, nearest first: the project's own
+# `.vekna.toml`, the user's table for this project, then what the user says for
 # every project. A file that will not read is left out and named in the second
 # list; whether that stops the command is the caller's to say.
 def config_layers(directory: Path) -> ConfigRead:
     layers: list[ConfigLayer] = []
     problems: list[str] = []
     user, shared = _user_file(problems)
+    if (found := project_config_path(directory)) is not None and (
+        tables := _tables(found, problems)
+    ) is not None:
+        if "projects" in tables:
+            problems.append(f"{found}: [projects] is read from {user} only")
+        layers.append(ConfigLayer(found, tables))
     if shared is not None and "projects" in shared:
         layers.extend(
             _project_layers(
@@ -157,12 +190,6 @@ def config_layers(directory: Path) -> ConfigRead:
                 problems=problems,
             )
         )
-    if (found := project_config_path(directory)) is not None and (
-        tables := _tables(found, problems)
-    ) is not None:
-        if "projects" in tables:
-            problems.append(f"{found}: [projects] is read from {user} only")
-        layers.append(ConfigLayer(found, tables))
     layers.extend(_everywhere(user, shared))
     return ConfigRead(layers, problems)
 
@@ -198,24 +225,85 @@ def read_user_layers(*, table: str, model: type[_File]) -> TableRead[_File]:
     return _validated(user_layers(), table=table, model=model)
 
 
+# One layer's word on one key. `layer` indexes the layers the words came from.
+class Said(NamedTuple):
+    layer: int
+    value: TomlValue
+
+
+# Each key of one table with every layer's word on it that the merge hears, the
+# winning word first. A layer whose table is no table is passed over; within a
+# table, a nearer value that is no table replaces a farther table whole, and a
+# table merges every farther table key by key. `depth` is how many levels are
+# merged before a value is taken whole.
+def settled(
+    said: Sequence[Said], *, depth: int = sys.maxsize
+) -> Iterator[tuple[tuple[str, ...], list[Said]]]:
+    for name, heard, nested in _named(said, depth=depth):
+        if nested:
+            for key, inner in settled(heard, depth=depth - 1):
+                yield (name, *key), inner
+        else:
+            yield (name,), heard
+
+
+# What `settled` drops on the way down: a farther layer's value that is no table
+# where a nearer table is merged key by key. Each comes with the nearest word
+# that overrides it, so a reader can say the value has no effect.
+def overruled(
+    said: Sequence[Said], *, depth: int = sys.maxsize
+) -> Iterator[tuple[tuple[str, ...], Said, Said]]:
+    for name, heard, nested in _named(said, depth=depth):
+        if not nested:
+            continue
+        for one in heard:
+            if not isinstance(one.value, dict):
+                yield (name,), heard[0], one
+        for key, over, lost in overruled(heard, depth=depth - 1):
+            yield (name, *key), over, lost
+
+
+# Each key of the tables among `said`, with every word on it, and whether the
+# words are merged further down rather than taken whole.
+def _named(
+    said: Sequence[Said], *, depth: int
+) -> Iterator[tuple[str, list[Said], bool]]:
+    tables = [(one.layer, one.value) for one in said if isinstance(one.value, dict)]
+    names: dict[str, None] = {}
+    names.update((name, None) for _, table in tables for name in table)
+    for name in names:
+        heard = [Said(layer, table[name]) for layer, table in tables if name in table]
+        nested = (
+            depth > 1
+            and isinstance(heard[0].value, dict)
+            and any(isinstance(one.value, dict) and one.value for one in heard)
+        )
+        yield name, heard, nested
+
+
 # One table across the layers, a nearer layer's key over a farther one's, and a
 # table inside a table merged the same way rather than replaced whole.
 def merged_table(layers: list[ConfigLayer], name: str) -> dict[str, TomlValue]:
     merged: dict[str, TomlValue] = {}
-    for layer in layers:
-        if isinstance(table := layer.tables.get(name), dict):
-            merged = _over(table, merged)
+    said = [
+        Said(index, layer.tables[name])
+        for index, layer in enumerate(layers)
+        if name in layer.tables
+    ]
+    for key, heard in settled(said):
+        _place(merged, key=key, value=heard[0].value)
     return merged
 
 
-def _over(
-    under: dict[str, TomlValue], over: dict[str, TomlValue]
-) -> dict[str, TomlValue]:
-    merged = dict(under)
-    for key, value in over.items():
-        below = merged.get(key)
-        if isinstance(value, dict) and isinstance(below, dict):
-            merged[key] = _over(below, value)
-        else:
-            merged[key] = value
-    return merged
+def _place(
+    table: dict[str, TomlValue], *, key: tuple[str, ...], value: TomlValue
+) -> None:
+    first, *rest = key
+    if not rest:
+        table[first] = value
+        return
+    inner = table.get(first)
+    if not isinstance(inner, dict):
+        inner = {}
+        table[first] = inner
+    _place(inner, key=tuple(rest), value=value)

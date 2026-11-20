@@ -92,6 +92,46 @@ class TestDefaults:
             defaults.of(GREET)
 
     @staticmethod
+    def test_every_key_the_ritual_does_not_take_is_named():
+        defaults = Defaults([(PROJECT, _config({"shout": True, "quiet": True}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.of(GREET)
+
+        table = f"{PROJECT.path}: [defaults.greet]"
+        assert str(refused.value) == (
+            f"{table} sets 'shout', which greet does not take\n"
+            f"{table} sets 'quiet', which greet does not take"
+        )
+
+    @staticmethod
+    def test_a_cast_names_every_key_the_ritual_does_not_take():
+        defaults = Defaults([(PROJECT, _config({"shout": True, "quiet": True}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.components(GREET, {"name": "you"})
+
+        table = f"{PROJECT.path}: [defaults.greet]"
+        assert str(refused.value) == (
+            f"{table} sets 'shout', which greet does not take\n"
+            f"{table} sets 'quiet', which greet does not take"
+        )
+
+    @staticmethod
+    def test_a_key_the_ritual_does_not_take_and_a_bad_value_are_reported_together():
+        defaults = Defaults([(PROJECT, _config({"shout": True, "loud": "very"}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.of(GREET)
+
+        table = f"{PROJECT.path}: [defaults.greet]"
+        assert str(refused.value) == (
+            f"{table} sets 'shout', which greet does not take\n"
+            f'{PROJECT.source}: [defaults.greet] loud = "very":'
+            " Input should be a valid boolean, unable to interpret input"
+        )
+
+    @staticmethod
     def test_a_ritual_no_config_names_has_no_defaults():
         defaults = Defaults([])
 

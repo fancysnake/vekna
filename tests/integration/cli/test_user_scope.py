@@ -95,7 +95,7 @@ class TestUserScope:
         assert "echo" in capsys.readouterr().err
 
     @staticmethod
-    def test_the_user_s_table_for_the_project_wins_over_the_project_s_file(
+    def test_the_project_s_file_wins_over_the_user_s_table_for_the_project(
         user: Path, repo: Path, capsys: pytest.CaptureFixture[str]
     ):
         (repo / ".vekna.toml").write_text(
@@ -112,7 +112,7 @@ class TestUserScope:
 
         assert rituals_show("strict") == 0
         shown = capsys.readouterr().out
-        assert f"--level <int>  = 7 ({user}: [projects.mine])" in shown
+        assert f"--level <int>  = 1 ({repo / '.vekna.toml'})" in shown
 
     # What a ritual needs is checked when that ritual is cast: a setting one
     # ritual refuses is not the business of a cast of another.
@@ -194,14 +194,14 @@ class TestConfigTable:
 
         assert config_table("cabinet") == ConfigTable(
             {
-                "gate": "mine",
+                "gate": "project",
                 "coverage": "project",
                 "remote": "https-origin",
                 "agent": {"may_not_run": ["slow"], "effort": "high"},
             },
             (
-                f"{user}: [projects.mine.cabinet]",
                 f"{repo / '.vekna.toml'}: [cabinet]",
+                f"{user}: [projects.mine.cabinet]",
                 f"{user}: [cabinet]",
             ),
         )

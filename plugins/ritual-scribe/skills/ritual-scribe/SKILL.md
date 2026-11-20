@@ -44,6 +44,7 @@ def cover_diff(components: CoverDiff) -> Uncovered:
 - `worktree=True` runs a cast the daemon spawns in a pooled worktree, leased
   before spawn. Set it on a ritual that checks out branches or edits files; a
   ritual that only reads a CI board or lists pull requests needs no tree.
+  The cast fails until `vekna altar init` has made the project's pool.
 - The name is bare. A tome's rituals are cast as `<tome>:<name>`, a prefix the
   loader adds, so a tome need not dodge names its users already have.
 

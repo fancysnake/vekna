@@ -1,11 +1,12 @@
 import asyncio
 import contextlib
 import importlib
+import io
 import itertools
 import json
 import os
 import sys
-from collections.abc import AsyncGenerator, Iterable, Mapping
+from collections.abc import AsyncGenerator, Collection, Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple, TextIO
@@ -18,10 +19,13 @@ from vekna.wire import (
     SHORT_ID,
     CastHello,
     WireMessage,
+    config_layers,
     daemon_refusal,
+    default_config_path,
     default_socket_path,
     explained,
     flag_of,
+    idle_projects,
     parse_flags,
     project_of,
 )
@@ -29,11 +33,17 @@ from vekna.wire import (
 from ._links.board import Board
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.follow import Follower
-from ._links.loader import load_rituals_module, load_rituals_source, read_configs
+from ._links.loader import (
+    load_rituals_module,
+    load_rituals_source,
+    read_config,
+    read_configs,
+)
 from ._links.resume import read_run
 from ._links.standalone import StandaloneRenderer, Tail
 from ._links.turns import Turns
 from ._links.unattended import UnattendedChannel
+from ._mills.audit import Audited, Evidence, report, validated
 from ._mills.defaults import Default, Defaults
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
@@ -62,6 +72,7 @@ from ._pacts import (
     Tome,
 )
 
+_UNCHECKED = "[defaults] were not fully checked: the rituals did not all load"
 _USAGE = (
     "usage: vekna cast <ritual> [--<component> value ...]\n"
     '       vekna cast --prompt "<text>"\n'
@@ -382,6 +393,63 @@ def rituals_show(name: str) -> int:
     if (library := _library_or_usage()) is None:
         return 2
     return _show(library, name)
+
+
+# The rituals the library loads here, or None when it does not load whole: a
+# `[defaults]` table is then checked against nothing. Every ritual's defaults
+# are validated on the way, which `show` does for one. A skipped tome's warning
+# is caught: it is an error of the report's, not a line above it.
+def _audited_rituals(cwd: Path, errors: list[str]) -> Collection[str] | None:
+    warned = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(warned):
+            library = _build_library(cwd)
+    except _LOAD_ERRORS as error:
+        errors += warned.getvalue().splitlines()
+        errors.append(str(error))
+        return None
+    names = library.compendium.names()
+    for name in names:
+        try:
+            library.defaults.of(library.compendium.ritual(name))
+        except RitualDefinitionError as error:
+            errors.append(str(error))
+    errors += library.skipped
+    return None if library.skipped else names
+
+
+# `problems` and `machine` are the root's word on its own tables, `[circle]`
+# and `[window]`, which the lexicon may not import the models of: what is
+# wrong in them, and which keys of each only the user's top level may set.
+# Every problem is collected rather than raised at the first. The root's
+# readers and this one may name the same unreadable file: the report says it
+# once.
+def audit(problems: list[str], machine: Mapping[str, Collection[str]]) -> int:
+    cwd = Path.cwd()
+    layers, unread = config_layers(cwd)
+    errors = [*unread, *problems]
+    audited: list[Audited] = []
+    for layer in layers:
+        try:
+            audited.append(Audited(layer, read_config(layer)))
+        except RitualDefinitionError as error:
+            audited.append(Audited(layer, None))
+            errors.append(str(error))
+    rituals = None
+    if not unread and validated(audited):
+        rituals = _audited_rituals(cwd, errors)
+    if rituals is None:
+        errors.append(_UNCHECKED)
+    evidence = Evidence(
+        layers=audited,
+        user=default_config_path(),
+        machine=machine,
+        rituals=rituals,
+        errors=errors,
+        pointless=idle_projects(),
+    )
+    sys.stdout.write(report(evidence))
+    return 1 if errors else 0
 
 
 def _prompt_ritual(prompt: str) -> Ritual:

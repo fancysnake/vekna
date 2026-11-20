@@ -144,16 +144,13 @@ _TABLES = (*Config.model_fields, "circle", "window")
 # A table vekna does not read is somebody else's, unless it is a near spelling
 # of one vekna does: a `[ritual]` would otherwise load nothing and leave the
 # next cast to fail with "no ritual named ...".
-def _misspelt(layer: ConfigLayer) -> None:
-    for table in layer.tables:
-        if table in _TABLES:
-            continue
-        if meant := difflib.get_close_matches(table, _TABLES, n=1, cutoff=0.8):
-            msg = (
-                f"{layer.source}: vekna reads no [{table}] table"
-                f" — did you mean [{meant[0]}]?"
-            )
-            raise RitualDefinitionError(msg)
+def _misspelt(layer: ConfigLayer) -> list[str]:
+    return [
+        f"{layer.source}: vekna reads no [{table}] table — did you mean [{meant[0]}]?"
+        for table in layer.tables
+        if table not in _TABLES
+        if (meant := difflib.get_close_matches(table, _TABLES, n=1, cutoff=0.8))
+    ]
 
 
 def _layers(directory: Path) -> list[ConfigLayer]:
@@ -163,33 +160,37 @@ def _layers(directory: Path) -> list[ConfigLayer]:
     return layers
 
 
-# Every config that speaks for `cwd`, nearest first. A config that does not
-# parse stops the command: loading no rituals from it would surface later as
-# "no ritual named ...", which names neither the file nor the mistake.
+# A config that does not parse stops the command: loading no rituals from it
+# would surface later as "no ritual named ...", which names neither the file
+# nor the mistake.
 # The user's table for a project names tomes only. A ritual the project defines
 # lives in its tree, and a path from here would name the checkout where a cast
 # in a pooled worktree must read its own tree.
+def read_config(layer: ConfigLayer) -> Config:
+    problems = _misspelt(layer)
+    try:
+        config = Config.model_validate(layer.tables)
+    except ValidationError as error:
+        problems.append(f"{layer.source}: {explained(error)}")
+        raise RitualDefinitionError("\n".join(problems)) from error
+    if problems:
+        raise RitualDefinitionError("\n".join(problems))
+    if layer.project is not None and config.rituals.files:
+        msg = (
+            f"{layer.table('rituals')} takes no files"
+            " — rituals a project defines are named in its own .vekna.toml"
+        )
+        raise RitualDefinitionError(msg)
+    return config
+
+
+# Every config that speaks for `cwd`, nearest first.
 def read_configs(cwd: Path) -> list[tuple[ConfigLayer, Config]]:
-    configs: list[tuple[ConfigLayer, Config]] = []
-    for layer in _layers(cwd):
-        _misspelt(layer)
-        try:
-            config = Config.model_validate(layer.tables)
-        except ValidationError as error:
-            msg = f"{layer.source}: {explained(error)}"
-            raise RitualDefinitionError(msg) from error
-        if layer.project is not None and config.rituals.files:
-            msg = (
-                f"{layer.table('rituals')} takes no files"
-                " — rituals a project defines are named in its own .vekna.toml"
-            )
-            raise RitualDefinitionError(msg)
-        configs.append((layer, config))
-    return configs
+    return [(layer, read_config(layer)) for layer in _layers(cwd)]
 
 
 # A tome's own table, as every layer that speaks for `directory` sets it: the
-# user's table for the project over the project's `.vekna.toml` over what the
+# project's `.vekna.toml` over the user's table for the project over what the
 # user says for every project, key by key. `sources` names each table that
 # contributed, nearest first, for the error a tome raises over a value.
 class ConfigTable(NamedTuple):

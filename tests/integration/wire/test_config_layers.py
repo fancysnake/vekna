@@ -48,7 +48,7 @@ class TestConfigLayers:
         assert config_layers(tmp_path) == ([], [])
 
     @staticmethod
-    def test_the_user_s_project_table_comes_before_the_project_s_file(
+    def test_the_project_s_file_comes_before_the_user_s_project_table(
         tmp_path: Path, user: Path
     ):
         repo = _repo(tmp_path)
@@ -64,8 +64,8 @@ class TestConfigLayers:
 
         assert config_layers(repo / "deep") == (
             [
-                ConfigLayer(user, {"circle": {"processes": 3}}, "mine"),
                 ConfigLayer(repo / ".vekna.toml", {"circle": {"processes": 2}}),
+                ConfigLayer(user, {"circle": {"processes": 3}}, "mine"),
                 ConfigLayer(user, {"circle": {"processes": 8}}),
             ],
             [],

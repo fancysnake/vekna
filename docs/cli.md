@@ -193,6 +193,60 @@ An exit no step takes is refused as the library loads, so `list`, `show` and
 `cast` all stop with `<step> may return <Class>, which no step takes` — usually
 a submodule that was never swept because it is missing an `__init__.py`.
 
+## `vekna audit`
+
+Check the config that speaks for the directory you are in, without casting
+anything.
+
+```bash
+vekna audit
+```
+
+It reads your user config and the project's `.vekna.toml`, and prints three
+things: each setting with the layer it is taken from, what is wrong, and what
+sets nothing.
+
+```text
+layers, nearest first:
+  1  /home/me/app/.vekna.toml
+  2  /home/me/.config/vekna/config.toml: [projects.app]
+  3  /home/me/.config/vekna/config.toml
+
+[rituals]
+  modules cabinet = cabinet.rituals  ← 1, 3
+[circle]
+  processes = 4  ← 2 (over 3: 2)
+[defaults.sweep]
+  base_branch = "main"  ← 1
+
+errors:
+  /home/me/app/.vekna.toml: [defaults.sweep] sets 'branch', which sweep does not take
+
+pointless:
+  /home/me/.config/vekna/config.toml: [projects.old] path = '~/old' does not exist
+```
+
+`← 2 (over 3: 2)` reads: layer 2 sets the value, over the `2` that layer 3
+says. A layer that says the same value is left out. `[rituals]` lists every
+layer that names a source, because each layer adds to that table.
+
+**errors** are what a cast or the daemon would refuse or ignore: a file that
+does not parse, a key a table does not take, a tome that does not import, a
+`[defaults.<ritual>]` value the ritual refuses. Any error makes the exit
+code 1.
+
+**pointless** lists settings that change nothing here, and leaves the exit
+code alone:
+
+- a `[projects.<name>]` table whose `path` does not exist
+- a key in your `[projects.<name>]` table that the project's `.vekna.toml`
+  also sets, or that equals the value it overrides
+- `[circle] coding` anywhere but the top level of your user config
+- a `[defaults.<ritual>]` table for a ritual that is not loaded here, unless
+  it is in the top level of your user config, which speaks for every project
+- a table that vekna does not read and that no tome in `[rituals] modules` is
+  named after. Another tool may read it, so check before you delete it.
+
 ## Notifications
 
 A cast that stops for an answer, or that ends, raises a desktop notification —
@@ -484,8 +538,8 @@ vekna version
 ```
 
 ```text
-vekna 1.3.0
-daemon 1.3.0 on /run/user/1000/vekna.sock
+vekna 2.0.0
+daemon 2.0.0 on /run/user/1000/vekna.sock
 ```
 
 With nothing listening the second line is `daemon: not running`. A daemon that

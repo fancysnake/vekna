@@ -119,13 +119,13 @@ the checkout.
 Per key, the nearest place that sets it:
 
 1. a flag on the command line
-2. the `[projects.<name>]` table in your user config
-3. the project's own `.vekna.toml`
+2. the project's own `.vekna.toml`
+3. the `[projects.<name>]` table in your user config
 4. the top level of your user config
 
-Your table for a project comes before the project's file because it is the
-more specific of the two: the file is what the repository says for everyone
-who clones it, and the table is what you say for your checkout of it.
+The project's file comes first: it is what the repository says for everyone
+who clones it. Your table for the project sets what the file leaves unset, for
+your checkout only. Your top level sets the rest, for every project.
 `[rituals]` is the exception to "nearest wins": every place adds to the list.
 
 `vekna rituals show <ritual>` prints each configured component with the place
@@ -134,6 +134,9 @@ that set it:
 ```text
   --base-branch <str>  = develop (/home/me/.config/vekna/config.toml: [projects.app])
 ```
+
+`vekna audit` prints every setting with the layer it is taken from, and lists
+the settings that change nothing.
 
 One setting is the machine's and not a project's: `[circle] coding`, the limit
 on agents running at once, is read from the top level only.

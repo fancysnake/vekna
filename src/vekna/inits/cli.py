@@ -4,7 +4,7 @@ import importlib
 import logging
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -17,10 +17,11 @@ from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing, recorded
 from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
+from vekna.links.circle_config import MACHINE_KEYS, circle_problems
 from vekna.links.journal import Journal
 from vekna.links.socket_server import attach
 from vekna.links.terminal import Terminal
-from vekna.links.window_config import history_after
+from vekna.links.window_config import history_after, window_problems
 from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
@@ -81,6 +82,8 @@ class _Runtime(Protocol):
     def rituals_list() -> int: ...
     @staticmethod
     def rituals_show(name: str) -> int: ...
+    @staticmethod
+    def audit(problems: list[str], machine: Mapping[str, Collection[str]]) -> int: ...
 
 
 def _runtime() -> _Runtime:
@@ -136,6 +139,20 @@ def _rituals_list() -> None:
 @click.argument("name")
 def _rituals_show(name: str) -> None:
     raise SystemExit(_runtime().rituals_show(name))
+
+
+# The cast runtime writes the report: most of what a config says is about
+# rituals. `[circle]` and `[window]` are read on this side of the line, so
+# their problems are handed over.
+@click.command(
+    "audit",
+    help="Check the config that speaks for this directory: what is wrong, which"
+    " file each setting is taken from, and what sets nothing.",
+)
+def _audit() -> None:
+    cwd = Path.cwd()
+    problems = [*circle_problems(cwd), *window_problems(cwd)]
+    raise SystemExit(_runtime().audit(problems, {"circle": MACHINE_KEYS, "window": ()}))
 
 
 # `cats` is one transposition away from `cast`, and the fingers that type the
@@ -540,6 +557,7 @@ def init_command() -> Group:
 
     vekna.add_command(_cast)
     vekna.add_command(_rituals)
+    vekna.add_command(_audit)
     vekna.add_command(_log)
     vekna.add_command(_cats)
     vekna.add_command(_serve)

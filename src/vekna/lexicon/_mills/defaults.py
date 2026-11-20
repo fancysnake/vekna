@@ -78,35 +78,43 @@ class Defaults:
 
     # A key the ritual does not take would be dropped by its model, and the
     # operator would watch a ritual ignore a default they believe they set.
+    def _unknown(self, ritual: Ritual) -> list[str]:
+        return [
+            f"{default.layer.table(f'defaults.{ritual.name}')} sets {key!r},"
+            f" which {ritual.name} does not take"
+            for key, default in self._tables.get(ritual.name, {}).items()
+            if key not in ritual.components.model_fields
+        ]
+
     def _found(self, ritual: Ritual) -> Mapping[str, Default]:
-        found = self._tables.get(ritual.name, {})
-        for key, default in found.items():
-            if key not in ritual.components.model_fields:
-                msg = (
-                    f"{default.layer.table(f'defaults.{ritual.name}')} sets {key!r},"
-                    f" which {ritual.name} does not take"
-                )
-                raise RitualDefinitionError(msg)
-        return found
+        if unknown := self._unknown(ritual):
+            raise RitualDefinitionError("\n".join(unknown))
+        return self._tables.get(ritual.name, {})
 
     # Validated as a whole model, with only the config's keys, so a value it
     # cannot take is refused here rather than at every cast. A field the config
-    # leaves to the flags reads as missing, and is not this check's.
+    # leaves to the flags reads as missing, and is not this check's. Unknown
+    # keys and bad values are reported together.
     def of(self, ritual: Ritual) -> Mapping[str, Default]:
-        found = self._found(ritual)
-        values = {key: default.value for key, default in found.items()}
+        lines = self._unknown(ritual)
+        fields = ritual.components.model_fields
+        known = {
+            key: default
+            for key, default in self._tables.get(ritual.name, {}).items()
+            if key in fields
+        }
+        values = {key: default.value for key, default in known.items()}
         try:
             ritual.components.model_validate(values)
         except ValidationError as error:
-            if kept := [
-                refusal
+            lines += [
+                _said(ritual=ritual, refusal=refusal, found=known, given={})
                 for refusal in refusals(error)
                 if refusal.kind != "missing" or len(refusal.loc) > 1
-            ]:
-                raise _refused(
-                    ritual=ritual, said=kept, found=found, given={}
-                ) from error
-        return found
+            ]
+        if lines:
+            raise RitualDefinitionError("\n".join(lines))
+        return known
 
     def components(self, ritual: Ritual, given: Mapping[str, JsonValue]) -> BaseModel:
         fields = ritual.components.model_fields

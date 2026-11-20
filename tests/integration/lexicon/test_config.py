@@ -90,6 +90,34 @@ class TestReadConfig:
             read_config(config)
 
     @staticmethod
+    def test_a_misspelt_table_and_a_misshapen_value_are_both_named(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text("[ritual]\n[defaults]\nbad = 1\n")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            read_config(config)
+
+        first, second = str(raised.value).splitlines()
+        assert first == (
+            f"{config}: vekna reads no [ritual] table — did you mean [rituals]?"
+        )
+        assert second.startswith(f"{config}: ")
+        assert "defaults.bad" in second
+
+    @staticmethod
+    def test_every_misspelt_table_is_named(tmp_path):
+        config = tmp_path / ".vekna.toml"
+        config.write_text("[ritual]\n[default]\n")
+
+        with pytest.raises(RitualDefinitionError) as raised:
+            read_config(config)
+
+        assert str(raised.value).splitlines() == [
+            f"{config}: vekna reads no [ritual] table — did you mean [rituals]?",
+            f"{config}: vekna reads no [default] table — did you mean [defaults]?",
+        ]
+
+    @staticmethod
     def test_a_misspelt_key_is_an_error(tmp_path):
         config = tmp_path / ".vekna.toml"
         config.write_text('[rituals]\nmodule = ["pkg.rites"]\n')

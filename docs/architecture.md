@@ -136,6 +136,7 @@ lexicon/
     graph.py     # AST step-graph reader for `rituals show`
     ledger.py    # what an interrupted cast already did, for `--resume`
     defaults.py  # [defaults.<ritual>] merged across configs, checked, overlaid
+    audit.py     # the `vekna audit` report: each setting's layer, what sets nothing
     follow.py    # Lineage: which casts a cast set going, and if they ended
   _links/
     standalone.py  # StandaloneRenderer, daemon socket probe
