@@ -14,6 +14,7 @@ from vekna.wire import (
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    BlockedTree,
     CastGoodbye,
     CastHello,
     CastQueued,
@@ -93,6 +94,8 @@ class _Trees(Trees):
     def __init__(self, *free: str) -> None:
         self.free = list(free)
         self.blocked: dict[str, str] = {}
+        # Trees the altar finds blocked and does nothing to.
+        self.unset: list[str] = []
         # Every lease, by what it was asked with.
         self.asked: list[dict[str, object]] = []
         self.tended: list[tuple[Tending, set[str]]] = []
@@ -133,6 +136,7 @@ class _Trees(Trees):
         return (
             [HeldTree(path=tree) for tree in sorted(held)]
             + free
+            + [BlockedTree(path=tree, reason="never set up") for tree in self.unset]
             + [
                 FailedTree(path=tree, reason=reason)
                 for tree, reason in self.blocked.items()
@@ -672,7 +676,8 @@ class TestBlockedTrees:
     ):
         caplog.set_level(logging.INFO)
         trees = _Trees("/pool/1")
-        circle, hub, _ = _circle(_Limits(), trees)
+        limits = _Limits()
+        circle, hub, _ = _circle(limits, trees)
         _left_blocked(hub, "c1", "/pool/1")
 
         request = AltarRequested(project_root="/proj", init=True)
@@ -680,6 +685,11 @@ class TestBlockedTrees:
         tended = await circle.tend(request, project="/proj/.git")
 
         assert tended == [ParkedTree(path="/pool/1")]
+        assert limits.asked_pool == [
+            ("worktrees", "/proj"),
+            ("base", "/proj"),
+            ("prepare", "/proj"),
+        ]
         assert trees.tended == [
             (
                 Tending(
@@ -734,6 +744,28 @@ class TestBlockedTrees:
                 "vekna.mills.circle",
                 logging.WARNING,
                 "altar failed /pool/1: rebase in progress",
+            )
+        ]
+
+    @staticmethod
+    async def test_the_altar_says_each_tree_it_found_blocked_and_why(
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        trees = _Trees()
+        trees.unset.append("/pool/1")
+        leasing, _ = _leasing(trees)
+
+        tended = await leasing.tend(
+            AltarRequested(project_root="/proj"), project="/proj/.git"
+        )
+
+        assert tended == [BlockedTree(path="/pool/1", reason="never set up")]
+        assert caplog.record_tuples == [
+            (
+                "vekna.mills.circle",
+                logging.INFO,
+                "altar found /pool/1 blocked: never set up",
             )
         ]
 
