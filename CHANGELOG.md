@@ -19,6 +19,16 @@ when.
 
 ### Fixed
 
+- **A shell rite ends when its command ends.** A command that exited and left
+  a process running kept the rite open for as long as that process held the
+  output, and with it the cast. The rite now stops what the command left
+  running, says that it did, and returns the exit code and the output. A
+  process that moved out of the command's group cannot be stopped: the rite
+  stops reading its output after two seconds and says so.
+- **A cast with no end recorded stops reading as running.** A cast that ended
+  while no daemon listened stayed `▶` in `vekna log` for good and was never
+  pruned. The next daemon to start records it as disconnected, unless the
+  cast's process is one that daemon still holds.
 - **A following cast keeps following past a large event.** An event over
   64 KiB from any cast, a shell result of that size for one, ended the follow:
   the terminal showed no more of the casts it queued and none of their

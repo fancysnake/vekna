@@ -712,6 +712,64 @@ class TestLeftBehind:
         assert "holding 1 cast(s) left running until they reattach" in said
         assert mark.exists()
 
+    @staticmethod
+    async def test_a_cast_left_running_with_no_process_is_ended(
+        socket_path: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+
+        async with _served(socket_path):
+            assert await alive(socket_path)
+
+        record = journal.read("c1")
+        assert record is not None
+        assert (record.status, record.detail) == (
+            "disconnected",
+            "no end recorded before the daemon stopped",
+        )
+        assert "ended 1 cast(s) a stopped daemon left with no end recorded" in _said(
+            caplog, logging.INFO
+        )
+        listed = CliRunner().invoke(init_command(), ["log"]).output
+        assert listed.split("  ")[:2] == ["c1", "⚠"]
+
+    # A directory refuses to open for append whoever asks.
+    @staticmethod
+    async def test_a_cast_that_cannot_be_ended_is_said_and_the_daemon_starts(
+        socket_path: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+        log = tmp_path / "runs" / "c1" / "events.jsonl"
+        log.unlink()
+        log.mkdir()
+
+        async with _served(socket_path):
+            assert await alive(socket_path)
+
+        assert "could not end cast c1: [Errno 21] Is a directory" in _said(
+            caplog, logging.WARNING
+        )
+
+    @staticmethod
+    async def test_a_cast_whose_process_still_runs_stays_running(
+        socket_path: Path, tmp_path: Path
+    ):
+        journal = Journal(tmp_path / "runs")
+        journal.record(_hello("c1"))
+        (tmp_path / "runs" / "c1" / "spawned.json").write_text(
+            f'{{"cast_id":"c1","pid":{os.getpid()},"project":"p","tree":null}}'
+        )
+
+        async with _served(socket_path):
+            assert await alive(socket_path)
+
+        record = journal.read("c1")
+        assert record is not None
+        assert (record.status, record.detail) == ("running", None)
+
 
 @pytest.mark.asyncio
 class TestPurify:
