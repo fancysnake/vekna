@@ -24,6 +24,8 @@ from vekna.mills.hub import Hub
 from vekna.pacts.circle import TreeError
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
+    AltarRequested,
+    AltarTended,
     AwaitRequested,
     AwaitWithdrawn,
     CastCancelRequested,
@@ -40,9 +42,7 @@ from vekna.wire import (
     EnqueueAccepted,
     EnqueueRefused,
     EnqueueRequested,
-    PurifyRequested,
     StopRequested,
-    TreesPurified,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -65,6 +65,7 @@ _DAEMON_LOG = "daemon.log"
 # project.
 _WORKTREES = "worktrees"
 _LOCK_SUFFIX = ".lock"
+_NO_END = "no end recorded before the daemon stopped"
 _NO_DAEMON = "no daemon running"
 _STOPPED = "stopped the daemon"
 # How long a daemon gets to start listening, and to stop.
@@ -115,6 +116,30 @@ def _locked(held: IO[str]) -> bool:
     return True
 
 
+# A cast that ended while no daemon listened stays `running` on its record for
+# good, and `prune` never collects it. One spawned and still alive is held by
+# its mark; one run by hand and still alive says hello again, which opens its
+# record again. A cast that cannot be ended is said and passed over, because
+# housekeeping must not stop a daemon from starting.
+def _end_unheld(journal: Journal, held: set[str]) -> None:
+    ended = [
+        record.hello.cast_id
+        for record in journal.running()
+        if record.hello.cast_id not in held
+    ]
+    for cast_id in ended:
+        try:
+            journal.record(
+                CastGoodbye(cast_id=cast_id, status="disconnected", detail=_NO_END)
+            )
+        except OSError as error:
+            _log.warning("could not end cast %s: %s", cast_id, error)
+    if ended:
+        _log.info(
+            "ended %d cast(s) a stopped daemon left with no end recorded", len(ended)
+        )
+
+
 async def _serving(*, path: Path, debug: Path | None) -> int:
     journal = Journal(default_runs_root())
     hub = Hub(on_routed=_sink(debug), on_journal=journal.record)
@@ -127,6 +152,8 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     spawner = Spawner(command=_CAST_COMMAND, runs=default_runs_root())
     if spawned := await asyncio.to_thread(spawner.left_behind):
         _log.info("holding %d cast(s) left running until they reattach", len(spawned))
+    running = {left_over.cast_id for left_over in spawned}
+    await asyncio.to_thread(_end_unheld, journal, running)
     left = LeftBehind(casts=hub, spawned=spawned, alive=pid_alive)
     leasing = Leasing(
         left=left,
@@ -142,7 +169,6 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         awaits=Awaits(hub=hub, records=journal.read),
     )
     # What a stopped daemon left waiting, less what it had already spawned.
-    running = {left_over.cast_id for left_over in spawned}
     for record in await asyncio.to_thread(journal.queued):
         if record.hello.cast_id not in running:
             circle.enqueue(record.hello)
@@ -343,19 +369,17 @@ class _Daemon(Routes):
             )
         )
 
-    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+    async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         root = request.project_root
         if (reason := await _missing(root)) is not None:
             return CastRefused(reason=reason)
         try:
-            trees = await self._circle.purify(
-                project_root=root,
-                project=await project_of(Path(root)),
-                save=request.save,
+            trees = await self._circle.tend(
+                request, project=await project_of(Path(root))
             )
         except TreeError as error:
             return CastRefused(reason=str(error))
-        return TreesPurified(trees=trees)
+        return AltarTended(trees=trees)
 
 
 # Why a cast cannot be queued in `root`, or `None` once it can: the tree has to

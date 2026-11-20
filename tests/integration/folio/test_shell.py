@@ -15,7 +15,9 @@ from vekna.folio.shell import ShellOutputError, ShellResult, shell
 from vekna.folio.shell import _links as shell_links
 from vekna.folio.shell._links import (
     _CANCELS_OUTLASTED,
+    _HELD,
     _REAPING,
+    _STOPPED,
     _signal_group,
     run_bash,
 )
@@ -481,7 +483,7 @@ class TestEmptiedGroup:
     def test_cancelling_a_command_whose_group_is_gone_still_cancels():
         command = (
             "python3 -c 'import os, time; os.setsid(); "
-            "print(os.getpid(), flush=True); time.sleep(300)' &"
+            "print(os.getpid(), flush=True); time.sleep(300)' & sleep 0.3"
         )
 
         async def cancel_once_bash_left() -> None:
@@ -495,8 +497,9 @@ class TestEmptiedGroup:
             running = asyncio.create_task(run_bash(command, on_line=on_line))
             async with asyncio.timeout(5):
                 await moved_out.wait()
-            # Time for the child watcher to reap bash, emptying the group.
-            await asyncio.sleep(0.2)
+            # Time for bash to exit and be reaped, emptying the group: it stays
+            # until the child has moved out, or the child is stopped as a leftover.
+            await asyncio.sleep(0.6)
             running.cancel()
             try:
                 with pytest.raises(asyncio.CancelledError):
@@ -549,3 +552,81 @@ class TestUnkillableGroup:
         asyncio.run(_signal_group(42))
 
         assert sent == [(42, signal.SIGTERM), (42, 0), (42, signal.SIGKILL), (42, 0)]
+
+
+class Leaving(BaseModel):
+    command: str
+
+
+# Bounded, so a rite that never ends fails the test rather than the run.
+@step
+async def leaving(state: Leaving) -> Done[ShellResult]:
+    return Done(await timeout(shell(state.command), seconds=10))
+
+
+class TestLeftovers:
+    @staticmethod
+    def test_a_process_left_holding_the_output_is_stopped_and_the_rite_ends(tmp_path):
+        pid = tmp_path / "pid"
+        command = f"sleep 300 & echo $! > {pid}; echo failed; exit 3"
+
+        result, grimoire, _ = _run(
+            entry(name="leaving", payload=Leaving(command=command))
+        )
+
+        assert result == ShellResult(
+            stdout="failed\n", stderr="", exit_code=_FAILURE_EXIT
+        )
+        assert not _running(pid.read_text(encoding="utf-8").strip())
+        assert _deltas(grimoire) == ["failed", _STOPPED]
+
+    @staticmethod
+    def test_a_process_left_running_quietly_is_stopped_too(tmp_path):
+        pid = tmp_path / "pid"
+        command = f"sleep 300 > /dev/null 2>&1 & echo $! > {pid}"
+
+        result, grimoire, _ = _run(
+            entry(name="leaving", payload=Leaving(command=command))
+        )
+
+        assert result == ShellResult(stdout="", stderr="", exit_code=0)
+        assert not _running(pid.read_text(encoding="utf-8").strip())
+        assert _deltas(grimoire) == [_STOPPED]
+
+    @staticmethod
+    def test_a_leftover_is_stopped_with_nobody_to_tell(tmp_path):
+        pid = tmp_path / "pid"
+        command = f"sleep 300 > /dev/null 2>&1 & echo $! > {pid}; echo ok"
+
+        assert asyncio.run(run_bash(command)) == ("ok\n", "", 0)
+        assert not _running(pid.read_text(encoding="utf-8").strip())
+
+    # Out of the group, so nothing here can stop it: the rite stops reading
+    # instead, with what the command wrote.
+    @staticmethod
+    def test_output_held_from_outside_the_group_is_let_go_of(monkeypatch):
+        monkeypatch.setattr(shell_links, "_DRAIN_SECONDS", 0.2)
+        command = (
+            "python3 -c 'import os, time; os.setsid(); "
+            "print(os.getpid(), flush=True); time.sleep(300)' & "
+            "sleep 0.5; printf partial"
+        )
+        said: list[str] = []
+
+        async def run() -> tuple[str, str, int]:
+            lines: list[str] = []
+            try:
+                async with asyncio.timeout(10):
+                    return await run_bash(
+                        command, on_line=lines.append, say=said.append
+                    )
+            finally:
+                # Inside the loop, so the pipe it held closes while one runs.
+                os.kill(int(lines[0]), signal.SIGKILL)
+                await asyncio.sleep(0.2)
+
+        stdout, stderr, exit_code = asyncio.run(run())
+
+        assert stdout.splitlines()[1:] == ["partial"]
+        assert (stderr, exit_code) == ("", 0)
+        assert said == [_HELD]

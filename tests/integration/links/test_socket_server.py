@@ -10,6 +10,8 @@ from vekna.links.socket_server import Serving, alive, attach, serve
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     VERSION,
+    AltarRequested,
+    AltarTended,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
@@ -21,11 +23,9 @@ from vekna.wire import (
     DecideReleased,
     DecideResolved,
     HeldTree,
-    PurifyRequested,
     RiteDelta,
     StopRequested,
     SurfaceHello,
-    TreesPurified,
     VersionRequested,
     WireMessage,
     encode_frame,
@@ -61,7 +61,7 @@ class _Daemon(Routes):
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
-        self.requests: list[CastRequested | PurifyRequested] = []
+        self.requests: list[CastRequested | AltarRequested] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
             tuple[
@@ -104,9 +104,9 @@ class _Daemon(Routes):
         del peer
         self.closed.append(cast_id)
 
-    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+    async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         self.requests.append(request)
-        return TreesPurified(trees=[HeldTree(path=f"{request.project_root}/1")])
+        return AltarTended(trees=[HeldTree(path=f"{request.project_root}/1")])
 
     async def start(self, path: Path) -> Serving:
         return await serve(path=path, routes=self)
@@ -178,17 +178,18 @@ class TestServing:
         await server.close()
 
     @staticmethod
-    async def test_a_purify_is_answered_down_its_connection(socket_path: Path):
+    async def test_an_altar_is_answered_down_its_connection(socket_path: Path):
         daemon = _Daemon()
         server = await daemon.start(socket_path)
 
         reader, writer = await attach(socket_path)
-        writer.write(encode_frame(PurifyRequested(project_root="/proj", save=True)))
+        asked = AltarRequested(project_root="/proj", fix=True, save=True, tree=1)
+        writer.write(encode_frame(asked))
         await writer.drain()
         reply = [message async for message in read_frames(reader)]
 
-        assert reply == [TreesPurified(trees=[HeldTree(path="/proj/1")])]
-        assert daemon.requests == [PurifyRequested(project_root="/proj", save=True)]
+        assert reply == [AltarTended(trees=[HeldTree(path="/proj/1")])]
+        assert daemon.requests == [asked]
         assert not daemon.attached
         writer.close()
         await server.close()

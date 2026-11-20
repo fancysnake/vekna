@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from vekna.mills.hub import Hub, replayed
 from vekna.pacts.routing import Routed, Surface
 from vekna.wire import (
+    AltarRequested,
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
@@ -29,7 +30,6 @@ from vekna.wire import (
     GrimoireBegin,
     GrimoireEnd,
     LockGranted,
-    PurifyRequested,
     RiteDelta,
     RiteFinished,
     RiteStarted,
@@ -713,8 +713,8 @@ class TestTreeBlocked:
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_a_hub_purifies_nothing():
-        refused = await Hub().purify(PurifyRequested(project_root="/proj"))
+    async def test_a_hub_tends_no_altar():
+        refused = await Hub().altar(AltarRequested(project_root="/proj"))
 
         assert refused == CastRefused(reason="this daemon keeps no worktree pool")
 

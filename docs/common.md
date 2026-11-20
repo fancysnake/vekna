@@ -265,9 +265,9 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `LockReleased` | cast → daemon | tied to release token |
 | `SurfaceHello` | surface → daemon | opens a view; replayed every live cast |
 | `StopRequested` | surface → daemon | `vekna stop`; ends the daemon |
-| `VersionRequested` / `DaemonVersion` | any ↔ daemon | the daemon's package version, asked on a connection of its own before a surface, a cast or a purify opens. A daemon that predates it hangs up without an answer |
-| `PurifyRequested` / `TreesPurified` | surface ↔ daemon | `vekna purify`; cleans and parks every pooled tree no cast holds, saving its work on a branch first with `save`. Refused as `CastRefused` |
-| `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again, by `vekna purify` or a lease; the block is over. Journaled with that cast |
+| `VersionRequested` / `DaemonVersion` | any ↔ daemon | the daemon's package version, asked on a connection of its own before a surface, a cast or an altar opens. A daemon that predates it hangs up without an answer |
+| `AltarRequested` / `AltarTended` | surface ↔ daemon | `vekna altar`; `reset` removes, `fix` cleans and moves to the base, `init` makes and sets up the pooled trees no cast holds, `tree` narrows it to one, and with none of the three each tree is said as it stands. `save` keeps uncommitted work on a branch first. Refused as `CastRefused` |
+| `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again or removed, by `vekna altar` or a lease; the block is over. Journaled with that cast |
 | `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A cancel of a cast not running, or not connected, is refused the same way |
 | `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 
@@ -373,7 +373,7 @@ vekna audit                                   # check the config: errors, each s
 vekna                                         # this project's dashboard; starts the daemon if none
 vekna stop                                    # end the daemon; running casts rejoin the next
 vekna version                                 # this vekna's version, and the running daemon's
-vekna purify [--save]                         # clean and park the pooled worktrees no cast holds
+vekna altar list|init|fix|reset               # show, make, repair or rebuild the pooled worktrees
 vekna log                                     # list active + recent casts
 vekna log <cast_id>                           # one cast: rites, errors, failed rites' output
 vekna cast --continue <cast_id>               # spawn a fresh cast process, hand it the journal

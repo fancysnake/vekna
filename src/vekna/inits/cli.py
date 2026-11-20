@@ -12,7 +12,7 @@ from typing import Protocol, cast
 import click
 from click import Group
 
-from vekna.gates.cli.commands import purified
+from vekna.gates.cli.commands import tended
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing, recorded
 from vekna.gates.cli.tui import Opened, VeknaApp
@@ -27,13 +27,13 @@ from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     VERSION,
+    AltarRequested,
+    AltarTended,
     CastMessage,
     CastRefused,
     FailedTree,
     Opening,
-    PurifyRequested,
     SurfaceHello,
-    TreesPurified,
     WireMessage,
     daemon_version,
     default_runs_root,
@@ -63,7 +63,7 @@ _DAEMON_ENDED = "the daemon ended"
 _VIEW_STOPPED = "the view stopped"
 _STARTED = "started the daemon — it runs until `vekna stop`"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
-_NO_TREES = "no pooled worktrees for this project"
+_NO_TREES = "no pooled worktrees for this project: run `vekna altar init`"
 _NO_ANSWER = (
     "the daemon hung up without answering: it may predate this vekna"
     " (`vekna stop`, then retry)"
@@ -431,41 +431,101 @@ async def _daemon_line() -> str:
     return f"daemon {told} on {path}{fit}"
 
 
-@click.command(
-    "purify",
-    help=(
-        "Clean every pooled worktree of this project that no cast holds and park"
-        " it. Uncommitted work is lost unless --save keeps it."
-    ),
-)
-@click.option(
+# One tree of the pool by its number, the last part of its path.
+_tree = click.argument("tree", type=click.IntRange(min=1), required=False)
+_save = click.option(
     "--save",
     is_flag=True,
     help="First commit each tree's uncommitted work to a vekna/rescue/ branch.",
 )
-def _purify(*, save: bool = False) -> None:
-    reply = asyncio.run(_purified(save=save))
+
+
+# Bare `vekna altar` names its subcommands, which is the group's own help.
+@click.group(
+    "altar",
+    help=(
+        "Tend this project's pooled worktrees: a ritual declared worktree=True"
+        " runs only in a tree set up here."
+    ),
+)
+def _altar() -> None:
+    pass
+
+
+@click.command("list", help="Show every pooled worktree and how it stands.")
+def _altar_list() -> None:
+    _tend(AltarRequested(project_root=str(Path.cwd())))
+
+
+@click.command(
+    "init",
+    help=(
+        "Make the worktrees the pool lacks and run `[circle] prepare` in each"
+        " tree not set up yet."
+    ),
+)
+def _altar_init() -> None:
+    _tend(AltarRequested(project_root=str(Path.cwd()), init=True))
+
+
+@click.command(
+    "fix",
+    help=(
+        "Clean every worktree no cast holds, or only TREE, move it to the base"
+        " branch and run `[circle] prepare` again. Uncommitted work is lost"
+        " unless --save keeps it."
+    ),
+)
+@_tree
+@_save
+def _altar_fix(*, tree: int | None = None, save: bool = False) -> None:
+    _tend(AltarRequested(project_root=str(Path.cwd()), fix=True, save=save, tree=tree))
+
+
+@click.command(
+    "reset",
+    help=(
+        "Remove every worktree no cast holds, or only TREE, folder and all, then"
+        " make it again as `init` does. Uncommitted work is lost unless --save"
+        " keeps it."
+    ),
+)
+@_tree
+@_save
+def _altar_reset(*, tree: int | None = None, save: bool = False) -> None:
+    root = str(Path.cwd())
+    _tend(
+        AltarRequested(project_root=root, reset=True, init=True, save=save, tree=tree)
+    )
+
+
+_altar.add_command(_altar_list)
+_altar.add_command(_altar_init)
+_altar.add_command(_altar_fix)
+_altar.add_command(_altar_reset)
+
+
+def _tend(request: AltarRequested) -> None:
+    reply = asyncio.run(_tended(request))
     for tree in reply.trees:
-        click.echo(purified(tree))
+        click.echo(tended(tree))
     if not reply.trees:
         click.echo(_NO_TREES)
     if any(isinstance(tree, FailedTree) for tree in reply.trees):
         raise SystemExit(1)
 
 
-# The daemon does the purifying: only it knows which trees a cast holds, a tree
-# still being prepared among them. Its note goes to stderr: stdout is the trees.
-async def _purified(*, save: bool) -> TreesPurified:
-    line = await _opened(
-        opening=PurifyRequested(project_root=str(Path.cwd()), save=save), debug=False
-    )
+# The daemon does the tending: only it knows which trees a cast holds. Its note
+# goes to stderr: stdout is the trees.
+async def _tended(request: AltarRequested) -> AltarTended:
+    line = await _opened(opening=request, debug=False)
     if line.note:
         click.echo(line.note, err=True)
     try:
         reply = await anext(read_frames(line.reader), None)
     finally:
         await line.close()
-    if isinstance(reply, TreesPurified):
+    if isinstance(reply, AltarTended):
         return reply
     reason = reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
     raise click.ClickException(reason)
@@ -502,7 +562,7 @@ def init_command() -> Group:
     vekna.add_command(_cats)
     vekna.add_command(_serve)
     vekna.add_command(_stop)
-    vekna.add_command(_purify)
+    vekna.add_command(_altar)
     vekna.add_command(_version)
     return vekna
 

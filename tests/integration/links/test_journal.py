@@ -110,6 +110,16 @@ class TestRecording:
             "second",
         ]
 
+    @staticmethod
+    def test_what_has_no_end_recorded_is_listed_as_running(tmp_path: Path):
+        journal = Journal(tmp_path)
+        for cast_id in ("ended", "queued", "going"):
+            journal.record(_hello(cast_id))
+        journal.record(CastGoodbye(cast_id="ended", status="ok"))
+        journal.record(CastQueued(cast_id="queued"))
+
+        assert [record.hello.cast_id for record in journal.running()] == ["going"]
+
     # The log now has a hole nothing in the log can show, so the record is where
     # it gets said. The raise goes on, because the daemon reports the failure.
     @staticmethod

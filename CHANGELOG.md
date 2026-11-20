@@ -13,6 +13,14 @@ when.
 
 ### Added
 
+- **`vekna altar`** tends a project's pooled worktrees. `list` says how each
+  stands; `init` makes the pool and runs `[circle] prepare` in each tree;
+  `fix` cleans each tree no cast holds, moves it to the base and prepares it
+  again; `reset` removes each from git and from disk and makes it again. `fix`
+  and `reset` take a tree's number to act on that one alone, and `--save` to
+  keep uncommitted work on a `vekna/rescue/` branch.
+- **`[circle] base_branch`** names what pooled trees are made on and fixed to.
+  Unset, it is the `HEAD` of the checkout `vekna altar` is typed in.
 - **`vekna audit` checks the config.** It prints each setting with the file it
   is taken from, every error in one run, and the settings that change nothing:
   a `[projects.<name>]` table for a checkout that is gone, an override equal
@@ -30,9 +38,31 @@ when.
   project, then the top level of your user config. Before, your table for the
   project came first. A key you set there to override the project's file no
   longer applies: `vekna audit` lists each one.
+- **Breaking: a cast no longer makes or prepares its worktree.** A
+  `worktree=True` cast runs only in a tree `vekna altar init` set up, and
+  fails saying so when there is none. Run `vekna altar init` once in each
+  project that casts such rituals, existing pools included. `prepare` now runs
+  there, before any ritual, where it used to run inside the first cast to
+  lease the tree.
+
+### Removed
+
+- **Breaking: `vekna purify`.** `vekna altar fix` does what it did, and also
+  moves each tree to the base and prepares it again. Its wire messages,
+  `PurifyRequested` and `TreesPurified`, go with it.
 
 ### Fixed
 
+- **A shell rite ends when its command ends.** A command that exited and left
+  a process running kept the rite open for as long as that process held the
+  output, and with it the cast. The rite now stops what the command left
+  running, says that it did, and returns the exit code and the output. A
+  process that moved out of the command's group cannot be stopped: the rite
+  stops reading its output after two seconds and says so.
+- **A cast with no end recorded stops reading as running.** A cast that ended
+  while no daemon listened stayed `▶` in `vekna log` for good and was never
+  pruned. The next daemon to start records it as disconnected, unless the
+  cast's process is one that daemon still holds.
 - **A following cast keeps following past a large event.** An event over
   64 KiB from any cast, a shell result of that size for one, ended the follow:
   the terminal showed no more of the casts it queued and none of their
