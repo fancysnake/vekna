@@ -9,7 +9,7 @@ jobs = 8
 actionlint = "1.7.12"
 hk = { version = "2.12.0", workflow = "release.yml" }
 jq = "1.8.2"
-markdownlint-cli2 = "0.24.0"
+markdownlint-cli2 = "0.24.1"
 node = "26"
 pipx = "1.18.16"
 "pipx:poetry" = "2.5.1"
@@ -20,7 +20,12 @@ shellcheck = "0.11.0"
 trivy = "0.76.2"
 
 [hooks]
-enter = ["poetry install", "hk install"]
+# `--mise` makes each git hook run `mise x -- hk`, so a commit finds black, ruff
+# and taplo in the venv of the tree it is made in. The plain hook ran whichever
+# `hk` came first on `PATH`: the real binary, in a daemon started from another
+# project, which has no venv on its `PATH` and failed every commit in a pooled
+# worktree with `black: command not found`.
+enter = ["poetry install", "hk install --mise"]
 
 [env]
 # Mise creates and activates this virtualenv automatically

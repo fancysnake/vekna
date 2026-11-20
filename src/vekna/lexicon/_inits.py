@@ -91,7 +91,6 @@ _NO_FOLLOW_FLAG = "--no-follow"
 _LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG, _NO_FOLLOW_FLAG})
 _FOLLOWING = "following the casts this one queued — Ctrl-C leaves them running\n"
 _LEFT = "left them running — `vekna` shows them\n"
-_DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory,"
@@ -834,7 +833,7 @@ async def _followed(
     if code:
         return code
     if not settled:
-        sys.stderr.write(_DAEMON_WENT)
+        sys.stderr.write(follower.lost)
         return 1
     return 1 if lineage.failed else 0
 

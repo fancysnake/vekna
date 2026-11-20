@@ -20,7 +20,8 @@ from typing_extensions import override
 from tests.conftest import versioned
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
-from vekna.lexicon._inits import _DAEMON_WENT, _FOLLOWING, _LEFT, _drive
+from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
+from vekna.lexicon._links.follow import DAEMON_WENT
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach
 from vekna.links.spawner import Spawner, pid_alive
@@ -1891,12 +1892,12 @@ class TestFollowing:
         reached: list[str] = []
 
         async def gone_once_attached(
-            path: str,
+            path: str, *, limit: int
         ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
             reached.append(path)
             if len(reached) > _UNTIL_THE_CAST_ATTACHED:
                 raise ConnectionRefusedError
-            return await connect(path)
+            return await connect(path, limit=limit)
 
         async with _served(socket_path):
             with monkeypatch.context() as patched:
@@ -1941,7 +1942,7 @@ class TestFollowing:
         await _spawned(lambda: not pid_alive(child.pid))
 
         assert code == 1
-        assert _DAEMON_WENT in capsys.readouterr().err
+        assert DAEMON_WENT in capsys.readouterr().err
 
     @staticmethod
     async def test_a_cast_that_raises_still_lets_go_of_the_daemon(

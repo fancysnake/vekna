@@ -31,6 +31,16 @@ when.
   project came first. A key you set there to override the project's file no
   longer applies: `vekna audit` lists each one.
 
+### Fixed
+
+- **A following cast keeps following past a large event.** An event over
+  64 KiB from any cast, a shell result of that size for one, ended the follow:
+  the terminal showed no more of the casts it queued and none of their
+  questions. A cast waiting on a queued cast lost its connection the same way
+  when the result was that large. Both now read what the daemon reads, 32 MiB
+  an event. A follow that still ends on an event it cannot read says so,
+  where it used to say the daemon went away. (#312)
+
 ## [1.3.0] - 2026-11-18
 
 ### Added

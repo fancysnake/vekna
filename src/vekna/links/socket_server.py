@@ -5,6 +5,7 @@ from pathlib import Path
 
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
+    FRAME_LIMIT,
     VERSION,
     CastCancelRequested,
     CastGoodbye,
@@ -26,14 +27,6 @@ from vekna.wire import (
 
 _SOCKET_MODE = 0o600
 _CONNECT_SECONDS = 2.0
-# One frame is one line, and a rite's result is a field of it: a shell medium
-# hands back everything the command printed, so `git diff` against a branch is a
-# single frame of megabytes. asyncio's stream default is 64KiB, and a frame over
-# it is a `ValueError` — read as an unreadable frame, which ends the connection
-# and marks a cast that is still running as aborted.
-# ponytail: a ceiling, not a fix. A result bigger than this still ends the
-# connection; framing the length ahead of the payload is the upgrade.
-_FRAME_LIMIT = 32 * 1024 * 1024
 _GONE = "socket closed without a goodbye"
 _NOT_ITS_OWN = "sent a frame for cast"
 
@@ -101,7 +94,7 @@ async def alive(path: Path) -> bool:
 # `vekna` — on its liveness probe, with nothing on screen to say why.
 async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     return await asyncio.wait_for(
-        asyncio.open_unix_connection(str(path), limit=_FRAME_LIMIT),
+        asyncio.open_unix_connection(str(path), limit=FRAME_LIMIT),
         timeout=_CONNECT_SECONDS,
     )
 
@@ -156,7 +149,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     if await asyncio.to_thread(_occupied, path):
         msg = f"{path} is not a socket — vekna has nowhere to bind"
         raise SocketPathError(msg)
-    server = await asyncio.start_unix_server(handle, path=str(path), limit=_FRAME_LIMIT)
+    server = await asyncio.start_unix_server(handle, path=str(path), limit=FRAME_LIMIT)
     await asyncio.to_thread(path.chmod, _SOCKET_MODE)
     return Serving(server, writers, stopping)
 

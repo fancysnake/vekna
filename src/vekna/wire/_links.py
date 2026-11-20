@@ -31,6 +31,15 @@ _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 _PROBE_SECONDS = 2.0
 _UNSAID = "does not say its version, so it predates this check"
+# One frame is one line, and a rite's result is a field of it: a shell medium
+# hands back everything the command printed, so `git diff` against a branch is a
+# single frame of megabytes. asyncio's stream default is 64KiB, and a frame over
+# it is a `ValueError` — read as an unreadable frame, which ends the connection.
+# Every end that reads frames opens its stream with this, or the one that does
+# not is the one that hangs up on what the others carried.
+# ponytail: a ceiling, not a fix. A result bigger than this still ends the
+# connection; framing the length ahead of the payload is the upgrade.
+FRAME_LIMIT = 32 * 1024 * 1024
 
 
 async def read_frames(reader: asyncio.StreamReader) -> AsyncIterator[WireMessage]:
@@ -99,7 +108,9 @@ def default_socket_path() -> Path:
 # ways, because a wedged daemon would otherwise hang every `vekna` on its probe.
 async def daemon_version(path: Path) -> str | None:
     async with asyncio.timeout(_PROBE_SECONDS):
-        reader, writer = await asyncio.open_unix_connection(str(path))
+        reader, writer = await asyncio.open_unix_connection(
+            str(path), limit=FRAME_LIMIT
+        )
     try:
         writer.write(encode_frame(VersionRequested()))
         with contextlib.suppress(OSError, ValueError):

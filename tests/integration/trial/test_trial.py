@@ -324,7 +324,7 @@ class TestNothingDefaults:
     ) -> None:
         trial.shell.replies(when="mise run lint:py", exit_code=0)
 
-        with pytest.raises(BaseExceptionGroup) as raised:
+        with pytest.RaisesGroup(BaseException) as raised:
             trial.cast(babysit, Attempt(budget=1))
 
         assert isinstance(raised.value.exceptions[0], TrialScriptError)
