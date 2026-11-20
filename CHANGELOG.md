@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-20
+
 ### Added
 
 - **`vekna altar`** tends a project's pooled worktrees. `list` says how each
@@ -22,28 +24,26 @@ when.
 - **`[circle] base_branch`** names what pooled trees are made on and fixed to.
   Unset, it is the `HEAD` of the checkout `vekna altar` is typed in.
 - **`vekna audit` checks the config.** It prints each setting with the file it
-  is taken from, every error in one run, and the settings that change nothing:
+  is taken from, every error, and the settings that change nothing:
   a `[projects.<name>]` table for a checkout that is gone, an override equal
   to what it overrides, a `[defaults.<ritual>]` table for a ritual not loaded
   here. Any error makes the exit code 1.
-
 - **A badge for projects that cast rituals.** `rituals | vekna`, with the
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
 
 ### Changed
 
-- **A project's `.vekna.toml` now wins over your `[projects.<name>]` table for
-  it.** Per key the order is the project's file, then your table for the
+- **Breaking: a project's `.vekna.toml` wins over your `[projects.<name>]`
+  table for it.** Per key the order is the project's file, then your table for the
   project, then the top level of your user config. Before, your table for the
   project came first. A key you set there to override the project's file no
   longer applies: `vekna audit` lists each one.
 - **Breaking: a cast no longer makes or prepares its worktree.** A
   `worktree=True` cast runs only in a tree `vekna altar init` set up, and
-  fails saying so when there is none. Run `vekna altar init` once in each
-  project that casts such rituals, existing pools included. `prepare` now runs
-  there, before any ritual, where it used to run inside the first cast to
-  lease the tree.
+  fails when there is none. Run `vekna altar init` once in each
+  project that casts such rituals, existing pools included. `prepare` runs
+  there, where it used to run inside the first cast to lease the tree.
 
 ### Removed
 
@@ -55,7 +55,7 @@ when.
 
 - **A shell rite ends when its command ends.** A command that exited and left
   a process running kept the rite open for as long as that process held the
-  output, and with it the cast. The rite now stops what the command left
+  output, and with it the cast. The rite stops what the command left
   running, says that it did, and returns the exit code and the output. A
   process that moved out of the command's group cannot be stopped: the rite
   stops reading its output after two seconds and says so.
@@ -67,8 +67,8 @@ when.
   64 KiB from any cast, a shell result of that size for one, ended the follow:
   the terminal showed no more of the casts it queued and none of their
   questions. A cast waiting on a queued cast lost its connection the same way
-  when the result was that large. Both now read what the daemon reads, 32 MiB
-  an event. A follow that still ends on an event it cannot read says so,
+  when the result was that large. Both read up to 32 MiB an event, as the
+  daemon does. A follow that still ends on an event it cannot read says so,
   where it used to say the daemon went away. (#312)
 
 ## [1.3.0] - 2026-11-18
@@ -1130,7 +1130,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v1.3.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/fancysnake/vekna/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/fancysnake/vekna/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/fancysnake/vekna/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/fancysnake/vekna/compare/v1.0.0...v1.1.0

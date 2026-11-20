@@ -110,6 +110,7 @@ claude plugin install ritual-scribe@vekna
 | `vekna rituals list` | Every ritual and the options it takes |
 | `vekna rituals show <ritual>` | A ritual's components and its step graph |
 | `vekna audit` | Check the config: what is wrong, where each setting comes from, what sets nothing |
+| `vekna altar list\|init\|fix\|reset` | Show, make, repair or rebuild the pooled worktrees |
 
 ## Contributing
 
