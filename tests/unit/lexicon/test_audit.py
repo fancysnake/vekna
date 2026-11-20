@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 from vekna.lexicon._mills.audit import Audited, Evidence, report
@@ -173,3 +174,192 @@ class TestReport:
             "\n"
             "no errors, nothing pointless\n"
         )
+
+
+class TestReportDetails:
+    @staticmethod
+    def test_a_value_json_cannot_hold_is_shown_as_text():
+        said = report(
+            _evidence(ConfigLayer(PROJECT, _tome({"since": date(2020, 1, 1)})))
+        )
+
+        assert _tables(said).endswith('[tome]\n  since = "2020-01-01"  ← 1')
+
+    @staticmethod
+    def test_no_layer_says_where_a_config_would_be_read():
+        said = report(replace(_evidence(), layers=[]))
+
+        assert said == (
+            "no config was read: a project's is .vekna.toml, the user's is"
+            f" {USER}\n\nno errors, nothing pointless\n"
+        )
+
+    @staticmethod
+    def test_a_machine_key_is_heard_from_the_user_s_own_table_only():
+        evidence = _evidence(
+            ConfigLayer(PROJECT, {"circle": {"coding": 1, "other": 2}}),
+            ConfigLayer(USER, {"circle": {"coding": 3}}, "repo"),
+            ConfigLayer(USER, {"circle": {"coding": 4}}),
+        )
+
+        said = report(replace(evidence, pointless=["earlier"]))
+
+        assert _tables(said) == "[circle]\n  coding = 4  ← 3\n  other = 2  ← 1"
+        assert said.split("\n\n")[2] == (
+            "pointless:\n"
+            "  earlier\n"
+            f"  {PROJECT}: [circle] coding is ignored:"
+            f" only {USER}'s own [circle] sets it\n"
+            f"  {USER}: [projects.repo.circle] coding is ignored:"
+            f" only {USER}'s own [circle] sets it\n"
+        )
+
+    @staticmethod
+    def test_a_machine_key_only_others_set_leaves_no_table():
+        said = report(
+            _evidence(ConfigLayer(PROJECT, {"circle": {"coding": 1, "other": 2}}))
+        )
+
+        assert _tables(said) == "[circle]\n  other = 2  ← 1"
+        assert said.endswith(
+            "pointless:\n"
+            f"  {PROJECT}: [circle] coding is ignored:"
+            f" only {USER}'s own [circle] sets it\n"
+        )
+
+    @staticmethod
+    def test_a_machine_table_only_others_set_is_not_listed():
+        said = report(_evidence(ConfigLayer(PROJECT, {"circle": {"coding": 1}})))
+
+        assert "\n[circle]\n" not in said
+
+    @staticmethod
+    def test_every_farther_layer_that_differs_is_named():
+        said = report(
+            _evidence(
+                ConfigLayer(PROJECT, _tome({"gate": "a"})),
+                ConfigLayer(USER, _tome({"gate": "b"}), "repo"),
+                ConfigLayer(USER, _tome({"gate": "c"})),
+            )
+        )
+
+        assert _tables(said).endswith('[tome]\n  gate = "a"  ← 1 (over 2: "b", 3: "c")')
+
+    @staticmethod
+    def test_a_plain_value_under_a_nested_table_is_named_by_its_path():
+        said = report(
+            _evidence(
+                ConfigLayer(PROJECT, _tome({"agent": {"model": {"name": "big"}}})),
+                ConfigLayer(USER, _tome({"agent": {"model": "small"}}), "repo"),
+            )
+        )
+
+        assert said.endswith(
+            f'  {USER}: [projects.repo.tome] agent.model = "small" is overridden by'
+            f" {PROJECT}: [tome] agent.model\n"
+        )
+
+    @staticmethod
+    def test_a_table_inside_a_default_is_not_merged():
+        said = report(
+            _evidence(
+                ConfigLayer(PROJECT, {"defaults": {"greet": {"to": {"name": "a"}}}}),
+                ConfigLayer(USER, {"defaults": {"greet": {"to": "x"}}}, "repo"),
+                rituals=("greet",),
+            )
+        )
+
+        assert said.split("\n\n")[2] == (
+            "pointless:\n"
+            f'  {USER}: [projects.repo.defaults.greet] to = "x" is overridden by'
+            f" {PROJECT}: [defaults.greet]\n"
+        )
+
+    @staticmethod
+    def test_a_default_for_a_ritual_not_loaded_is_named_where_a_project_sets_it():
+        said = report(
+            _evidence(
+                ConfigLayer(
+                    PROJECT,
+                    {
+                        "rituals": {"files": ["a.py"]},
+                        "defaults": {"ghost": {"a": 1}, "greet": {"b": 2}},
+                    },
+                ),
+                ConfigLayer(USER, {"defaults": {"ghost": {"a": 1}}}),
+                rituals=("greet",),
+            )
+        )
+
+        assert _tables(said) == (
+            f"[rituals]\n  files {PROJECT.parent / 'a.py'}  ← 1\n"
+            "[defaults.ghost] (no such ritual here)\n"
+            "  a = 1  ← 1\n"
+            "[defaults.greet]\n"
+            "  b = 2  ← 1"
+        )
+        assert said.split("\n\n")[2] == (
+            "pointless:\n"
+            f"  {PROJECT}: [defaults.ghost]: no ritual named 'ghost'"
+            " is loaded here\n"
+        )
+
+    @staticmethod
+    def test_a_ritual_source_file_is_named_from_its_layer_s_directory():
+        said = report(_evidence(ConfigLayer(PROJECT, {"rituals": {"files": ["a.py"]}})))
+
+        assert _tables(said) == f"[rituals]\n  files {PROJECT.parent / 'a.py'}  ← 1"
+
+    @staticmethod
+    def test_a_ritual_source_named_once_repeats_nothing():
+        said = report(_evidence(ConfigLayer(USER, _tome({}), "repo")))
+
+        assert said.endswith("no errors, nothing pointless\n")
+
+    @staticmethod
+    def test_a_layer_that_did_not_validate_does_not_hide_the_next():
+        evidence = _evidence(
+            ConfigLayer(PROJECT, _tome({"a": 1})), ConfigLayer(USER, _tome({"b": 2}))
+        )
+        broken = [Audited(evidence.layers[0].layer, None), evidence.layers[1]]
+
+        said = report(replace(evidence, layers=broken))
+
+        assert _tables(said).startswith(
+            "[rituals]\n  modules tome = tome.rituals  ← 2\n"
+        )
+
+    @staticmethod
+    def test_a_table_no_tome_and_no_machine_table_owns_is_stale():
+        evidence = _evidence(ConfigLayer(PROJECT, {"stale": {"a": 1}}))
+
+        said = report(replace(evidence, pointless=["earlier"]))
+
+        assert said.split("\n\n")[2] == (
+            "pointless:\n  earlier\n"
+            f"  {PROJECT}: [stale]: vekna reads no [stale] and no tome named"
+            " 'stale' is in [rituals] modules — stale, unless another tool"
+            " reads it\n"
+        )
+
+    @staticmethod
+    def test_a_table_is_no_guess_when_a_layer_did_not_validate():
+        evidence = _evidence(ConfigLayer(PROJECT, {"stale": {"a": 1}}))
+        broken = [Audited(evidence.layers[0].layer, None)]
+
+        said = report(replace(evidence, layers=broken))
+
+        assert said.endswith("no errors, nothing pointless\n")
+
+    @staticmethod
+    def test_a_tome_is_named_by_the_first_part_of_its_module():
+        said = report(
+            _evidence(
+                ConfigLayer(
+                    PROJECT,
+                    {"rituals": {"modules": ["tome.sub.rituals"]}, "tome": {"a": 1}},
+                )
+            )
+        )
+
+        assert said.endswith("no errors, nothing pointless\n")
