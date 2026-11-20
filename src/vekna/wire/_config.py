@@ -239,17 +239,46 @@ class Said(NamedTuple):
 def settled(
     said: Sequence[Said], *, depth: int = sys.maxsize
 ) -> Iterator[tuple[tuple[str, ...], list[Said]]]:
+    for name, heard, nested in _named(said, depth=depth):
+        if nested:
+            for key, inner in settled(heard, depth=depth - 1):
+                yield (name, *key), inner
+        else:
+            yield (name,), heard
+
+
+# What `settled` drops on the way down: a farther layer's value that is no table
+# where a nearer table is merged key by key. Each comes with the nearest word
+# that overrides it, so a reader can say the value has no effect.
+def overruled(
+    said: Sequence[Said], *, depth: int = sys.maxsize
+) -> Iterator[tuple[tuple[str, ...], Said, Said]]:
+    for name, heard, nested in _named(said, depth=depth):
+        if not nested:
+            continue
+        for one in heard:
+            if not isinstance(one.value, dict):
+                yield (name,), heard[0], one
+        for key, over, lost in overruled(heard, depth=depth - 1):
+            yield (name, *key), over, lost
+
+
+# Each key of the tables among `said`, with every word on it, and whether the
+# words are merged further down rather than taken whole.
+def _named(
+    said: Sequence[Said], *, depth: int
+) -> Iterator[tuple[str, list[Said], bool]]:
     tables = [(one.layer, one.value) for one in said if isinstance(one.value, dict)]
     names: dict[str, None] = {}
     names.update((name, None) for _, table in tables for name in table)
     for name in names:
         heard = [Said(layer, table[name]) for layer, table in tables if name in table]
-        nested = depth > 1 and isinstance(heard[0].value, dict)
-        if nested and any(isinstance(one.value, dict) and one.value for one in heard):
-            for key, inner in settled(heard, depth=depth - 1):
-                yield (name, *key), inner
-        else:
-            yield (name,), heard
+        nested = (
+            depth > 1
+            and isinstance(heard[0].value, dict)
+            and any(isinstance(one.value, dict) and one.value for one in heard)
+        )
+        yield name, heard, nested
 
 
 # One table across the layers, a nearer layer's key over a farther one's, and a

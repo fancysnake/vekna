@@ -113,6 +113,21 @@ class TestReport:
         )
 
     @staticmethod
+    def test_a_plain_value_under_a_table_the_project_sets_is_pointless():
+        said = report(
+            _evidence(
+                ConfigLayer(PROJECT, _tome({"agent": {"model": "big"}})),
+                ConfigLayer(USER, {"tome": {"agent": "disabled"}}, "repo"),
+            )
+        )
+
+        assert said.split("\n\n")[2] == (
+            "pointless:\n"
+            f'  {USER}: [projects.repo.tome] agent = "disabled" is overridden by'
+            f" {PROJECT}: [tome] agent\n"
+        )
+
+    @staticmethod
     def test_a_module_listed_twice_in_one_table_repeats_that_table():
         said = report(
             _evidence(

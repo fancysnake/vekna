@@ -80,13 +80,13 @@ class Defaults:
     # operator would watch a ritual ignore a default they believe they set.
     def _found(self, ritual: Ritual) -> Mapping[str, Default]:
         found = self._tables.get(ritual.name, {})
-        for key, default in found.items():
-            if key not in ritual.components.model_fields:
-                msg = (
-                    f"{default.layer.table(f'defaults.{ritual.name}')} sets {key!r},"
-                    f" which {ritual.name} does not take"
-                )
-                raise RitualDefinitionError(msg)
+        if unknown := [
+            f"{default.layer.table(f'defaults.{ritual.name}')} sets {key!r},"
+            f" which {ritual.name} does not take"
+            for key, default in found.items()
+            if key not in ritual.components.model_fields
+        ]:
+            raise RitualDefinitionError("\n".join(unknown))
         return found
 
     # Validated as a whole model, with only the config's keys, so a value it

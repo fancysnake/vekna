@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from vekna.lexicon._pacts import Config
-from vekna.wire import ConfigLayer, Said, TomlValue, settled
+from vekna.wire import ConfigLayer, Said, TomlValue, overruled, settled
 
 _RITUALS = "rituals"
 _DEFAULTS = "defaults"
@@ -92,6 +92,14 @@ class _Report:
         self, *, table: str, said: list[Said], depth: int = sys.maxsize, tail: str = ""
     ) -> list[str]:
         lines: list[str] = []
+        # A plain value the merge drops under a nearer table is no line of its
+        # own, so it would pass as heard.
+        self.pointless += [
+            f"{self._table(lost, table)} {'.'.join(path)} = {_shown(lost.value)}"
+            f" is overridden by {self._table(over, table)} {'.'.join(path)}"
+            for path, over, lost in overruled(said, depth=depth)
+            if self._layers[lost.layer].project is not None
+        ]
         for path, every in settled(said, depth=depth):
             key = ".".join(path)
             if not (heard := self._heard(table=table, key=key, said=every)):

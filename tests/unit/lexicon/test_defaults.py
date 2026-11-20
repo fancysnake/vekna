@@ -92,6 +92,19 @@ class TestDefaults:
             defaults.of(GREET)
 
     @staticmethod
+    def test_every_key_the_ritual_does_not_take_is_named():
+        defaults = Defaults([(PROJECT, _config({"shout": True, "quiet": True}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.of(GREET)
+
+        table = f"{PROJECT.path}: [defaults.greet]"
+        assert str(refused.value) == (
+            f"{table} sets 'shout', which greet does not take\n"
+            f"{table} sets 'quiet', which greet does not take"
+        )
+
+    @staticmethod
     def test_a_ritual_no_config_names_has_no_defaults():
         defaults = Defaults([])
 
