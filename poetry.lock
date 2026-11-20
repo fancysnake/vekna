@@ -627,18 +627,18 @@ files = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.2.181"
+version = "0.2.183"
 description = "Python SDK for Claude Code"
 optional = false
 python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "claude_agent_sdk-0.2.181-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3cd4a8fdb9115369142a1eef68fdb0f5e590c64eda374880cb1eeac59f8a28ea"},
-    {file = "claude_agent_sdk-0.2.181-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:5da8b0a4d3e70c49d5bf404999913e0e3f0dd36155f2b583f24f7ed94919b332"},
-    {file = "claude_agent_sdk-0.2.181-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:5047fd13b58659aa07c1128d5a44798a65df39dafc53e2d793c0fdd16bfb91b0"},
-    {file = "claude_agent_sdk-0.2.181-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:9fad1f5cca72daaf4b6585e8e47e5f8f74b01a10564b742f9f10bf0003b0f6a1"},
-    {file = "claude_agent_sdk-0.2.181-py3-none-win_amd64.whl", hash = "sha256:254d6361e9f698bd5382c2ecd03778602ae0a6be4a09d1f309c71c2a04674367"},
-    {file = "claude_agent_sdk-0.2.181.tar.gz", hash = "sha256:1d99a9903a37eaf5c8b0ce0a3f7aab218e68011283d74b13091b54d1e0de0877"},
+    {file = "claude_agent_sdk-0.2.183-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a53b01ab0c47feca096d4df77357f47ee93329bd773c5293d64f63d83c180767"},
+    {file = "claude_agent_sdk-0.2.183-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:c65077522414d2119579de0df45d6c4d9f0bf7d400d0b5dcb1f2a2c440d7717c"},
+    {file = "claude_agent_sdk-0.2.183-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:9b0714ebd3ba95328382922b9aba5ca447291e89090b7c9dfb2698e929c3d720"},
+    {file = "claude_agent_sdk-0.2.183-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:9b739884f6918bae22aff46c507aec7b45d0f97b2165ce20f4e4321eb4d86f4c"},
+    {file = "claude_agent_sdk-0.2.183-py3-none-win_amd64.whl", hash = "sha256:faa69a49e590471831dfe1c598d72ecbe89d9500e149c0c010824d2a286e0127"},
+    {file = "claude_agent_sdk-0.2.183.tar.gz", hash = "sha256:6e40affc389a5adf08a86796eb75629b6314ba3ea9fd0e6018916182114f02a5"},
 ]
 
 [package.dependencies]
