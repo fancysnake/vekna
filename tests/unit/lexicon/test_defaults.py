@@ -105,6 +105,20 @@ class TestDefaults:
         )
 
     @staticmethod
+    def test_a_key_the_ritual_does_not_take_and_a_bad_value_are_reported_together():
+        defaults = Defaults([(PROJECT, _config({"shout": True, "loud": "very"}))])
+
+        with pytest.raises(RitualDefinitionError) as refused:
+            defaults.of(GREET)
+
+        table = f"{PROJECT.path}: [defaults.greet]"
+        assert str(refused.value) == (
+            f"{table} sets 'shout', which greet does not take\n"
+            f'{PROJECT.source}: [defaults.greet] loud = "very":'
+            " Input should be a valid boolean, unable to interpret input"
+        )
+
+    @staticmethod
     def test_a_ritual_no_config_names_has_no_defaults():
         defaults = Defaults([])
 
