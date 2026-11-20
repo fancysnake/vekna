@@ -121,7 +121,7 @@ NEEDS_TREE = 75
 
 
 # The tree a cast ran in was not parked after it: uncommitted work, or a merge or
-# rebase left open. It stays out of the pool until `vekna purify` or somebody
+# rebase left open. It stays out of the pool until `vekna altar --fix` or somebody
 # cleans it, and the cast that left it is who it is reported against.
 class TreeBlocked(BaseModel):
     kind: Literal["tree_blocked"] = "tree_blocked"
@@ -130,7 +130,7 @@ class TreeBlocked(BaseModel):
     reason: str
 
 
-# The tree a cast left blocked was parked, by `vekna purify` or by a lease
+# The tree a cast left blocked was parked, by `vekna altar` or by a lease
 # that found it clean: the block is over.
 class TreeFreed(BaseModel):
     kind: Literal["tree_freed"] = "tree_freed"
@@ -138,17 +138,28 @@ class TreeFreed(BaseModel):
     path: str
 
 
-# `vekna purify` opens a connection with this and nothing else. Every pooled
-# tree of the project no cast holds goes back to its parking branch, and with
-# `save` what it had not committed is kept on a branch of its own first.
-class PurifyRequested(BaseModel):
-    kind: Literal["purify_requested"] = "purify_requested"
+# `vekna altar` opens a connection with this and nothing else, and it is the
+# only way a project's pool is made: a lease hands out a tree that was set up
+# here and makes none. `reset` removes every tree no cast holds, `fix` cleans
+# each, moves its parking branch to the base and sets it up again, `init` makes
+# the trees the pool lacks and sets up each that never was. In that order when
+# more than one is asked. With `save`, what a tree had not committed is kept on
+# a branch of its own before a reset or a fix throws it away. With none of the
+# three, nothing is touched and each tree is said as it stands. `tree` is the
+# number of the one tree to act on, and `None` is every tree.
+class AltarRequested(BaseModel):
+    kind: Literal["altar_requested"] = "altar_requested"
     project_root: str
+    reset: bool = False
+    init: bool = False
+    fix: bool = False
     save: bool = False
+    tree: int | None = None
 
 
-# What purifying one tree of the pool did. `saved` is the branch its
-# uncommitted work went to, whether or not the tree was then parked.
+# What the altar says of one tree of the pool. This one is set up and on its
+# parking branch. `saved` is the branch its uncommitted work went to, whether
+# or not the tree then came right.
 class ParkedTree(BaseModel):
     outcome: Literal["parked"] = "parked"
     path: str
@@ -168,13 +179,31 @@ class FailedTree(BaseModel):
     saved: str | None = None
 
 
-PurifiedTree = Annotated[ParkedTree | HeldTree | FailedTree, Discriminator("outcome")]
+# The tree and everything beside it is gone from disk and from git.
+class RemovedTree(BaseModel):
+    outcome: Literal["removed"] = "removed"
+    path: str
+    saved: str | None = None
+
+
+# No cast holds it and no lease would hand it out: it was never set up, or it
+# has work or an operation left open. Said only of a tree nothing was done to.
+class BlockedTree(BaseModel):
+    outcome: Literal["blocked"] = "blocked"
+    path: str
+    reason: str
+
+
+TendedTree = Annotated[
+    ParkedTree | HeldTree | FailedTree | RemovedTree | BlockedTree,
+    Discriminator("outcome"),
+]
 
 
 # Said back down the connection that asked, which then closes.
-class TreesPurified(BaseModel):
-    kind: Literal["trees_purified"] = "trees_purified"
-    trees: list[PurifiedTree]
+class AltarTended(BaseModel):
+    kind: Literal["altar_tended"] = "altar_tended"
+    trees: list[TendedTree]
 
 
 class GrimoireBegin(BaseModel):
@@ -433,10 +462,10 @@ CastMessage = CastHello | CastUpdate
 
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
-Opening = SurfaceHello | StopRequested | PurifyRequested | VersionRequested
+Opening = SurfaceHello | StopRequested | AltarRequested | VersionRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused | TreesPurified | DaemonVersion
+Request = CastRequested | CastRefused | AltarTended | DaemonVersion
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

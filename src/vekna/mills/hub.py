@@ -7,6 +7,8 @@ from vekna.pacts.casts import CastBoard, CastView, Prompt, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
     SHORT_ID,
+    AltarRequested,
+    AltarTended,
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
@@ -35,13 +37,11 @@ from vekna.wire import (
     LockDenied,
     LockGranted,
     LockReleased,
-    PurifyRequested,
     RiteDelta,
     RiteFinished,
     RiteStarted,
     TreeBlocked,
     TreeFreed,
-    TreesPurified,
     WireMessage,
 )
 
@@ -167,7 +167,7 @@ class Hub(CastBoard, Routes):
         surface.send(CastRefused(reason=_STARTS_NOTHING))
 
     @override
-    async def purify(self, request: PurifyRequested) -> TreesPurified | CastRefused:
+    async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         del request
         return CastRefused(reason=_KEEPS_NO_POOL)
 

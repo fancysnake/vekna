@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from vekna.wire import CastHello, PurifiedTree
+from vekna.wire import AltarRequested, CastHello, TendedTree
 
 # What a project's circle allows when nothing says otherwise.
 DEFAULT_PROCESSES = 4
@@ -10,13 +10,16 @@ DEFAULT_WORKTREES = 2
 
 
 # Read each time they are asked for, so an edited config counts from the next
-# cast on without restarting the daemon. `processes`, `worktrees` and `prepare`
-# are per project, found from the tree the cast was asked from; `coding` is per
-# account, so only the user's own config says it, and `None` is no limit.
+# cast on without restarting the daemon. `processes`, `worktrees`, `prepare`
+# and `base` are per project, found from the tree the cast was asked from;
+# `coding` is per account, so only the user's own config says it, and `None` is
+# no limit. `base` is the project's `base_branch`, and `None` is the `HEAD` of
+# the tree the altar was asked from.
 class Limits(Protocol):
     def processes(self, project_root: str) -> int: ...
     def worktrees(self, project_root: str) -> int: ...
     def prepare(self, project_root: str) -> str | None: ...
+    def base(self, project_root: str) -> str | None: ...
     def coding(self) -> int | None: ...
 
 
@@ -44,10 +47,22 @@ class Spawned:
     tree: str | None
 
 
-# A tree could not be made ready: `git worktree add` refused, or `prepare`
-# failed. The cast that wanted it ends with this as its reason.
+# No tree could be leased: the pool was never set up, or every tree of it is
+# blocked. The cast that wanted one ends with this as its reason. Also why the
+# altar could not read the pool at all.
 class TreeError(Exception):
     pass
+
+
+# What `vekna altar` asked for, with what the project's config says of its
+# pool: `count` trees, each standing on `base` and set up by `prepare`.
+@dataclass(frozen=True, kw_only=True)
+class Tending:
+    asked: AltarRequested
+    project: str
+    count: int
+    base: str | None
+    prepare: str | None
 
 
 # No tree to lease while some are held: `held` is those of the lease's `held`
@@ -60,22 +75,20 @@ class Full:
 # A project's pooled worktrees, read off git each time rather than remembered.
 # `held` is every tree a live cast stands in, which only the daemon knows.
 class Trees(Protocol):
-    # A free tree, or a new one while the pool is under `count`; `Full` while
-    # one is held, as it frees when its cast ends. Raises `TreeError`, also
-    # when every tree is blocked, since nothing would free one.
+    # A free tree that the altar set up; `Full` while one is held, as it frees
+    # when its cast ends. Makes none. Raises `TreeError` when no tree is set
+    # up, and when every tree is blocked, since nothing would free one.
     async def lease(
-        self, *, project_root: str, project: str, held: set[str], count: int
+        self, *, project_root: str, project: str, held: set[str]
     ) -> str | Full: ...
-
-    # Once per tree, not per lease. Raises `TreeError`.
-    async def prepare(self, tree: str, command: str | None) -> None: ...
 
     # Why the tree could not be parked, or `None` once it is.
     async def release(self, tree: str) -> str | None: ...
 
-    # Every tree of the pool not in `held` cleaned and parked, its work saved
-    # on a branch first with `save`. Raises `TreeError` when the pool cannot
-    # be read; a tree that will not come clean is said in its own entry.
-    async def purify(
-        self, *, project_root: str, project: str, held: set[str], save: bool
-    ) -> list[PurifiedTree]: ...
+    # What each tree of the pool came to, in the order done: removed, then
+    # fixed, then made and set up. A tree in `held` is left alone, and with
+    # nothing asked every tree is, and is said as it stands. Asked for one
+    # tree, a held one is a failure. Raises `TreeError` when the pool or the
+    # base cannot be read, or the pool lacks the tree asked for; a tree that
+    # will not come right is said in its own entry.
+    async def tend(self, tending: Tending, held: set[str]) -> list[TendedTree]: ...
