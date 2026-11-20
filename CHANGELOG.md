@@ -13,9 +13,33 @@ when.
 
 ### Added
 
+- **`vekna altar`** tends a project's pooled worktrees. `list` says how each
+  stands; `init` makes the pool and runs `[circle] prepare` in each tree;
+  `fix` cleans each tree no cast holds, moves it to the base and prepares it
+  again; `reset` removes each from git and from disk and makes it again. `fix`
+  and `reset` take a tree's number to act on that one alone, and `--save` to
+  keep uncommitted work on a `vekna/rescue/` branch.
+- **`[circle] base_branch`** names what pooled trees are made on and fixed to.
+  Unset, it is the `HEAD` of the checkout `vekna altar` is typed in.
+
 - **A badge for projects that cast rituals.** `rituals | vekna`, with the
   crowned skull, for a README. The line to paste is on the setup page, and
   ritual-scribe offers it when a project's README has no vekna badge.
+
+### Changed
+
+- **Breaking: a cast no longer makes or prepares its worktree.** A
+  `worktree=True` cast runs only in a tree `vekna altar init` set up, and
+  fails saying so when there is none. Run `vekna altar init` once in each
+  project that casts such rituals, existing pools included. `prepare` now runs
+  there, before any ritual, where it used to run inside the first cast to
+  lease the tree.
+
+### Removed
+
+- **Breaking: `vekna purify`.** `vekna altar fix` does what it did, and also
+  moves each tree to the base and prepares it again. Its wire messages,
+  `PurifyRequested` and `TreesPurified`, go with it.
 
 ### Fixed
 

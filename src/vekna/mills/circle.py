@@ -7,11 +7,13 @@ from typing import Literal
 from pydantic import JsonValue
 
 from vekna.pacts.casts import CastBoard, Casts, CastView
-from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, TreeError, Trees
+from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, Tending, TreeError, Trees
 from vekna.wire import (
     NEEDS_TREE,
+    AltarRequested,
     AwaitEnded,
     AwaitRequested,
+    BlockedTree,
     CastGoodbye,
     CastHello,
     CastQueued,
@@ -21,8 +23,9 @@ from vekna.wire import (
     FailedTree,
     HeldTree,
     ParkedTree,
-    PurifiedTree,
+    RemovedTree,
     RunRecord,
+    TendedTree,
     TreeBlocked,
     TreeFreed,
     WireMessage,
@@ -150,7 +153,8 @@ class Awaits:
 # Spawns a cast, and once it has said its ritual runs in a worktree, spawns it
 # again in a tree leased before the spawn: a lease taken mid-cast would hold a
 # slot while it waits, and with every slot waiting that is a deadlock no ritual
-# caused.
+# caused. The lease makes no tree and sets none up: that is the altar's, done
+# before any cast, so a cast never waits on a `prepare` or fails in one.
 class Leasing:
     def __init__(
         self, *, left: LeftBehind, spawn: Spawn, trees: Trees, limits: Limits
@@ -166,7 +170,6 @@ class Leasing:
         self._needs_tree: dict[str, str | None] = {}
         # One lease or release at a time per project, so two casts never take
         # the same free tree, and a release lands after any lease it raced.
-        # `prepare` runs outside it: it takes minutes.
         self._locks: dict[str, asyncio.Lock] = {}
 
     # `None` when the cast needs a tree and none is free. Raises `TreeError`.
@@ -188,7 +191,6 @@ class Leasing:
             if (tree := await self._lease(hello)) is None:
                 return None
             parked(tree)
-            await self._trees.prepare(tree, self._limits.prepare(hello.project_root))
             exited = await self._spawn(hello, tree)
         except BaseException:
             await self._release(hello, tree, parked)
@@ -205,10 +207,7 @@ class Leasing:
         root = hello.project_root
         async with self._lock(hello.project):
             found = await self._trees.lease(
-                project_root=root,
-                project=hello.project,
-                held=self._held(),
-                count=self._limits.worktrees(root),
+                project_root=root, project=hello.project, held=self._held()
             )
             if isinstance(found, str):
                 self._needs_tree[hello.cast_id] = found
@@ -238,21 +237,25 @@ class Leasing:
             _log.warning("%s is blocked after cast %s: %s", tree, hello.cast_id, reason)
         return reason
 
-    # Under the lease lock, so no tree is leased while it is being purified.
-    # Raises `TreeError`.
-    async def purify(
-        self, *, project_root: str, project: str, save: bool
-    ) -> list[PurifiedTree]:
+    # Under the lease lock, `prepare` and all, so no tree is leased while it is
+    # being tended. Raises `TreeError`.
+    async def tend(self, request: AltarRequested, *, project: str) -> list[TendedTree]:
+        root = request.project_root
+        tending = Tending(
+            asked=request,
+            project=project,
+            count=self._limits.worktrees(root),
+            base=self._limits.base(root),
+            prepare=self._limits.prepare(root),
+        )
         async with self._lock(project):
-            trees = await self._trees.purify(
-                project_root=project_root, project=project, held=self._held(), save=save
-            )
+            trees = await self._trees.tend(tending, self._held())
         for tree in trees:
             failed = isinstance(tree, FailedTree)
-            _log.log(logging.WARNING if failed else logging.INFO, _purified(tree))
+            _log.log(logging.WARNING if failed else logging.INFO, _tended(tree))
         return trees
 
-    # A tree leased to a cast still preparing it is held too.
+    # A tree leased to a cast not spawned in it yet is held too.
     def _held(self) -> set[str]:
         return self._left.trees() | {
             held for held in self._needs_tree.values() if held is not None
@@ -287,15 +290,11 @@ class Circle:
         # still `queued` in the view, and has to hold its slot all the same.
         self._launching: dict[str, asyncio.Task[None]] = {}
 
-    # Raises `TreeError`.
-    async def purify(
-        self, *, project_root: str, project: str, save: bool
-    ) -> list[PurifiedTree]:
-        trees = await self._leasing.purify(
-            project_root=project_root, project=project, save=save
-        )
+    # A tree that is parked or gone blocks nothing any more. Raises `TreeError`.
+    async def tend(self, request: AltarRequested, *, project: str) -> list[TendedTree]:
+        trees = await self._leasing.tend(request, project=project)
         for tree in trees:
-            if isinstance(tree, ParkedTree):
+            if isinstance(tree, (ParkedTree, RemovedTree)):
                 self._freed(tree.path)
         return trees
 
@@ -427,15 +426,19 @@ class CodingPool:
             )
 
 
-# What the daemon's log says of one tree `purify` reached.
-def _purified(tree: PurifiedTree) -> str:
+# What the daemon's log says of one tree the altar reached.
+def _tended(tree: TendedTree) -> str:
     match tree:
         case HeldTree():
-            return f"purify held {tree.path}"
+            return f"altar held {tree.path}"
         case ParkedTree():
-            said = f"purify parked {tree.path}"
+            said = f"altar readied {tree.path}"
+        case RemovedTree():
+            said = f"altar removed {tree.path}"
+        case BlockedTree():
+            return f"altar found {tree.path} blocked: {tree.reason}"
         case _:
-            said = f"purify failed {tree.path}: {tree.reason}"
+            said = f"altar failed {tree.path}: {tree.reason}"
     if tree.saved is None:
         return said
     return f"{said}, its uncommitted work on {tree.saved}"

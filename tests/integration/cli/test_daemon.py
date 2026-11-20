@@ -14,7 +14,7 @@ from pathlib import Path
 
 import click
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 from typing_extensions import override
 
 from tests.conftest import versioned
@@ -27,9 +27,11 @@ from vekna.links.socket_server import alive, attach
 from vekna.links.spawner import Spawner, pid_alive
 from vekna.links.worktrees import GitTrees
 from vekna.pacts.casts import DamagedRun
+from vekna.pacts.circle import Tending
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     VERSION,
+    AltarRequested,
     AwaitRequested,
     AwaitWithdrawn,
     CastCancelRequested,
@@ -47,7 +49,6 @@ from vekna.wire import (
     DecideRequested,
     EnqueueRefused,
     EnqueueRequested,
-    PurifyRequested,
     RiteDelta,
     RiteFinished,
     RiteStarted,
@@ -713,12 +714,39 @@ class TestLeftBehind:
         assert mark.exists()
 
 
+# Each command is run on a thread: it runs its own event loop, and the daemon
+# it talks to is on this one.
+async def _altar(*args: str) -> Result:
+    return await asyncio.to_thread(CliRunner().invoke, init_command(), ["altar", *args])
+
+
 @pytest.mark.asyncio
-class TestPurify:
-    # Run on a thread: the command runs its own event loop, and the daemon it
-    # talks to is on this one.
+class TestAltar:
     @staticmethod
-    async def test_a_blocked_tree_is_saved_parked_and_its_cast_freed(
+    async def test_init_makes_the_pool_and_list_says_how_it_stands(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        repo = _one_commit_repo(tmp_path, monkeypatch)
+        (repo / ".vekna.toml").write_text('[circle]\nprepare = "touch ../ran-$$"\n')
+
+        async with _served(socket_path):
+            made = await _altar("init")
+            home = _home()
+            (home / "2" / "new.txt").write_text("mine\n")
+            listed = await _altar("list")
+
+        assert made.exit_code == 0
+        # The daemon logs to the same stderr, so only stdout is the command's.
+        assert made.stdout == f"{home}/1: ready\n{home}/2: ready\n"
+        assert len(list(home.glob("ran-*"))) == len(("1", "2"))
+        assert listed.exit_code == 0
+        assert listed.stdout == (
+            f"{home}/1: ready\n{home}/2: blocked: uncommitted changes\n"
+        )
+        assert (home / "2" / "new.txt").exists()
+
+    @staticmethod
+    async def test_fix_saves_and_parks_a_blocked_tree_and_frees_its_cast(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         repo = _one_commit_repo(tmp_path, monkeypatch)
@@ -734,20 +762,32 @@ class TestPurify:
             )
             reader, watcher = await attach(socket_path)
             watcher.write(encode_frame(SurfaceHello()))
-            purified = await asyncio.to_thread(
-                CliRunner().invoke, init_command(), ["purify", "--save"]
-            )
+            fixed = await _altar("fix", "1", "--save")
             heard = await _until_freed(read_frames(reader))
             cast.close()
             watcher.close()
 
-        assert purified.exit_code == 0
-        # The daemon logs to the same stderr, so only stdout is the command's.
-        assert purified.stdout.startswith(
-            f"{tree}: purified — its uncommitted work is on vekna/rescue/vekna/wt-1-"
+        assert fixed.exit_code == 0
+        assert fixed.stdout.startswith(
+            f"{tree}: ready — its uncommitted work is on vekna/rescue/vekna/wt-1-"
         )
         assert heard[-1] == TreeFreed(cast_id="c1", path=tree)
         assert not (Path(tree) / "new.txt").exists()
+
+    @staticmethod
+    async def test_reset_removes_a_tree_and_makes_it_again(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        tree = await _leased(_one_commit_repo(tmp_path, monkeypatch))
+        (Path(tree) / "new.txt").write_text("mine\n")
+
+        async with _served(socket_path):
+            reset = await _altar("reset", "1")
+
+        assert reset.exit_code == 0
+        assert reset.stdout == f"{tree}: removed\n{tree}: ready\n"
+        assert not (Path(tree) / "new.txt").exists()
+        assert _git(Path(tree), "branch", "--show-current") == "vekna/wt-1"
 
     @staticmethod
     async def test_a_tree_a_running_cast_stands_in_is_left_alone(
@@ -765,25 +805,36 @@ class TestPurify:
                 async for message in read_frames(reader):
                     if message == hello:
                         break
-            purified = await asyncio.to_thread(
-                CliRunner().invoke, init_command(), ["purify"]
-            )
+            fixed = await _altar("fix")
+            asked = await _altar("reset", "1")
             cast.close()
             watcher.close()
 
-        assert purified.exit_code == 0
-        assert purified.stdout == f"{tree}: held by a running cast, left alone\n"
+        assert fixed.exit_code == 0
+        assert fixed.stdout == f"{tree}: held by a running cast, left alone\n"
+        assert asked.exit_code == 1
+        assert asked.stdout == f"{tree}: failed: a running cast holds it\n"
         assert (Path(tree) / "new.txt").exists()
+
+    @staticmethod
+    async def test_a_tree_the_pool_lacks_is_refused(
+        socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        await _leased(_one_commit_repo(tmp_path, monkeypatch))
+
+        async with _served(socket_path):
+            fixed = await _altar("fix", "7")
+
+        assert fixed.exit_code == 1
+        assert "the pool has no worktree 7" in fixed.output
 
     @staticmethod
     async def test_a_directory_with_no_repository_is_refused(socket_path: Path):
         async with _served(socket_path):
-            purified = await asyncio.to_thread(
-                CliRunner().invoke, init_command(), ["purify"]
-            )
+            listed = await _altar("list")
 
-        assert purified.exit_code == 1
-        assert "git worktree in " in purified.output
+        assert listed.exit_code == 1
+        assert "git worktree in " in listed.output
 
     @staticmethod
     async def test_a_tree_that_will_not_come_clean_fails_the_command(
@@ -793,12 +844,10 @@ class TestPurify:
         shutil.rmtree(tree)
 
         async with _served(socket_path):
-            purified = await asyncio.to_thread(
-                CliRunner().invoke, init_command(), ["purify"]
-            )
+            fixed = await _altar("fix")
 
-        assert purified.exit_code == 1
-        assert purified.stdout.startswith(f"{tree}: failed: git rev-parse in ")
+        assert fixed.exit_code == 1
+        assert fixed.stdout.startswith(f"{tree}: failed: git rev-parse in ")
 
     @staticmethod
     async def test_a_directory_that_is_not_there_is_refused(
@@ -808,11 +857,22 @@ class TestPurify:
 
         async with _served(socket_path):
             reader, writer = await attach(socket_path)
-            writer.write(encode_frame(PurifyRequested(project_root=str(gone))))
+            writer.write(encode_frame(AltarRequested(project_root=str(gone))))
             reply = [message async for message in read_frames(reader)]
             writer.close()
 
         assert reply == [CastRefused(reason=f"{gone} is not a directory")]
+
+
+class TestAltarHelp:
+    @staticmethod
+    def test_bare_altar_names_its_subcommands():
+        shown = CliRunner().invoke(init_command(), ["altar"])
+
+        assert [
+            line.split()[0]
+            for line in shown.output.partition("Commands:\n")[2].splitlines()
+        ] == ["fix", "init", "list", "reset"]
 
 
 def _one_commit_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -826,11 +886,26 @@ def _one_commit_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return repo
 
 
-# A tree of the pool the daemon under test keeps, as a cast's lease leaves it.
+# Where the daemon under test keeps the one pool it has made.
+def _home() -> Path:
+    [home] = (default_state_root() / "worktrees").iterdir()
+    return home
+
+
+# The one tree of a pool the daemon under test keeps, as a cast's lease leaves
+# it.
 async def _leased(repo: Path) -> str:
-    tree = await GitTrees(root=default_state_root() / "worktrees").lease(
-        project_root=str(repo), project=await project_of(repo), held=set(), count=1
+    trees = GitTrees(root=default_state_root() / "worktrees")
+    project = await project_of(repo)
+    asked = Tending(
+        asked=AltarRequested(project_root=str(repo), init=True),
+        project=project,
+        count=1,
+        base=None,
+        prepare=None,
     )
+    await trees.tend(asked, set())
+    tree = await trees.lease(project_root=str(repo), project=project, held=set())
     assert isinstance(tree, str)
     return tree
 
@@ -961,19 +1036,21 @@ class TestTheBareCommand:
         )
 
     @staticmethod
-    def test_purify_starts_a_daemon_says_so_and_says_an_empty_pool_is_empty(
+    def test_altar_starts_a_daemon_says_so_and_says_an_empty_pool_is_empty(
         socket_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         _one_commit_repo(tmp_path, monkeypatch)
         try:
-            purified = CliRunner().invoke(init_command(), ["purify"])
+            listed = CliRunner().invoke(init_command(), ["altar", "list"])
             started = asyncio.run(alive(socket_path))
         finally:
             CliRunner().invoke(init_command(), ["stop"])
 
-        assert purified.exit_code == 0
-        assert purified.stdout == "no pooled worktrees for this project\n"
-        assert purified.stderr == "started the daemon — it runs until `vekna stop`\n"
+        assert listed.exit_code == 0
+        assert listed.stdout == (
+            "no pooled worktrees for this project: run `vekna altar init`\n"
+        )
+        assert listed.stderr == "started the daemon — it runs until `vekna stop`\n"
         assert started
 
     @staticmethod
@@ -1457,6 +1534,7 @@ def _pool_tree(repo: Path) -> Path:
 class TestWorktrees:
     @staticmethod
     async def test_a_worktree_ritual_runs_in_a_pool_tree_parked_after(repo: Path):
+        await _leased(repo)
         keys = _Keys()
         async with _served(repo / "vekna.sock"):
             peer = asyncio.create_task(window(screen=keys))
@@ -1476,6 +1554,7 @@ class TestWorktrees:
     async def test_a_tree_left_dirty_is_blocked_and_said(
         repo: Path, caplog: pytest.LogCaptureFixture
     ):
+        await _leased(repo)
         keys = _Keys()
         async with _served(repo / "vekna.sock"):
             peer = asyncio.create_task(window(screen=keys))
@@ -1488,6 +1567,32 @@ class TestWorktrees:
 
         assert (_pool_tree(repo) / "left.txt").read_text() == "mine"
         assert "is blocked after cast" in _said(caplog, logging.WARNING)
+
+    # The pool is the altar's to make: a cast that made its own would run
+    # `prepare` inside a ritual.
+    @staticmethod
+    async def test_a_worktree_ritual_with_no_pool_fails_and_says_how(repo: Path):
+        journal = Journal(repo / "runs")
+        keys = _Keys()
+        async with _served(repo / "vekna.sock"):
+            peer = asyncio.create_task(window(screen=keys))
+            keys.press("c tidy")
+            await _spawned(lambda: _ended(journal) is not None)
+            keys.press("q")
+            await peer
+
+        assert _ended(journal) == (
+            "no worktree is set up for this project: run `vekna altar init`"
+        )
+        assert not list((repo / "state" / "vekna" / "worktrees").glob("*/1"))
+
+
+# Why the one cast in the journal ended in error, once it has.
+def _ended(journal: Journal) -> str | None:
+    runs = journal.recent(limit=5)
+    if not runs or isinstance(runs[0], DamagedRun) or runs[0].status != "error":
+        return None
+    return runs[0].detail
 
 
 _QUEUE_RITUALS = textwrap.dedent("""

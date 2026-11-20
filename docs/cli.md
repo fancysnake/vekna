@@ -377,29 +377,31 @@ the next daemon runs it.
 
 A ritual declared `@ritual("fix", worktree=True)` runs in a pooled worktree
 rather than in the directory `c` was typed in. The daemon leases a tree before
-it spawns the cast and releases it once the process exits. The pool takes two
-more keys:
+it spawns the cast and releases it once the process exits. The pool takes
+three more keys:
 
 ```toml
 [circle]
 worktrees = 2                          # pooled trees per project
-prepare = "mise install && poetry install"   # run once in each new tree
+prepare = "mise install && poetry install"   # run in each tree when it is set up
+base_branch = "main"                   # what each tree is made on and fixed to
 ```
 
 Trees live under `~/.local/state/vekna/worktrees/<repo>-<hash>/<n>`, each parked
 on its own branch, `vekna/wt-<n>`, while no cast holds it. The pool is whatever
-`git worktree list` shows there, so a restarted daemon finds the same trees. A
-tree is made when every existing one is held and the pool is under
-`worktrees` (default 2), from the `HEAD` of the tree the cast was asked from;
-`prepare` runs once in it, logging to `<n>.prepare.log` beside it. A prepare
-that fails fails the cast
-and runs again at the tree's next lease. Nothing removes a tree.
+`git worktree list` shows there, so a restarted daemon finds the same trees.
+
+[`vekna altar init`](#vekna-altar) makes the pool, and nothing else does. A
+lease hands out only a tree the altar set up, so `prepare` runs before any
+ritual and never inside a cast. With no tree set up, a `worktree=True` cast
+fails and says `run vekna altar init`. A ritual that asks for no worktree needs
+no pool.
 
 After the cast, the daemon parks a clean tree. A tree with uncommitted or
 untracked changes, or with a merge, rebase, cherry-pick or revert in progress,
 is left as it is and marked blocked: the cast's drilled view and `daemon.log`
 say which tree and why. It joins the pool again once it is clean, by hand or
-through [`vekna purify`](#vekna-purify). Gitignored
+through [`vekna altar fix`](#vekna-altar). Gitignored
 files are not changes, so whatever `prepare` builds must be gitignored, or
 every tree reads dirty. Past the pool, a cast waits queued for a tree while
 another cast holds one; once every tree is blocked and none is held, nothing
@@ -411,30 +413,53 @@ A tree holds only what git tracks. A `.vekna.toml` or `rituals.py` kept out of
 git is not there, and a cast in the tree will not find its rituals. A
 `worktree=True` ritual typed as `vekna cast` runs where it was typed.
 
-## `vekna purify`
+## `vekna altar`
 
-Cleans every pooled worktree of the project it is typed in and parks it: an
-open merge, rebase, cherry-pick or revert is aborted, uncommitted and untracked
-changes are thrown away, and the tree goes back to its parking branch.
-Gitignored files stay, so a prepared venv survives. A tree a running cast
-holds is left alone. Neither the checkout you work in nor the pool's size is
-touched.
+Tends the pooled worktrees of the project it is typed in. Bare `vekna altar`
+lists its subcommands.
+
+| Command | Trees | What it does |
+| --- | --- | --- |
+| `vekna altar list` | all | says how each tree stands; changes nothing |
+| `vekna altar init` | missing ones, up to `worktrees` | makes each on the base and runs `prepare` in each tree not set up yet |
+| `vekna altar fix [TREE] [--save]` | every tree no cast holds | aborts an open merge, rebase, cherry-pick or revert, throws away uncommitted and untracked changes, parks the tree, moves its parking branch to the base and runs `prepare` again |
+| `vekna altar reset [TREE] [--save]` | every tree no cast holds | removes the tree from git and from disk, with its marker and log, then makes it again as `init` does |
+
+`TREE` is a tree's number, the last part of its path. With it, `fix` and
+`reset` act on that tree alone, and fail when a running cast holds it. Without
+it, a held tree is left alone and said so.
+
+The base is `[circle] base_branch`, or the `HEAD` of the checkout the command
+is typed in when the key is unset. Nothing is fetched: a stale local branch
+gives stale trees.
+
+`prepare` runs with the tree as its directory and logs to `<n>.prepare.log`
+beside it. A tree is set up once `<n>.prepared` stands beside it; a `prepare`
+that fails leaves no marker, so no cast is handed the tree, and the next
+`init` runs it again. `fix` keeps gitignored files, so a prepared venv is
+reused; `reset` removes them with the tree. While the altar works, worktree
+casts of the project wait.
 
 ```bash
-vekna purify          # throws away what the trees had not committed
-vekna purify --save   # commits it to a branch of its own first
+vekna altar list            # how each tree stands
+vekna altar init            # once per project, and after raising `worktrees`
+vekna altar fix             # throws away what the trees had not committed
+vekna altar fix 2 --save    # tree 2 only, its work committed to a branch first
+vekna altar reset           # every tree removed and made again
 ```
 
 ```text
-/home/you/.local/state/vekna/worktrees/vekna-1a2b3c4d/1: purified — its uncommitted work is on vekna/rescue/fix-flaky-1f2e3d4c
+/home/you/.local/state/vekna/worktrees/vekna-1a2b3c4d/1: ready — its uncommitted work is on vekna/rescue/fix-flaky-1f2e3d4c
 /home/you/.local/state/vekna/worktrees/vekna-1a2b3c4d/2: held by a running cast, left alone
 ```
 
+Each line is one tree: `ready`, `removed`, `held by a running cast, left
+alone`, `blocked: <why no cast can take it>` from `list`, or `failed: <why>`.
 `--save` names each branch `vekna/rescue/<branch the tree was on>-<hash>`, and
 keeps it local. The daemon does the work, since only it knows which trees are
-held; with none listening, `vekna purify` starts one. A cast whose tree is
-parked again, purified or found clean by a lease, loses its blocked mark in
-every window. Exits `1` when any tree would not come clean, saying why.
+held; with none listening, `vekna altar` starts one. A cast whose tree is
+parked again or removed loses its blocked mark in every window. Exits `1` when
+any tree failed.
 
 ## `vekna stop`
 
@@ -470,7 +495,7 @@ shows the same versions at the right of its hint line.
 ### Compatibility
 
 A daemon serves its own major version only. Every `vekna`, `vekna cast` and
-`vekna purify` asks the daemon for its version first. When the major versions
+`vekna altar` asks the daemon for its version first. When the major versions
 differ, or the daemon cannot say its version, the command stops before it sends
 anything else and prints both ways out:
 

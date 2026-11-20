@@ -7,6 +7,7 @@ from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     FRAME_LIMIT,
     VERSION,
+    AltarRequested,
     CastCancelRequested,
     CastGoodbye,
     CastMessage,
@@ -15,7 +16,6 @@ from vekna.wire import (
     DecideClaimed,
     DecideReleased,
     DecideResolved,
-    PurifyRequested,
     StopRequested,
     SurfaceHello,
     VersionRequested,
@@ -109,7 +109,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     stopping = asyncio.Event()
 
     # What a connection opens with is what it is, and that is settled once: a
-    # surface is fanned out to, a stop ends the daemon, a purify and a version
+    # surface is fanned out to, a stop ends the daemon, an altar and a version
     # are answered, anything else is a cast and is routed. The first frame is
     # the only place they can be told apart, so it is the only place that asks.
     async def handle(
@@ -123,11 +123,11 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif isinstance(opened, (PurifyRequested, VersionRequested)):
+            elif isinstance(opened, (AltarRequested, VersionRequested)):
                 reply = (
                     DaemonVersion(version=VERSION)
                     if isinstance(opened, VersionRequested)
-                    else await routes.purify(opened)
+                    else await routes.altar(opened)
                 )
                 writer.write(encode_frame(reply))
                 with contextlib.suppress(OSError):

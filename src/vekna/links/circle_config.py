@@ -20,6 +20,7 @@ class _Circle(BaseModel):
     processes: PositiveInt | None = None
     worktrees: PositiveInt | None = None
     prepare: str | None = None
+    base_branch: str | None = None
     coding: PositiveInt | None = None
 
 
@@ -45,6 +46,10 @@ class ConfigLimits(Limits):
     @override
     def prepare(self, project_root: str) -> str | None:
         return _nearest(Path(project_root), lambda circle: circle.prepare)
+
+    @override
+    def base(self, project_root: str) -> str | None:
+        return _nearest(Path(project_root), lambda circle: circle.base_branch)
 
     # The machine's, not a project's: only what the user says for every project.
     @override
