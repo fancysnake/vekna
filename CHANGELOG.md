@@ -11,6 +11,8 @@ when.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-22
+
 ### Added
 
 - **`[circle] total_processes`** limits how many casts run at once across
@@ -31,10 +33,10 @@ when.
 
 ### Changed
 
-- **A cast typed by hand is refused when no slot is free.** With `processes`
-  or `total_processes` reached, `vekna cast <ritual>` exits `1` before its
-  first step and names `--queue`. Before, it ran past the limit.
-- **More casts than processors now queue.** Set `total_processes` to raise
+- **Breaking: a cast typed by hand is refused when no slot is free.** With
+  `processes` or `total_processes` reached, `vekna cast <ritual>` exits `1`
+  before its first step and names `--queue`. Before, it ran past the limit.
+- **More casts than processors queue.** Set `total_processes` to raise
   the limit.
 - **The casts a typed cast sets going run one at a time.** A `vekna cast`
   typed at a terminal, the casts it queued and the ones they queued each wait
@@ -58,17 +60,17 @@ when.
 
 ### Removed
 
-- **The board of a following cast.** A typed cast prints the casts it follows
-  into its terminal as they write, each named where it takes over from another,
-  so the output scrolls back and a prompt stands under what its cast printed. A
-  pipe or a file gets the same lines; lines are no longer prefixed with the
-  cast's name or held back.
+- **Breaking: the board of a following cast.** A typed cast prints the casts
+  it follows into its terminal as they write, each named where it takes over
+  from another, so the output scrolls back and a prompt stands under what its
+  cast printed. A pipe or a file gets the same lines; lines are no longer
+  prefixed with the cast's name or held back.
 
 ### Fixed
 
 - **A default is not a component the caller set.** A cast that handed its own
   components to `enqueue` passed its `[defaults.<ritual>]` values on as if it
-  had named them, and they outranked the child's own defaults. The child now
+  had named them, and they outranked the child's own defaults. The child
   gets the flags of the cast that queued it and answers the rest where it
   runs.
 
@@ -1191,7 +1193,8 @@ describes code that still exists.
 [semantic versioning]: https://semver.org/spec/v2.0.0.html
 
 <!-- Versions -->
-[unreleased]: https://github.com/fancysnake/vekna/compare/v2.0.0...HEAD
+[unreleased]: https://github.com/fancysnake/vekna/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/fancysnake/vekna/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/fancysnake/vekna/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/fancysnake/vekna/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/fancysnake/vekna/compare/v1.1.0...v1.2.0

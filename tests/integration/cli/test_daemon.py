@@ -19,7 +19,7 @@ from typing_extensions import override
 
 from tests.conftest import versioned
 from vekna.inits.cli import init_command, tui_window, window
-from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
+from vekna.inits.daemon import CLI_MODULE, _look, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
 from vekna.lexicon._links.follow import DAEMON_WENT
 from vekna.links.journal import Journal
@@ -27,8 +27,9 @@ from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive
 from vekna.links.worktrees import GitTrees
 from vekna.mills.hub import Hub
+from vekna.mills.vigils import Vigils
 from vekna.pacts.casts import DamagedRun
-from vekna.pacts.circle import Tending
+from vekna.pacts.circle import Tending, VigilBook
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     VERSION,
@@ -2114,6 +2115,37 @@ class TestVigils:
             await _spawned(lambda: _finished(runs, "count"))
 
         assert _run_of(runs, "count").hello.vigil == "tally"
+
+    # A look that raises something other than a disk error ends the keeper. The
+    # daemon says so and still stops clean.
+    @staticmethod
+    async def test_a_keeper_that_dies_is_said_and_the_daemon_still_stops_clean(
+        socket_path: Path,
+        vigil_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        looks: list[None] = []
+
+        async def look_once(*, vigils: Vigils, book: VigilBook, journal: Journal):
+            if looks:
+                msg = "no more looks"
+                raise ValueError(msg)
+            looks.append(None)
+            await _look(vigils=vigils, book=book, journal=journal)
+
+        monkeypatch.setattr("vekna.inits.daemon._look", look_once)
+        runs = socket_path.parent / "runs"
+        _keep_tally(vigil_config)
+        async with _served(socket_path) as host:
+            await _spawned(lambda: _finished(runs, "count"))
+            await _eventually(
+                lambda: "the vigils are no longer kept: ValueError('no more looks')"
+                in _said(caplog, logging.ERROR).splitlines()
+            )
+
+        assert _run_of(runs, "count").hello.vigil == "tally"
+        assert host.result() == 0
 
 
 @pytest.mark.asyncio
