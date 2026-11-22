@@ -198,8 +198,10 @@ def _sdk_stub(
         content: str | list
         model: str = "stub-model"
 
-    # What the CLI echoes back after a tool ran. It has `content` like an
-    # assistant message, and no `model`.
+    # What the CLI echoes back after a tool ran. Its content is plain text on
+    # purpose: the SDK also allows a list of tool-result blocks, but the text
+    # filter drops those, so only plain text would reach the output if this
+    # message were mistaken for the agent's reply.
     @dataclass
     class UserMessage:
         content: str
@@ -254,9 +256,6 @@ def _sdk_stub(
                 else [TextBlock(text="drafting the haiku"), ToolUseBlock(name="Write")]
             )
         )
-        # A test seeds `captured["tool_result"]` to have the CLI echo one.
-        if "tool_result" in captured:
-            yield UserMessage(content=captured["tool_result"])
         if tools:
             captured["permissions"] = [
                 await options.can_use_tool(tool, {"tool": tool}, None) for tool in tools
@@ -271,6 +270,7 @@ def _sdk_stub(
     stub.ToolUseBlock = ToolUseBlock
     stub.SystemMessage = SystemMessage
     stub.AssistantMessage = AssistantMessage
+    stub.UserMessage = UserMessage
     stub.ResultMessage = ResultMessage
     stub.ClaudeAgentOptions = ClaudeAgentOptions
     stub.create_sdk_mcp_server = create_sdk_mcp_server
@@ -300,6 +300,20 @@ def _sdk_stub_failing_with(error):
 
     def query(**_kwargs):
         return _failing_stream(error)
+
+    stub.query = query
+    return stub
+
+
+def _sdk_stub_echoing(captured, *, echo):
+    stub = _sdk_stub(captured)
+    stream = stub.query
+
+    async def query(**kwargs):
+        async for message in stream(**kwargs):
+            if isinstance(message, stub.ResultMessage):
+                yield stub.UserMessage(content=echo)
+            yield message
 
     stub.query = query
     return stub
@@ -518,8 +532,12 @@ class TestCastWithClaudeFocus:
     def test_a_message_that_is_not_the_agents_reply_is_left_out_of_the_stream(
         tmp_path, monkeypatch, capsys
     ):
-        captured = {"tool_result": "wrote haiku.txt"}
-        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        captured = {}
+        monkeypatch.setitem(
+            sys.modules,
+            "claude_agent_sdk",
+            _sdk_stub_echoing(captured, echo="wrote haiku.txt"),
+        )
         (tmp_path / "rituals.py").write_text(_RITUALS)
         monkeypatch.chdir(tmp_path)
 
