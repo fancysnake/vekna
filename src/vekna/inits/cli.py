@@ -21,6 +21,7 @@ from vekna.links.circle_config import MACHINE_KEYS, circle_problems
 from vekna.links.journal import Journal
 from vekna.links.socket_server import attach
 from vekna.links.terminal import Terminal
+from vekna.links.vigil_config import vigil_problems
 from vekna.links.window_config import history_after, window_problems
 from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub, replayed
@@ -183,7 +184,7 @@ def _rituals_show(name: str) -> None:
 
 
 # The cast runtime writes the report: most of what a config says is about
-# rituals. `[circle]` and `[window]` are read on this side of the line, so
+# rituals. `[circle]`, `[window]` and `[vigil]` are read on this side, so
 # their problems are handed over.
 @click.command(
     "audit",
@@ -192,8 +193,9 @@ def _rituals_show(name: str) -> None:
 )
 def _audit() -> None:
     cwd = Path.cwd()
-    problems = [*circle_problems(cwd), *window_problems(cwd)]
-    raise SystemExit(_runtime().audit(problems, {"circle": MACHINE_KEYS, "window": ()}))
+    problems = [*circle_problems(cwd), *window_problems(cwd), *vigil_problems(cwd)]
+    machine = {"circle": MACHINE_KEYS, "window": (), "vigil": ()}
+    raise SystemExit(_runtime().audit(problems, machine))
 
 
 # `cats` is one transposition away from `cast`, and the fingers that type the

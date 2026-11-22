@@ -10,6 +10,8 @@ from vekna.wire import ConfigLayer, Said, TomlValue, overruled, settled
 
 _RITUALS = "rituals"
 _DEFAULTS = "defaults"
+# Each table inside is taken whole from the nearest layer that names it.
+_VIGIL = "vigil"
 
 
 # A layer with what it validated as, or None where it did not.
@@ -197,7 +199,8 @@ class _Report:
                 lines += self.defaults(said)
             elif name != _RITUALS:
                 self._unclaimed(name, said)
-                lines += self.section(table=name, said=said)
+                depth = 1 if name == _VIGIL else sys.maxsize
+                lines += self.section(table=name, said=said, depth=depth)
         return lines
 
 

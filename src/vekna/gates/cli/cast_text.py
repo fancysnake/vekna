@@ -172,4 +172,6 @@ def carried(hello: CastHello) -> str:
     )
     if hello.enqueued_by is not None:
         said += f"  queued by {hello.enqueued_by[:SHORT_ID]}"
+    if hello.vigil is not None:
+        said += f"  vigil {hello.vigil}"
     return said

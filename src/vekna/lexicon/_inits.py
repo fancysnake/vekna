@@ -504,6 +504,8 @@ class _Plan(NamedTuple):
     leased: bool = False
     # The cast that queued this one, kept on the hello its own run says.
     enqueued_by: str | None = None
+    # The vigil that started this one, kept the same way.
+    vigil: str | None = None
     # Each folio that did not import, as `_load_folios` said it.
     unloaded: tuple[str, ...] = ()
     # Stay for the casts it queued once its own steps end.
@@ -563,6 +565,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
             leased=Path.cwd().resolve() != Path(hello.project_root).resolve(),
             compendium=compendium,
             enqueued_by=hello.enqueued_by,
+            vigil=hello.vigil,
         )
     # The record holds the components as the CLI already validated them once,
     # so they are validated again against the same model rather than
@@ -646,6 +649,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         wired=plan.wired,
         unattended=plan.unattended,
         enqueued_by=plan.enqueued_by,
+        vigil=plan.vigil,
         pid=os.getpid(),
     )
 

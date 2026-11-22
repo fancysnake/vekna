@@ -254,8 +254,8 @@ code alone:
 - a `[projects.<name>]` table whose `path` does not exist
 - a key in your `[projects.<name>]` table that the project's `.vekna.toml`
   also sets, or that equals the value it overrides
-- `[circle] coding` or `total_processes` anywhere but the top level of your
-  user config
+- `[circle] coding`, `total_processes` or `vigil_processes` anywhere but the
+  top level of your user config
 - a `[defaults.<ritual>]` table for a ritual that is not loaded here, unless
   it is in the top level of your user config, which speaks for every project
 - a table that vekna does not read and that no tome in `[rituals] modules` is
@@ -426,6 +426,7 @@ sets it for [one project](scopes.md#one-config-for-every-project):
 processes = 4         # casts running at once in this project; the nearest table wins
 total_processes = 8   # casts running at once, across every project; user config only
 coding = 2            # agent sessions at once, across every project; user config only
+vigil_processes = 7   # casts started by vigils at once; user config only
 ```
 
 `processes` counts every running cast of the project, whether `c` started it or
@@ -451,6 +452,62 @@ A cast that a ritual's `await_cast` blocks shows `on child` and the id it waits
 on, and holds no slot until that cast ends. A cast queued by another names it
 in the drilled view: `queued by <id>`. What is queued survives `vekna stop`:
 the next daemon runs it.
+
+### Vigils
+
+A vigil casts a ritual every so often, with nobody typing it. It is a ritual,
+an interval in seconds, and optional arguments for the ritual:
+
+```toml
+[vigil.prwatch]
+every = 3600
+ritual = "heal.mine"
+args = { author = "me" }
+```
+
+A `[vigil.<name>]` table at the top level of your user config runs in every
+project that has a `[projects.<name>]` table whose `path` exists. A
+`[projects.<name>.vigil.<name>]` table, or the `.vekna.toml` of a listed
+project, sets a vigil for that one project. The nearest table replaces a
+farther table of the same name whole: no key is merged. A project cannot turn
+a top-level vigil off, only replace it.
+
+`args` set the ritual's components as flags typed after its name do, and
+override `[defaults.<ritual>]` the same way.
+
+A vigil is due when `every` seconds have passed since a cast of that ritual
+last started in that project, whoever started it. A vigil that has never run is
+due at once. The daemon looks every five seconds, so no interval is kept more
+closely than that. A due vigil starts a cast only when all three hold:
+
+- no cast of that ritual is queued or running in the project, a cast typed by
+  hand included
+- the project and the machine each have a slot that no queued cast is waiting
+  for
+- fewer than `[circle] vigil_processes` casts started by vigils are queued or
+  running
+
+Otherwise it stays due, and the daemon tries it again on the next look. When
+several are due, the longest overdue goes first. However many intervals passed
+while the daemon was down, a vigil casts once.
+
+`vigil_processes` defaults to one less than `total_processes`, and to 1 at
+least. A cast that a vigil's cast queues or awaits does not count toward it. A
+cast names the vigil that started it in the drilled view: `vigil prwatch`.
+
+The daemon reads the config again on every look, so an edit counts without a
+restart. A `[vigil]` that does not validate is noted in `daemon.log` and left
+out; `vekna audit` names it.
+
+Three limits to know:
+
+- The interval is counted from the journal, which keeps the newest 200 casts
+  and is trimmed when the daemon starts. A vigil whose last cast was trimmed is
+  due at once after a restart.
+- A ritual that needs a worktree waits queued when no tree is free, and counts
+  toward `vigil_processes` while it waits.
+- For a few seconds after a restart, the daemon does not see a cast typed by
+  hand that is still running, and a due vigil can start a second one.
 
 ### Worktrees
 

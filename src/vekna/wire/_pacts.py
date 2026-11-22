@@ -44,6 +44,9 @@ class CastHello(BaseModel):
     # Said by the enqueuing cast, which has the ritual: the daemon leases a tree
     # before the first spawn instead of learning the need from `NEEDS_TREE`.
     worktree: bool = False
+    # The vigil whose interval started this cast: the daemon counts such casts
+    # against `vigil_processes`.
+    vigil: str | None = None
     # The process saying it, which is what the daemon signals when a cancel
     # asked over the wire is not acted on.
     pid: int | None = None

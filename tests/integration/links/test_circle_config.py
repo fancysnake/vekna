@@ -118,6 +118,36 @@ class TestTotal:
 
 
 @pytest.mark.usefixtures("config")
+class TestVigils:
+    @staticmethod
+    def test_one_slot_short_of_the_machine_s(
+        config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        config.write_text(f"[circle]\ntotal_processes = {_MINE}\n", encoding="utf-8")
+
+        assert ConfigLimits().vigils() == _MINE - 1
+        assert not caplog.records
+
+    @staticmethod
+    def test_never_fewer_than_one(config: Path):
+        config.write_text("[circle]\ntotal_processes = 1\n", encoding="utf-8")
+
+        assert ConfigLimits().vigils() == 1
+
+    @staticmethod
+    def test_the_user_s_config_sets_it_and_a_project_s_does_not(
+        config: Path, tmp_path: Path
+    ):
+        config.write_text(
+            f"[circle]\ntotal_processes = {_MINE}\nvigil_processes = {_CODING}\n",
+            encoding="utf-8",
+        )
+        _project(tmp_path, "[circle]\nvigil_processes = 1\n")
+
+        assert ConfigLimits().vigils() == _CODING
+
+
+@pytest.mark.usefixtures("config")
 class TestWorktrees:
     @staticmethod
     def test_nothing_configured_is_two_trees_and_no_prepare(

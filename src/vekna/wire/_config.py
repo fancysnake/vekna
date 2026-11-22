@@ -152,6 +152,20 @@ def _project_layers(
             yield ConfigLayer(user, settings, name)
 
 
+# The checkout of every project the user's config names, by its name there.
+# An entry that names no checkout is `config_layers`' to name.
+def project_checkouts() -> dict[str, Path]:
+    user, shared = _user_file([])
+    if shared is None or "projects" not in shared:
+        return {}
+    return {
+        name: checkout
+        for name, _, checkout in _checkouts(
+            user=user, projects=shared["projects"], problems=[]
+        )
+    }
+
+
 # The user's project entries whose checkout is gone. An entry that names no
 # checkout is `config_layers`' to name, and is passed over here.
 def idle_projects() -> list[str]:
