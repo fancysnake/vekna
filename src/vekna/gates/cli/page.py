@@ -4,7 +4,7 @@ from pathlib import Path
 from rich.text import Text
 
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
-from vekna.wire import SHORT_ID, CastHello
+from vekna.wire import SHORT_ID, CastHello, allowed_answers
 
 from .cast_text import (
     ago,
@@ -14,8 +14,10 @@ from .cast_text import (
     counted,
     elapsed,
     ended,
+    labelled,
     live,
     printable,
+    top_prompt,
     word,
 )
 from .contents import Counts, Entry, rite_tree, walked
@@ -46,6 +48,7 @@ _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
 NO_CAST = "no cast here — c starts one"
+LEAVES = "esc leaves"
 
 
 def where(root: str) -> str:
@@ -142,6 +145,17 @@ def _flags(hello: CastHello) -> str:
     return " ".join(f"--{name} {value}" for name, value in hello.components.items())
 
 
+# The right page's top for a cast taken over: which cast, how to leave it, and
+# the rite whose output is under it. The cast's rites are on the left page.
+def taken_head(view: CastView) -> Text:
+    rite = _shown_rite(view)
+    return Text.assemble(
+        (f" ◆ taken over · {labelled(view.hello)} ", "bold reverse"),
+        (f" {LEAVES}\n", "dim"),
+        ("no output yet" if rite is None else f"{rite.started.name} · live", "dim"),
+    )
+
+
 # The right page's top: what the line under the cursor is, in full.
 def head(
     entry: Entry | None, *, branches: dict[str, str | None], now: datetime
@@ -228,13 +242,37 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
 def output(entry: Entry | None) -> list[str]:
     if entry is None or entry.view is None:
         return []
-    view = entry.view
-    rite = entry.rite or _shown_rite(view)
+    return cast_output(entry.view, entry.rite)
+
+
+# The same for a cast on its own: `picked` is the rite chosen under it, if any.
+def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
+    rite = picked or _shown_rite(view)
     said = [] if rite is None else list(rite.deltas)
-    if entry.rite is None and view.detail and not live(view):
+    if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
     return [printable(line) or " " for line in said]
+
+
+# The output of a cast taken over ends with the question the answer line
+# answers: the oldest one open.
+def taken_output(view: CastView, mine: set[str]) -> list[str]:
+    lines = cast_output(view)
+    if (prompt := top_prompt(view)) is None:
+        return lines
+    request = prompt.request
+    asked = printable(request.prompt).splitlines() or [""]
+    allowed = allowed_answers(options=request.options, free=request.free)
+    takes = " | ".join(allowed) if allowed is not None else "any answer"
+    if prompt.claim_id is not None and prompt.claim_id not in mine:
+        takes += " · claimed elsewhere"
+    return [
+        *lines,
+        f"? {asked[0]}",
+        *(f"  {more}" for more in asked[1:]),
+        f"    {takes}",
+    ]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:

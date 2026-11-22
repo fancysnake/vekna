@@ -41,6 +41,15 @@ when.
   failure, a give-up path that aborts and stashes under a reported name, and
   one failure not paid for twice.
   ([#231](https://github.com/fancysnake/vekna/issues/231))
+- **`t` in the window takes over a cast, not one prompt.** The left page opens
+  the cast's rite tree and the right page is its output. Every prompt it asks
+  is claimed and shown at the end of that output, and the line under the
+  output answers it, with no key between prompts. Esc hands the open prompts
+  back. The takeover ends with the cast, and when the cast asks nothing for
+  five seconds after an answer. A running cast can be taken over before it
+  asks. The answer dialog is gone.
+- **The line that says a cast waits is one line.** It names the cast and no
+  longer prints the question, which could fill half the window.
 
 ### Removed
 

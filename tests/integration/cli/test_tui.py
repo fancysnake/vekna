@@ -5,10 +5,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from textual.pilot import Pilot
-from textual.widgets import Log, Static, Tree
+from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import AnswerScreen, Opened, VeknaApp
+from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -63,6 +63,7 @@ def _app(
     history_after: timedelta = timedelta.max,
     *,
     title: str = "vekna",
+    quiet: timedelta = timedelta(seconds=5),
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
 
@@ -73,7 +74,11 @@ def _app(
     return VeknaApp(
         casts=hub,
         opened=Opened(
-            project="/proj/.git", root="/proj", history_after=history_after, title=title
+            project="/proj/.git",
+            root="/proj",
+            history_after=history_after,
+            title=title,
+            quiet=quiet,
         ),
         send=sent.append,
         branch_of=branch_of,
@@ -858,7 +863,7 @@ class TestWaiting:
 
             ask = _text(app, "#ask")
             lines = _contents(app)
-        assert ask == "⏸ push?\n  yes | no · open · t answers it"
+        assert ask == "⏸ pr_fix c1 asks · open · t answers it"
         assert lines[2] == "    ⏸ @now  c1  asks"
         assert lines[3].startswith("      ▶ fix  ")
         assert lines[3].endswith("  asks")
@@ -878,7 +883,7 @@ class TestWaiting:
 
             ask = _text(app, "#ask")
         assert pointer == "⏸ 1 cast waits on you · w goes to it"
-        assert ask.startswith("⏸ push?")
+        assert ask.startswith("⏸ pr_fix ")
 
     @staticmethod
     async def test_w_in_the_history_view_returns_to_the_tree_and_the_waiting_cast():
@@ -905,7 +910,7 @@ class TestWaiting:
             f"  ▸ ✓ {_hour(0)}  sweep  c1",
         ]
         assert note == "tree view"
-        assert ask.startswith("⏸ push?")
+        assert ask.startswith("⏸ pr_fix ")
 
     @staticmethod
     async def test_with_no_cast_waiting_w_says_so():
@@ -931,7 +936,7 @@ class TestWaiting:
             await pilot.pause(_PAINTED)
 
             ask = _text(app, "#ask")
-        assert ask == "⏸ push?\n  yes | no · claimed elsewhere · t answers it"
+        assert ask == "⏸ pr_fix c1 asks · claimed elsewhere · t answers it"
 
 
 @pytest.mark.asyncio
@@ -1014,10 +1019,10 @@ class TestCommands:
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
             await pilot.press("c", "ctrl+u", "t", "enter")
-            await pilot.pause()
+            await pilot.pause(_PAINTED)
 
-            screen = app.screen
-        assert isinstance(screen, AnswerScreen)
+            note = _text(app, "#note")
+        assert note == "took over pr_fix c1"
         assert sent == [_claim_then(sent)]
 
     @staticmethod
@@ -1037,31 +1042,78 @@ class TestCommands:
         assert note == "nothing to answer — pick a waiting cast first"
 
 
+# `t` on the asking cast, painted, so its first prompt is claimed.
+async def _take(pilot: Pilot[None]) -> None:
+    await pilot.pause(_PAINTED)
+    await pilot.press("t")
+    await pilot.pause(_PAINTED)
+
+
 @pytest.mark.asyncio
 class TestTakingOver:
     @staticmethod
-    async def test_t_claims_the_prompt_and_the_dialog_answers_it():
+    async def test_t_claims_the_prompt_and_enter_answers_it():
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
         app = _app(hub, sent)
 
         async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            await pilot.press("t")
-            await pilot.pause()
-            assert isinstance(app.screen, AnswerScreen)
-            await pilot.click("#choice-1")
+            await _take(pilot)
+            banner = app.query_one("#ask", Static).display
+            asked = list(app.query_one("#log", Log).lines)
+            line = app.query_one("#answer", Input)
+            typing = line.display and line.has_focus
+            await pilot.press(*"no", "enter")
             await pilot.pause()
 
+            note = _text(app, "#note")
         claim = _claim_then(sent)
+        assert not banner
+        assert asked == ["? push?", "    yes | no"]
+        assert typing
+        assert note == "answered no"
         assert sent == [
             DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim.claim_id),
             DecideResolved(cast_id="c1", request_id="q1", answer="no"),
         ]
 
     @staticmethod
-    async def test_a_free_prompt_takes_an_answer_typed_into_the_dialog():
+    async def test_every_later_prompt_is_claimed_without_another_t():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press(*"yes", "enter")
+            for answered, asked in (("q1", "q2"), ("q2", "q3")):
+                hub.apply(
+                    DecideResolved(cast_id="c1", request_id=answered, answer="yes")
+                )
+                hub.apply(
+                    DecideRequested(
+                        cast_id="c1", request_id=asked, prompt="again?", free=True
+                    )
+                )
+                app.changed()
+                await pilot.pause(_PAINTED)
+                await pilot.press(*asked, "enter")
+            await pilot.pause()
+
+        kinds = [(message.kind, getattr(message, "request_id", "")) for message in sent]
+        assert kinds == [
+            ("decide_claimed", "q1"),
+            ("decide_resolved", "q1"),
+            ("decide_claimed", "q2"),
+            ("decide_resolved", "q2"),
+            ("decide_claimed", "q3"),
+            ("decide_resolved", "q3"),
+        ]
+
+    @staticmethod
+    async def test_a_free_prompt_takes_what_is_typed():
         hub = Hub()
         hub.apply(_hello("c1", "pr_fix"))
         hub.apply(
@@ -1071,10 +1123,7 @@ class TestTakingOver:
         app = _app(hub, sent)
 
         async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            await pilot.press("t")
-            await pilot.pause()
-            await pilot.click("#free")
+            await _take(pilot)
             await pilot.press(*"flaky", "enter")
             await pilot.pause()
 
@@ -1085,63 +1134,273 @@ class TestTakingOver:
         ]
 
     @staticmethod
-    async def test_escape_lets_the_claim_go():
+    async def test_an_answer_not_offered_is_refused_and_the_takeover_stays():
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
         app = _app(hub, sent)
 
         async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press(*"maybe", "enter")
             await pilot.pause(_PAINTED)
-            await pilot.press("t")
-            await pilot.pause()
+
+            note = _text(app, "#note")
+            hint = _text(app, "#hint")
+        assert note == "'maybe' is not one of yes, no"
+        assert hint == (
+            "taken over pr_fix c1 · enter answers"
+            " · esc leaves and hands the prompts back"
+        )
+        assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_escape_hands_the_prompt_back_and_the_contents_take_keys_again():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            locked = app.query_one("#contents", Tree).disabled
             await pilot.press("escape")
-            await pilot.pause()
+            await pilot.pause(_PAINTED)
 
+            note = _text(app, "#note")
+            tree = app.query_one("#contents", Tree)
+            usable = tree.has_focus and not tree.disabled
+            line = app.query_one("#answer", Input).display
         claim = _claim_then(sent)
+        assert locked
         assert sent == [claim, DecideReleased(cast_id="c1", request_id="q1")]
+        assert note == "left pr_fix c1 — its prompts are handed back"
+        assert usable
+        assert not line
 
     @staticmethod
-    async def test_a_prompt_answered_elsewhere_closes_its_dialog():
+    async def test_a_running_cast_is_taken_over_before_it_asks():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            head = _text(app, "#head")
+            await pilot.press("enter")
+            await pilot.pause()
+            note = _text(app, "#note")
+            quiet = list(sent)
+            hub.apply(
+                DecideRequested(cast_id="c1", request_id="q1", prompt="go?", free=True)
+            )
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+        assert head == " ◆ taken over · ci_watch c1  esc leaves\nno output yet"
+        assert note == "the cast asks nothing right now"
+        assert not quiet
+        assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_the_left_page_opens_the_rites_of_a_cast_taken_from_under_a_fold():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(_rite("r1", "fetch"))
+        hub.apply(_rite("r2", "fix"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="editing"))
+        hub.apply(
+            DecideRequested(
+                cast_id="c1", rite_id="r2", request_id="q1", prompt="push?\nnow?"
+            )
+        )
+        hub.apply(DecideClaimed(cast_id="c1", request_id="q1", claim_id="other"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/proj/.git")
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            folded = len(_contents(app))
+            await _take(pilot)
+
+            rites = [str(node.label).split()[1] for _, node in _nodes(app)[3:]]
+            head = _text(app, "#head")
+            said = list(app.query_one("#log", Log).lines)
+            await pilot.press("escape")
+            await pilot.pause(_PAINTED)
+            left = len(_contents(app))
+        assert folded == 1
+        assert rites == ["fetch", "fix"]
+        assert head == " ◆ taken over · pr_fix c1  esc leaves\nfix · live"
+        assert said == [
+            "editing",
+            "? push?",
+            "  now?",
+            "    yes | no · claimed elsewhere",
+        ]
+        assert left == 1
+
+    @staticmethod
+    async def test_the_takeover_ends_once_the_cast_asks_nothing_after_an_answer():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent, quiet=timedelta(seconds=1))
+
+        async with app.run_test() as pilot:
+            tree: Tree[str] = app.query_one("#contents", Tree)
+            await _take(pilot)
+            await pilot.press(*"no", "enter")
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="no"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            held = tree.disabled
+            await _eventually(pilot, lambda: not tree.disabled)
+
+            note = _text(app, "#note")
+        assert held
+        assert note == "left pr_fix c1 — it asks nothing more"
+        assert sent == [
+            _claim_then(sent),
+            DecideResolved(cast_id="c1", request_id="q1", answer="no"),
+        ]
+
+    @staticmethod
+    async def test_the_takeover_ends_with_its_cast():
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
         app = _app(hub, sent)
 
         async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            await pilot.press("t")
-            await pilot.pause()
+            await _take(pilot)
             hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+            hub.apply(CastGoodbye(cast_id="c1", status="ok"))
             app.changed()
             await pilot.pause(_PAINTED)
 
-            assert not isinstance(app.screen, AnswerScreen)
+            note = _text(app, "#note")
+            locked = app.query_one("#contents", Tree).disabled
+        assert note == "the cast taken over has ended"
+        assert not locked
         assert sent == [_claim_then(sent)]
 
-    # The palette is a screen of its own: closing whatever is on top would
-    # close it and leave the dialog up for a prompt that has gone.
     @staticmethod
-    async def test_a_dialog_under_the_palette_still_closes_when_its_prompt_goes():
+    async def test_a_prompt_from_another_cast_is_one_line_under_the_contents():
+        hub = Hub()
+        _asking(hub)
+        hub.apply(_hello("c2", "nap"))
+        hub.apply(DecideRequested(cast_id="c2", request_id="q2", prompt="wake?"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "c:c1")
+            await _take(pilot)
+            one = _text(app, "#elsewhere")
+            hub.apply(_hello("c3", "sweep"))
+            hub.apply(DecideRequested(cast_id="c3", request_id="q3", prompt="all?"))
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            many = _text(app, "#elsewhere")
+            top = app.query_one("#ask", Static).display
+            await pilot.press("escape")
+            await pilot.pause(_PAINTED)
+
+            under = app.query_one("#elsewhere", Static).display
+        assert one == "? nap c2 asks too"
+        assert many == "? 2 other casts ask too"
+        assert not top
+        assert not under
+
+    # With the output in focus the window's keys work again: none of them
+    # starts a second takeover or puts a command on the answer line.
+    @staticmethod
+    async def test_t_and_c_change_nothing_while_a_cast_is_taken_over():
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
         app = _app(hub, sent)
 
         async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            await pilot.press("t")
-            await pilot.pause()
-            app.action_command_palette()
-            await pilot.pause()
-            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="yes"))
-            app.changed()
+            await _take(pilot)
+            app.query_one("#log", Log).focus()
+            await pilot.press("t", "c")
             await pilot.pause(_PAINTED)
 
-            stack = app.screen_stack
-        assert not any(isinstance(screen, AnswerScreen) for screen in stack)
-        assert len(stack) == 1
+            typed = app.query_one("#answer", Input).value
+        assert not typed
         assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_the_contents_keys_do_nothing_while_a_cast_is_taken_over():
+        hub = Hub()
+        _asking(hub)
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            app.query_one("#log", Log).focus()
+            await pilot.press("w", "H", "g", "p")
+            await pilot.pause(_PAINTED)
+
+            note = _text(app, "#note")
+            where = app.sub_title
+        assert note == "took over pr_fix c1"
+        assert where == "1 waiting  (proj)"
+
+    @staticmethod
+    async def test_an_empty_line_is_not_sent_as_an_answer():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(
+            DecideRequested(cast_id="c1", request_id="q1", prompt="why?", free=True)
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press("enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+        assert note == "type an answer first"
+        assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_a_draft_typed_for_one_question_is_not_sent_to_the_next():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(
+            DecideRequested(cast_id="c1", request_id="q1", prompt="why?", free=True)
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press(*"flak")
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="other"))
+            hub.apply(
+                DecideRequested(
+                    cast_id="c1", request_id="q2", prompt="when?", free=True
+                )
+            )
+            app.changed()
+            await pilot.pause(_PAINTED)
+            await pilot.press("y", "enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+            typed = app.query_one("#answer", Input).value
+        assert note == "the question changed — your answer was not sent"
+        assert not typed
+        assert [message.kind for message in sent] == ["decide_claimed"] * 2
 
     @staticmethod
     async def test_a_answers_without_a_claim_and_refuses_what_is_not_offered():
@@ -1162,9 +1421,10 @@ class TestTakingOver:
         assert sent == [DecideResolved(cast_id="c1", request_id="q1", answer="yes")]
 
     @staticmethod
-    async def test_with_nothing_waiting_t_says_so():
+    async def test_a_cast_that_ended_is_not_taken_over():
         hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_hello("c1", "nap"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
         sent: list[WireMessage] = []
         app = _app(hub, sent)
 
@@ -1175,7 +1435,7 @@ class TestTakingOver:
 
             note = _text(app, "#note")
         assert not sent
-        assert note == "nothing to answer — pick a waiting cast first"
+        assert note == "only a running cast can be taken over"
 
 
 @pytest.mark.asyncio
@@ -1472,7 +1732,7 @@ class TestPages:
             head = _text(app, "#head")
             note = _text(app, "#note")
         assert head == "no cast here — c starts one"
-        assert note == "nothing to answer — pick a waiting cast first"
+        assert note == "only a running cast can be taken over"
 
 
 @pytest.mark.asyncio
