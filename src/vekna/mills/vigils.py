@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from vekna.pacts.casts import Casts
 from vekna.pacts.circle import CastQueue, Limits, Vigil
-from vekna.wire import CastHello, CastStatus, RunRecord
+from vekna.wire import CastHello, RunRecord
 
 _log = logging.getLogger(__name__)
 
@@ -56,13 +56,11 @@ class Vigils:
             project = projects[vigil.project_root]
             known = list(self._known(records))
             if any(
-                status in _OPEN and _same(hello, vigil=vigil, project=project)
-                for hello, status in known
+                open_ and _same(hello, vigil=vigil, project=project)
+                for hello, open_ in known
             ):
                 continue
-            kept = sum(
-                status in _OPEN and hello.vigil is not None for hello, status in known
-            )
+            kept = sum(open_ and hello.vigil is not None for hello, open_ in known)
             if kept >= self._limits.vigils():
                 break
             if not self._queue.has_spare(
@@ -107,16 +105,14 @@ class Vigils:
             return _NEVER
         return max(began) + timedelta(seconds=vigil.every)
 
-    # Every cast with how it stands: the hub's word first, then the journal's
-    # on the casts the hub has not seen. Of those, one the record leaves
-    # running is a cast a stopped daemon left behind, and it still runs only
-    # while its process does.
-    def _known(
-        self, records: Sequence[RunRecord]
-    ) -> Iterator[tuple[CastHello, CastStatus]]:
+    # Every cast with whether it is still open: the hub's word first, then the
+    # journal's on the casts the hub has not seen. Of those, one the record
+    # leaves running is a cast a stopped daemon left behind, and it is open
+    # only while its process runs.
+    def _known(self, records: Sequence[RunRecord]) -> Iterator[tuple[CastHello, bool]]:
         casts = self._hub.casts
         for view in casts.values():
-            yield view.hello, view.status
+            yield view.hello, view.status in _OPEN
         for record in records:
             hello = record.hello
             if hello.cast_id in casts:
@@ -124,7 +120,7 @@ class Vigils:
             gone = record.status == "running" and not (
                 hello.pid is not None and self._alive(hello.pid)
             )
-            yield hello, "disconnected" if gone else record.status
+            yield hello, record.status in _OPEN and not gone
 
 
 # A cast says its ritual with the tome it came from, `cabinet:heal.mine`, and

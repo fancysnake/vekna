@@ -194,6 +194,13 @@ class TestDue:
         assert _tick(_vigils(board), _vigil()) == []
 
     @staticmethod
+    def test_a_ritual_named_through_nested_tomes_counts_as_the_bare_name_s():
+        board = _Board()
+        ran = _record(_hello("c1", ago=59, ritual="outer:cabinet:heal"))
+
+        assert _tick(_vigils(board), _vigil(every=60), records=(ran,)) == []
+
+    @staticmethod
     def test_a_vigil_that_names_a_tome_counts_that_tome_s_casts_only():
         board = _Board()
         records = (
@@ -224,6 +231,31 @@ class TestOneAtATime:
 
         assert _tick(_vigils(board), _vigil(), _vigil(root="/api")) == ["prwatch /api"]
         assert board.asked == [("/api", "/api/.git")]
+
+    @staticmethod
+    def test_a_held_vigil_does_not_stop_the_ones_due_after_it():
+        board = _Board()
+        board.seen(_hello("c1", ago=_HOUR), "running")
+        elsewhere = _record(
+            _hello("c2", ago=120).model_copy(
+                update={"project_root": "/api", "project": "/api/.git"}
+            )
+        )
+
+        started = _tick(
+            _vigils(board), _vigil(), _vigil(root="/api"), records=(elsewhere,)
+        )
+
+        assert started == ["prwatch /api"]
+
+    @staticmethod
+    def test_a_record_the_hub_knows_does_not_hide_the_records_after_it():
+        board = _Board()
+        hello = _hello("c1", ago=_HOUR)
+        board.seen(hello, "ok")
+        left = _record(_hello("c2", ago=_HOUR, pid=_LIVE_PID), "running")
+
+        assert _tick(_vigils(board), _vigil(), records=(_record(hello), left)) == []
 
     @staticmethod
     def test_a_cast_left_running_by_a_stopped_daemon_holds_it_while_its_process_lives():
