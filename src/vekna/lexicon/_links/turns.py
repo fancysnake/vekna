@@ -2,19 +2,9 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vekna.lexicon._pacts import Display, EndStatus, RiteEvent
+from vekna.lexicon._pacts import Display, RiteEvent
 
 from .standalone import Revisable, StandaloneRenderer
-
-_MARK: dict[EndStatus, str] = {
-    "ok": "✓ done",
-    "error": "✗ failed",
-    "disconnected": "⚠ aborted",
-}
-
-
-def ended_said(status: EndStatus, detail: str | None) -> str:
-    return f"{_MARK[status]}: {detail}" if detail else _MARK[status]
 
 
 # A name or a notice never lands on the end of a line left unfinished.
@@ -69,42 +59,31 @@ class _Named(Revisable):
         return self._out.overwrite(mark, text)
 
 
-@dataclass
-class _Turn:
-    label: str
-    renderer: StandaloneRenderer
-
-
 # A typed cast and the casts it set going, into the one stream of its terminal.
 # The daemon runs them one at a time, so each line goes straight out, and a
 # cast is named where it takes over from another. The typed cast speaks first
-# and needs no name until another has spoken. How a cast ended, and a notice
-# about one, are a line carrying its name: neither is that cast speaking.
+# and needs no name until another has spoken. A notice about a cast is a line
+# carrying its name: it is not that cast speaking.
 class Turns(Display):
     def __init__(self, out: Revisable, *, typed: str) -> None:
         self._out = out
         self._floor = _Floor(speaker=typed)
-        self._turns: dict[str, _Turn] = {}
-        # Where the typed cast writes.
-        self.typed = _Named(out, label=typed, floor=self._floor)
+        self._turns: dict[str, StandaloneRenderer] = {}
+        # Where the typed cast writes, and the renderer that shows its rites.
+        self.typed: Revisable = _Named(out, label=typed, floor=self._floor)
+        self.renderer = StandaloneRenderer(out=self.typed)
 
     @override
     def entered(self, *, cast_id: str, label: str) -> None:
         out = _Named(self._out, label=label, floor=self._floor)
-        self._turns[cast_id] = _Turn(label=label, renderer=StandaloneRenderer(out=out))
+        self._turns[cast_id] = StandaloneRenderer(out=out)
 
     @override
     def render(self, cast_id: str, event: RiteEvent) -> None:
-        self._turns[cast_id].renderer.render(event)
+        self._turns[cast_id].render(event)
 
     @override
-    def ended(self, *, cast_id: str, status: EndStatus, detail: str | None) -> None:
-        label = self._turns[cast_id].label
-        self.say(cast_id=cast_id, label=label, line=ended_said(status, detail))
-
-    @override
-    def say(self, *, cast_id: str, label: str, line: str) -> None:
-        del cast_id
+    def say(self, *, label: str, line: str) -> None:
         _begin_row(self._out)
         self._out.write(f"[{label}] {line}\n")
         self._out.flush()

@@ -598,6 +598,10 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
         if not wanted or not wanted[0]:
             raise ValueError(_USAGE.rstrip())
         return _resume(wanted[0], unattended=unattended)
+    return _checked(name, flags, unattended=unattended)
+
+
+def _checked(name: str, flags: list[str], *, unattended: bool) -> _Plan:
     library = _build_library(Path.cwd())
     the_ritual = library.compendium.ritual(name)
     return _Plan(
@@ -614,9 +618,7 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
 def queueable(argv: list[str]) -> int:
     name, *flags = argv
     try:
-        library = _build_library(Path.cwd())
-        the_ritual = library.compendium.ritual(name)
-        library.defaults.components(the_ritual, parse_flags(flags))
+        _checked(name, flags, unattended=False)
     except _LOAD_ERRORS as error:
         sys.stderr.write(f"{error}\n")
         return 2
@@ -667,13 +669,12 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
-# The one terminal a typed cast and the casts it set going share. The renderer
-# says the typed cast's own lines, under its name once another cast has spoken.
-# The asker asks every question, the followed casts' too: they share one stdin,
-# and a question is the asking cast's by its prompt, not by a line above it.
+# The one terminal a typed cast and the casts it set going share. The turns say
+# the typed cast's own lines, under its name once another cast has spoken. The
+# asker asks every question, the followed casts' too: they share one stdin, and
+# a question is the asking cast's by its prompt, not by a line above it.
 class _Terminal(NamedTuple):
     turns: Turns
-    renderer: StandaloneRenderer
     asker: StandaloneRenderer
 
 
@@ -722,7 +723,7 @@ async def _cast(
             ),
         )
         terminal.asker.notify("done", plan.ritual.name)
-        terminal.renderer.say(f"result: {_rendered(result)}\n")
+        terminal.turns.renderer.say(f"result: {_rendered(result)}\n")
         return 0
     await link.close(status="error", detail=detail)
     terminal.asker.notify("failed", f"{plan.ritual.name}: {detail}")
@@ -743,11 +744,7 @@ async def _run(plan: _Plan) -> int:
     screen = Tail(sys.stdout)
     turns = Turns(screen, typed=f"{hello.ritual} {cast_id[:SHORT_ID]}")
     out = turns.typed
-    terminal = _Terminal(
-        turns=turns,
-        renderer=StandaloneRenderer(out=out),
-        asker=StandaloneRenderer(out=screen),
-    )
+    terminal = _Terminal(turns=turns, asker=StandaloneRenderer(out=screen))
     err: TextIO = sys.stderr
     with (
         contextlib.redirect_stdout(out),
@@ -770,7 +767,7 @@ async def _run_on(plan: _Plan, terminal: _Terminal, *, hello: CastHello) -> int:
     channel: Channel = UnattendedChannel() if plan.unattended else tee
 
     def emit(event: RiteEvent) -> None:
-        terminal.renderer.render(event)
+        terminal.turns.renderer.render(event)
         link.send(to_wire(event, cast_id=cast_id))
 
     grimoire = Grimoire(on_event=emit)
@@ -808,7 +805,7 @@ async def _run_on(plan: _Plan, terminal: _Terminal, *, hello: CastHello) -> int:
         if follower is None:
             return code
         return await _followed(
-            code, follower=follower, lineage=lineage, renderer=terminal.renderer
+            code, follower=follower, lineage=lineage, renderer=terminal.turns.renderer
         )
 
 

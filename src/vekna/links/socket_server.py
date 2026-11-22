@@ -8,6 +8,7 @@ from vekna.wire import (
     FRAME_LIMIT,
     VERSION,
     AltarRequested,
+    Asked,
     CastCancelRequested,
     CastGoodbye,
     CastMessage,
@@ -124,7 +125,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif isinstance(opened, (AltarRequested, VersionRequested, CastRequested)):
+            elif isinstance(opened, Asked):
                 writer.write(encode_frame(await _answer(opened, routes)))
                 with contextlib.suppress(OSError):
                     await writer.drain()
@@ -149,9 +150,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     return Serving(server, writers, stopping)
 
 
-async def _answer(
-    opened: AltarRequested | VersionRequested | CastRequested, routes: Routes
-) -> WireMessage:
+async def _answer(opened: Asked, routes: Routes) -> WireMessage:
     if isinstance(opened, VersionRequested):
         return DaemonVersion(version=VERSION)
     if isinstance(opened, AltarRequested):

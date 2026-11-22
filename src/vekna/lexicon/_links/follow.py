@@ -6,6 +6,7 @@ from pathlib import Path
 from vekna.lexicon._pacts import (
     Channel,
     Display,
+    EndStatus,
     LineageProtocol,
     RiteBegan,
     RiteEnded,
@@ -40,6 +41,15 @@ _UNREAD = (
     "stopped following them: the daemon sent a frame this vekna cannot read"
     " ({why}) — `vekna` shows them\n"
 )
+_MARK: dict[EndStatus, str] = {
+    "ok": "✓ done",
+    "error": "✗ failed",
+    "disconnected": "⚠ aborted",
+}
+
+
+def ended_said(status: EndStatus, detail: str | None) -> str:
+    return f"{_MARK[status]}: {detail}" if detail else _MARK[status]
 
 
 # One followed cast: its name, and the rites it has already shown, so a replay
@@ -193,9 +203,9 @@ class Follower:
             self._display.render(message.cast_id, event)
 
     def _goodbye(self, goodbye: CastGoodbye) -> None:
-        if goodbye.cast_id in self._followed:
-            self._display.ended(
-                cast_id=goodbye.cast_id, status=goodbye.status, detail=goodbye.detail
+        if (followed := self._followed.get(goodbye.cast_id)) is not None:
+            self._display.say(
+                label=followed.label, line=ended_said(goodbye.status, goodbye.detail)
             )
 
     def _prompt(
@@ -265,9 +275,7 @@ class Follower:
         return cast_id[:SHORT_ID] if followed is None else followed.label
 
     def _say(self, request: DecideRequested, line: str) -> None:
-        self._display.say(
-            cast_id=request.cast_id, label=self._label(request.cast_id), line=line
-        )
+        self._display.say(label=self._label(request.cast_id), line=line)
 
 
 # What a rite message means to a renderer, or None for what it has shown

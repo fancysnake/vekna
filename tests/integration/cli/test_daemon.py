@@ -2227,7 +2227,9 @@ class TestQueueFlag:
         assert not await alive(socket_path)
 
     @staticmethod
-    async def test_it_goes_with_neither_unattended_nor_continue(socket_path: Path):
+    async def test_it_goes_with_none_of_unattended_continue_no_follow(
+        socket_path: Path,
+    ):
         del socket_path
         runner = CliRunner()
 
@@ -2237,11 +2239,16 @@ class TestQueueFlag:
         continued = await asyncio.to_thread(
             runner.invoke, init_command(), ["cast", "--continue", "c1", "--queue"]
         )
+        no_follow = await asyncio.to_thread(
+            runner.invoke, init_command(), ["cast", "--no-follow", "--queue", "count"]
+        )
 
         assert unattended.exit_code == _REFUSED
         assert continued.exit_code == _REFUSED
+        assert no_follow.exit_code == _REFUSED
         assert "--queue takes a ritual of its own" in unattended.output
         assert "--queue takes a ritual of its own" in continued.output
+        assert "--no-follow" in no_follow.output
 
     @staticmethod
     async def test_a_daemon_that_will_not_queue_it_fails_the_command(

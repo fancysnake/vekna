@@ -141,8 +141,8 @@ cast's id and exits `0`:
 queued sweep 6f1c2a9e — `vekna` shows it
 ```
 
-`--queue` takes a ritual: it does not go with `--prompt`, `--continue` or
-`--unattended`.
+`--queue` takes a ritual: it does not go with `--prompt`, `--continue`,
+`--unattended` or `--no-follow`.
 
 ### `vekna cast --prompt`
 

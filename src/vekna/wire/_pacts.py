@@ -468,6 +468,10 @@ CastMessage = CastHello | CastUpdate
 # first frame there is nothing left for one of these to say.
 Opening = SurfaceHello | StopRequested | AltarRequested | VersionRequested
 
+# A request the daemon answers on a connection of its own, with one frame. Not in
+# `Opening`: a surface sends `CastRequested` later in its connection too.
+Asked = AltarRequested | VersionRequested | CastRequested
+
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused | AltarTended | DaemonVersion
 

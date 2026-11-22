@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from typing_extensions import override
 
+from vekna.lexicon._links.follow import ended_said
 from vekna.lexicon._links.standalone import Tail
 from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._mills.follow import Lineage
@@ -157,7 +158,7 @@ class TestTurns:
         turns.typed.write("progress")
         turns.render("c1", _began())
         turns.typed.write("again")
-        turns.ended(cast_id="c1", status="ok", detail=None)
+        turns.say(label="ci_watch child000", line="✓ done")
 
         assert out.getvalue() == (
             "progress\n── ci_watch child000 ──\n▶ watch\n"
@@ -210,25 +211,17 @@ class TestTurns:
         assert not Turns(Tail(io.StringIO()), typed="sweep root0000").typed.isatty()
 
     @staticmethod
-    def test_how_a_cast_ended_is_said_with_its_name():
-        out = io.StringIO()
-        turns = Turns(Tail(out), typed="sweep root0000")
-        turns.entered(cast_id="c1", label="ci_watch child000")
-        turns.entered(cast_id="c2", label="pr_fix child111")
-
-        turns.ended(cast_id="c1", status="ok", detail=None)
-        turns.ended(cast_id="c2", status="error", detail="no tree")
-
-        assert out.getvalue() == (
-            "[ci_watch child000] ✓ done\n[pr_fix child111] ✗ failed: no tree\n"
-        )
+    def test_how_a_cast_ended_is_said_with_its_detail():
+        assert ended_said("ok", None) == "✓ done"
+        assert ended_said("error", "no tree") == "✗ failed: no tree"
+        assert ended_said("disconnected", None) == "⚠ aborted"
 
     @staticmethod
     def test_a_notice_names_its_cast_and_takes_nothing_over():
         out = io.StringIO()
         turns = Turns(Tail(out), typed="sweep root0000")
 
-        turns.say(cast_id="c1", label="ci_watch child000", line="⏸ push?")
+        turns.say(label="ci_watch child000", line="⏸ push?")
         turns.typed.write("on\n")
 
         assert out.getvalue() == "[ci_watch child000] ⏸ push?\non\n"

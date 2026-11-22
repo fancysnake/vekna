@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol, TypeVar, cast
 
 import click
 from click import Group
@@ -30,6 +30,7 @@ from vekna.wire import (
     VERSION,
     AltarRequested,
     AltarTended,
+    Asked,
     CastMessage,
     CastQueued,
     CastRefused,
@@ -57,6 +58,7 @@ _CAST_CONTEXT: dict[str, bool] = {
     "ignore_unknown_options": True,
     "allow_interspersed_args": False,
 }
+_Reply = TypeVar("_Reply")
 _RUNTIME = "vekna.lexicon._inits"
 _RESUME = "--resume"
 _UNATTENDED = "--unattended"
@@ -69,7 +71,10 @@ _STARTED = "started the daemon — it runs until `vekna stop`"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
 _NO_TREES = "no pooled worktrees for this project: run `vekna altar init`"
 _QUEUE_USAGE = "usage: vekna cast --queue <ritual> [--<component> value ...]"
-_QUEUE_ALONE = "--queue takes a ritual of its own: not --continue, not --unattended"
+_QUEUE_ALONE = (
+    "--queue takes a ritual of its own: not --continue, not --unattended,"
+    " not --no-follow"
+)
 _NO_ANSWER = (
     "the daemon hung up without answering: it may predate this vekna"
     " (`vekna stop`, then retry)"
@@ -138,7 +143,7 @@ def _cast(
     queued: bool = False,
 ) -> None:
     if queued:
-        if continued is not None or unattended:
+        if continued is not None or unattended or no_follow:
             raise click.UsageError(_QUEUE_ALONE)
         raise SystemExit(_queue(list(ritual_args)))
     flags = [
@@ -161,9 +166,7 @@ def _queue(argv: list[str]) -> int:
     request = CastRequested(
         project_root=str(Path.cwd()), ritual=ritual, components=parse_flags(flags)
     )
-    reply = asyncio.run(_asked(request))
-    if not isinstance(reply, CastQueued):
-        raise click.ClickException(_reason(reply))
+    reply = asyncio.run(_asked(request, expecting=CastQueued))
     click.echo(f"queued {ritual} {reply.cast_id[:SHORT_ID]} — `vekna` shows it")
     return 0
 
@@ -322,7 +325,7 @@ class _Line:
             await self.writer.wait_closed()
 
 
-async def _opened(*, opening: Opening | CastRequested, debug: bool) -> _Line:
+async def _opened(*, opening: Opening | Asked, debug: bool) -> _Line:
     path = default_socket_path()
     note = _DEBUG_LATE if debug else ""
     try:
@@ -544,9 +547,7 @@ _altar.add_command(_altar_reset)
 
 
 def _tend(request: AltarRequested) -> None:
-    reply = asyncio.run(_asked(request))
-    if not isinstance(reply, AltarTended):
-        raise click.ClickException(_reason(reply))
+    reply = asyncio.run(_asked(request, expecting=AltarTended))
     for tree in reply.trees:
         click.echo(tended(tree))
     if not reply.trees:
@@ -555,22 +556,23 @@ def _tend(request: AltarRequested) -> None:
         raise SystemExit(1)
 
 
-# What the daemon answers a connection that opens with a request, or `None`
-# when it hung up first. The daemon does the tending and the queueing: only it
-# knows which trees a cast holds and what may run next. Its note goes to
-# stderr: stdout is the answer.
-async def _asked(request: AltarRequested | CastRequested) -> WireMessage | None:
+# What the daemon answers a connection that opens with a request: the reply it
+# was asked for, or the command fails with the daemon's refusal. The daemon does
+# the tending and the queueing: only it knows which trees a cast holds and what
+# may run next. Its note goes to stderr: stdout is the answer.
+async def _asked(request: Asked, *, expecting: type[_Reply]) -> _Reply:
     line = await _opened(opening=request, debug=False)
     if line.note:
         click.echo(line.note, err=True)
     try:
-        return await anext(read_frames(line.reader), None)
+        reply = await anext(read_frames(line.reader), None)
     finally:
         await line.close()
-
-
-def _reason(reply: WireMessage | None) -> str:
-    return reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
+    if isinstance(reply, expecting):
+        return reply
+    raise click.ClickException(
+        reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
+    )
 
 
 def init_command() -> Group:

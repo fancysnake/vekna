@@ -336,11 +336,14 @@ class Circle:
         awaited = {
             request.child
             for view in self._hub.casts.values()
-            for request in view.on_children.values()
             if self._typed(view) is not None
+            for request in view.on_children.values()
         }
-        ahead = [cast_id for cast_id in self._queue if cast_id in awaited]
-        return ahead + [cast_id for cast_id in self._queue if cast_id not in awaited]
+
+        def behind(cast_id: str) -> bool:
+            return cast_id not in awaited
+
+        return sorted(self._queue, key=behind)
 
     def _may_run(self, view: CastView) -> bool:
         if self._busy(view) >= self._limits.processes(view.hello.project_root):
