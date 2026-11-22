@@ -221,9 +221,11 @@ class GrimoireEnd(BaseModel):
 # --- the queue ---
 
 
-# A cast asking the daemon to queue another. The child's hello is whole: the
-# enqueuing cast resolved the ritual and dumped the components, and the daemon,
-# which loads no ritual, only checks the tree is there.
+# A cast asking the daemon to queue another. The enqueuing cast resolved the
+# ritual, and the daemon, which loads no ritual, only checks the tree is there.
+# The child's hello carries the components its enqueuer set and no others: the
+# child answers the rest from its own defaults when it starts, and the hello it
+# then says, every component resolved, replaces this one on the record.
 class EnqueueRequested(BaseModel):
     kind: Literal["enqueue_requested"] = "enqueue_requested"
     cast_id: str

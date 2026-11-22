@@ -34,6 +34,14 @@ when.
   pipe or a file gets the same lines; lines are no longer prefixed with the
   cast's name or held back.
 
+### Fixed
+
+- **A default is not a component the caller set.** A cast that handed its own
+  components to `enqueue` passed its `[defaults.<ritual>]` values on as if it
+  had named them, and they outranked the child's own defaults. The child now
+  gets the flags of the cast that queued it and answers the rest where it
+  runs.
+
 ## [2.0.0] - 2026-11-20
 
 ### Added
