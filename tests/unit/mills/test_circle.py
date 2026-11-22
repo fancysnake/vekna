@@ -313,7 +313,8 @@ class TestProcesses:
 
     @staticmethod
     async def test_has_room_until_a_limit_is_reached_and_why_full_names_it():
-        circle, hub, _ = _circle(_Limits(processes=1, total=2))
+        limits = _Limits(processes=1, total=2)
+        circle, hub, _ = _circle(limits)
         assert circle.has_room(project_root="/proj", project="/proj/.git")
 
         hub.apply(_hello("by-hand"))
@@ -323,6 +324,7 @@ class TestProcesses:
         on_machine = not circle.has_room(project_root="/third", project="/third/.git")
 
         assert (in_project, other_has_room, on_machine) == (True, True, True)
+        limits.asked.clear()
         assert (
             circle.why_full(project_root="/proj", project="/proj/.git")
             == "1 of 1 casts are running in this project"
@@ -331,6 +333,7 @@ class TestProcesses:
             circle.why_full(project_root="/third", project="/third/.git")
             == "2 of 2 casts are running on this machine"
         )
+        assert limits.asked == ["/proj", "/third"]
 
     # Counting what is running in the project, not what this daemon spawned:
     # a `vekna cast` typed by hand takes a slot too.
