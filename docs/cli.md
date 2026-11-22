@@ -130,8 +130,8 @@ vekna cast --queue sweep --max-prs 5
 
 Hands the ritual to the daemon and returns, starting the daemon if none is
 running. The cast runs there with no terminal, the casts it queues run side by
-side up to `[circle] processes`, and `vekna` shows them and answers their
-prompts. This is what `c` in the window does.
+side up to `[circle] processes` and `total_processes`, and `vekna` shows them
+and answers their prompts. This is what `c` in the window does.
 
 The ritual's name and components are checked before the daemon is asked, so a
 mistake is said at once and exits `2`. Otherwise the command prints the queued
@@ -254,7 +254,8 @@ code alone:
 - a `[projects.<name>]` table whose `path` does not exist
 - a key in your `[projects.<name>]` table that the project's `.vekna.toml`
   also sets, or that equals the value it overrides
-- `[circle] coding` anywhere but the top level of your user config
+- `[circle] coding` or `total_processes` anywhere but the top level of your
+  user config
 - a `[defaults.<ritual>]` table for a ritual that is not loaded here, unless
   it is in the top level of your user config, which speaks for every project
 - a table that vekna does not read and that no tome in `[rituals] modules` is
@@ -422,12 +423,23 @@ sets it for [one project](scopes.md#one-config-for-every-project):
 
 ```toml
 [circle]
-processes = 4   # casts running at once in this project; the nearest table wins
-coding = 2      # agent sessions at once, across every project; user config only
+processes = 4         # casts running at once in this project; the nearest table wins
+total_processes = 8   # casts running at once, across every project; user config only
+coding = 2            # agent sessions at once, across every project; user config only
 ```
 
 `processes` counts every running cast of the project, whether `c` started it or
-somebody typed `vekna cast`; past it, `c` queues. It defaults to 4. `coding`
+somebody typed `vekna cast`; past it, `c` queues. It defaults to 4.
+`total_processes` counts every running cast of every project the same way, and
+defaults to the number of processors. With either limit reached, a cast asked
+for with `c` or `vekna cast --queue` waits queued, and a cast typed as plain
+`vekna cast` is refused before its first step, with exit code `1`:
+
+```text
+8 of 8 casts are running on this machine: queue it with `vekna cast --queue sweep`, or wait for one to end
+```
+
+`coding`
 limits how many `coding` calls talk to an agent at once, in every cast attached
 to the daemon: past it, a call waits for a slot before its session starts, and
 gives it back when the session ends. It defaults to no limit. With no daemon

@@ -75,8 +75,8 @@ class LeftBehind:
             if any(request.child in children for request in view.on_children.values())
         }
 
-    def count(self, project: str) -> int:
-        return sum(1 for spawned in self._live() if spawned.project == project)
+    def projects(self) -> list[str]:
+        return [spawned.project for spawned in self._live()]
 
     # Dropped for good once either is true, since neither comes back: a view
     # stays in the hub, and a pid that is gone and reused is somebody else's.
@@ -266,12 +266,13 @@ class Leasing:
 
 
 # The daemon's scheduler. A project runs as many casts at once as its
-# `processes` says — every running cast of the project counts, whether the
-# daemon spawned it or somebody typed `vekna cast` — and a queued one is spawned
-# when a slot frees. A cast awaiting another holds no slot until the other ends,
-# and then comes back ahead of the queue. The casts a cast typed at a terminal
-# set going run one at a time, that cast among them: its terminal is one stream,
-# and it reads in order only if one cast writes to it at a time.
+# `processes` says, and the machine as many as `total` says — every running cast
+# counts, whether the daemon spawned it or somebody typed `vekna cast` — and a
+# queued one is spawned when a slot frees. A cast awaiting another holds no slot
+# until the other ends, and then comes back ahead of the queue. The casts a cast
+# typed at a terminal set going run one at a time, that cast among them: its
+# terminal is one stream, and it reads in order only if one cast writes to it at
+# a time.
 class Circle:
     def __init__(
         self,
@@ -329,6 +330,26 @@ class Circle:
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
 
+    # Whether a cast in `project_root` may start now. Nothing is held for a cast
+    # typed by hand: its hello is what takes the slot.
+    # shortcut: two casts typed in the same instant can both be told there is
+    # room for the last slot; admitting on the hello itself is the upgrade.
+    def has_room(self, *, project_root: str, project: str) -> bool:
+        holders = self._holders()
+        return (
+            holders.count(project) < self._limits.processes(project_root)
+            and len(holders) < self._limits.total()
+        )
+
+    # The limit that `has_room` ran into; only to be said to a person.
+    def why_full(self, *, project_root: str, project: str) -> str:
+        holders = self._holders()
+        mine, allowed = holders.count(project), self._limits.processes(project_root)
+        if mine >= allowed:
+            return f"{mine} of {allowed} casts are running in this project"
+        total = self._limits.total()
+        return f"{len(holders)} of {total} casts are running on this machine"
+
     # The queue, with what a typed cast's line awaits ahead of the rest: of one
     # cast at a time, the next has to be the one a parked cast is waiting on, or
     # the terminal reads a sibling in the middle of it.
@@ -346,7 +367,8 @@ class Circle:
         return sorted(self._queue, key=behind)
 
     def _may_run(self, view: CastView) -> bool:
-        if self._busy(view) >= self._limits.processes(view.hello.project_root):
+        hello = view.hello
+        if not self.has_room(project_root=hello.project_root, project=hello.project):
             return False
         typed = self._typed(view)
         return typed is None or all(
@@ -375,11 +397,9 @@ class Circle:
             ):
                 yield view
 
-    def _busy(self, queued: CastView) -> int:
-        project = queued.hello.project
-        return sum(
-            1 for view in self._active() if view.hello.project == project
-        ) + self._left.count(project)
+    # The project of every cast that holds a slot.
+    def _holders(self) -> list[str]:
+        return [view.hello.project for view in self._active()] + self._left.projects()
 
     # Held until the cast's process has gone: the task is its only reference.
     def _launch(self, hello: CastHello) -> None:

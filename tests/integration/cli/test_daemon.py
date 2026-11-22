@@ -70,9 +70,9 @@ _PATIENCE = 400
 _TICK = 0.01
 _REFUSED = 2
 _QUEUED_N = 2
-# The version asked before the cast and again as it attaches, then the cast's
-# own connection.
-_UNTIL_THE_CAST_ATTACHED = 3
+# The version asked before the cast, then whether there is room for it, the
+# version again as it attaches, then the cast's own connection.
+_UNTIL_THE_CAST_ATTACHED = 4
 
 
 # Of the project the test is standing in unless told otherwise, which is the
@@ -1005,6 +1005,31 @@ async def _older(socket_path: Path) -> AsyncGenerator[list[bytes]]:
 _ASKED_ITS_VERSION = b'{"kind":"version_requested"}\n'
 
 
+# A daemon of this version that says `replies` to whatever opens a connection
+# for anything but its version, then hangs up.
+@contextlib.asynccontextmanager
+async def _scripted(socket_path: Path, *replies: WireMessage) -> AsyncGenerator[None]:
+    async def scripted(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        asked = await reader.readline()
+        said = (
+            [DaemonVersion(version=VERSION)] if asked == _ASKED_ITS_VERSION else replies
+        )
+        for reply in said:
+            writer.write(encode_frame(reply))
+        with contextlib.suppress(OSError):
+            await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_unix_server(scripted, path=str(socket_path))
+    try:
+        yield
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
 @pytest.mark.asyncio
 class TestVersions:
     @staticmethod
@@ -1779,6 +1804,12 @@ def _finished(runs: Path, ritual: str) -> bool:
     )
 
 
+def _runs(runs: Path) -> list[RunRecord]:
+    return [
+        run for run in Journal(runs).recent(limit=10) if not isinstance(run, DamagedRun)
+    ]
+
+
 def _run_of(runs: Path, ritual: str) -> RunRecord:
     [found] = [
         run
@@ -2015,6 +2046,77 @@ class _Flushes(io.StringIO):
     @override
     def flush(self) -> None:
         self.calls.append(_FLUSHED)
+
+
+@pytest.mark.asyncio
+class TestRoom:
+    @staticmethod
+    async def test_a_cast_typed_on_a_full_machine_is_refused_before_it_runs_a_step(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        (queue_rituals / "config" / "vekna").mkdir(parents=True)
+        (queue_rituals / "config" / "vekna" / "config.toml").write_text(
+            "[circle]\ntotal_processes = 1\n"
+        )
+        async with _served(socket_path):
+            holder = await _say(socket_path, _hello("holder", project="/elsewhere"))
+            code = await _drive(["hold_one"])
+            holder.close()
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == (
+            "1 of 1 casts are running on this machine: queue it with"
+            " `vekna cast --queue hold_one`, or wait for one to end\n"
+        )
+        assert [run.hello.cast_id for run in _runs(queue_rituals / "runs")] == [
+            "holder"
+        ]
+
+    @staticmethod
+    async def test_a_resumed_cast_refused_is_told_only_to_wait(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        Journal(queue_rituals / "runs").record(
+            CastHello(
+                cast_id="left",
+                project_root=str(queue_rituals),
+                project=str(queue_rituals),
+                ritual="count",
+                components={"n": 5},
+                started_at=_WHEN,
+            )
+        )
+        async with _scripted(socket_path, CastRefused(reason="full")):
+            code = await _drive(["--resume", "left"])
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == (
+            "note: cast 'left' recorded nothing to replay — every step runs live\n"
+            "full: wait for one to end\n"
+        )
+        assert not said.out
+
+    @staticmethod
+    @pytest.mark.usefixtures("queue_rituals")
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            pytest.param(["--unattended", "hold_one"], id="unattended"),
+            pytest.param(["--prompt", "fix it"], id="prompt"),
+        ],
+    )
+    async def test_a_cast_that_cannot_be_queued_as_typed_is_told_only_to_wait(
+        argv: list[str], socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        async with _scripted(socket_path, CastRefused(reason="full")):
+            code = await _drive(argv)
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == "full: wait for one to end\n"
+        assert not said.out
 
 
 # The hand cast in this process, so what it does once its own steps end is

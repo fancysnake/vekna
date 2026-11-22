@@ -108,6 +108,20 @@ class CastRefused(BaseModel):
     reason: str
 
 
+# A cast typed by hand opens a connection with this and nothing else before its
+# first step, and is answered `CastAdmitted` or `CastRefused`. The daemon
+# spawns nothing for it: the cast runs where it was typed, so all the daemon can
+# do about a full machine is say so. A daemon that predates the question hangs
+# up, and the cast runs.
+class AdmissionRequested(BaseModel):
+    kind: Literal["admission_requested"] = "admission_requested"
+    project_root: str
+
+
+class CastAdmitted(BaseModel):
+    kind: Literal["cast_admitted"] = "cast_admitted"
+
+
 # A cast the daemon has a record of and no process for yet: it waits for a
 # process slot, and the hello before it was written by the daemon, not the cast.
 class CastQueued(BaseModel):
@@ -466,14 +480,20 @@ CastMessage = CastHello | CastUpdate
 
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
-Opening = SurfaceHello | StopRequested | AltarRequested | VersionRequested
+Opening = (
+    SurfaceHello
+    | StopRequested
+    | AltarRequested
+    | VersionRequested
+    | AdmissionRequested
+)
 
 # A request the daemon answers on a connection of its own, with one frame. Not in
 # `Opening`: a surface sends `CastRequested` later in its connection too.
-Asked = AltarRequested | VersionRequested | CastRequested
+Asked = AltarRequested | VersionRequested | CastRequested | AdmissionRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused | AltarTended | DaemonVersion
+Request = CastRequested | CastRefused | AltarTended | DaemonVersion | CastAdmitted
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

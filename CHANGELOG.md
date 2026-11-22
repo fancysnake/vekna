@@ -13,6 +13,9 @@ when.
 
 ### Added
 
+- **`[circle] total_processes`** limits how many casts run at once across
+  every project. It is read from the user config only and defaults to the
+  number of processors.
 - **`vekna cast --queue <ritual>`** hands the ritual to the daemon and
   returns, as `c` in the window does. The cast runs with no terminal, the casts
   it queues run side by side, and `vekna` shows them. The ritual's name and
@@ -23,6 +26,11 @@ when.
 
 ### Changed
 
+- **A cast typed by hand is refused when no slot is free.** With `processes`
+  or `total_processes` reached, `vekna cast <ritual>` exits `1` before its
+  first step and names `--queue`. Before, it ran past the limit.
+- **More casts than processors now queue.** Set `total_processes` to raise
+  the limit.
 - **The casts a typed cast sets going run one at a time.** A `vekna cast`
   typed at a terminal, the casts it queued and the ones they queued each wait
   for the one before. A cast that awaits another carries on before the next

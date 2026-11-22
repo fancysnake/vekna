@@ -138,8 +138,9 @@ that set it:
 `vekna audit` prints every setting with the layer it is taken from, and lists
 the settings that change nothing.
 
-One setting is the machine's and not a project's: `[circle] coding`, the limit
-on agents running at once, is read from the top level only.
+Two settings are the machine's and not a project's, and are read from the top
+level only: `[circle] coding`, the limit on agents running at once, and
+`[circle] total_processes`, the limit on casts running at once.
 
 ### When a project still needs a `.vekna.toml`
 

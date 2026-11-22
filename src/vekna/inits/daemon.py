@@ -24,10 +24,12 @@ from vekna.mills.hub import Hub
 from vekna.pacts.circle import TreeError
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
+    AdmissionRequested,
     AltarRequested,
     AltarTended,
     AwaitRequested,
     AwaitWithdrawn,
+    CastAdmitted,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
@@ -372,6 +374,14 @@ class _Daemon(Routes):
         )
         self._circle.enqueue(hello)
         return CastQueued(cast_id=hello.cast_id)
+
+    async def admit(self, request: AdmissionRequested) -> CastAdmitted | CastRefused:
+        root = Path(request.project_root)
+        project = await project_of(root)
+        if self._circle.has_room(project_root=str(root), project=project):
+            return CastAdmitted()
+        reason = self._circle.why_full(project_root=str(root), project=project)
+        return CastRefused(reason=reason)
 
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         root = request.project_root

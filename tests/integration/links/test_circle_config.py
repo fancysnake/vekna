@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,21 @@ class TestCoding:
                 " — [circle] ignored"
             )
         ]
+
+
+@pytest.mark.usefixtures("config")
+class TestTotal:
+    @staticmethod
+    def test_one_per_processor_unless_the_user_says(caplog: pytest.LogCaptureFixture):
+        assert ConfigLimits().total() == (os.cpu_count() or 1)
+        assert not caplog.records
+
+    @staticmethod
+    def test_the_user_s_config_sets_it(config: Path, caplog: pytest.LogCaptureFixture):
+        config.write_text(f"[circle]\ntotal_processes = {_MINE}\n", encoding="utf-8")
+
+        assert ConfigLimits().total() == _MINE
+        assert not caplog.records
 
 
 @pytest.mark.usefixtures("config")

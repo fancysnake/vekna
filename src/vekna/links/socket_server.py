@@ -7,6 +7,7 @@ from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     FRAME_LIMIT,
     VERSION,
+    AdmissionRequested,
     AltarRequested,
     Asked,
     CastCancelRequested,
@@ -111,9 +112,9 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
 
     # What a connection opens with is what it is, and that is settled once: a
     # surface is fanned out to, a stop ends the daemon, an altar, a version and
-    # a cast to queue are answered, anything else is a cast and is routed. The
-    # first frame is the only place they can be told apart, so it is the only
-    # place that asks.
+    # an admission are answered, a cast to queue is too, anything else is a cast
+    # and is routed. The first frame is the only place they can be told apart, so
+    # it is the only place that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -151,11 +152,15 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
 
 
 async def _answer(opened: Asked, routes: Routes) -> WireMessage:
-    if isinstance(opened, VersionRequested):
-        return DaemonVersion(version=VERSION)
-    if isinstance(opened, AltarRequested):
-        return await routes.altar(opened)
-    return await routes.queue(opened)
+    match opened:
+        case VersionRequested():
+            return DaemonVersion(version=VERSION)
+        case AltarRequested():
+            return await routes.altar(opened)
+        case AdmissionRequested():
+            return await routes.admit(opened)
+        case _:
+            return await routes.queue(opened)
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything

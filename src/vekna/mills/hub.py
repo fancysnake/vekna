@@ -7,11 +7,13 @@ from vekna.pacts.casts import CastBoard, CastView, Prompt, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
     SHORT_ID,
+    AdmissionRequested,
     AltarRequested,
     AltarTended,
     AwaitEnded,
     AwaitRequested,
     AwaitWithdrawn,
+    CastAdmitted,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
@@ -170,6 +172,11 @@ class Hub(CastBoard, Routes):
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         del request
         return CastRefused(reason=_KEEPS_NO_POOL)
+
+    @override
+    async def admit(self, request: AdmissionRequested) -> CastAdmitted | CastRefused:
+        del request
+        return CastAdmitted()
 
     @override
     async def queue(self, request: CastRequested) -> CastQueued | CastRefused:

@@ -5,6 +5,7 @@ import io
 import itertools
 import json
 import os
+import shlex
 import sys
 from collections.abc import AsyncGenerator, Collection, Iterable, Mapping
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from vekna.wire import (
     SHORT_ID,
     CastHello,
     WireMessage,
+    admission_refusal,
     config_layers,
     daemon_refusal,
     default_config_path,
@@ -91,6 +93,7 @@ _NO_FOLLOW_FLAG = "--no-follow"
 _LEADING_FLAGS = frozenset({_UNATTENDED_FLAG, _WIRED_FLAG, _NO_FOLLOW_FLAG})
 _FOLLOWING = "following the casts this one queued — Ctrl-C leaves them running\n"
 _LEFT = "left them running — `vekna` shows them\n"
+_WAIT = "wait for one to end"
 _NEEDS_TREE = "needs a worktree — the daemon queues it again for one\n"
 _NO_RITUALS = (
     "no rituals found (create a rituals.py or a rituals/ package in this directory,"
@@ -890,12 +893,39 @@ async def _drive(argv: list[str]) -> int:
     if _needs_tree(plan):
         sys.stderr.write(_NEEDS_TREE)
         return NEEDS_TREE
-    # Before any step runs: the link would only stay away from this daemon, and
-    # a cast nobody can see is not what was asked for.
+    return await _begin(plan, argv)
+
+
+# Both asked before any step runs: the link would only stay away from a daemon
+# of another version, and a cast nobody can see is not what was asked for.
+async def _begin(plan: _Plan, argv: list[str]) -> int:
     if (refusal := await daemon_refusal(default_socket_path())) is not None:
         sys.stderr.write(f"{refusal}\n")
         return 2
+    if (full := await _full(plan, argv)) is not None:
+        sys.stderr.write(f"{full}\n")
+        return 1
     return await _run(plan)
+
+
+# A cast the daemon spawned was given its slot before it began. One typed by
+# hand asks. Only a named ritual run attended can be queued as typed: a resumed
+# cast has no flags to queue again with, an unattended one would come back
+# attended, and `--queue` takes no prompt.
+async def _full(plan: _Plan, argv: list[str]) -> str | None:
+    if plan.wired:
+        return None
+    reason = await admission_refusal(default_socket_path(), str(Path.cwd()))
+    if reason is None:
+        return None
+    if (
+        plan.resumed_from is not None
+        or plan.unattended
+        or _prompt_text(argv) is not None
+    ):
+        return f"{reason}: {_WAIT}"
+    queue = f"vekna cast --queue {shlex.join(argv)}"
+    return f"{reason}: queue it with `{queue}`, or {_WAIT}"
 
 
 def main(argv: list[str]) -> int:
