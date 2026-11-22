@@ -129,6 +129,115 @@ if not attended():
     return Done(summary)
 ```
 
+## Failing over many items
+
+A ritual cast by hand on one branch can stop at the first failure: you are
+there to read it. A ritual cast every night over twenty pull requests cannot.
+Nobody reads the traceback, and the next item is still owed its turn. Four
+practices follow, all taken from
+[cabinet](https://github.com/fancysnake/cabinet)'s `heal` rituals.
+
+### The world decides, never the reply
+
+An agent that answers "fixed" has told you what it believes. Route on what the
+ritual can read back itself: the gate's exit code, the index, the file on disk.
+
+```python
+@step
+async def repair(red: Red) -> Red | Landed | GaveUp:
+    await coding(_REPAIR + red.said, session=Session.CONTINUE, key=red.branch)
+    gate = await shell("mise run check")
+    if not gate.exit_code:
+        return Landed(branch=red.branch)
+    if red.budget <= 1:
+        return GaveUp(branch=red.branch, reason=gate.stdout, seen=red.seen)
+    return red.model_copy(update={"budget": red.budget - 1, "said": gate.stdout})
+```
+
+The step throws the reply away. The gate runs after every round, and its exit
+code alone chooses the exit. The same holds for a merge: ask git whether the
+index is clean, not the agent whether it resolved the conflict.
+
+A reply given through `output=Model` is a reading, and a reading is fair data:
+which threads need an answer, which files conflict. It is not a verdict on
+whether the work is done.
+
+A step with nothing to read back has no retry loop. Where no command, file or
+API can say whether the work happened, a second attempt is a second guess that
+costs as much as the first. Run the agent once and report what it left.
+
+### Three tiers of failure
+
+Decide how far each failure reaches at the place it happens.
+
+| Tier | Example | What the ritual does |
+| --- | --- | --- |
+| Fatal to the run | the worktree is dirty, the remote refuses the login | raise, and let the report step say what was done so far |
+| Fatal to one item | the branch will not check out, the forge will not answer about this pull request | write the item's row as blocked, take the next item |
+| Degraded | the item's gate will not go green, but its review can still be posted | stand down from that task, go on with the item's other tasks, report it red |
+
+Only the first tier is a raise. The other two are payloads a step returns,
+which makes them exits the annotation names and `rituals show` draws:
+
+```python
+async def sync_branch(work: SyncBranch) -> Chart | SkipPr | Tend: ...
+```
+
+Treat every failure as fatal and one stuck branch costs the nineteen behind it.
+Drop the third tier and a branch whose gate stays red vanishes from the report,
+when "still red, and here is what it said" is the line you wanted to read.
+
+### Leave the world recoverable
+
+Every path that gives up does three things: it aborts what is half done, it
+stashes what the agent left under a name, and it puts the name in the report.
+
+```python
+_RELEASE = """\
+if git rev-parse -q --verify MERGE_HEAD >/dev/null; then git merge --abort; fi
+if [ -n "$(git status --porcelain)" ]; then
+    git stash push -u -m {name} >/dev/null && echo stashed
+fi
+"""
+
+
+@step
+async def give_up(lost: GaveUp) -> NextItem:
+    name = f"gave-up/{lost.branch}"
+    ran = await shell(_RELEASE.format(name=shlex.quote(name)))
+    stash = name if ran.stdout.strip() == "stashed" else ""
+    row = Row(branch=lost.branch, reason=lost.reason, stash=stash)
+    return NextItem(rows=[*lost.rows, row], seen=[*lost.seen, lost.reason])
+```
+
+Half a repair is not something to review, and the next item needs a clean tree
+to start from. A stash without a name in the report is work nobody will find.
+The script echoes its own word because `git stash push` exits 0 with nothing to
+stash, so the exit code alone would report a stash that does not exist.
+
+### Do not pay twice for one failure
+
+When the base branch is red, every pull request that merges it fails the same
+test. Spending a full repair budget on each buys the same verdict twenty times.
+
+Carry the failures the cast gave up on in the payload, and compare each item's
+first failure against them before the first repair:
+
+```python
+def same_failure(one: str, other: str) -> bool:
+    return bool(one) and re.sub(r"\d+", "", one) == re.sub(r"\d+", "", other)
+
+
+if any(same_failure(gate.stdout, known) for known in red.seen):
+    return GaveUp(branch=red.branch, reason="red as it already was", seen=red.seen)
+```
+
+Compare normalised text. Timings, counts and timestamps differ on every run, so
+two runs of one broken suite never match character for character; with the
+digits gone, the failing test's name and the tool that named it remain. Ask
+before the first repair, never after one, so that a match means "this item
+arrived broken the same way" and not "the agent failed twice".
+
 ## Components become flags
 
 The ritual's single parameter is a pydantic model, and each field becomes an
@@ -229,7 +338,10 @@ Per key, a flag wins, then the project `.vekna.toml`, then your
 `[projects.<name>]` table for the project in the user config, then the top
 level of the user config ([which setting wins](scopes.md#which-setting-wins)).
 TOML values arrive typed. A queued cast takes the defaults of the repo it runs
-in for every component its enqueuer left unset.
+in for every component its enqueuer left unset. A default does not count as
+set, so a ritual that hands its own components to `enqueue` passes on its flags
+and nothing else. A field copied by name — `Child(remote=components.remote)` —
+is set, whatever it came from.
 
 `rituals show` prints a configured component with its value and file:
 

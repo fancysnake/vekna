@@ -46,7 +46,7 @@ from ._links.standalone import StandaloneRenderer, Tail
 from ._links.turns import Turns
 from ._links.unattended import UnattendedChannel
 from ._mills.audit import Audited, Evidence, report, validated
-from ._mills.defaults import Default, Defaults
+from ._mills.defaults import Default, Defaults, said_only
 from ._mills.dispatch import component_flags
 from ._mills.engine import (
     CAST_QUEUE,
@@ -526,7 +526,9 @@ def _recorded_components(
         raise RitualDefinitionError(msg)
     values = {key: default.value for key, default in (defaults or {}).items()}
     try:
-        return ritual.components.model_validate(values | dict(recorded))
+        return said_only(
+            ritual.components.model_validate(values | dict(recorded)), recorded
+        )
     except ValidationError as error:
         msg = f"{unfit} — {explained(error)}"
         raise RitualDefinitionError(msg) from error

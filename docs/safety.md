@@ -37,6 +37,14 @@ devcontainer, VM, whatever the project already uses — rather than expecting
 vekna to grow one inwards. A cast process is an ordinary Python process with a
 working directory, and it containerises like anything else.
 
+## What a ritual leaves behind
+
+A ritual that gives up halfway leaves an open merge and an agent's unfinished
+edits in your tree, and no boundary above catches that. The cleanup is the
+ritual's to write: abort, stash under a name, and report the name.
+[Leave the world recoverable](rituals.md#leave-the-world-recoverable) shows
+how.
+
 ## What vekna does own
 
 Small, and stated:
