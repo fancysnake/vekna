@@ -1,7 +1,8 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 from typing import ClassVar
 from uuid import uuid4
 
@@ -19,13 +20,21 @@ from vekna.wire import (
     DecideReleased,
     DecideRequested,
     WireMessage,
-    allowed_answers,
 )
 
 from .cast_text import counted, labelled, live, named
 from .commands import request_cast, send_answer
-from .contents import Entry, Reading, cast_key, contents, historic, walked
-from .page import LEAVES, cast_output, head, holder, line_text, output, taken_head
+from .contents import (
+    Entry,
+    Reading,
+    cast_key,
+    contents,
+    historic,
+    project_key,
+    ritual_key,
+    walked,
+)
+from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
@@ -75,13 +84,15 @@ class Contents(Tree[str]):
 
 # What a window is opened with: its project, the directory a ritual started
 # from it runs in, how long after it ended a cast moves to the history view,
-# and the title it shows: the versions of this vekna and of its daemon.
+# the title it shows: the versions of this vekna and of its daemon, and how
+# long a cast taken over may ask nothing after an answer before it is left.
 @dataclass(frozen=True)
 class Opened:
     project: str
     root: str
     history_after: timedelta
     title: str = "vekna"
+    quiet: timedelta = timedelta(seconds=5)
 
 
 # Where the window opened — its project, the directory a ritual started from it
@@ -99,12 +110,17 @@ class _Scope:
 # that cast it claimed. Each is claimed once: a claim another window takes
 # after that stays theirs. `draft` is the prompt the answer line was first
 # typed into, "" when the cast asked nothing then; none while the line is empty.
+# `answered` is whether the taken cast got an answer here, and `asked_at` when
+# it last had a prompt open after that; `quiet` seconds later the cast is left.
 @dataclass
 class _Claims:
     mine: set[str] = field(default_factory=set)
     taken: str | None = None
     asked: set[str] = field(default_factory=set)
     draft: str | None = None
+    quiet: float = 5
+    answered: bool = False
+    asked_at: float = 0
 
 
 # The contents last drawn: the line under the cursor, their shape — each line's
@@ -153,9 +169,15 @@ class _View:
 
 
 # Where a waiting question shows: loud on top for the cast in view, and during
-# a takeover one line under the contents for the casts that ask elsewhere.
+# a takeover one line under the contents for the casts that ask elsewhere. The
+# taken cast's own question is in its output, and `answer` under it answers it.
 @dataclass
 class _Asks:
+    answer: Input = field(
+        default_factory=lambda: Input(
+            id="answer", select_on_focus=False, placeholder=_ANSWER_HERE
+        )
+    )
     here: Static = field(default_factory=lambda: Static(id="ask", markup=False))
     elsewhere: Static = field(
         default_factory=lambda: Static(id="elsewhere", markup=False)
@@ -183,14 +205,16 @@ class _Widgets:
 # turns it to the history view, the casts that ended long ago, by day. The
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
-# only while it is being typed into. `t` takes a cast over: the right page
-# stays on it, every prompt it asks is claimed and answered on the command
-# line, and the contents take no keys until Esc hands the prompts back.
+# only while it is being typed into. `t` takes a cast over: the left page opens
+# its rite tree, the right page is its output, every prompt it asks is claimed
+# and shown at the end of that output, and the line under the output answers
+# it. The contents take no keys until Esc hands the prompts back, or the cast
+# asks nothing more for a while after an answer.
 class VeknaApp(App[None]):
     TITLE = "vekna"
     CSS = """
     #ask {
-        display: none; height: auto; padding: 0 1;
+        display: none; height: 1; padding: 0 1;
         background: $warning 25%; text-style: bold;
     }
     #body { height: 1fr; }
@@ -201,7 +225,7 @@ class VeknaApp(App[None]):
     #head { height: auto; max-height: 50%; }
     #log { height: 1fr; margin-top: 1; }
     #note { height: auto; padding: 0 1; color: $warning; }
-    #command { display: none; border: none; height: 1; }
+    #command, #answer { display: none; border: none; height: 1; }
     #foot { height: 1; }
     #hint { width: 1fr; padding: 0 1; color: $text-muted; }
     #version { width: auto; padding: 0 1; color: $text-muted; }
@@ -219,11 +243,6 @@ class VeknaApp(App[None]):
         Binding("a", "command('a ')", "type an answer", show=False),
         Binding("escape", "close_command", show=False),
     ]
-    # The keys that move the contents; `:` and `a` still bring the answer
-    # line back into focus.
-    _CONTENTS_ACTIONS: ClassVar[frozenset[str]] = frozenset(
-        {"take", "next_waiting", "history", "every", "home"}
-    )
 
     def __init__(
         self,
@@ -238,7 +257,10 @@ class VeknaApp(App[None]):
         self._scope = _Scope(home=opened.project, root=opened.root, title=opened.title)
         self._send = send
         self._branch_of = branch_of
-        self._view = _View(reading=Reading(history_after=opened.history_after))
+        self._view = _View(
+            reading=Reading(history_after=opened.history_after),
+            claims=_Claims(quiet=opened.quiet.total_seconds()),
+        )
         self._w = _Widgets()
 
     @override
@@ -251,6 +273,7 @@ class VeknaApp(App[None]):
             with Vertical(id="page"):
                 yield self._w.head
                 yield self._w.log
+                yield self._w.ask.answer
         yield self._w.note
         yield self._w.command
         with Horizontal(id="foot"):
@@ -267,9 +290,9 @@ class VeknaApp(App[None]):
         self.set_interval(_BRANCH_SECONDS, self._look_up_branches)
         self.call_later(self._look_up_branches)
 
-    @override
-    def check_action(self, action: str, _parameters: tuple[object, ...]) -> bool:
-        return self._view.claims.taken is None or action not in self._CONTENTS_ACTIONS
+    # The keys that move the contents do nothing during a takeover.
+    def _locked(self) -> bool:
+        return self._view.claims.taken is not None
 
     def changed(self) -> None:
         self._view.dirty = True
@@ -279,12 +302,14 @@ class VeknaApp(App[None]):
 
     # --- what the operator does ---
 
-    # A taken-over cast has the line for its answers, so a command's prefix
-    # stays out of it.
+    # A taken-over cast takes answers only, so the key goes to its answer line.
     def action_command(self, prefix: str) -> None:
+        if self._view.claims.taken is not None:
+            self._w.ask.answer.focus()
+            return
         line = self._w.command
         line.display = True
-        line.value = "" if self._view.claims.taken else prefix
+        line.value = prefix
         line.cursor_position = len(prefix)
         line.focus()
 
@@ -295,14 +320,20 @@ class VeknaApp(App[None]):
         self._close_line()
 
     def action_every(self) -> None:
+        if self._locked():
+            return
         self._scope.every = True
         self.changed()
 
     def action_home(self) -> None:
+        if self._locked():
+            return
         self._scope.every = False
         self.changed()
 
     def action_history(self) -> None:
+        if self._locked():
+            return
         reading = self._view.reading
         reading.history = not reading.history
         self.say("history view" if reading.history else "tree view")
@@ -322,6 +353,8 @@ class VeknaApp(App[None]):
     # cast that asks, or a fold one hides in — wrapping round to the top. The
     # history view never holds a cast that asks, so `w` leaves it for the tree.
     def action_next_waiting(self) -> None:
+        if self._locked():
+            return
         reading = self._view.reading
         if not reading.history:
             self._move_to_waiting()
@@ -363,6 +396,8 @@ class VeknaApp(App[None]):
     # The cast under the cursor, or the first one that asks under a fold. The
     # line its answers are typed on opens at once, and stays open.
     def action_take(self) -> None:
+        if self._locked():
+            return
         claims = self._view.claims
         found = self._waiting()
         view = found[0] if found is not None else self._focused()
@@ -371,8 +406,8 @@ class VeknaApp(App[None]):
             return
         claims.taken = view.hello.cast_id
         self._w.contents.disabled = True
-        self._w.command.placeholder = _ANSWER_HERE
-        self.action_command("")
+        self._w.ask.answer.display = True
+        self._w.ask.answer.focus()
         self.say(f"took over {labelled(view.hello)}")
         self.changed()
 
@@ -390,7 +425,7 @@ class VeknaApp(App[None]):
         claims = self._view.claims
         if claims.taken is not None:
             draft, claims.draft = claims.draft, None
-            self._w.command.value = ""
+            self._w.ask.answer.value = ""
             if draft is not None and draft != self._asking():
                 self.say(_QUESTION_CHANGED)
                 return
@@ -437,10 +472,10 @@ class VeknaApp(App[None]):
         if not typed:
             self.say(_TYPE_FIRST)
             return
-        if (
-            refused := send_answer(request=request, typed=typed, send=self._send)
-        ) is not None:
-            self.say(refused)
+        refused = send_answer(request=request, typed=typed, send=self._send)
+        claims = self._view.claims
+        claims.answered = claims.answered or (refused is None and self._locked())
+        self.say(refused or f"answered {typed}")
 
     def _taken(self) -> CastView | None:
         return self._casts.casts.get(self._view.claims.taken or "")
@@ -492,7 +527,8 @@ class VeknaApp(App[None]):
         )
 
     # Every prompt the taken cast asks is claimed as it comes. A cast that
-    # ended has nothing left to hand back.
+    # ended has nothing left to hand back. No prompt says it is the last one,
+    # so a cast that asks nothing for a while after an answer is left.
     def _hold(self) -> None:
         claims = self._view.claims
         if claims.taken is None:
@@ -505,6 +541,10 @@ class VeknaApp(App[None]):
             if request_id not in claims.asked:
                 claims.asked.add(request_id)
                 self._claim(prompt.request)
+        if view.waiting or not claims.answered:
+            claims.asked_at = monotonic()
+        elif monotonic() - claims.asked_at >= claims.quiet:
+            self._leave(f"left {labelled(view.hello)} — it asks nothing more")
 
     # A cast that ended asks nothing, so only a live one has claims to hand
     # back.
@@ -519,7 +559,9 @@ class VeknaApp(App[None]):
         claims.taken = None
         claims.asked.clear()
         claims.draft = None
-        self._w.command.placeholder = ""
+        claims.answered = False
+        self._w.ask.answer.value = ""
+        self._w.ask.answer.display = False
         self._w.contents.disabled = False
         self._close_line()
         self.say(said)
@@ -576,13 +618,15 @@ class VeknaApp(App[None]):
         self._w.hint.update(_hint(old) if taken is None else _taken_hint(taken))
         self._paint_contents(listed, now)
         self._paint_ask(listed, self._focused())
-        branches = self._view.branches
         if taken is not None:
-            self._w.head.update(taken_head(taken, branches=branches, now=now))
-            self._paint_output(cast_key(taken.hello.cast_id), cast_output(taken))
+            self._w.head.update(taken_head(taken))
+            self._paint_output(
+                cast_key(taken.hello.cast_id),
+                taken_output(taken, self._view.claims.mine),
+            )
             return
         entry = self._entry()
-        self._w.head.update(head(entry, branches=branches, now=now))
+        self._w.head.update(head(entry, branches=self._view.branches, now=now))
         self._paint_output(None if entry is None else entry.key, output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the
@@ -590,7 +634,7 @@ class VeknaApp(App[None]):
     # cursor goes to the nearest line above it that is still there; with none,
     # to the first cast, which is what a window opens to look at.
     def _paint_contents(self, listed: list[CastView], now: datetime) -> None:
-        drawn, reading = self._view.drawn, self._view.reading
+        drawn, reading = self._view.drawn, self._read()
         history = reading.history
         lines = walked(contents(listed, reading, now))
         entries = {entry.key: entry for entry, _ in lines}
@@ -624,22 +668,29 @@ class VeknaApp(App[None]):
         if cursor is not None:
             tree.call_after_refresh(tree.move_cursor, nodes[cursor])
 
-    # Loud while the cast in view waits on the operator, and a pointer to the
-    # next one while some other cast does: a question nobody sees is a cast
-    # that never ends. During a takeover the top line is the taken cast's
-    # alone, and what asks elsewhere is one line under the contents.
+    # The operator's folds, except that a cast taken over is open to its whole
+    # rite tree, and so is every line it hangs under.
+    def _read(self) -> Reading:
+        reading = self._view.reading
+        if (taken := self._taken()) is None:
+            return reading
+        opened = reading.toggled | {cast_key(taken.hello.cast_id)}
+        return replace(
+            reading, toggled=opened - {project_key(taken), ritual_key(taken)}
+        )
+
+    # One loud line while the cast in view waits on the operator, and a pointer
+    # to the next one while some other cast does: a question nobody sees is a
+    # cast that never ends. The question itself is in the output of a cast
+    # taken over; then what asks elsewhere is one line under the contents.
     def _paint_ask(self, listed: list[CastView], view: CastView | None) -> None:
         taken = self._view.claims.taken is not None
         others = [other for other in listed if other.waiting and other is not view]
         text = ""
-        if view is not None and view.waiting:
+        if view is not None and view.waiting and not taken:
             prompt = next(iter(view.waiting.values()))
-            request = prompt.request
-            allowed = allowed_answers(options=request.options, free=request.free)
-            takes = " | ".join(allowed) if allowed is not None else "any answer"
             holds = holder(view, prompt, self._view.claims.mine)
-            key = "enter" if taken else "t"
-            text = f"⏸ {request.prompt}\n  {takes} · {holds} · {key} answers it"
+            text = f"⏸ {labelled(view.hello)} asks · {holds} · t answers it"
         elif others and not taken:
             many = "1 cast waits" if len(others) == 1 else f"{len(others)} casts wait"
             text = f"⏸ {many} on you · w goes to it"

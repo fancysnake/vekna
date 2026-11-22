@@ -4,7 +4,7 @@ from pathlib import Path
 from rich.text import Text
 
 from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
-from vekna.wire import SHORT_ID, CastHello
+from vekna.wire import SHORT_ID, CastHello, allowed_answers
 
 from .cast_text import (
     ago,
@@ -14,6 +14,7 @@ from .cast_text import (
     counted,
     elapsed,
     ended,
+    labelled,
     live,
     printable,
     word,
@@ -143,15 +144,14 @@ def _flags(hello: CastHello) -> str:
     return " ".join(f"--{name} {value}" for name, value in hello.components.items())
 
 
-# The right page's top for a cast taken over: that it is, how to leave it,
-# then the cast in full.
-def taken_head(
-    view: CastView, *, branches: dict[str, str | None], now: datetime
-) -> Text:
+# The right page's top for a cast taken over: which cast, how to leave it, and
+# the rite whose output is under it. The cast's rites are on the left page.
+def taken_head(view: CastView) -> Text:
+    rite = _shown_rite(view)
     return Text.assemble(
-        (" ◆ taken over ", "bold reverse"),
+        (f" ◆ taken over · {labelled(view.hello)} ", "bold reverse"),
         (f" {LEAVES}\n", "dim"),
-        _cast_head(view, branches, now),
+        ("no output yet" if rite is None else f"{rite.started.name} · live", "dim"),
     )
 
 
@@ -252,6 +252,26 @@ def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
         said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
     return [printable(line) or " " for line in said]
+
+
+# The output of a cast taken over ends with the question the answer line
+# answers: the oldest one open.
+def taken_output(view: CastView, mine: set[str]) -> list[str]:
+    lines = cast_output(view)
+    if (prompt := next(iter(view.waiting.values()), None)) is None:
+        return lines
+    request = prompt.request
+    asked = printable(request.prompt).splitlines() or [""]
+    allowed = allowed_answers(options=request.options, free=request.free)
+    takes = " | ".join(allowed) if allowed is not None else "any answer"
+    if prompt.claim_id is not None and prompt.claim_id not in mine:
+        takes += " · claimed elsewhere"
+    return [
+        *lines,
+        f"? {asked[0]}",
+        *(f"  {more}" for more in asked[1:]),
+        f"    {takes}",
+    ]
 
 
 def _shown_rite(view: CastView) -> RiteView | None:

@@ -63,6 +63,7 @@ def _app(
     history_after: timedelta = timedelta.max,
     *,
     title: str = "vekna",
+    quiet: timedelta = timedelta(seconds=5),
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
 
@@ -73,7 +74,11 @@ def _app(
     return VeknaApp(
         casts=hub,
         opened=Opened(
-            project="/proj/.git", root="/proj", history_after=history_after, title=title
+            project="/proj/.git",
+            root="/proj",
+            history_after=history_after,
+            title=title,
+            quiet=quiet,
         ),
         send=sent.append,
         branch_of=branch_of,
@@ -858,7 +863,7 @@ class TestWaiting:
 
             ask = _text(app, "#ask")
             lines = _contents(app)
-        assert ask == "⏸ push?\n  yes | no · open · t answers it"
+        assert ask == "⏸ pr_fix c1 asks · open · t answers it"
         assert lines[2] == "    ⏸ @now  c1  asks"
         assert lines[3].startswith("      ▶ fix  ")
         assert lines[3].endswith("  asks")
@@ -878,7 +883,7 @@ class TestWaiting:
 
             ask = _text(app, "#ask")
         assert pointer == "⏸ 1 cast waits on you · w goes to it"
-        assert ask.startswith("⏸ push?")
+        assert ask.startswith("⏸ pr_fix ")
 
     @staticmethod
     async def test_w_in_the_history_view_returns_to_the_tree_and_the_waiting_cast():
@@ -905,7 +910,7 @@ class TestWaiting:
             f"  ▸ ✓ {_hour(0)}  sweep  c1",
         ]
         assert note == "tree view"
-        assert ask.startswith("⏸ push?")
+        assert ask.startswith("⏸ pr_fix ")
 
     @staticmethod
     async def test_with_no_cast_waiting_w_says_so():
@@ -931,7 +936,7 @@ class TestWaiting:
             await pilot.pause(_PAINTED)
 
             ask = _text(app, "#ask")
-        assert ask == "⏸ push?\n  yes | no · claimed elsewhere · t answers it"
+        assert ask == "⏸ pr_fix c1 asks · claimed elsewhere · t answers it"
 
 
 @pytest.mark.asyncio
@@ -1055,12 +1060,19 @@ class TestTakingOver:
 
         async with app.run_test() as pilot:
             await _take(pilot)
-            ask = _text(app, "#ask")
+            banner = app.query_one("#ask", Static).display
+            asked = list(app.query_one("#log", Log).lines)
+            line = app.query_one("#answer", Input)
+            typing = line.display and line.has_focus
             await pilot.press(*"no", "enter")
             await pilot.pause()
 
+            note = _text(app, "#note")
         claim = _claim_then(sent)
-        assert ask == "⏸ push?\n  yes | no · open · enter answers it"
+        assert not banner
+        assert asked == ["? push?", "    yes | no"]
+        assert typing
+        assert note == "answered no"
         assert sent == [
             DecideClaimed(cast_id="c1", request_id="q1", claim_id=claim.claim_id),
             DecideResolved(cast_id="c1", request_id="q1", answer="no"),
@@ -1158,7 +1170,7 @@ class TestTakingOver:
             note = _text(app, "#note")
             tree = app.query_one("#contents", Tree)
             usable = tree.has_focus and not tree.disabled
-            line = app.query_one("#command", Input).display
+            line = app.query_one("#answer", Input).display
         claim = _claim_then(sent)
         assert locked
         assert sent == [claim, DecideReleased(cast_id="c1", request_id="q1")]
@@ -1186,10 +1198,75 @@ class TestTakingOver:
             app.changed()
             await pilot.pause(_PAINTED)
 
-        assert head.startswith(" ◆ taken over  esc leaves\nci_watch  c1")
+        assert head == " ◆ taken over · ci_watch c1  esc leaves\nno output yet"
         assert note == "the cast asks nothing right now"
         assert not quiet
         assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_the_left_page_opens_the_rites_of_a_cast_taken_from_under_a_fold():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(_rite("r1", "fetch"))
+        hub.apply(_rite("r2", "fix"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="editing"))
+        hub.apply(
+            DecideRequested(
+                cast_id="c1", rite_id="r2", request_id="q1", prompt="push?\nnow?"
+            )
+        )
+        hub.apply(DecideClaimed(cast_id="c1", request_id="q1", claim_id="other"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/proj/.git")
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            folded = len(_contents(app))
+            await _take(pilot)
+
+            rites = [str(node.label).split()[1] for _, node in _nodes(app)[3:]]
+            head = _text(app, "#head")
+            said = list(app.query_one("#log", Log).lines)
+            await pilot.press("escape")
+            await pilot.pause(_PAINTED)
+            left = len(_contents(app))
+        assert folded == 1
+        assert rites == ["fetch", "fix"]
+        assert head == " ◆ taken over · pr_fix c1  esc leaves\nfix · live"
+        assert said == [
+            "editing",
+            "? push?",
+            "  now?",
+            "    yes | no · claimed elsewhere",
+        ]
+        assert left == 1
+
+    @staticmethod
+    async def test_the_takeover_ends_once_the_cast_asks_nothing_after_an_answer():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent, quiet=timedelta(seconds=1))
+
+        async with app.run_test() as pilot:
+            tree: Tree[str] = app.query_one("#contents", Tree)
+            await _take(pilot)
+            await pilot.press(*"no", "enter")
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="no"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            held = tree.disabled
+            await _eventually(pilot, lambda: not tree.disabled)
+
+            note = _text(app, "#note")
+        assert held
+        assert note == "left pr_fix c1 — it asks nothing more"
+        assert sent == [
+            _claim_then(sent),
+            DecideResolved(cast_id="c1", request_id="q1", answer="no"),
+        ]
 
     @staticmethod
     async def test_the_takeover_ends_with_its_cast():
@@ -1255,7 +1332,7 @@ class TestTakingOver:
             await pilot.press("t", "c")
             await pilot.pause(_PAINTED)
 
-            typed = app.query_one("#command", Input).value
+            typed = app.query_one("#answer", Input).value
         assert not typed
         assert sent == [_claim_then(sent)]
 
@@ -1268,7 +1345,7 @@ class TestTakingOver:
         async with app.run_test() as pilot:
             await _take(pilot)
             app.query_one("#log", Log).focus()
-            await pilot.press("w", "H", "g")
+            await pilot.press("w", "H", "g", "p")
             await pilot.pause(_PAINTED)
 
             note = _text(app, "#note")
@@ -1320,7 +1397,7 @@ class TestTakingOver:
             await pilot.pause()
 
             note = _text(app, "#note")
-            typed = app.query_one("#command", Input).value
+            typed = app.query_one("#answer", Input).value
         assert note == "the question changed — your answer was not sent"
         assert not typed
         assert [message.kind for message in sent] == ["decide_claimed"] * 2
