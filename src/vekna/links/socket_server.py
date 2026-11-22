@@ -7,6 +7,7 @@ from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     FRAME_LIMIT,
     VERSION,
+    AdmissionRequested,
     AltarRequested,
     CastCancelRequested,
     CastGoodbye,
@@ -109,9 +110,10 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     stopping = asyncio.Event()
 
     # What a connection opens with is what it is, and that is settled once: a
-    # surface is fanned out to, a stop ends the daemon, an altar and a version
-    # are answered, anything else is a cast and is routed. The first frame is
-    # the only place they can be told apart, so it is the only place that asks.
+    # surface is fanned out to, a stop ends the daemon, an altar, a version and
+    # an admission are answered, anything else is a cast and is routed. The first
+    # frame is the only place they can be told apart, so it is the only place
+    # that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -123,13 +125,10 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif isinstance(opened, (AltarRequested, VersionRequested)):
-                reply = (
-                    DaemonVersion(version=VERSION)
-                    if isinstance(opened, VersionRequested)
-                    else await routes.altar(opened)
-                )
-                writer.write(encode_frame(reply))
+            elif isinstance(
+                opened, (AltarRequested, VersionRequested, AdmissionRequested)
+            ):
+                writer.write(encode_frame(await _answered(opened, routes=routes)))
                 with contextlib.suppress(OSError):
                     await writer.drain()
             # A request is a surface's to make, after it has said it is one.
@@ -152,6 +151,16 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     server = await asyncio.start_unix_server(handle, path=str(path), limit=FRAME_LIMIT)
     await asyncio.to_thread(path.chmod, _SOCKET_MODE)
     return Serving(server, writers, stopping)
+
+
+async def _answered(
+    opened: AltarRequested | VersionRequested | AdmissionRequested, *, routes: Routes
+) -> WireMessage:
+    if isinstance(opened, VersionRequested):
+        return DaemonVersion(version=VERSION)
+    if isinstance(opened, AdmissionRequested):
+        return await routes.admit(opened)
+    return await routes.altar(opened)
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything

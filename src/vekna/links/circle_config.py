@@ -1,4 +1,5 @@
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
@@ -22,6 +23,7 @@ class _Circle(BaseModel):
     prepare: str | None = None
     base_branch: str | None = None
     coding: PositiveInt | None = None
+    total_processes: PositiveInt | None = None
 
 
 # Only `[circle]` is the daemon's; every other table is the cast's to read.
@@ -56,6 +58,16 @@ class ConfigLimits(Limits):
     def coding(self) -> int | None:
         return _first(read_user_layers(table="circle", model=_File), lambda c: c.coding)
 
+    # A cast is a process tree of its own, so one per processor is what the
+    # machine runs at once without being told.
+    @override
+    def total(self) -> int:
+        found = _first(
+            read_user_layers(table="circle", model=_File),
+            lambda circle: circle.total_processes,
+        )
+        return (os.cpu_count() or 1) if found is None else found
+
 
 def _nearest(directory: Path, key: Callable[[_Circle], _T | None]) -> _T | None:
     found = read_layers(directory=directory, table="circle", model=_File)
@@ -71,8 +83,8 @@ def _first(found: TableRead[_File], key: Callable[[_Circle], _T | None]) -> _T |
     return None
 
 
-# What only the user's top-level `[circle]` may set: `coding` is the machine's.
-MACHINE_KEYS = ("coding",)
+# What only the user's top-level `[circle]` may set: both are the machine's.
+MACHINE_KEYS = ("coding", "total_processes")
 
 
 def circle_problems(directory: Path) -> list[str]:

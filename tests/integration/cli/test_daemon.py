@@ -30,6 +30,7 @@ from vekna.pacts.casts import DamagedRun
 from vekna.pacts.circle import Tending
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    SHORT_ID,
     VERSION,
     AltarRequested,
     AwaitRequested,
@@ -68,9 +69,9 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
 _REFUSED = 2
-# The version asked before the cast and again as it attaches, then the cast's
-# own connection.
-_UNTIL_THE_CAST_ATTACHED = 3
+# The version asked before the cast, then whether there is room for it, the
+# version again as it attaches, then the cast's own connection.
+_UNTIL_THE_CAST_ATTACHED = 4
 
 
 # Of the project the test is standing in unless told otherwise, which is the
@@ -1003,6 +1004,38 @@ async def _older(socket_path: Path) -> AsyncGenerator[list[bytes]]:
 _ASKED_ITS_VERSION = b'{"kind":"version_requested"}\n'
 
 
+# A daemon of this version that says `replies` to whatever opens a connection
+# for anything but its version, then hangs up, or with `held` keeps it open.
+@contextlib.asynccontextmanager
+async def _scripted(
+    socket_path: Path, *replies: WireMessage, held: bool = False
+) -> AsyncGenerator[None]:
+    release = asyncio.Event()
+
+    async def scripted(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        asked = await reader.readline()
+        said = (
+            [DaemonVersion(version=VERSION)] if asked == _ASKED_ITS_VERSION else replies
+        )
+        for reply in said:
+            writer.write(encode_frame(reply))
+        with contextlib.suppress(OSError):
+            await writer.drain()
+        if held and asked != _ASKED_ITS_VERSION:
+            await release.wait()
+        writer.close()
+
+    server = await asyncio.start_unix_server(scripted, path=str(socket_path))
+    try:
+        yield
+    finally:
+        release.set()
+        server.close()
+        await server.wait_closed()
+
+
 @pytest.mark.asyncio
 class TestVersions:
     @staticmethod
@@ -1109,6 +1142,19 @@ class TestTheBareCommand:
             "no pooled worktrees for this project: run `vekna altar init`\n"
         )
         assert listed.stderr == "started the daemon — it runs until `vekna stop`\n"
+        assert started
+
+    @staticmethod
+    def test_queue_starts_a_daemon_and_says_so(socket_path: Path):
+        try:
+            queued = CliRunner().invoke(init_command(), ["cast", "--queue", "nap"])
+            started = asyncio.run(alive(socket_path))
+        finally:
+            CliRunner().invoke(init_command(), ["stop"])
+
+        assert queued.exit_code == 0
+        assert re.fullmatch(r"queued nap [0-9a-f]{8}\n", queued.stdout)
+        assert queued.stderr == "started the daemon — it runs until `vekna stop`\n"
         assert started
 
     @staticmethod
@@ -1779,6 +1825,12 @@ def _finished(runs: Path, ritual: str) -> bool:
     )
 
 
+def _runs(runs: Path) -> list[RunRecord]:
+    return [
+        run for run in Journal(runs).recent(limit=10) if not isinstance(run, DamagedRun)
+    ]
+
+
 def _run_of(runs: Path, ritual: str) -> RunRecord:
     [found] = [
         run
@@ -2019,6 +2071,134 @@ class _Flushes(io.StringIO):
 
 # The hand cast in this process, so what it does once its own steps end is
 # measured: a subprocess's lines are not.
+@pytest.mark.asyncio
+class TestRoom:
+    @staticmethod
+    async def test_a_cast_typed_on_a_full_machine_is_refused_before_it_runs_a_step(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        (queue_rituals / "config" / "vekna").mkdir(parents=True)
+        (queue_rituals / "config" / "vekna" / "config.toml").write_text(
+            "[circle]\ntotal_processes = 1\n"
+        )
+        async with _served(socket_path):
+            holder = await _say(socket_path, _hello("holder", project="/elsewhere"))
+            code = await _drive(["hold_one"])
+            holder.close()
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == (
+            "1 of 1 casts are running on this machine: queue it with"
+            " `vekna cast --queue hold_one`, or wait for one to end\n"
+        )
+        assert [run.hello.cast_id for run in _runs(queue_rituals / "runs")] == [
+            "holder"
+        ]
+
+    @staticmethod
+    async def test_queue_hands_the_cast_to_the_daemon_and_names_it(
+        socket_path: Path, queue_rituals: Path
+    ):
+        runs = queue_rituals / "runs"
+        async with _served(socket_path):
+            queued = await asyncio.to_thread(
+                CliRunner().invoke,
+                init_command(),
+                ["cast", "--queue", "count", "--n", "5"],
+            )
+            await _spawned(lambda: _finished(runs, "count"))
+
+        ran = _run_of(runs, "count")
+        assert queued.exit_code == 0
+        assert queued.stdout == f"queued count {ran.hello.cast_id[:SHORT_ID]}\n"
+        assert (ran.status, ran.result) == ("ok", {"n": 5})
+
+    @staticmethod
+    async def test_a_resumed_cast_refused_is_told_only_to_wait(
+        socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        Journal(queue_rituals / "runs").record(
+            CastHello(
+                cast_id="left",
+                project_root=str(queue_rituals),
+                project=str(queue_rituals),
+                ritual="count",
+                components={"n": 5},
+                started_at=_WHEN,
+            )
+        )
+        async with _scripted(socket_path, CastRefused(reason="full")):
+            code = await _drive(["--resume", "left"])
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == (
+            "note: cast 'left' recorded nothing to replay — every step runs live\n"
+            "full: wait for one to end\n"
+        )
+        assert not said.out
+
+    @staticmethod
+    async def test_queue_says_why_the_daemon_refused(socket_path: Path):
+        async with _scripted(socket_path, CastRefused(reason="not here")):
+            refused = await _queue("count", "--n", "5")
+
+        assert refused.exit_code == 1
+        assert refused.stderr == "Error: not here\n"
+        assert not refused.stdout
+
+    @staticmethod
+    async def test_queue_says_so_when_the_daemon_goes_before_it_answers(
+        socket_path: Path,
+    ):
+        async with _scripted(socket_path):
+            lost = await _queue("count", "--n", "5")
+
+        assert lost.exit_code == 1
+        assert lost.stderr == "Error: the daemon went away before it queued the cast\n"
+
+    # A daemon that predates the id on the request queues under one of its own.
+    @staticmethod
+    async def test_queue_does_not_wait_for_ever_on_a_daemon_that_names_no_cast(
+        socket_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr("vekna.inits.cli._QUEUE_SECONDS", 0.05)
+        async with _scripted(socket_path, held=True):
+            asked = await _queue("count", "--n", "5")
+
+        assert asked.exit_code == 0
+        assert asked.stdout == "asked for count\n"
+
+
+async def _queue(*args: str) -> Result:
+    return await asyncio.to_thread(
+        CliRunner().invoke, init_command(), ["cast", "--queue", *args]
+    )
+
+
+class TestQueueUsage:
+    @staticmethod
+    def test_a_flag_with_no_value_is_refused_before_the_daemon_is_asked():
+        refused = CliRunner().invoke(
+            init_command(), ["cast", "--queue", "count", "--n"]
+        )
+
+        assert refused.exit_code == _REFUSED
+        assert "--n is missing a value (write --n=<value>)" in refused.stderr
+
+    @staticmethod
+    def test_queue_takes_no_other_option():
+        refused = CliRunner().invoke(
+            init_command(), ["cast", "--queue", "--unattended", "count"]
+        )
+
+        assert refused.exit_code == _REFUSED
+        assert "--queue takes a ritual and its flags, and no other option" in (
+            refused.stderr
+        )
+
+
 @pytest.mark.asyncio
 class TestFollowing:
     @staticmethod

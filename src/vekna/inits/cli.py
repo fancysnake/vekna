@@ -8,6 +8,7 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
+from uuid import uuid4
 
 import click
 from click import Group
@@ -26,11 +27,14 @@ from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    SHORT_ID,
     VERSION,
     AltarRequested,
     AltarTended,
     CastMessage,
+    CastQueued,
     CastRefused,
+    CastRequested,
     FailedTree,
     Opening,
     SurfaceHello,
@@ -40,6 +44,7 @@ from vekna.wire import (
     default_socket_path,
     default_state_root,
     encode_frame,
+    parse_flags,
     project_of,
     read_frames,
     refused,
@@ -58,6 +63,10 @@ _RESUME = "--resume"
 _UNATTENDED = "--unattended"
 _NO_FOLLOW = "--no-follow"
 _RECENT = 20
+_QUEUE_USAGE = "--queue takes a ritual and its flags, and no other option"
+_QUEUE_LOST = "the daemon went away before it queued the cast"
+# How long the daemon gets to say the cast is queued.
+_QUEUE_SECONDS = 5.0
 _DEBUG_LOG = "debug.log"
 _DAEMON_ENDED = "the daemon ended"
 _VIEW_STOPPED = "the view stopped"
@@ -113,6 +122,12 @@ def _runtime() -> _Runtime:
     is_flag=True,
     help="End with the cast's own steps rather than with the casts it queued.",
 )
+@click.option(
+    "--queue",
+    "queued",
+    is_flag=True,
+    help="Hand the cast to the daemon, which runs it once a slot is free.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
 def _cast(
     *,
@@ -120,7 +135,12 @@ def _cast(
     continued: str | None = None,
     unattended: bool = False,
     no_follow: bool = False,
+    queued: bool = False,
 ) -> None:
+    if queued:
+        if continued is not None or unattended or no_follow or not ritual_args:
+            raise click.UsageError(_QUEUE_USAGE)
+        raise SystemExit(asyncio.run(_queue(ritual_args)))
     flags = [
         *([_UNATTENDED] if unattended else []),
         *([_NO_FOLLOW] if no_follow else []),
@@ -128,6 +148,53 @@ def _cast(
     if continued is not None:
         raise SystemExit(_continue(continued, flags=flags))
     raise SystemExit(_runtime().main([*flags, *ritual_args]))
+
+
+# The daemon spawns the cast with no terminal, so what it asks is answered in a
+# window. Its flags are the ritual's to check: a bad one shows as that cast
+# failing, as it does for a cast asked for with `c`.
+async def _queue(ritual_args: tuple[str, ...]) -> int:
+    ritual, *flags = ritual_args
+    try:
+        components = parse_flags(flags)
+    except ValueError as error:
+        raise click.UsageError(str(error)) from error
+    cast_id = uuid4().hex
+    request = CastRequested(
+        project_root=str(Path.cwd()),
+        ritual=ritual,
+        components=components,
+        cast_id=cast_id,
+    )
+    line = await _opened(opening=SurfaceHello(), debug=False)
+    if line.note:
+        click.echo(line.note, err=True)
+    line.send(request)
+    try:
+        queued = await _said_queued(line.reader, cast_id)
+    except TimeoutError:
+        # A daemon that predates the id picks its own, and says nothing of ours.
+        click.echo(f"asked for {ritual}")
+        return 0
+    finally:
+        await line.close()
+    if not queued:
+        raise click.ClickException(_QUEUE_LOST)
+    click.echo(f"queued {ritual} {cast_id[:SHORT_ID]}")
+    return 0
+
+
+# Whether the daemon said the cast is queued before it hung up, which may come
+# as a reset connection instead of an ended one.
+async def _said_queued(reader: asyncio.StreamReader, cast_id: str) -> bool:
+    with contextlib.suppress(ConnectionError):
+        async with asyncio.timeout(_QUEUE_SECONDS):
+            async for message in read_frames(reader):
+                if isinstance(message, CastRefused):
+                    raise click.ClickException(message.reason)
+                if isinstance(message, CastQueued) and message.cast_id == cast_id:
+                    return True
+    return False
 
 
 @click.command("list", help="List rituals and the options each one takes.")

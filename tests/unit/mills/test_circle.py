@@ -36,9 +36,15 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
 class _Limits(Limits):
     def __init__(
-        self, *, processes: int = 1, worktrees: int = 2, coding: int | None = None
+        self,
+        *,
+        processes: int = 1,
+        worktrees: int = 2,
+        coding: int | None = None,
+        total: int = 99,
     ) -> None:
         self.slots = processes
+        self._total = total
         self._worktrees = worktrees
         self._coding = coding
         self.asked: list[str] = []
@@ -63,6 +69,9 @@ class _Limits(Limits):
 
     def coding(self) -> int | None:
         return self._coding
+
+    def total(self) -> int:
+        return self._total
 
 
 # Each spawned cast runs until the test says how it ended.
@@ -286,6 +295,35 @@ class TestProcesses:
         await _settled()
 
         assert not errors
+
+    @staticmethod
+    async def test_the_machine_s_limit_counts_every_project():
+        circle, hub, spawn = _circle(_Limits(processes=2, total=2))
+        for name in ("a", "b", "c"):
+            circle.enqueue(_hello(name, project=f"/{name}/.git", root=f"/{name}"))
+        await _settled()
+        assert spawn.spawned == ["a", "b"]
+        hub.apply(_hello("a", project="/a/.git", root="/a"))
+        hub.apply(CastGoodbye(cast_id="a", status="ok"))
+
+        spawn.exit("a")
+        await _settled()
+
+        assert spawn.spawned == ["a", "b", "c"]
+
+    @staticmethod
+    async def test_full_names_the_limit_that_is_reached():
+        circle, hub, _ = _circle(_Limits(processes=1, total=2))
+        assert circle.full(project_root="/proj", project="/proj/.git") is None
+
+        hub.apply(_hello("by-hand"))
+        in_project = circle.full(project_root="/proj", project="/proj/.git")
+        assert circle.full(project_root="/other", project="/other/.git") is None
+        hub.apply(_hello("another", project="/other/.git", root="/other"))
+        on_machine = circle.full(project_root="/third", project="/third/.git")
+
+        assert in_project == "1 of 1 casts are running in this project"
+        assert on_machine == "2 of 2 casts are running on this machine"
 
     # Counting what is running in the project, not what this daemon spawned:
     # a `vekna cast` typed by hand takes a slot too.

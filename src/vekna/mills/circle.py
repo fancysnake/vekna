@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import JsonValue
 
-from vekna.pacts.casts import CastBoard, Casts, CastView
+from vekna.pacts.casts import CastBoard, Casts
 from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, Tending, TreeError, Trees
 from vekna.wire import (
     NEEDS_TREE,
@@ -75,8 +75,8 @@ class LeftBehind:
             if any(request.child in children for request in view.on_children.values())
         }
 
-    def count(self, project: str) -> int:
-        return sum(1 for spawned in self._live() if spawned.project == project)
+    def projects(self) -> list[str]:
+        return [spawned.project for spawned in self._live()]
 
     # Dropped for good once either is true, since neither comes back: a view
     # stays in the hub, and a pid that is gone and reused is somebody else's.
@@ -266,10 +266,10 @@ class Leasing:
 
 
 # The daemon's scheduler. A project runs as many casts at once as its
-# `processes` says — every running cast of the project counts, whether the
-# daemon spawned it or somebody typed `vekna cast` — and a queued one is spawned
-# when a slot frees. A cast awaiting another holds no slot until the other ends,
-# and then comes back ahead of the queue.
+# `processes` says, and the machine as many as `total` says — every running cast
+# counts, whether the daemon spawned it or somebody typed `vekna cast` — and a
+# queued one is spawned when a slot frees. A cast awaiting another holds no slot
+# until the other ends, and then comes back ahead of the queue.
 class Circle:
     def __init__(
         self,
@@ -316,7 +316,7 @@ class Circle:
     def _start(self) -> None:
         for reply in self._awaits.due():
             parent = self._hub.casts[reply.cast_id]
-            if self._busy(parent) < self._limits.processes(parent.hello.project_root):
+            if self._room(parent.hello) is None:
                 self._hub.apply(reply)
                 # A parent that is not attached says its await again on reattach.
                 self._hub.tell(reply.cast_id, reply)
@@ -324,20 +324,35 @@ class Circle:
             view = self._hub.casts.get(cast_id)
             if view is None or view.status != "queued":
                 self._queue.remove(cast_id)
-            elif self._busy(view) < self._limits.processes(view.hello.project_root):
+            elif self._room(view.hello) is None:
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
 
-    def _busy(self, queued: CastView) -> int:
-        project = queued.hello.project
+    # Why a cast typed by hand in `project_root` may not start now, or `None`
+    # when it may. Nothing is held for it: its hello is what takes the slot.
+    # shortcut: two casts typed in the same instant can both be told there is
+    # room for the last slot; admitting on the hello itself is the upgrade.
+    def full(self, *, project_root: str, project: str) -> str | None:
+        holders = self._holders()
+        mine, allowed = holders.count(project), self._limits.processes(project_root)
+        if mine >= allowed:
+            return f"{mine} of {allowed} casts are running in this project"
+        if len(holders) >= (total := self._limits.total()):
+            return f"{len(holders)} of {total} casts are running on this machine"
+        return None
+
+    def _room(self, hello: CastHello) -> str | None:
+        return self.full(project_root=hello.project_root, project=hello.project)
+
+    # The project of every cast that holds a slot.
+    def _holders(self) -> list[str]:
         parked = self._awaits.parked()
-        return sum(
-            1
+        return [
+            view.hello.project
             for cast_id, view in self._hub.casts.items()
-            if view.hello.project == project
-            and cast_id not in parked
+            if cast_id not in parked
             and (view.status == "running" or cast_id in self._launching)
-        ) + self._left.count(project)
+        ] + self._left.projects()
 
     # Held until the cast's process has gone: the task is its only reference.
     def _launch(self, hello: CastHello) -> None:

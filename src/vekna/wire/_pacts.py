@@ -91,11 +91,14 @@ class DaemonVersion(BaseModel):
 # What a surface asks the daemon for, past its `SurfaceHello`: start a ritual in
 # a directory. The components cross as the strings the operator typed — the
 # daemon loads no ritual, so the cast it spawns is what validates them.
+# `cast_id` is what `vekna cast --queue` picks so it can tell its own cast in
+# what the daemon says next; with none, the daemon picks.
 class CastRequested(BaseModel):
     kind: Literal["cast_requested"] = "cast_requested"
     project_root: str
     ritual: str
     components: dict[str, str]
+    cast_id: str | None = None
 
 
 # Said back to the surface that asked, and to nobody else: a request the daemon
@@ -104,6 +107,20 @@ class CastRequested(BaseModel):
 class CastRefused(BaseModel):
     kind: Literal["cast_refused"] = "cast_refused"
     reason: str
+
+
+# A cast typed by hand opens a connection with this and nothing else before its
+# first step, and is answered `CastAdmitted` or `CastRefused`. The daemon
+# spawns nothing for it: the cast runs where it was typed, so all the daemon can
+# do about a full machine is say so. A daemon that predates the question hangs
+# up, and the cast runs.
+class AdmissionRequested(BaseModel):
+    kind: Literal["admission_requested"] = "admission_requested"
+    project_root: str
+
+
+class CastAdmitted(BaseModel):
+    kind: Literal["cast_admitted"] = "cast_admitted"
 
 
 # A cast the daemon has a record of and no process for yet: it waits for a
@@ -462,10 +479,16 @@ CastMessage = CastHello | CastUpdate
 
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
-Opening = SurfaceHello | StopRequested | AltarRequested | VersionRequested
+Opening = (
+    SurfaceHello
+    | StopRequested
+    | AltarRequested
+    | VersionRequested
+    | AdmissionRequested
+)
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused | AltarTended | DaemonVersion
+Request = CastRequested | CastRefused | AltarTended | DaemonVersion | CastAdmitted
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

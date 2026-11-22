@@ -24,10 +24,12 @@ from vekna.mills.hub import Hub
 from vekna.pacts.circle import TreeError
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
+    AdmissionRequested,
     AltarRequested,
     AltarTended,
     AwaitRequested,
     AwaitWithdrawn,
+    CastAdmitted,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
@@ -359,7 +361,7 @@ class _Daemon(Routes):
         root = Path(request.project_root)
         self._circle.enqueue(
             CastHello(
-                cast_id=uuid4().hex,
+                cast_id=self._fresh(request.cast_id),
                 project_root=str(root),
                 project=await project_of(root),
                 ritual=request.ritual,
@@ -368,6 +370,15 @@ class _Daemon(Routes):
                 wired=True,
             )
         )
+
+    # The id the request came with, unless a cast already has it.
+    def _fresh(self, asked: str | None) -> str:
+        return uuid4().hex if asked is None or asked in self._hub.casts else asked
+
+    async def admit(self, request: AdmissionRequested) -> CastAdmitted | CastRefused:
+        root = Path(request.project_root)
+        full = self._circle.full(project_root=str(root), project=await project_of(root))
+        return CastAdmitted() if full is None else CastRefused(reason=full)
 
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         root = request.project_root

@@ -11,6 +11,22 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`[circle] total_processes`** limits how many casts run at once across
+  every project. It is read from the user config only and defaults to the
+  number of processors.
+- **`vekna cast --queue`** hands a cast to the daemon and returns. The daemon
+  runs it once a slot is free.
+
+### Changed
+
+- **A cast typed by hand is refused when no slot is free.** With `processes`
+  or `total_processes` reached, `vekna cast <ritual>` exits `1` before its
+  first step and names `--queue`. Before, it ran past the limit.
+- **More casts than processors now queue.** Set `total_processes` to raise
+  the limit.
+
 ## [2.0.0] - 2026-11-20
 
 ### Added

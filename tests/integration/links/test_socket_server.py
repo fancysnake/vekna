@@ -10,8 +10,10 @@ from vekna.links.socket_server import Serving, alive, attach, serve
 from vekna.pacts.routing import Routes, SocketPathError, Surface
 from vekna.wire import (
     VERSION,
+    AdmissionRequested,
     AltarRequested,
     AltarTended,
+    CastAdmitted,
     CastCancelRequested,
     CastGoodbye,
     CastHello,
@@ -28,6 +30,7 @@ from vekna.wire import (
     SurfaceHello,
     VersionRequested,
     WireMessage,
+    admission_refusal,
     encode_frame,
     read_frames,
 )
@@ -61,7 +64,7 @@ class _Daemon(Routes):
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
-        self.requests: list[CastRequested | AltarRequested] = []
+        self.requests: list[CastRequested | AltarRequested | AdmissionRequested] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
             tuple[
@@ -107,6 +110,10 @@ class _Daemon(Routes):
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         self.requests.append(request)
         return AltarTended(trees=[HeldTree(path=f"{request.project_root}/1")])
+
+    async def admit(self, request: AdmissionRequested) -> CastAdmitted | CastRefused:
+        self.requests.append(request)
+        return CastRefused(reason="full")
 
     async def start(self, path: Path) -> Serving:
         return await serve(path=path, routes=self)
@@ -175,6 +182,20 @@ class TestServing:
 
         assert not daemon.messages
         writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_cast_asking_for_room_is_answered_down_its_connection(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        refusal = await admission_refusal(socket_path, "/proj")
+
+        assert refusal == "full"
+        assert daemon.requests == [AdmissionRequested(project_root="/proj")]
+        assert not daemon.attached
         await server.close()
 
     @staticmethod

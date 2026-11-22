@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from vekna.wire import (
+    AdmissionRequested,
     AltarRequested,
     AltarTended,
+    CastAdmitted,
     CastCancelRequested,
     CastMessage,
     CastRefused,
@@ -25,7 +27,7 @@ class Surface(Protocol):
 # what it is. A cast is `apply`d and has a peer the daemon can write back to; a
 # surface is attached, and can ask for a cast, claim a prompt, release its
 # claim, answer a prompt and cancel a cast. An altar is answered down its
-# own connection.
+# own connection, and so is a cast typed by hand asking whether there is room.
 class Routes(Protocol):
     def apply(self, message: CastMessage) -> None: ...
     def attach_surface(self, surface: Surface) -> None: ...
@@ -38,6 +40,9 @@ class Routes(Protocol):
     def open_cast(self, cast_id: str, peer: Surface) -> None: ...
     def close_cast(self, cast_id: str, peer: Surface) -> None: ...
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused: ...
+    async def admit(
+        self, request: AdmissionRequested
+    ) -> CastAdmitted | CastRefused: ...
 
 
 # Something that is not a socket is sitting where the daemon binds. Its own

@@ -12,15 +12,17 @@ DEFAULT_WORKTREES = 2
 # Read each time they are asked for, so an edited config counts from the next
 # cast on without restarting the daemon. `processes`, `worktrees`, `prepare`
 # and `base` are per project, found from the tree the cast was asked from;
-# `coding` is per account, so only the user's own config says it, and `None` is
-# no limit. `base` is the project's `base_branch`, and `None` is the `HEAD` of
-# the tree the altar was asked from.
+# `coding` and `total` are per machine, so only the user's own config says
+# them: `None` is no limit on `coding`, and `total` is how many casts run at
+# once across every project. `base` is the project's `base_branch`, and `None`
+# is the `HEAD` of the tree the altar was asked from.
 class Limits(Protocol):
     def processes(self, project_root: str) -> int: ...
     def worktrees(self, project_root: str) -> int: ...
     def prepare(self, project_root: str) -> str | None: ...
     def base(self, project_root: str) -> str | None: ...
     def coding(self) -> int | None: ...
+    def total(self) -> int: ...
 
 
 # How a spawned cast process ended, and the last thing it said: a cast that dies
