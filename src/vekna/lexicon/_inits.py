@@ -909,14 +909,20 @@ async def _begin(plan: _Plan, argv: list[str]) -> int:
 
 
 # A cast the daemon spawned was given its slot before it began. One typed by
-# hand asks, and a resumed one has no flags to queue again with.
+# hand asks. Only a named ritual run attended can be queued as typed: a resumed
+# cast has no flags to queue again with, an unattended one would come back
+# attended, and `--queue` takes no prompt.
 async def _full(plan: _Plan, argv: list[str]) -> str | None:
     if plan.wired:
         return None
     reason = await admission_refusal(default_socket_path(), str(Path.cwd()))
     if reason is None:
         return None
-    if plan.resumed_from is not None:
+    if (
+        plan.resumed_from is not None
+        or plan.unattended
+        or _prompt_text(argv) is not None
+    ):
         return f"{reason}: {_WAIT}"
     queue = f"vekna cast --queue {shlex.join(argv)}"
     return f"{reason}: queue it with `{queue}`, or {_WAIT}"

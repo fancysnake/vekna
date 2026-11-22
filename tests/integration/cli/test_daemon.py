@@ -2098,6 +2098,26 @@ class TestRoom:
         )
         assert not said.out
 
+    @staticmethod
+    @pytest.mark.usefixtures("queue_rituals")
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            pytest.param(["--unattended", "hold_one"], id="unattended"),
+            pytest.param(["--prompt", "fix it"], id="prompt"),
+        ],
+    )
+    async def test_a_cast_that_cannot_be_queued_as_typed_is_told_only_to_wait(
+        argv: list[str], socket_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        async with _scripted(socket_path, CastRefused(reason="full")):
+            code = await _drive(argv)
+
+        said = capsys.readouterr()
+        assert code == 1
+        assert said.err == "full: wait for one to end\n"
+        assert not said.out
+
 
 # The hand cast in this process, so what it does once its own steps end is
 # measured: a subprocess's lines are not.

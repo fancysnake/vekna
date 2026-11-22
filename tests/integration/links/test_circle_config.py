@@ -106,7 +106,7 @@ class TestCoding:
 class TestTotal:
     @staticmethod
     def test_one_per_processor_unless_the_user_says(caplog: pytest.LogCaptureFixture):
-        assert ConfigLimits().total() == os.cpu_count()
+        assert ConfigLimits().total() == (os.cpu_count() or 1)
         assert not caplog.records
 
     @staticmethod
