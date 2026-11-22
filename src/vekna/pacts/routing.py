@@ -8,6 +8,7 @@ from vekna.wire import (
     CastAdmitted,
     CastCancelRequested,
     CastMessage,
+    CastQueued,
     CastRefused,
     CastRequested,
     DecideClaimed,
@@ -26,8 +27,9 @@ class Surface(Protocol):
 # Everything a connection can bring the daemon, once its first frame has said
 # what it is. A cast is `apply`d and has a peer the daemon can write back to; a
 # surface is attached, and can ask for a cast, claim a prompt, release its
-# claim, answer a prompt and cancel a cast. An altar is answered down its
-# own connection, and so is a cast typed by hand asking whether there is room.
+# claim, answer a prompt and cancel a cast. An altar, a cast asked for by a
+# connection that says nothing else, and a cast typed by hand asking whether
+# there is room are answered down their own connection.
 class Routes(Protocol):
     def apply(self, message: CastMessage) -> None: ...
     def attach_surface(self, surface: Surface) -> None: ...
@@ -43,6 +45,7 @@ class Routes(Protocol):
     async def admit(
         self, request: AdmissionRequested
     ) -> CastAdmitted | CastRefused: ...
+    async def queue(self, request: CastRequested) -> CastQueued | CastRefused: ...
 
 
 # Something that is not a socket is sitting where the daemon binds. Its own

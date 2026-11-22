@@ -9,6 +9,7 @@ from vekna.wire import (
     VERSION,
     AdmissionRequested,
     AltarRequested,
+    Asked,
     CastCancelRequested,
     CastGoodbye,
     CastMessage,
@@ -111,9 +112,9 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
 
     # What a connection opens with is what it is, and that is settled once: a
     # surface is fanned out to, a stop ends the daemon, an altar, a version and
-    # an admission are answered, anything else is a cast and is routed. The first
-    # frame is the only place they can be told apart, so it is the only place
-    # that asks.
+    # an admission are answered, a cast to queue is too, anything else is a cast
+    # and is routed. The first frame is the only place they can be told apart, so
+    # it is the only place that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -125,11 +126,10 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif (answer := await _answered(opened, routes=routes)) is not None:
-                writer.write(encode_frame(answer))
+            elif isinstance(opened, Asked):
+                writer.write(encode_frame(await _answer(opened, routes)))
                 with contextlib.suppress(OSError):
                     await writer.drain()
-            # A request is a surface's to make, after it has said it is one.
             elif isinstance(opened, CastMessage):
                 await _as_cast(
                     opened,
@@ -151,20 +151,16 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     return Serving(server, writers, stopping)
 
 
-# The reply to an opening that is a question, or `None` for one that is not.
-# The only list of the questions the daemon answers.
-async def _answered(
-    opened: WireMessage | None, *, routes: Routes
-) -> WireMessage | None:
+async def _answer(opened: Asked, routes: Routes) -> WireMessage:
     match opened:
         case VersionRequested():
             return DaemonVersion(version=VERSION)
-        case AdmissionRequested():
-            return await routes.admit(opened)
         case AltarRequested():
             return await routes.altar(opened)
+        case AdmissionRequested():
+            return await routes.admit(opened)
         case _:
-            return None
+            return await routes.queue(opened)
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything

@@ -16,8 +16,10 @@ when.
 - **`[circle] total_processes`** limits how many casts run at once across
   every project. It is read from the user config only and defaults to the
   number of processors.
-- **`vekna cast --queue`** hands a cast to the daemon and returns. The daemon
-  runs it once a slot is free.
+- **`vekna cast --queue <ritual>`** hands the ritual to the daemon and
+  returns, as `c` in the window does. The cast runs with no terminal, the casts
+  it queues run side by side, and `vekna` shows them. The ritual's name and
+  components are checked first; the command prints the queued cast's id.
 - **`ClaudeOptions(skills=[...])`** names the skills a `coding` call depends on.
   The agent is told to load each one before it starts and keeps every other
   skill it has. A name the agent does not have fails the call.
@@ -29,11 +31,24 @@ when.
   first step and names `--queue`. Before, it ran past the limit.
 - **More casts than processors now queue.** Set `total_processes` to raise
   the limit.
+- **The casts a typed cast sets going run one at a time.** A `vekna cast`
+  typed at a terminal, the casts it queued and the ones they queued each wait
+  for the one before. A cast that awaits another carries on before the next
+  starts. Casts started from the window or with `--queue` still run side by
+  side.
 - **`ritual-scribe`** and the Rituals page teach failing over many items: route
   on what the ritual reads back and not on the agent's reply, three tiers of
   failure, a give-up path that aborts and stashes under a reported name, and
   one failure not paid for twice.
   ([#231](https://github.com/fancysnake/vekna/issues/231))
+
+### Removed
+
+- **The board of a following cast.** A typed cast prints the casts it follows
+  into its terminal as they write, each named where it takes over from another,
+  so the output scrolls back and a prompt stands under what its cast printed. A
+  pipe or a file gets the same lines; lines are no longer prefixed with the
+  cast's name or held back.
 
 ### Fixed
 

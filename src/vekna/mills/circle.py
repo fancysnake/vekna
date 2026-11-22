@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import JsonValue
 
-from vekna.pacts.casts import CastBoard, Casts
+from vekna.pacts.casts import CastBoard, Casts, CastView
 from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, Tending, TreeError, Trees
 from vekna.wire import (
     NEEDS_TREE,
@@ -269,7 +269,10 @@ class Leasing:
 # `processes` says, and the machine as many as `total` says — every running cast
 # counts, whether the daemon spawned it or somebody typed `vekna cast` — and a
 # queued one is spawned when a slot frees. A cast awaiting another holds no slot
-# until the other ends, and then comes back ahead of the queue.
+# until the other ends, and then comes back ahead of the queue. The casts a cast
+# typed at a terminal set going run one at a time, that cast among them: its
+# terminal is one stream, and it reads in order only if one cast writes to it at
+# a time.
 class Circle:
     def __init__(
         self,
@@ -315,16 +318,15 @@ class Circle:
     # and a child it waited on may be the reason the queue is full.
     def _start(self) -> None:
         for reply in self._awaits.due():
-            parent = self._hub.casts[reply.cast_id]
-            if self._fits(parent.hello):
+            if self._may_run(self._hub.casts[reply.cast_id]):
                 self._hub.apply(reply)
                 # A parent that is not attached says its await again on reattach.
                 self._hub.tell(reply.cast_id, reply)
-        for cast_id in list(self._queue):
+        for cast_id in self._in_turn():
             view = self._hub.casts.get(cast_id)
             if view is None or view.status != "queued":
                 self._queue.remove(cast_id)
-            elif self._fits(view.hello):
+            elif self._may_run(view):
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
 
@@ -348,18 +350,56 @@ class Circle:
         total = self._limits.total()
         return f"{len(holders)} of {total} casts are running on this machine"
 
-    def _fits(self, hello: CastHello) -> bool:
-        return self.has_room(project_root=hello.project_root, project=hello.project)
+    # The queue, with what a typed cast's line awaits ahead of the rest: of one
+    # cast at a time, the next has to be the one a parked cast is waiting on, or
+    # the terminal reads a sibling in the middle of it.
+    def _in_turn(self) -> list[str]:
+        awaited = {
+            request.child
+            for view in self._hub.casts.values()
+            if self._typed(view) is not None
+            for request in view.on_children.values()
+        }
+
+        def behind(cast_id: str) -> bool:
+            return cast_id not in awaited
+
+        return sorted(self._queue, key=behind)
+
+    def _may_run(self, view: CastView) -> bool:
+        hello = view.hello
+        if not self.has_room(project_root=hello.project_root, project=hello.project):
+            return False
+        typed = self._typed(view)
+        return typed is None or all(
+            self._typed(other) != typed for other in self._active()
+        )
+
+    # The cast typed at a terminal that set this one going, itself included, or
+    # `None` for a line the daemon was asked to start. Walked up each time: no
+    # chain is longer than the casts there are, which bounds a loop a peer sent.
+    def _typed(self, view: CastView) -> str | None:
+        casts = self._hub.casts
+        for _ in casts:
+            if (parent := view.hello.enqueued_by) is None:
+                return None if view.hello.wired else view.hello.cast_id
+            if (found := casts.get(parent)) is None:
+                return None
+            view = found
+        return None
+
+    # Every cast holding a process: running or spawned, and awaiting nothing.
+    def _active(self) -> Iterator[CastView]:
+        parked = self._awaits.parked()
+        for cast_id, view in self._hub.casts.items():
+            if cast_id not in parked and (
+                view.status == "running" or cast_id in self._launching
+            ):
+                yield view
 
     # The project of every cast that holds a slot.
     def _holders(self) -> list[str]:
-        parked = self._awaits.parked()
-        return [
-            view.hello.project
-            for cast_id, view in self._hub.casts.items()
-            if cast_id not in parked
-            and (view.status == "running" or cast_id in self._launching)
-        ] + self._left.projects()
+        return [view.hello.project for view in self._active()] + self._left.projects()
 
     # Held until the cast's process has gone: the task is its only reference.
     def _launch(self, hello: CastHello) -> None:

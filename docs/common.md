@@ -269,7 +269,7 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `AdmissionRequested` / `CastAdmitted` | cast ↔ daemon | a cast typed by hand asks, on a connection of its own before its first step, whether the project and the machine have a free slot. Refused as `CastRefused`, and the cast does not start. A daemon that predates it hangs up without an answer, and the cast runs. A spawned cast does not ask |
 | `AltarRequested` / `AltarTended` | surface ↔ daemon | `vekna altar`; `reset` removes, `fix` cleans and moves to the base, `init` makes and sets up the pooled trees no cast holds, `tree` narrows it to one, and with none of the three each tree is said as it stands. `save` keeps uncommitted work on a branch first. Refused as `CastRefused` |
 | `TreeFreed` | daemon → surfaces | a tree a cast left blocked was parked again or removed, by `vekna altar` or a lease; the block is over. Journaled with that cast |
-| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. `cast_id` is optional: `vekna cast --queue` picks it, to know its own cast in the `CastQueued` that follows. A cancel of a cast not running, or not connected, is refused the same way |
+| `CastRequested` / `CastRefused` | surface ↔ daemon | start a ritual in a directory, with its components as typed; refused when the directory is not there. A connection that opens with `CastRequested` is answered a `CastQueued` naming the cast, or the refusal, and nothing else. A cancel of a cast not running, or not connected, is refused the same way |
 | `CastCancelRequested` | surface → daemon → cast | end a running cast: it cancels itself and says so in its goodbye. One still running a grace later is sent SIGINT, then SIGKILL |
 
 **Replay rule.** On every (re)attach: `GrimoireBegin`, replay full log in
@@ -367,8 +367,8 @@ One command tree.
 
 ```text
 vekna cast <ritual> [--<component>=value …]   # invoke a ritual (the only command running ritual code)
-vekna cast --queue <ritual> […]               # hand the cast to the daemon and return
 vekna cast --prompt "<text>"                  # one-step cast on the coding medium, no rituals.py needed
+vekna cast --queue <ritual> […]               # hand the ritual to the daemon and return
 vekna rituals list                            # defined rituals + their Components
 vekna rituals show <ritual>                   # Component schema + inferred step graph
 vekna audit                                   # check the config: errors, each setting's layer, what sets nothing

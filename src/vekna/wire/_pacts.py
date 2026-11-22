@@ -90,15 +90,14 @@ class DaemonVersion(BaseModel):
 
 # What a surface asks the daemon for, past its `SurfaceHello`: start a ritual in
 # a directory. The components cross as the strings the operator typed — the
-# daemon loads no ritual, so the cast it spawns is what validates them.
-# `cast_id` is what `vekna cast --queue` picks so it can tell its own cast in
-# what the daemon says next; with none, the daemon picks.
+# daemon loads no ritual, so the cast it spawns is what validates them. A
+# connection may open with one instead, and is answered a `CastQueued` naming
+# the cast, or a `CastRefused`.
 class CastRequested(BaseModel):
     kind: Literal["cast_requested"] = "cast_requested"
     project_root: str
     ritual: str
     components: dict[str, str]
-    cast_id: str | None = None
 
 
 # Said back to the surface that asked, and to nobody else: a request the daemon
@@ -488,6 +487,10 @@ Opening = (
     | VersionRequested
     | AdmissionRequested
 )
+
+# A request the daemon answers on a connection of its own, with one frame. Not in
+# `Opening`: a surface sends `CastRequested` later in its connection too.
+Asked = AltarRequested | VersionRequested | CastRequested | AdmissionRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused | AltarTended | DaemonVersion | CastAdmitted
