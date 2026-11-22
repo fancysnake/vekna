@@ -522,8 +522,8 @@ class VeknaApp(App[None]):
         claims = self._view.claims
         if claims.taken is None:
             return
-        view = self._taken()
-        if view is None or not live(view):
+        view = self._casts.casts[claims.taken]
+        if not live(view):
             self._leave("the cast taken over has ended")
             return
         for request_id, prompt in view.waiting.items():

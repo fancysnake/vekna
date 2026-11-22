@@ -190,6 +190,7 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     keeping = asyncio.create_task(
         _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
     )
+    keeping.add_done_callback(_ended)
     try:
         await server.stopped()
     finally:
@@ -197,6 +198,13 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         await server.close()
     _log.info("stopped")
     return 0
+
+
+# The keeper ends only by cancel. Any other end leaves every vigil unwatched
+# until the daemon restarts, so it is logged.
+def _ended(done: asyncio.Task[None]) -> None:
+    if not done.cancelled() and (error := done.exception()) is not None:
+        _log.error("the vigils are no longer kept: %r", error, exc_info=error)
 
 
 # A look that fails is logged and the next one is tried: a config half written
