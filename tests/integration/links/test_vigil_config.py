@@ -131,6 +131,49 @@ class TestVigils:
         assert said.getMessage().endswith(" — [vigil] ignored")
 
     @staticmethod
+    def test_a_user_config_that_will_not_read_is_said_once(
+        config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        config.write_text("[projects\n", encoding="utf-8")
+        book = ConfigVigils()
+
+        assert book.vigils() == []
+        assert book.vigils() == []
+
+        [said] = caplog.records
+        assert said.levelno == logging.WARNING
+        assert said.getMessage().startswith(f"{config}: ")
+
+    @staticmethod
+    def test_a_project_entry_without_a_checkout_is_said(
+        config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        config.write_text("[projects.app]\nname = 1\n", encoding="utf-8")
+
+        assert ConfigVigils().vigils() == []
+
+        [said] = caplog.records
+        assert said.getMessage() == (
+            f"{config}: [projects.app] needs a path, the project's checkout"
+        )
+
+    @staticmethod
+    def test_an_interval_too_long_for_a_date_is_said_and_passed_over(
+        config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        app = _project(tmp_path, "app")
+        config.write_text(
+            f'[vigil.prwatch]\nevery = {300_000_000_000}\nritual = "heal"\n'
+            + _listed(app),
+            encoding="utf-8",
+        )
+
+        assert ConfigVigils().vigils() == []
+
+        [said] = caplog.records
+        assert said.getMessage().endswith(" — [vigil] ignored")
+
+    @staticmethod
     def test_a_problem_that_comes_back_is_said_again(
         config: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):

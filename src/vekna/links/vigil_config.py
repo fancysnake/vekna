@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, JsonValue, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from typing_extensions import override
 
 from vekna.pacts.circle import Vigil, VigilBook
@@ -9,12 +9,14 @@ from vekna.wire import project_checkouts, read_layers
 
 _log = logging.getLogger(__name__)
 _TABLE = "vigil"
+# A longer interval carries the due time past what a datetime holds.
+_LONGEST_EVERY = 366 * 24 * 3600
 
 
 class _Vigil(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    every: PositiveInt
+    every: int = Field(gt=0, le=_LONGEST_EVERY)
     ritual: str
     args: dict[str, JsonValue] = {}
 
@@ -37,7 +39,7 @@ class ConfigVigils(VigilBook):
     def vigils(self) -> list[Vigil]:
         found: list[Vigil] = []
         problems: list[str] = []
-        for checkout in project_checkouts().values():
+        for checkout in project_checkouts(problems).values():
             if checkout.is_dir():
                 read = read_layers(directory=checkout, table=_TABLE, model=_File)
                 problems += read.problems

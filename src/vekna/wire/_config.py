@@ -152,16 +152,17 @@ def _project_layers(
             yield ConfigLayer(user, settings, name)
 
 
-# The checkout of every project the user's config names, by its name there.
-# An entry that names no checkout is `config_layers`' to name.
-def project_checkouts() -> dict[str, Path]:
-    user, shared = _user_file([])
+# The checkout of every project the user's config names, by its name there. A
+# file that will not read, and an entry that names no checkout, are named in
+# `problems`.
+def project_checkouts(problems: list[str]) -> dict[str, Path]:
+    user, shared = _user_file(problems)
     if shared is None or "projects" not in shared:
         return {}
     return {
         name: checkout
         for name, _, checkout in _checkouts(
-            user=user, projects=shared["projects"], problems=[]
+            user=user, projects=shared["projects"], problems=problems
         )
     }
 

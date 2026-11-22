@@ -202,11 +202,9 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
 # A look that fails is logged and the next one is tried: a config half written
 # or a journal the disk will not read must not end the vigils for good.
 async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
-    # A root's repository, asked of git once.
-    projects: dict[str, str] = {}
     for _ in itertools.count():
         try:
-            await _look(vigils=vigils, book=book, journal=journal, projects=projects)
+            await _look(vigils=vigils, book=book, journal=journal)
         except OSError:
             _log.exception("could not look at the vigils")
         await asyncio.sleep(_VIGIL_SECONDS)
@@ -215,13 +213,13 @@ async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> 
 # shortcut: every look reads each project's config and, with a vigil
 # configured, every record in the journal; remembering each ritual's last
 # start is the upgrade if a large journal makes this show up in a profile.
-async def _look(
-    *, vigils: Vigils, book: VigilBook, journal: Journal, projects: dict[str, str]
-) -> None:
+async def _look(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
     if not (found := await asyncio.to_thread(book.vigils)):
         return
-    for root in {vigil.project_root for vigil in found} - projects.keys():
-        projects[root] = await project_of(Path(root))
+    projects = {
+        root: await project_of(Path(root))
+        for root in {vigil.project_root for vigil in found}
+    }
     records = await asyncio.to_thread(journal.records)
     vigils.tick(
         now=datetime.now(tz=UTC), vigils=found, projects=projects, records=records
