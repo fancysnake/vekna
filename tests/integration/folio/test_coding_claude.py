@@ -198,6 +198,12 @@ def _sdk_stub(
         content: str | list
         model: str = "stub-model"
 
+    # What the CLI echoes back after a tool ran. It has `content` like an
+    # assistant message, and no `model`.
+    @dataclass
+    class UserMessage:
+        content: str
+
     @dataclass
     class ResultMessage:
         session_id: str
@@ -248,6 +254,9 @@ def _sdk_stub(
                 else [TextBlock(text="drafting the haiku"), ToolUseBlock(name="Write")]
             )
         )
+        # A test seeds `captured["tool_result"]` to have the CLI echo one.
+        if "tool_result" in captured:
+            yield UserMessage(content=captured["tool_result"])
         if tools:
             captured["permissions"] = [
                 await options.can_use_tool(tool, {"tool": tool}, None) for tool in tools
@@ -504,6 +513,24 @@ class TestCastWithClaudeFocus:
 
         assert exit_code == 0
         assert "drafting the haiku" in capsys.readouterr().out
+
+    @staticmethod
+    def test_a_message_that_is_not_the_agents_reply_is_left_out_of_the_stream(
+        tmp_path, monkeypatch, capsys
+    ):
+        captured = {"tool_result": "wrote haiku.txt"}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "wrote haiku.txt" not in out
+        assert "drafting the haiku" in out
+        assert "haiku done" in out
+        assert captured["prompt"] == "write a haiku"
 
     @staticmethod
     def test_missing_focus_reports_install_hint(tmp_path, monkeypatch, capsys):
