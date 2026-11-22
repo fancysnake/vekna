@@ -1,5 +1,5 @@
 import contextlib
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
@@ -76,6 +76,9 @@ _ASK_INSTRUCTION = (
     "wait for the answer rather than guessing. Pass `options` when the answer "
     "is one of a known set."
 )
+_SKILL_INSTRUCTION = (
+    "Before anything else, load these skills with the Skill tool and follow them:"
+)
 
 
 # The SDK's message dataclasses carry `Any`-typed fields, so naming those
@@ -107,6 +110,31 @@ class _ResultLike(Protocol):
     def total_cost_usd(self) -> float | None: ...
     @property
     def result(self) -> str | None: ...
+
+
+@runtime_checkable
+class _SystemLike(Protocol):
+    @property
+    def subtype(self) -> str: ...
+    @property
+    def data(self) -> Mapping[str, JsonValue]: ...
+
+
+# The session's first message lists every skill the agent has. A named skill
+# that is not on it would be skipped in silence, and the prompt no longer
+# carries the procedure the skill was to supply. An opening message with no
+# list means the SDK changed, and a missing skill can no longer be seen.
+def _check_skills(*, message: _SystemLike, named: Sequence[str]) -> None:
+    if message.subtype != "init" or not named:
+        return
+    known = message.data.get("skills")
+    if not isinstance(known, list):
+        msg = "the agent's opening message lists no skills, so `skills` is unchecked"
+        raise RitualError(msg)
+    if missing := [name for name in named if name not in known]:
+        absent = ", ".join(repr(name) for name in missing)
+        msg = f"the agent has no skill {absent} — install it, or drop it from `skills`"
+        raise RitualError(msg)
 
 
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
@@ -151,25 +179,31 @@ def _ask_server(
 
 
 def _system_prompt(
-    system: str | None,
+    *, system: str | None, skills: Sequence[str]
 ) -> str | SystemPromptPreset | SystemPromptFile | None:
+    instruction = _ASK_INSTRUCTION
+    if skills:
+        instruction = f"{instruction}\n\n{_SKILL_INSTRUCTION} {', '.join(skills)}."
     # Appending to the preset keeps Claude Code's own system prompt; a plain
     # string would replace it.
     if system is None:
-        return {"type": "preset", "preset": "claude_code", "append": _ASK_INSTRUCTION}
-    return f"{system}\n\n{_ASK_INSTRUCTION}"
+        return {"type": "preset", "preset": "claude_code", "append": instruction}
+    return f"{system}\n\n{instruction}"
 
 
 def _agent_options(
-    *, call: CodingCall, gate: GateFn | None, ask: AskFn
+    *, call: CodingCall, knobs: ClaudeOptions, gate: GateFn | None, ask: AskFn
 ) -> ClaudeAgentOptions:
-    knobs = _claude_options(call.focus_options)
     if (permission_mode := knobs.permission_mode) is None:
         permission_mode = "default" if gate is not None else "bypassPermissions"
     output_format: dict[str, str | dict[str, JsonValue]] | None = None
     if call.output_schema is not None:
         output_format = {"type": "json_schema", "schema": call.output_schema}
-    allowed: list[str] = [*(knobs.allowed_tools or []), _ASK_TOOL]
+    allowed: list[str] = [
+        *(knobs.allowed_tools or []),
+        _ASK_TOOL,
+        *(f"Skill({name})" for name in knobs.skills),
+    ]
     servers: (
         dict[
             str,
@@ -183,7 +217,7 @@ def _agent_options(
     ) = {_SERVER: _ask_server(ask)}
     return ClaudeAgentOptions(
         model=call.model,
-        system_prompt=_system_prompt(call.system),
+        system_prompt=_system_prompt(system=call.system, skills=knobs.skills),
         cwd=call.cwd,
         # `resume`, not `continue_conversation`: the medium already resolved
         # which thread this call is on, and the SDK's continue flag means the
@@ -221,7 +255,11 @@ async def _from_agent(messages: AsyncGenerator[Message]) -> AsyncGenerator[Messa
 
 
 async def _streamed(
-    *, prompt: str, options: ClaudeAgentOptions, on_delta: Callable[[str], None]
+    *,
+    prompt: str,
+    skills: Sequence[str],
+    options: ClaudeAgentOptions,
+    on_delta: Callable[[str], None],
 ) -> FocusReply:
     parts: list[str] = []
     session_id: str | None = None
@@ -251,6 +289,8 @@ async def _streamed(
                 num_turns = message.num_turns
                 cost_usd = message.total_cost_usd
                 result_text = message.result
+            elif isinstance(message, _SystemLike):
+                _check_skills(message=message, named=skills)
     # The SDK drops a torn last frame at debug level, so a CLI that exits clean
     # after one ends the stream with no result, and the text so far is half a
     # reply rather than the reply.
@@ -275,5 +315,8 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         gate: GateFn | None,
         ask: AskFn,
     ) -> FocusReply:
-        options = _agent_options(call=call, gate=gate, ask=ask)
-        return await _streamed(prompt=call.prompt, options=options, on_delta=on_delta)
+        knobs = _claude_options(call.focus_options)
+        options = _agent_options(call=call, knobs=knobs, gate=gate, ask=ask)
+        return await _streamed(
+            prompt=call.prompt, skills=knobs.skills, options=options, on_delta=on_delta
+        )
