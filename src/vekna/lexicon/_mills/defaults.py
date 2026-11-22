@@ -65,6 +65,13 @@ def _refused(
     )
 
 
+# `enqueue` ships the keys a model says were set. A default left among them
+# would outrank the defaults of the repo the child runs in.
+def said_only(components: BaseModel, said: Iterable[str]) -> BaseModel:
+    components.model_fields_set.intersection_update(said)
+    return components
+
+
 # Per ritual, per key, with the file that said it. Configs come nearest first,
 # so a project key overrides its global twin and spares the rest.
 class Defaults:
@@ -127,7 +134,9 @@ class Defaults:
         found = self._found(ritual)
         values = {key: default.value for key, default in found.items()}
         try:
-            return ritual.components.model_validate(values | dict(given))
+            return said_only(
+                ritual.components.model_validate(values | dict(given)), given
+            )
         except ValidationError as error:
             raise _refused(
                 ritual=ritual, said=refusals(error), found=found, given=given
