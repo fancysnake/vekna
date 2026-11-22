@@ -5,7 +5,7 @@
 # can render flags from, and that every declared exit names a step.
 # Casting is out of scope here — most of these rituals call an agent.
 
-import sys
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -54,7 +54,9 @@ class TestProjectRituals:
     # makes `list` exit 1, and cabinet's does wherever cabinet is not installed.
     @staticmethod
     @pytest.mark.skipif(
-        sys.version_info >= (3, 15), reason="pyproject installs cabinet only below 3.15"
+        find_spec("cabinet") is None,
+        reason="cabinet is not installed: above Python 3.14, or no release accepts"
+        " this vekna major yet",
     )
     def test_cabinet_rituals_load_beside_the_project_ones(capsys):
         exit_code = rituals_list()

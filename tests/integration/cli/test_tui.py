@@ -1288,6 +1288,26 @@ class TestTakingOver:
         assert not locked
         assert sent == [_claim_then(sent)]
 
+    # No claim is handed back: the cast they were on is not there to tell.
+    @staticmethod
+    async def test_the_takeover_ends_when_its_cast_is_gone_from_the_casts():
+        hub = Hub()
+        _asking(hub)
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            del hub.casts["c1"]
+            app.changed()
+            await pilot.pause(_PAINTED)
+
+            note = _text(app, "#note")
+            locked = app.query_one("#contents", Tree).disabled
+        assert note == "the cast taken over has ended"
+        assert not locked
+        assert sent == [_claim_then(sent)]
+
     @staticmethod
     async def test_a_prompt_from_another_cast_is_one_line_under_the_contents():
         hub = Hub()

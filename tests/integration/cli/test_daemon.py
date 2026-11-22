@@ -11,6 +11,7 @@ import textwrap
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -2114,6 +2115,23 @@ class TestVigils:
             await _spawned(lambda: _finished(runs, "count"))
 
         assert _run_of(runs, "count").hello.vigil == "tally"
+
+    # The keeper never runs out of looks on its own, so the test gives it one.
+    @staticmethod
+    async def test_a_daemon_whose_keeper_has_ended_still_stops_clean(
+        socket_path: Path, vigil_config: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(
+            "vekna.inits.daemon.itertools", SimpleNamespace(count=lambda: range(1))
+        )
+        runs = socket_path.parent / "runs"
+        _keep_tally(vigil_config)
+        async with _served(socket_path) as host:
+            await _spawned(lambda: _finished(runs, "count"))
+            await asyncio.sleep(_TICK * 10)
+
+        assert _run_of(runs, "count").hello.vigil == "tally"
+        assert host.result() == 0
 
 
 @pytest.mark.asyncio
