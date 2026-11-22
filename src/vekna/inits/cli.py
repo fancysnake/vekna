@@ -19,6 +19,14 @@ from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.circle_config import MACHINE_KEYS, circle_problems
 from vekna.links.journal import Journal
+from vekna.links.service import (
+    UNIT,
+    search_path,
+    systemctl,
+    unit_path,
+    user_vekna,
+    write_unit,
+)
 from vekna.links.socket_server import attach
 from vekna.links.terminal import Terminal
 from vekna.links.vigil_config import vigil_problems
@@ -455,6 +463,87 @@ def _stop() -> None:
     click.echo(asyncio.run(stop_daemon()))
 
 
+# Asked before any subcommand runs: with no user manager answering there is
+# nothing to enable, and nothing is written.
+@click.group("service", help="Run the daemon as a systemd user service.")
+def _service() -> None:
+    if (problem := asyncio.run(systemctl("show-environment"))) is not None:
+        message = f"`vekna service` needs systemd, and it is not answering: {problem}"
+        raise click.ClickException(message)
+
+
+async def _systemd(*args: str) -> None:
+    if (problem := await systemctl(*args)) is not None:
+        raise click.ClickException(problem)
+
+
+async def _enabled() -> str:
+    if (vekna := user_vekna()) is None:
+        message = (
+            f"no vekna of your own on {search_path()}: the service never runs a"
+            " project's — `pipx install vekna`"
+        )
+        raise click.ClickException(message)
+    try:
+        unit = await asyncio.to_thread(write_unit, vekna=vekna)
+    except OSError as error:
+        message = f"could not write the unit: {error}"
+        raise click.ClickException(message) from error
+    await _systemd("daemon-reload")
+    await _systemd("enable", UNIT)
+    return f"wrote {unit}: {vekna} starts at login — `vekna service start` for now"
+
+
+@click.command(
+    "enable", help="Write the unit and have systemd start the daemon at login."
+)
+def _service_enable() -> None:
+    click.echo(asyncio.run(_enabled()))
+
+
+@click.command("disable", help="No longer start the daemon at login.")
+def _service_disable() -> None:
+    asyncio.run(_systemd("disable", UNIT))
+    click.echo("the daemon no longer starts at login")
+
+
+# A daemon started by hand holds the socket's lock, so it is stopped before
+# systemd starts its own. One systemd already runs is left alone: stopping it
+# here would race the start that follows.
+async def _started(*, again: bool) -> None:
+    if not unit_path().is_file():
+        message = f"no unit at {unit_path()}: `vekna service enable` first"
+        raise click.ClickException(message)
+    if again or await systemctl("is-active", "--quiet", UNIT) is not None:
+        await stop_daemon()
+    await _systemd("restart" if again else "start", UNIT)
+
+
+@click.command("start", help="Start the daemon under systemd.")
+def _service_start() -> None:
+    asyncio.run(_started(again=False))
+    click.echo("started the daemon under systemd")
+
+
+@click.command("restart", help="Stop the daemon and start it under systemd.")
+def _service_restart() -> None:
+    asyncio.run(_started(again=True))
+    click.echo("restarted the daemon under systemd")
+
+
+@click.command("stop", help="Stop the daemon. Running casts rejoin the next one.")
+def _service_stop() -> None:
+    asyncio.run(_systemd("stop", UNIT))
+    click.echo("stopped the daemon")
+
+
+_service.add_command(_service_enable)
+_service.add_command(_service_disable)
+_service.add_command(_service_start)
+_service.add_command(_service_restart)
+_service.add_command(_service_stop)
+
+
 # Not through `_opened`: asking what is running must neither start a daemon nor
 # be refused by the one it is asking about.
 @click.command("version", help="Show this vekna's version, and the running daemon's.")
@@ -608,6 +697,7 @@ def init_command() -> Group:
     vekna.add_command(_cats)
     vekna.add_command(_serve)
     vekna.add_command(_stop)
+    vekna.add_command(_service)
     vekna.add_command(_altar)
     vekna.add_command(_version)
     return vekna
