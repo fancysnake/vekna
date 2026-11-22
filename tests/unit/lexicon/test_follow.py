@@ -211,6 +211,17 @@ class TestTurns:
         assert not Turns(Tail(io.StringIO()), typed="sweep root0000").typed.isatty()
 
     @staticmethod
+    def test_whether_its_row_is_empty_is_the_stream_s_answer():
+        turns = Turns(Tail(io.StringIO()), typed="sweep root0000")
+        assert turns.typed.row_empty
+
+        turns.typed.write("half a line")
+        assert not turns.typed.row_empty
+
+        turns.typed.write("\n")
+        assert turns.typed.row_empty
+
+    @staticmethod
     def test_how_a_cast_ended_is_said_with_its_detail():
         assert ended_said("ok", None) == "✓ done"
         assert ended_said("error", "no tree") == "✗ failed: no tree"
