@@ -178,6 +178,33 @@ class TestDue:
 
         assert _tick(_vigils(board), _vigil(), records=records) == ["prwatch /app"]
 
+    # The config names the ritual as it is typed; a cast says the tome too.
+    @staticmethod
+    def test_a_cast_that_names_the_ritual_s_tome_counts_as_the_bare_name_s():
+        board = _Board()
+        ran = _record(_hello("c1", ago=59, ritual="cabinet:heal"))
+
+        assert _tick(_vigils(board), _vigil(every=60), records=(ran,)) == []
+
+    @staticmethod
+    def test_a_cast_of_the_tome_s_ritual_open_in_the_project_holds_the_vigil():
+        board = _Board()
+        board.seen(_hello("c1", ago=_HOUR, ritual="cabinet:heal"), "running")
+
+        assert _tick(_vigils(board), _vigil()) == []
+
+    @staticmethod
+    def test_a_vigil_that_names_a_tome_counts_that_tome_s_casts_only():
+        board = _Board()
+        records = (
+            _record(_hello("c1", ritual="heal")),
+            _record(_hello("c2", ritual="other:heal")),
+        )
+
+        assert _tick(
+            _vigils(board), _vigil(ritual="cabinet:heal"), records=records
+        ) == ["prwatch /app"]
+
     @staticmethod
     def test_the_last_cast_is_read_off_the_hub_too():
         board = _Board()

@@ -9,6 +9,7 @@ from vekna.wire import CastHello, CastStatus, RunRecord
 
 _log = logging.getLogger(__name__)
 
+_TOME_SEPARATOR = ":"
 _OPEN = frozenset({"queued", "running"})
 # A vigil that has never run is due before any that has.
 _NEVER = datetime.min.replace(tzinfo=UTC)
@@ -126,5 +127,12 @@ class Vigils:
             yield hello, "disconnected" if gone else record.status
 
 
+# A cast says its ritual with the tome it came from, `cabinet:heal.mine`, and
+# a config may name it bare, as it is typed. Only the cast loads the rituals,
+# so the daemon cannot resolve the name.
+# shortcut: a bare name counts the cast of any tome's ritual of that name, so
+# a project with the name in two tomes waits on either; naming the tome in the
+# vigil tells them apart.
 def _same(hello: CastHello, *, vigil: Vigil, project: str) -> bool:
-    return hello.ritual == vigil.ritual and hello.project == project
+    bare = hello.ritual.rpartition(_TOME_SEPARATOR)[2]
+    return hello.project == project and vigil.ritual in {hello.ritual, bare}

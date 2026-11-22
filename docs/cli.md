@@ -472,7 +472,9 @@ project, sets a vigil for that one project. The nearest table replaces a
 farther table of the same name whole: no key is merged. A project cannot turn
 a top-level vigil off, only replace it.
 
-`args` set the ritual's components as flags typed after its name do, and
+`ritual` is the name as you type it after `vekna cast`: bare, or with its
+tome, `cabinet:heal.mine`. A bare name counts a cast of that name from any
+tome. `args` set the ritual's components as flags typed after its name do, and
 override `[defaults.<ritual>]` the same way.
 
 A vigil is due when `every` seconds have passed since a cast of that ritual
