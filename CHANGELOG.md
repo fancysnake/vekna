@@ -18,6 +18,9 @@ when.
   number of processors.
 - **`vekna cast --queue`** hands a cast to the daemon and returns. The daemon
   runs it once a slot is free.
+- **`ClaudeOptions(skills=[...])`** names the skills a `coding` call depends on.
+  The agent is told to load each one before it starts and keeps every other
+  skill it has. A name the agent does not have fails the call.
 
 ### Changed
 
