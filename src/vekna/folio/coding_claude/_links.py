@@ -122,21 +122,19 @@ class _SystemLike(Protocol):
 
 # The session's first message lists every skill the agent has. A named skill
 # that is not on it would be skipped in silence, and the prompt no longer
-# carries the procedure the skill was to supply.
+# carries the procedure the skill was to supply. An opening message with no
+# list means the SDK changed, and a missing skill can no longer be seen.
 def _check_skills(*, message: _SystemLike, named: Sequence[str]) -> None:
-    known = message.data.get("skills")
-    if message.subtype != "init" or not isinstance(known, list):
+    if message.subtype != "init" or not named:
         return
+    known = message.data.get("skills")
+    if not isinstance(known, list):
+        msg = "the agent's opening message lists no skills, so `skills` is unchecked"
+        raise RitualError(msg)
     if missing := [name for name in named if name not in known]:
         absent = ", ".join(repr(name) for name in missing)
         msg = f"the agent has no skill {absent} — install it, or drop it from `skills`"
         raise RitualError(msg)
-
-
-def _prompt(*, prompt: str, skills: Sequence[str]) -> str:
-    if not skills:
-        return prompt
-    return f"{_SKILL_INSTRUCTION} {', '.join(skills)}.\n\n{prompt}"
 
 
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
@@ -181,19 +179,21 @@ def _ask_server(
 
 
 def _system_prompt(
-    system: str | None,
+    *, system: str | None, skills: Sequence[str]
 ) -> str | SystemPromptPreset | SystemPromptFile | None:
+    instruction = _ASK_INSTRUCTION
+    if skills:
+        instruction = f"{instruction}\n\n{_SKILL_INSTRUCTION} {', '.join(skills)}."
     # Appending to the preset keeps Claude Code's own system prompt; a plain
     # string would replace it.
     if system is None:
-        return {"type": "preset", "preset": "claude_code", "append": _ASK_INSTRUCTION}
-    return f"{system}\n\n{_ASK_INSTRUCTION}"
+        return {"type": "preset", "preset": "claude_code", "append": instruction}
+    return f"{system}\n\n{instruction}"
 
 
 def _agent_options(
-    *, call: CodingCall, gate: GateFn | None, ask: AskFn
+    *, call: CodingCall, knobs: ClaudeOptions, gate: GateFn | None, ask: AskFn
 ) -> ClaudeAgentOptions:
-    knobs = _claude_options(call.focus_options)
     if (permission_mode := knobs.permission_mode) is None:
         permission_mode = "default" if gate is not None else "bypassPermissions"
     output_format: dict[str, str | dict[str, JsonValue]] | None = None
@@ -217,7 +217,7 @@ def _agent_options(
     ) = {_SERVER: _ask_server(ask)}
     return ClaudeAgentOptions(
         model=call.model,
-        system_prompt=_system_prompt(call.system),
+        system_prompt=_system_prompt(system=call.system, skills=knobs.skills),
         cwd=call.cwd,
         # `resume`, not `continue_conversation`: the medium already resolved
         # which thread this call is on, and the SDK's continue flag means the
@@ -271,7 +271,7 @@ async def _streamed(
     # rite takes the session down before it closes. Typed an `AsyncIterator`,
     # which has no `aclose`, so the generator it is at runtime is asked for —
     # and anything else refused, since it could not be closed.
-    messages = query(prompt=_prompt(prompt=prompt, skills=skills), options=options)
+    messages = query(prompt=prompt, options=options)
     if not isinstance(messages, AsyncGenerator):
         msg = (
             "claude_agent_sdk.query returned "
@@ -315,8 +315,8 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         gate: GateFn | None,
         ask: AskFn,
     ) -> FocusReply:
-        options = _agent_options(call=call, gate=gate, ask=ask)
-        skills = _claude_options(call.focus_options).skills
+        knobs = _claude_options(call.focus_options)
+        options = _agent_options(call=call, knobs=knobs, gate=gate, ask=ask)
         return await _streamed(
-            prompt=call.prompt, skills=skills, options=options, on_delta=on_delta
+            prompt=call.prompt, skills=knobs.skills, options=options, on_delta=on_delta
         )

@@ -238,7 +238,9 @@ def _sdk_stub(
         captured.setdefault("every_options", []).append(options)
         # A real session opens with its hooks' messages, which list no skills.
         yield SystemMessage(subtype="hook_started", data={})
-        yield SystemMessage(subtype="init", data={"skills": list(_KNOWN_SKILLS)})
+        # A test seeds `captured["init_data"]` to change what the session opens with.
+        init_data = captured.get("init_data", {"skills": list(_KNOWN_SKILLS)})
+        yield SystemMessage(subtype="init", data=init_data)
         yield AssistantMessage(
             content=(
                 "drafting the haiku"
@@ -705,9 +707,14 @@ class TestNamedSkills:
         exit_code = main(["mender", "--text", "resolve the conflict"])
 
         assert exit_code == 0
-        assert captured["prompt"] == (
-            "Before anything else, load these skills with the Skill tool and"
-            " follow them: conflict, tome:gate.\n\nresolve the conflict"
+        assert captured["prompt"] == "resolve the conflict"
+        assert (
+            captured["options"]
+            .system_prompt["append"]
+            .endswith(
+                "Before anything else, load these skills with the Skill tool and"
+                " follow them: conflict, tome:gate."
+            )
         )
         assert captured["options"].allowed_tools == [
             "mcp__vekna__ask_human",
@@ -729,6 +736,20 @@ class TestNamedSkills:
         assert exit_code == _CAST_FAILED_EXIT
         assert "the agent has no skill 'absent'" in captured.err
         assert "drafting the haiku" not in captured.out
+
+    @staticmethod
+    def test_an_opening_message_without_a_skills_list_fails_the_cast(
+        tmp_path, monkeypatch, capsys
+    ):
+        stub = _sdk_stub({"init_data": {}})
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", stub)
+        (tmp_path / "rituals.py").write_text(_SKILLED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["mender", "--text", "resolve the conflict"])
+
+        assert exit_code == _CAST_FAILED_EXIT
+        assert "lists no skills" in capsys.readouterr().err
 
     @staticmethod
     def test_a_call_that_names_no_skill_is_sent_as_written(tmp_path, monkeypatch):
