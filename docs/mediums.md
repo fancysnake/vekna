@@ -119,6 +119,11 @@ plan = await coding("plan the migration", output=Plan)
 await coding("survey the code", opts=CodingOpts(focus_options=ClaudeOptions(
     permission_mode="dontAsk", allowed_tools=["Read", "Grep"], effort="high"
 )))
+
+# Skills the agent must load before it starts
+await coding("resolve the conflict", opts=CodingOpts(focus_options=ClaudeOptions(
+    skills=["conflict"]
+)))
 ```
 
 Everything reusable bundles into `CodingOpts` — sharing one across calls is
@@ -136,6 +141,12 @@ mode cannot read the files you gave it `Read` for.
 denied. Use it when a sandbox already does the fencing and the ritual only needs
 to take a few tools away. A field `ClaudeOptions` does not have raises
 `ClaudeOptionsError`.
+
+`skills` names the skills a call depends on. The agent is told to load each
+one before it starts, and it keeps every other skill it has. A name the agent
+does not have fails the call and the error says which: a prompt that leans on a
+skill must not run without it. Use the name the agent lists, `conflict` for a
+project or user skill and `plugin:skill` for one a plugin ships.
 
 An agent can hand a decision back to you mid-rite by calling the `ask_human`
 tool; the cast blocks until you answer, exactly as `decide` does. Any options it

@@ -11,8 +11,19 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`ClaudeOptions(skills=[...])`** names the skills a `coding` call depends on.
+  The agent is told to load each one before it starts and keeps every other
+  skill it has. A name the agent does not have fails the call.
+
 ### Changed
 
+- **`ritual-scribe`** and the Rituals page teach failing over many items: route
+  on what the ritual reads back and not on the agent's reply, three tiers of
+  failure, a give-up path that aborts and stashes under a reported name, and
+  one failure not paid for twice.
+  ([#231](https://github.com/fancysnake/vekna/issues/231))
 - **`t` in the window takes over a cast, not one prompt.** The right page
   stays on the cast, and every prompt it asks is claimed and answered on the
   line at the bottom, with no key between them. Esc hands the open prompts

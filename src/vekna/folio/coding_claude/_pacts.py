@@ -31,6 +31,9 @@ class ClaudeOptions(BaseModel):
     permission_mode: PermissionMode | None = None
     allowed_tools: list[str] | None = None
     disallowed_tools: list[str] = []
+    # Skills this call must load, by name. The agent keeps every other skill
+    # it has: this adds a demand, it does not filter.
+    skills: list[str] = []
     max_turns: int | None = None
     effort: EffortLevel | None = None
 
