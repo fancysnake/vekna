@@ -25,6 +25,11 @@ when.
   for the one before. A cast that awaits another carries on before the next
   starts. Casts started from the window or with `--queue` still run side by
   side.
+- **`ritual-scribe`** and the Rituals page teach failing over many items: route
+  on what the ritual reads back and not on the agent's reply, three tiers of
+  failure, a give-up path that aborts and stashes under a reported name, and
+  one failure not paid for twice.
+  ([#231](https://github.com/fancysnake/vekna/issues/231))
 
 ### Removed
 

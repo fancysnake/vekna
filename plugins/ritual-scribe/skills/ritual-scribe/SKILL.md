@@ -454,6 +454,74 @@ if the ritual can do without the answer. Or ask first: `attended()` from
 `vekna.lexicon` is false under the flag, and `trial.decide.attended = False`
 stands in for it in a test, refusing every `decide` the way the flag does.
 
+**The world decides, never the reply.** "Fixed" is what the agent believes.
+Route on what the ritual reads back itself — the gate's exit code, the index,
+the file on disk:
+
+```python
+@step
+async def repair(red: Red) -> Red | Landed | GaveUp:
+    await coding(_REPAIR + red.said, session=Session.CONTINUE, key=red.branch)
+    gate = await shell("mise run check")       # the reply is thrown away
+    if not gate.exit_code:
+        return Landed(branch=red.branch)
+    if red.budget <= 1:
+        return GaveUp(branch=red.branch, reason=gate.stdout, seen=red.seen)
+    return red.model_copy(update={"budget": red.budget - 1, "said": gate.stdout})
+```
+
+An `output=Model` reply is a reading — which threads, which files — never a
+verdict that the work is done. A step with nothing to read back gets no retry
+loop: with no command, file or API to ask, a second attempt is a second guess.
+Run the agent once and report what it left.
+
+**A ritual over many items has three tiers of failure.** Pick the tier where
+the failure happens:
+
+- *Fatal to the run* (dirty worktree, login refused): raise, and let the report
+  step say what was done so far.
+- *Fatal to one item* (branch will not check out): return a payload that writes
+  the item's row as blocked and takes the next item.
+- *Degraded* (the gate stays red, the review can still be posted): stand down
+  from that task, continue the item, report it red.
+
+Only the first raises. The other two are exits in the return annotation. One
+stuck item must not cost the items behind it, and an item that stays red still
+gets its line in the report.
+
+**Leave the world recoverable.** Every give-up path aborts what is half done,
+stashes the rest under a name, and puts the name in the report:
+
+```python
+_RELEASE = """\
+if git rev-parse -q --verify MERGE_HEAD >/dev/null; then git merge --abort; fi
+if [ -n "$(git status --porcelain)" ]; then
+    git stash push -u -m {name} >/dev/null && echo stashed
+fi
+"""
+
+name = f"gave-up/{lost.branch}"
+ran = await shell(_RELEASE.format(name=shlex.quote(name)))
+stash = name if ran.stdout.strip() == "stashed" else ""   # goes in the row
+```
+
+`git stash push` exits 0 with nothing to stash; the echoed word is what makes
+the report's claim true.
+
+**Do not pay twice for one failure.** A red base branch fails every item the
+same way. Carry the failures the cast gave up on in the payload, and compare an
+item's *first* failure against them before any repair — digits stripped,
+because timings and counts differ on every run:
+
+```python
+def same_failure(one: str, other: str) -> bool:
+    return bool(one) and re.sub(r"\d+", "", one) == re.sub(r"\d+", "", other)
+
+
+if any(same_failure(gate.stdout, known) for known in red.seen):
+    return GaveUp(branch=red.branch, reason="red as it already was", seen=red.seen)
+```
+
 **Bound time per call, not per step loop.** `await timeout(coding(...),
 seconds=600)` and `await race(a, b)` from `vekna.folio.flow`; `@step(timeout=600)`
 bounds a whole visit. An overrun cancels the work — shell process group killed,
@@ -670,6 +738,9 @@ on the page it asked about.
       it.
 - [ ] Every non-zero `exit_code` on a path you care about routes or raises
       `RitualError` naming what failed.
+- [ ] Every retry loop routes on something the ritual read back — an exit code,
+      the index, a file — never on the agent's reply.
+- [ ] Every give-up path aborts, stashes under a name, and reports the name.
 - [ ] Every `coding` call's permissions are a decision you made, not the
       `bypassPermissions` default inherited by writing no `opts`.
 - [ ] Agent constraints are enforced by `allowed_tools`/`permission_mode`/
