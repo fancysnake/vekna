@@ -16,6 +16,11 @@ when.
 - **`[circle] total_processes`** limits how many casts run at once across
   every project. It is read from the user config only and defaults to the
   number of processors.
+- **Vigils**: a `[vigil.<name>]` table names a ritual, an interval in seconds
+  and optional `args`, and the daemon casts the ritual in each listed project
+  when the interval has passed since its last cast there. `[circle]
+  vigil_processes` limits how many such casts run at once; it defaults to one
+  less than `total_processes`. A cast names the vigil that started it.
 - **`vekna cast --queue <ritual>`** hands the ritual to the daemon and
   returns, as `c` in the window does. The cast runs with no terminal, the casts
   it queues run side by side, and `vekna` shows them. The ritual's name and

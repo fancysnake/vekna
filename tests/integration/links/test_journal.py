@@ -120,6 +120,19 @@ class TestRecording:
 
         assert [record.hello.cast_id for record in journal.running()] == ["going"]
 
+    @staticmethod
+    def test_every_record_that_reads_back_is_listed_whatever_its_state(tmp_path: Path):
+        journal = Journal(tmp_path)
+        for cast_id in ("ended", "queued", "going", "torn"):
+            journal.record(_hello(cast_id))
+        journal.record(CastGoodbye(cast_id="ended", status="ok"))
+        journal.record(CastQueued(cast_id="queued"))
+        (tmp_path / "torn" / "run.json").write_text("{", encoding="utf-8")
+
+        assert sorted(
+            (record.hello.cast_id, record.status) for record in journal.records()
+        ) == [("ended", "ok"), ("going", "running"), ("queued", "queued")]
+
     # The log now has a hole nothing in the log can show, so the record is where
     # it gets said. The raise goes on, because the daemon reports the failure.
     @staticmethod

@@ -5,9 +5,19 @@ from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import JsonValue
+from typing_extensions import override
 
 from vekna.pacts.casts import CastBoard, Casts, CastView
-from vekna.pacts.circle import Exited, Limits, Spawn, Spawned, Tending, TreeError, Trees
+from vekna.pacts.circle import (
+    CastQueue,
+    Exited,
+    Limits,
+    Spawn,
+    Spawned,
+    Tending,
+    TreeError,
+    Trees,
+)
 from vekna.wire import (
     NEEDS_TREE,
     AltarRequested,
@@ -273,7 +283,7 @@ class Leasing:
 # typed at a terminal set going run one at a time, that cast among them: its
 # terminal is one stream, and it reads in order only if one cast writes to it at
 # a time.
-class Circle:
+class Circle(CastQueue):
     def __init__(
         self,
         *,
@@ -301,6 +311,7 @@ class Circle:
                 self._freed(tree.path)
         return trees
 
+    @override
     def enqueue(self, hello: CastHello) -> None:
         self._hub.apply(hello)
         self._hub.apply(CastQueued(cast_id=hello.cast_id))
@@ -335,7 +346,18 @@ class Circle:
     # shortcut: two casts typed in the same instant can both be told there is
     # room for the last slot; admitting on the hello itself is the upgrade.
     def has_room(self, *, project_root: str, project: str) -> bool:
-        holders = self._holders()
+        return self._fits(self._holders(), project_root=project_root, project=project)
+
+    # Room that no queued cast is waiting for: all a cast nobody asked for may
+    # take.
+    @override
+    def has_spare(self, *, project_root: str, project: str) -> bool:
+        queued = [self._hub.casts[cast_id].hello.project for cast_id in self._queue]
+        return self._fits(
+            self._holders() + queued, project_root=project_root, project=project
+        )
+
+    def _fits(self, holders: list[str], *, project_root: str, project: str) -> bool:
         return (
             holders.count(project) < self._limits.processes(project_root)
             and len(holders) < self._limits.total()

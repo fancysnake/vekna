@@ -24,6 +24,7 @@ class _Circle(BaseModel):
     base_branch: str | None = None
     coding: PositiveInt | None = None
     total_processes: PositiveInt | None = None
+    vigil_processes: PositiveInt | None = None
 
 
 # Only `[circle]` is the daemon's; every other table is the cast's to read.
@@ -68,6 +69,16 @@ class ConfigLimits(Limits):
         )
         return (os.cpu_count() or 1) if found is None else found
 
+    # One slot short of the machine's, so a cast somebody asks for finds room
+    # however many vigils are due.
+    @override
+    def vigils(self) -> int:
+        found = _first(
+            read_user_layers(table="circle", model=_File),
+            lambda circle: circle.vigil_processes,
+        )
+        return max(self.total() - 1, 1) if found is None else found
+
 
 def _nearest(directory: Path, key: Callable[[_Circle], _T | None]) -> _T | None:
     found = read_layers(directory=directory, table="circle", model=_File)
@@ -83,8 +94,8 @@ def _first(found: TableRead[_File], key: Callable[[_Circle], _T | None]) -> _T |
     return None
 
 
-# What only the user's top-level `[circle]` may set: both are the machine's.
-MACHINE_KEYS = ("coding", "total_processes")
+# What only the user's top-level `[circle]` may set: each is the machine's.
+MACHINE_KEYS = ("coding", "total_processes", "vigil_processes")
 
 
 def circle_problems(directory: Path) -> list[str]:

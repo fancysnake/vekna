@@ -1,6 +1,8 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
+
+from pydantic import JsonValue
 
 from vekna.wire import AltarRequested, CastHello, TendedTree
 
@@ -14,8 +16,9 @@ DEFAULT_WORKTREES = 2
 # and `base` are per project, found from the tree the cast was asked from;
 # `coding` and `total` are per machine, so only the user's own config says
 # them: `None` is no limit on `coding`, and `total` is how many casts run at
-# once across every project. `base` is the project's `base_branch`, and `None`
-# is the `HEAD` of the tree the altar was asked from.
+# once across every project. `vigils` is how many of those a vigil may have
+# started. `base` is the project's `base_branch`, and `None` is the `HEAD` of
+# the tree the altar was asked from.
 class Limits(Protocol):
     def processes(self, project_root: str) -> int: ...
     def worktrees(self, project_root: str) -> int: ...
@@ -23,6 +26,31 @@ class Limits(Protocol):
     def base(self, project_root: str) -> str | None: ...
     def coding(self) -> int | None: ...
     def total(self) -> int: ...
+    def vigils(self) -> int: ...
+
+
+# A ritual the daemon casts in one project whenever `every` seconds have passed
+# since a cast of it last started there. `args` are the ritual's components, as
+# flags typed after its name would set them.
+@dataclass(frozen=True, kw_only=True)
+class Vigil:
+    name: str
+    project_root: str
+    ritual: str
+    every: int
+    args: Mapping[str, JsonValue]
+
+
+# What a vigil needs of the daemon's scheduler. `has_spare` is room that no
+# queued cast is waiting for, so a cast enqueued on it starts at once.
+class CastQueue(Protocol):
+    def has_spare(self, *, project_root: str, project: str) -> bool: ...
+    def enqueue(self, hello: CastHello) -> None: ...
+
+
+# Read each time it is asked, so an edited config counts from the next look.
+class VigilBook(Protocol):
+    def vigils(self) -> list[Vigil]: ...
 
 
 # How a spawned cast process ended, and the last thing it said: a cast that dies

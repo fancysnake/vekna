@@ -42,9 +42,11 @@ class _Limits(Limits):
         worktrees: int = 2,
         coding: int | None = None,
         total: int = 99,
+        vigils: int = 98,
     ) -> None:
         self.slots = processes
         self._total = total
+        self._vigils = vigils
         self._worktrees = worktrees
         self._coding = coding
         self.asked: list[str] = []
@@ -72,6 +74,9 @@ class _Limits(Limits):
 
     def total(self) -> int:
         return self._total
+
+    def vigils(self) -> int:
+        return self._vigils
 
 
 # Each spawned cast runs until the test says how it ended.
@@ -334,6 +339,25 @@ class TestProcesses:
             == "2 of 2 casts are running on this machine"
         )
         assert limits.asked == ["/proj", "/third"]
+
+    # One cast runs and the rest wait for their project: each waiting one is a
+    # slot of the machine's three already spoken for.
+    @staticmethod
+    async def test_a_queued_cast_leaves_no_spare_room_for_a_cast_nobody_asked_for():
+        circle, _, spawn = _circle(_Limits(processes=1, total=3))
+        circle.enqueue(_hello("runs"))
+        circle.enqueue(_hello("waits"))
+        await asyncio.sleep(0)
+        other = {"project_root": "/other", "project": "/other/.git"}
+
+        spare_with_one_waiting = circle.has_spare(**other)
+        circle.enqueue(_hello("waits-too"))
+
+        assert spawn.spawned == ["runs"]
+        assert spare_with_one_waiting
+        assert circle.has_room(**other)
+        assert not circle.has_spare(**other)
+        assert not circle.has_spare(project_root="/proj", project="/proj/.git")
 
     # Counting what is running in the project, not what this daemon spawned:
     # a `vekna cast` typed by hand takes a slot too.

@@ -112,6 +112,38 @@ class TestAudit:
         assert code == 1
 
     @staticmethod
+    def test_a_vigil_is_shown_whole_from_the_nearest_layer_and_a_broken_one_named(
+        user: Path, repo: Path
+    ):
+        user.write_text(
+            '[vigil.prwatch]\nevery = 3600\nritual = "heal"\n'
+            '[vigil.tidy]\nevery = 60\nritual = "tidy"\ncron = "*"\n',
+            encoding="utf-8",
+        )
+        project = repo / ".vekna.toml"
+        project.write_text(
+            '[vigil.prwatch]\nevery = 60\nritual = "echo"\n', encoding="utf-8"
+        )
+
+        code, said = _audit()
+
+        assert said == (
+            "layers, nearest first:\n"
+            f"  1  {project}\n"
+            f"  2  {user}\n"
+            "\n"
+            "[vigil]\n"
+            '  prwatch = {"every": 60, "ritual": "echo"}  ← 1'
+            ' (over 2: {"every": 3600, "ritual": "heal"})\n'
+            '  tidy = {"every": 60, "ritual": "tidy", "cron": "*"}  ← 2\n'
+            "\n"
+            "errors:\n"
+            f"  {user}: vigil.tidy.cron: Extra inputs are not permitted"
+            " — [vigil] ignored\n"
+        )
+        assert code == 1
+
+    @staticmethod
     def test_every_broken_table_is_named_and_the_audit_fails(user: Path, repo: Path):
         user.write_text(
             "[window]\nhistory_after = 3\ntheme = 1\n[projects.bad]\nkey = 1\n",

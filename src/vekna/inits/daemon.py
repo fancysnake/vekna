@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import fcntl
+import itertools
 import logging
 import sys
 from collections.abc import Callable, Coroutine
@@ -16,12 +17,14 @@ from vekna.links.debug_log import DebugLog
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive, signal_pid
+from vekna.links.vigil_config import ConfigVigils
 from vekna.links.worktrees import GitTrees
 from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.cutter import Cutter
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
-from vekna.pacts.circle import TreeError
+from vekna.mills.vigils import Vigils
+from vekna.pacts.circle import TreeError, VigilBook
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
     AdmissionRequested,
@@ -74,6 +77,9 @@ _STOPPED = "stopped the daemon"
 # How long a daemon gets to start listening, and to stop.
 _POLL_SECONDS = 0.05
 _POLLS = 100
+# How often the daemon looks for a vigil that is due, so no interval is kept
+# more closely than this.
+_VIGIL_SECONDS = 5.0
 
 
 def _nothing(_: Routed) -> None:
@@ -180,12 +186,44 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
     server = await serve(path=path, routes=routes)
     _log.info("listening on %s", path)
+    vigils = Vigils(hub=hub, queue=circle, limits=limits, alive=pid_alive)
+    keeping = asyncio.create_task(
+        _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
+    )
     try:
         await server.stopped()
     finally:
+        keeping.cancel()
         await server.close()
     _log.info("stopped")
     return 0
+
+
+# A look that fails is logged and the next one is tried: a config half written
+# or a journal the disk will not read must not end the vigils for good.
+async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
+    for _ in itertools.count():
+        try:
+            await _look(vigils=vigils, book=book, journal=journal)
+        except OSError:
+            _log.exception("could not look at the vigils")
+        await asyncio.sleep(_VIGIL_SECONDS)
+
+
+# shortcut: every look reads each project's config and, with a vigil
+# configured, every record in the journal; remembering each ritual's last
+# start is the upgrade if a large journal makes this show up in a profile.
+async def _look(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
+    if not (found := await asyncio.to_thread(book.vigils)):
+        return
+    projects = {
+        root: await project_of(Path(root))
+        for root in {vigil.project_root for vigil in found}
+    }
+    records = await asyncio.to_thread(journal.records)
+    vigils.tick(
+        now=datetime.now(tz=UTC), vigils=found, projects=projects, records=records
+    )
 
 
 # `vekna serve` detaches itself and its launcher exits at once, so what is

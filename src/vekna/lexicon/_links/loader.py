@@ -138,7 +138,7 @@ def load_rituals_source(path: Path) -> list[RitualSource]:
 
 # Not a closed set: other tools keep their tables in the same file. `[circle]`
 # is the daemon's, read in its own process.
-_TABLES = (*Config.model_fields, "circle", "window")
+_TABLES = (*Config.model_fields, "circle", "window", "vigil")
 
 
 # A table vekna does not read is somebody else's, unless it is a near spelling

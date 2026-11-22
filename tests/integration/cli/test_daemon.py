@@ -2048,6 +2048,74 @@ class _Flushes(io.StringIO):
         self.calls.append(_FLUSHED)
 
 
+# A daemon that looks for a due vigil often enough for a test to wait on, in a
+# project its user config lists.
+@pytest.fixture(name="vigil_config")
+def _vigil_config(queue_rituals: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setattr("vekna.inits.daemon._VIGIL_SECONDS", _TICK)
+    (queue_rituals / "config" / "vekna").mkdir(parents=True)
+    config = queue_rituals / "config" / "vekna" / "config.toml"
+    config.write_text(f'[projects.here]\npath = "{queue_rituals}"\n', encoding="utf-8")
+    return config
+
+
+def _keep_tally(config: Path) -> None:
+    listed = config.read_text(encoding="utf-8")
+    config.write_text(
+        listed + '[vigil.tally]\nevery = 3600\nritual = "count"\nargs = { n = 7 }\n',
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+class TestVigils:
+    # Looked at many times while the daemon is up, and cast once: the interval
+    # has not passed again.
+    @staticmethod
+    async def test_a_due_vigil_is_cast_once_with_its_args_and_named_on_the_cast(
+        socket_path: Path, vigil_config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
+        project = socket_path.parent
+        _keep_tally(vigil_config)
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(project / "runs", "count"))
+            await asyncio.sleep(_TICK * 10)
+
+        count = _run_of(project / "runs", "count")
+        assert (count.status, count.result) == ("ok", {"n": 7})
+        assert (count.hello.vigil, count.hello.wired) == ("tally", True)
+        assert count.hello.project_root == str(project)
+        assert (
+            f"vigil tally cast count {count.hello.cast_id} in {project}" in _said(
+                caplog, logging.INFO
+            ).splitlines()
+        )
+
+    # A journal that cannot be listed is the look failing. The vigil is written
+    # into the config of a daemon already up, and is cast once the disk reads.
+    @staticmethod
+    async def test_a_look_that_fails_is_said_and_the_next_one_is_tried(
+        socket_path: Path, vigil_config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        runs = socket_path.parent / "runs"
+        runs.mkdir()
+        async with _served(socket_path):
+            runs.chmod(0o300)
+            try:
+                _keep_tally(vigil_config)
+                await _eventually(
+                    lambda: "could not look at the vigils" in _said(
+                        caplog, logging.ERROR
+                    )
+                )
+            finally:
+                runs.chmod(0o700)
+            await _spawned(lambda: _finished(runs, "count"))
+
+        assert _run_of(runs, "count").hello.vigil == "tally"
+
+
 @pytest.mark.asyncio
 class TestRoom:
     @staticmethod

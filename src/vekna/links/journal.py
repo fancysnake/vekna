@@ -204,6 +204,10 @@ class Journal:
             if not isinstance(run, DamagedRun) and run.status == "running"
         ]
 
+    # Every cast whose record reads back, in no order.
+    def records(self) -> list[RunRecord]:
+        return [run for run in self._all() if not isinstance(run, DamagedRun)]
+
     def _all(self) -> Iterator[Run]:
         if not self._root.is_dir():
             return

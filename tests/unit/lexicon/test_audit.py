@@ -50,6 +50,25 @@ class TestReport:
         )
 
     @staticmethod
+    def test_a_vigil_is_taken_whole_from_the_nearest_layer_that_names_it():
+        said = report(
+            _evidence(
+                ConfigLayer(
+                    PROJECT, {"vigil": {"prwatch": {"every": 60, "ritual": "echo"}}}
+                ),
+                ConfigLayer(
+                    USER, {"vigil": {"prwatch": {"every": 3600, "ritual": "heal"}}}
+                ),
+            )
+        )
+
+        assert _tables(said) == (
+            "[vigil]\n"
+            '  prwatch = {"every": 60, "ritual": "echo"}  ← 1'
+            ' (over 2: {"every": 3600, "ritual": "heal"})'
+        )
+
+    @staticmethod
     def test_a_value_over_a_table_replaces_it_whole():
         said = report(
             _evidence(

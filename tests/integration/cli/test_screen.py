@@ -432,3 +432,13 @@ class TestDrilledIn:
         )
 
         assert "queued by c1abcdef" in painted
+
+    @staticmethod
+    def test_a_cast_a_vigil_started_names_the_vigil():
+        kept = _hello()
+        kept.cast_id = "c2beef0011"
+        kept.vigil = "prwatch"
+
+        painted = paint(listed=[CastView(hello=kept)], focus="c2beef0011", project=None)
+
+        assert "c2beef00  vigil prwatch" in painted
