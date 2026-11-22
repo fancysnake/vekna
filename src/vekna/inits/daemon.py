@@ -32,6 +32,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastQueued,
     CastRefused,
     CastRequested,
     CodingSlotReleased,
@@ -353,21 +354,24 @@ class _Daemon(Routes):
         )
 
     async def _queued(self, surface: Surface, request: CastRequested) -> None:
+        if isinstance(reply := await self.queue(request), CastRefused):
+            surface.send(reply)
+
+    async def queue(self, request: CastRequested) -> CastQueued | CastRefused:
         if (reason := await _missing(request.project_root)) is not None:
-            surface.send(CastRefused(reason=reason))
-            return
+            return CastRefused(reason=reason)
         root = Path(request.project_root)
-        self._circle.enqueue(
-            CastHello(
-                cast_id=uuid4().hex,
-                project_root=str(root),
-                project=await project_of(root),
-                ritual=request.ritual,
-                components=dict(request.components),
-                started_at=datetime.now(tz=UTC),
-                wired=True,
-            )
+        hello = CastHello(
+            cast_id=uuid4().hex,
+            project_root=str(root),
+            project=await project_of(root),
+            ritual=request.ritual,
+            components=dict(request.components),
+            started_at=datetime.now(tz=UTC),
+            wired=True,
         )
+        self._circle.enqueue(hello)
+        return CastQueued(cast_id=hello.cast_id)
 
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         root = request.project_root

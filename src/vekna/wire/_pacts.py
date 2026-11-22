@@ -90,7 +90,9 @@ class DaemonVersion(BaseModel):
 
 # What a surface asks the daemon for, past its `SurfaceHello`: start a ritual in
 # a directory. The components cross as the strings the operator typed — the
-# daemon loads no ritual, so the cast it spawns is what validates them.
+# daemon loads no ritual, so the cast it spawns is what validates them. A
+# connection may open with one instead, and is answered a `CastQueued` naming
+# the cast, or a `CastRefused`.
 class CastRequested(BaseModel):
     kind: Literal["cast_requested"] = "cast_requested"
     project_root: str
@@ -465,6 +467,10 @@ CastMessage = CastHello | CastUpdate
 # What a connection that is not a cast opens with, and only opens with: past the
 # first frame there is nothing left for one of these to say.
 Opening = SurfaceHello | StopRequested | AltarRequested | VersionRequested
+
+# A request the daemon answers on a connection of its own, with one frame. Not in
+# `Opening`: a surface sends `CastRequested` later in its connection too.
+Asked = AltarRequested | VersionRequested | CastRequested
 
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused | AltarTended | DaemonVersion

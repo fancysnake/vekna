@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol, TypeVar, cast
 
 import click
 from click import Group
@@ -26,11 +26,15 @@ from vekna.links.worktrees import branch_of
 from vekna.mills.hub import Hub, replayed
 from vekna.pacts.screen import Screen
 from vekna.wire import (
+    SHORT_ID,
     VERSION,
     AltarRequested,
     AltarTended,
+    Asked,
     CastMessage,
+    CastQueued,
     CastRefused,
+    CastRequested,
     FailedTree,
     Opening,
     SurfaceHello,
@@ -40,6 +44,7 @@ from vekna.wire import (
     default_socket_path,
     default_state_root,
     encode_frame,
+    parse_flags,
     project_of,
     read_frames,
     refused,
@@ -53,6 +58,7 @@ _CAST_CONTEXT: dict[str, bool] = {
     "ignore_unknown_options": True,
     "allow_interspersed_args": False,
 }
+_Reply = TypeVar("_Reply")
 _RUNTIME = "vekna.lexicon._inits"
 _RESUME = "--resume"
 _UNATTENDED = "--unattended"
@@ -64,6 +70,11 @@ _VIEW_STOPPED = "the view stopped"
 _STARTED = "started the daemon — it runs until `vekna stop`"
 _DEBUG_LATE = "--debug ignored: the daemon was already running (`vekna stop` first)"
 _NO_TREES = "no pooled worktrees for this project: run `vekna altar init`"
+_QUEUE_USAGE = "usage: vekna cast --queue <ritual> [--<component> value ...]"
+_QUEUE_ALONE = (
+    "--queue takes a ritual of its own: not --continue, not --unattended,"
+    " not --no-follow"
+)
 _NO_ANSWER = (
     "the daemon hung up without answering: it may predate this vekna"
     " (`vekna stop`, then retry)"
@@ -78,6 +89,8 @@ _NO_ANSWER = (
 class _Runtime(Protocol):
     @staticmethod
     def main(argv: list[str]) -> int: ...
+    @staticmethod
+    def queueable(argv: list[str]) -> int: ...
     @staticmethod
     def rituals_list() -> int: ...
     @staticmethod
@@ -113,6 +126,13 @@ def _runtime() -> _Runtime:
     is_flag=True,
     help="End with the cast's own steps rather than with the casts it queued.",
 )
+@click.option(
+    "--queue",
+    "queued",
+    is_flag=True,
+    help="Hand the ritual to the daemon and return: it runs there, with the"
+    " casts it queues side by side, and `vekna` shows it.",
+)
 @click.argument("ritual_args", nargs=-1, type=click.UNPROCESSED)
 def _cast(
     *,
@@ -120,7 +140,12 @@ def _cast(
     continued: str | None = None,
     unattended: bool = False,
     no_follow: bool = False,
+    queued: bool = False,
 ) -> None:
+    if queued:
+        if continued is not None or unattended or no_follow:
+            raise click.UsageError(_QUEUE_ALONE)
+        raise SystemExit(_queue(list(ritual_args)))
     flags = [
         *([_UNATTENDED] if unattended else []),
         *([_NO_FOLLOW] if no_follow else []),
@@ -128,6 +153,22 @@ def _cast(
     if continued is not None:
         raise SystemExit(_continue(continued, flags=flags))
     raise SystemExit(_runtime().main([*flags, *ritual_args]))
+
+
+# Checked here before the daemon is asked, which loads no ritual. The daemon's
+# note goes to stderr: stdout is the cast's id.
+def _queue(argv: list[str]) -> int:
+    if not argv or argv[0].startswith("-"):
+        raise click.UsageError(_QUEUE_USAGE)
+    if code := _runtime().queueable(argv):
+        return code
+    ritual, *flags = argv
+    request = CastRequested(
+        project_root=str(Path.cwd()), ritual=ritual, components=parse_flags(flags)
+    )
+    reply = asyncio.run(_asked(request, expecting=CastQueued))
+    click.echo(f"queued {ritual} {reply.cast_id[:SHORT_ID]} — `vekna` shows it")
+    return 0
 
 
 @click.command("list", help="List rituals and the options each one takes.")
@@ -284,7 +325,7 @@ class _Line:
             await self.writer.wait_closed()
 
 
-async def _opened(*, opening: Opening, debug: bool) -> _Line:
+async def _opened(*, opening: Opening | Asked, debug: bool) -> _Line:
     path = default_socket_path()
     note = _DEBUG_LATE if debug else ""
     try:
@@ -506,7 +547,7 @@ _altar.add_command(_altar_reset)
 
 
 def _tend(request: AltarRequested) -> None:
-    reply = asyncio.run(_tended(request))
+    reply = asyncio.run(_asked(request, expecting=AltarTended))
     for tree in reply.trees:
         click.echo(tended(tree))
     if not reply.trees:
@@ -515,9 +556,11 @@ def _tend(request: AltarRequested) -> None:
         raise SystemExit(1)
 
 
-# The daemon does the tending: only it knows which trees a cast holds. Its note
-# goes to stderr: stdout is the trees.
-async def _tended(request: AltarRequested) -> AltarTended:
+# What the daemon answers a connection that opens with a request: the reply it
+# was asked for, or the command fails with the daemon's refusal. The daemon does
+# the tending and the queueing: only it knows which trees a cast holds and what
+# may run next. Its note goes to stderr: stdout is the answer.
+async def _asked(request: Asked, *, expecting: type[_Reply]) -> _Reply:
     line = await _opened(opening=request, debug=False)
     if line.note:
         click.echo(line.note, err=True)
@@ -525,10 +568,11 @@ async def _tended(request: AltarRequested) -> AltarTended:
         reply = await anext(read_frames(line.reader), None)
     finally:
         await line.close()
-    if isinstance(reply, AltarTended):
+    if isinstance(reply, expecting):
         return reply
-    reason = reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
-    raise click.ClickException(reason)
+    raise click.ClickException(
+        reply.reason if isinstance(reply, CastRefused) else _NO_ANSWER
+    )
 
 
 def init_command() -> Group:

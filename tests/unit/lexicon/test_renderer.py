@@ -8,13 +8,11 @@ import pytest
 
 from tests.conftest import Tty
 from vekna.lexicon import StandalonePromptError
-from vekna.lexicon._links.standalone import StandaloneRenderer, Tail, question_height
+from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
 # Up over the line just written, and everything from there down gone.
 _BACK = "\x1b[1A\r\x1b[J"
-_CONFIRM_HEIGHT = 8
-_MENU_HEIGHT = 12
 
 
 def _renderer(
@@ -641,13 +639,3 @@ class TestWithdrawnPrompt:
         inp.close()
 
         assert finished
-
-
-class TestQuestionHeight:
-    @staticmethod
-    def test_a_confirmation_is_its_prompt_and_the_answer_rows():
-        assert question_height("push?", None) == _CONFIRM_HEIGHT
-
-    @staticmethod
-    def test_every_option_and_every_prompt_line_takes_a_row():
-        assert question_height("which?\nsecond line", ["a", "b", "c"]) == _MENU_HEIGHT

@@ -3,9 +3,11 @@ from datetime import UTC, datetime
 
 from typing_extensions import override
 
+from vekna.lexicon._links.follow import ended_said
 from vekna.lexicon._links.standalone import Tail
-from vekna.lexicon._links.turns import _Prefixed
+from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._mills.follow import Lineage
+from vekna.lexicon._pacts import RiteBegan, RiteEnded
 from vekna.wire import CastGoodbye, CastHello
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -101,60 +103,136 @@ class _Terminal(io.StringIO):
         return True
 
 
-class TestPrefixed:
-    @staticmethod
-    def test_a_line_written_in_pieces_is_named_once():
-        out = io.StringIO()
-        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+def _began(rite_id: str = "r1") -> RiteBegan:
+    return RiteBegan(
+        rite_id=rite_id, parent_id=None, name="watch", category="step", started_at=_WHEN
+    )
 
-        prefixed.write("checks ")
-        prefixed.write("red\nnext\n")
+
+def _ended(rite_id: str = "r1") -> RiteEnded:
+    return RiteEnded(
+        rite_id=rite_id, status="ok", result=None, finished_at=_WHEN, error=None
+    )
+
+
+class TestTurns:
+    @staticmethod
+    def test_the_typed_cast_speaks_first_under_no_name():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
+
+        turns.typed.write("listing\n")
+
+        assert out.getvalue() == "listing\n"
+
+    @staticmethod
+    def test_a_cast_is_named_where_it_takes_over_and_not_again():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+
+        turns.render("c1", _began())
+        turns.render("c1", _ended())
+
+        assert out.getvalue() == "── ci_watch child000 ──\n▶ watch\n✓ watch\n"
+
+    @staticmethod
+    def test_the_typed_cast_is_named_once_another_has_spoken():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+        turns.render("c1", _began())
+
+        turns.typed.write("back\n")
 
         assert out.getvalue() == (
-            "[ci_watch child000] checks red\n[ci_watch child000] next\n"
+            "── ci_watch child000 ──\n▶ watch\n── sweep root0000 ──\nback\n"
         )
 
     @staticmethod
-    def test_an_empty_write_leaves_the_next_line_named():
+    def test_a_name_and_a_notice_follow_an_unfinished_line_on_a_row_of_their_own():
         out = io.StringIO()
-        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
 
-        prefixed.write("")
-        prefixed.write("checks\n")
-        prefixed.write("")
-        prefixed.write("red\n")
+        turns.typed.write("progress")
+        turns.render("c1", _began())
+        turns.typed.write("again")
+        turns.say(label="ci_watch child000", line="✓ done")
 
         assert out.getvalue() == (
-            "[ci_watch child000] checks\n[ci_watch child000] red\n"
+            "progress\n── ci_watch child000 ──\n▶ watch\n"
+            "── sweep root0000 ──\nagain\n[ci_watch child000] ✓ done\n"
+        )
+
+    @staticmethod
+    def test_an_empty_write_takes_nothing_over():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+        turns.render("c1", _began())
+
+        turns.typed.write("")
+        turns.render("c1", _ended())
+
+        assert out.getvalue() == "── ci_watch child000 ──\n▶ watch\n✓ watch\n"
+
+    @staticmethod
+    def test_a_rite_nothing_printed_inside_ends_on_its_own_line_at_a_terminal():
+        out = _Terminal()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+
+        turns.render("c1", _began())
+        turns.render("c1", _ended())
+
+        assert out.getvalue() == (
+            "── ci_watch child000 ──\n▶ watch\n\x1b[1A\r\x1b[J✓ watch\n"
+        )
+
+    @staticmethod
+    def test_a_rite_another_cast_spoke_inside_ends_on_a_line_of_its_own():
+        out = _Terminal()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+        turns.render("c1", _began())
+        turns.typed.write("back\n")
+
+        turns.render("c1", _ended())
+
+        assert out.getvalue() == (
+            "── ci_watch child000 ──\n▶ watch\n── sweep root0000 ──\nback\n"
+            "── ci_watch child000 ──\n✓ watch\n"
         )
 
     @staticmethod
     def test_whether_it_is_a_terminal_is_the_terminal_s_answer():
-        assert _Prefixed(Tail(_Terminal()), "ci_watch child000").isatty()
+        assert Turns(Tail(_Terminal()), typed="sweep root0000").typed.isatty()
+        assert not Turns(Tail(io.StringIO()), typed="sweep root0000").typed.isatty()
 
     @staticmethod
-    def test_a_line_taken_back_stays_under_its_name():
-        out = _Terminal()
-        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+    def test_whether_its_row_is_empty_is_the_stream_s_answer():
+        turns = Turns(Tail(io.StringIO()), typed="sweep root0000")
+        assert turns.typed.row_empty
 
-        prefixed.write("▶ watch\n")
-        prefixed.overwrite(prefixed.mark, "✓ watch\n")
+        turns.typed.write("half a line")
+        assert not turns.typed.row_empty
 
-        assert out.getvalue() == (
-            "[ci_watch child000] ▶ watch\n"
-            "\x1b[1A\r\x1b[J[ci_watch child000] ✓ watch\n"
-        )
+        turns.typed.write("\n")
+        assert turns.typed.row_empty
 
     @staticmethod
-    def test_every_line_taken_back_stays_under_its_name():
-        out = _Terminal()
-        prefixed = _Prefixed(Tail(out), "ci_watch child000")
+    def test_how_a_cast_ended_is_said_with_its_detail():
+        assert ended_said("ok", None) == "✓ done"
+        assert ended_said("error", "no tree") == "✗ failed: no tree"
+        assert ended_said("disconnected", None) == "⚠ aborted"
 
-        prefixed.write("▶ watch\n")
-        prefixed.overwrite(prefixed.mark, "✗ watch  — one\ntwo\n")
+    @staticmethod
+    def test_a_notice_names_its_cast_and_takes_nothing_over():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
 
-        assert out.getvalue() == (
-            "[ci_watch child000] ▶ watch\n"
-            "\x1b[1A\r\x1b[J[ci_watch child000] ✗ watch  — one\n"
-            "[ci_watch child000] two\n"
-        )
+        turns.say(label="ci_watch child000", line="⏸ push?")
+        turns.typed.write("on\n")
+
+        assert out.getvalue() == "[ci_watch child000] ⏸ push?\non\n"

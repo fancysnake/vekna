@@ -718,6 +718,15 @@ class TestTreeBlocked:
 
         assert refused == CastRefused(reason="this daemon keeps no worktree pool")
 
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_hub_queues_nothing():
+        refused = await Hub().queue(
+            CastRequested(project_root="/proj", ritual="nap", components={})
+        )
+
+        assert refused == CastRefused(reason="this daemon starts no casts")
+
 
 class TestPeers:
     @staticmethod

@@ -23,9 +23,10 @@ from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
 from vekna.lexicon._links.follow import DAEMON_WENT
 from vekna.links.journal import Journal
-from vekna.links.socket_server import alive, attach
+from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive
 from vekna.links.worktrees import GitTrees
+from vekna.mills.hub import Hub
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.circle import Tending
 from vekna.pacts.screen import Screen
@@ -68,6 +69,7 @@ _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _PATIENCE = 400
 _TICK = 0.01
 _REFUSED = 2
+_QUEUED_N = 2
 # The version asked before the cast and again as it attaches, then the cast's
 # own connection.
 _UNTIL_THE_CAST_ATTACHED = 3
@@ -1751,22 +1753,20 @@ _QUEUE_RITUALS = textwrap.dedent("""
         return Boom()
 
 
-    class Queued(BaseModel):
+    class HoldingTwo(BaseModel):
         pass
 
 
-    # Queues a cast, then dies once the test has seen the board for it.
     @step
-    async def queue_then_blow_up(_: Queued) -> Done[Queued]:
+    async def holding_two(_: HoldingTwo) -> Done[HoldingTwo]:
         await enqueue("hold", NoComponents())
-        while not Path("go").exists():
-            await asyncio.sleep(0.05)
-        raise RuntimeError("boom")
+        await enqueue("hold", NoComponents())
+        return Done(HoldingTwo())
 
 
-    @ritual("queue_boom")
-    async def queue_boom(_: NoComponents) -> Queued:
-        return Queued()
+    @ritual("hold_two")
+    async def hold_two(_: NoComponents) -> HoldingTwo:
+        return HoldingTwo()
     """)
 
 
@@ -2120,31 +2120,177 @@ class TestFollowing:
             await _eventually(lambda: "detached" in log.read_text())
 
 
-class _Screen(io.StringIO):
-    @override
-    def isatty(self) -> bool:
-        return True
+def _statuses(runs: Path, ritual: str) -> list[str]:
+    return sorted(
+        run.status
+        for run in Journal(runs).recent(limit=10)
+        if not isinstance(run, DamagedRun) and run.hello.ritual == ritual
+    )
 
 
 @pytest.mark.asyncio
-class TestBoardOnFailure:
+class TestOneAtATime:
     @staticmethod
-    async def test_a_cast_that_raises_is_left_on_the_board_as_failed(
-        socket_path: Path, queue_rituals: Path, monkeypatch: pytest.MonkeyPatch
+    async def test_what_a_typed_cast_queued_runs_one_cast_at_a_time(
+        socket_path: Path, queue_rituals: Path
     ):
-        out = _Screen()
-        monkeypatch.setattr(sys, "stdout", out)
+        runs = queue_rituals / "runs"
         async with _served(socket_path):
-            cast = asyncio.create_task(_drive(["queue_boom"]))
-            await _spawned(lambda: "\x1b[?1049h" in out.getvalue())
-            (queue_rituals / "go").touch()
-            with pytest.raises(RuntimeError, match="boom"):
-                await cast
+            cast = asyncio.create_task(_drive(["hold_two"]))
+            await _spawned(lambda: "running" in _statuses(runs, "hold"))
+            held = _statuses(runs, "hold")
             (queue_rituals / "release").touch()
+            code = await asyncio.wait_for(cast, timeout=60)
 
-        left = out.getvalue().rpartition("\x1b[?1049l")[2]
-        assert "✗ failed" in left
-        assert "▶" not in left.splitlines()[0]
+        assert held == ["queued", "running"]
+        assert code == 0
+        assert _statuses(runs, "hold") == ["ok", "ok"]
+
+
+async def _queue(*args: str) -> Result:
+    return await asyncio.to_thread(
+        CliRunner().invoke, init_command(), ["cast", "--queue", *args]
+    )
+
+
+# A daemon of this version that hangs up on whatever is asked of it next.
+@contextlib.asynccontextmanager
+async def _deaf(socket_path: Path) -> AsyncGenerator[None]:
+    async def deaf(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        if await reader.readline() == _ASKED_ITS_VERSION:
+            writer.write(encode_frame(DaemonVersion(version=VERSION)))
+            with contextlib.suppress(OSError):
+                await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_unix_server(deaf, path=str(socket_path))
+    try:
+        yield
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.asyncio
+class TestQueueFlag:
+    @staticmethod
+    async def test_it_names_the_cast_the_daemon_queued_and_returns(
+        socket_path: Path, queue_rituals: Path
+    ):
+        runs = queue_rituals / "runs"
+        async with _served(socket_path):
+            queued = await _queue("count", "--n", "2")
+            await _spawned(lambda: _finished(runs, "count"))
+
+        run = _run_of(runs, "count")
+        assert queued.exit_code == 0
+        assert queued.stdout == (
+            f"queued count {run.hello.cast_id[:8]} — `vekna` shows it\n"
+        )
+        assert run.status == "ok"
+        assert run.hello.wired
+        assert run.hello.components == {"n": _QUEUED_N}
+
+    @staticmethod
+    async def test_a_ritual_that_is_not_there_is_said_and_no_daemon_is_asked(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+
+        queued = await _queue("nothing")
+
+        assert queued.exit_code == _REFUSED
+        assert "no ritual named 'nothing'" in queued.output
+        assert not await alive(socket_path)
+
+    @staticmethod
+    async def test_a_component_that_does_not_fit_is_said(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+
+        queued = await _queue("count", "--n", "many")
+
+        assert queued.exit_code == _REFUSED
+        assert "--n" in queued.output
+        assert not await alive(socket_path)
+
+    @staticmethod
+    @pytest.mark.parametrize("args", [(), ("--prompt", "hello")])
+    async def test_anything_but_a_ritual_is_a_usage_error(
+        socket_path: Path, args: tuple[str, ...]
+    ):
+        queued = await _queue(*args)
+
+        assert queued.exit_code == _REFUSED
+        assert "usage: vekna cast --queue <ritual>" in queued.output
+        assert not await alive(socket_path)
+
+    @staticmethod
+    async def test_it_goes_with_none_of_unattended_continue_no_follow(
+        socket_path: Path,
+    ):
+        del socket_path
+        runner = CliRunner()
+
+        unattended = await asyncio.to_thread(
+            runner.invoke, init_command(), ["cast", "--unattended", "--queue", "count"]
+        )
+        continued = await asyncio.to_thread(
+            runner.invoke, init_command(), ["cast", "--continue", "c1", "--queue"]
+        )
+        no_follow = await asyncio.to_thread(
+            runner.invoke, init_command(), ["cast", "--no-follow", "--queue", "count"]
+        )
+
+        assert unattended.exit_code == _REFUSED
+        assert continued.exit_code == _REFUSED
+        assert no_follow.exit_code == _REFUSED
+        assert "--queue takes a ritual of its own" in unattended.output
+        assert "--queue takes a ritual of its own" in continued.output
+        assert "--no-follow" in no_follow.output
+
+    @staticmethod
+    async def test_a_daemon_that_will_not_queue_it_fails_the_command(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+        server = await serve(path=socket_path, routes=Hub())
+
+        queued = await _queue("count", "--n", "2")
+
+        await server.close()
+        assert queued.exit_code == 1
+        assert "this daemon starts no casts" in queued.output
+
+    @staticmethod
+    async def test_a_daemon_that_hangs_up_is_said_to_predate_this_vekna(
+        socket_path: Path, queue_rituals: Path
+    ):
+        del queue_rituals
+        async with _deaf(socket_path):
+            queued = await _queue("count", "--n", "2")
+
+        assert queued.exit_code == 1
+        assert "the daemon hung up without answering" in queued.output
+
+    @staticmethod
+    async def test_a_directory_that_is_not_there_is_refused(
+        socket_path: Path, tmp_path: Path
+    ):
+        gone = tmp_path / "gone"
+
+        async with _served(socket_path):
+            reader, writer = await attach(socket_path)
+            writer.write(
+                encode_frame(
+                    CastRequested(project_root=str(gone), ritual="count", components={})
+                )
+            )
+            reply = [message async for message in read_frames(reader)]
+            writer.close()
+
+        assert reply == [CastRefused(reason=f"{gone} is not a directory")]
 
 
 def _said(caplog: pytest.LogCaptureFixture, level: int) -> str:

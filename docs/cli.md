@@ -78,58 +78,71 @@ source were wrong, or a medium the ritual calls has no focus registered.
 ### Following what it queued
 
 A cast typed with a daemon running stays at its terminal for as long as the
-casts it queued — and the ones they queued — are still going. Once the first of
-them arrives the terminal shows a board: a line per cast with how long it has
-run and the step it is in, then the latest output of one cast.
+casts it queued — and the ones they queued — are still going. They run one at a
+time, the typed cast among them, so the terminal is one stream that reads in
+order and scrolls back like any other output. A cast that awaits another waits
+while that one runs, then carries on before the next one starts.
+
+A cast's lines are printed as it writes them. A line names the cast where it
+takes over from another:
 
 ```text
-  1  ci_watch 3f9a2b11  ▶ 2m05s  watch
-  2  pr_fix 91bb0c4d  ▶ 41s  repair_ci
-  3  ci_watch 77c0e2aa  ✓ done
+▶ fan_out
+✓ fan_out
+result: {"queued":[...]}
 ── ci_watch 3f9a2b11 ──
 ▶ watch
-  ↳ shell  gh pr checks 412
-    lint  pending
- a number to view a cast · l its whole log · Ctrl-C leaves them running
+  ✓ shell  gh pr checks 412
+── pr_fix 91bb0c4d ──
+▶ repair_ci
+✓ repair_ci
+[pr_fix 91bb0c4d] ✓ done
+── ci_watch 3f9a2b11 ──
+✓ watch
+[ci_watch 3f9a2b11] ✓ done
 ```
 
-Type a number and Enter to view another cast. `l` and Enter prints the viewed
-cast's whole log to the terminal's own screen, where it scrolls; Enter returns
-to the board. When the cast in view ends, the next one still running takes its
-place. The typed cast has a line while it runs and leaves the board when it
-ends well; a cast that failed always keeps its line.
-
-A prompt from any of them takes the view: the board shows the asking cast's
-latest output with the question under it, and nothing else changes on screen
-until the question closes. A second question waits its turn. A prompt taken
-over in `vekna` stops being asked here, and is asked again if that window lets
-it go or closes. A prompt this terminal cannot answer — the cast is
-`--unattended`, or input has ended — is noted in its cast's output and holds
-nothing.
-
-When the last cast ends the board leaves the terminal as it found it, then
-prints what the typed cast said meanwhile, a line per cast, and the whole log
-of each cast that failed.
-
-With output to a pipe or a file there is no board. One cast's lines are
-written at a time, each under its name, in the order the casts arrived; the
-others are held until it ends. A notice about a prompt is written at once:
+A prompt from any of them is asked here, under what its cast printed last,
+with the cast's name in front. A prompt taken over in `vekna` stops being asked
+here, and is asked again if that window lets it go or closes. A prompt this
+terminal cannot answer — the cast is `--unattended`, or input has ended — is
+said in a line and holds nothing:
 
 ```text
-[ci_watch 3f9a2b11] ▶ watch
-[ci_watch 3f9a2b11] ✓ watch
 [pr_fix 91bb0c4d] ⏸ push? — answer it in `vekna`
-[ci_watch 3f9a2b11] ✓ done
-[pr_fix 91bb0c4d] ▶ repair_ci
-[pr_fix 91bb0c4d] ✓ done
 ```
 
+Output to a pipe or a file reads the same.
+
 The cast exits `1` if any of them failed. Ctrl-C stops following and leaves
-them running; `--no-follow` ends the cast with its own steps:
+them running; `--no-follow` ends the cast with its own steps. Either way they
+still run one at a time:
 
 ```bash
 vekna cast --no-follow sweep
 ```
+
+### `vekna cast --queue`
+
+```bash
+vekna cast --queue sweep --max-prs 5
+```
+
+Hands the ritual to the daemon and returns, starting the daemon if none is
+running. The cast runs there with no terminal, the casts it queues run side by
+side up to `[circle] processes`, and `vekna` shows them and answers their
+prompts. This is what `c` in the window does.
+
+The ritual's name and components are checked before the daemon is asked, so a
+mistake is said at once and exits `2`. Otherwise the command prints the queued
+cast's id and exits `0`:
+
+```text
+queued sweep 6f1c2a9e — `vekna` shows it
+```
+
+`--queue` takes a ritual: it does not go with `--prompt`, `--continue`,
+`--unattended` or `--no-follow`.
 
 ### `vekna cast --prompt`
 
