@@ -84,6 +84,16 @@ class TestDefaults:
             name="you", loud=True
         )
 
+    # `enqueue` ships the set keys; a default among them would outrank the
+    # defaults of the repo the child runs in.
+    @staticmethod
+    def test_a_default_is_not_a_key_the_caller_set():
+        defaults = Defaults([(PROJECT, _config({"loud": True}))])
+
+        components = defaults.components(GREET, {"name": "you"})
+
+        assert components.model_fields_set == {"name"}
+
     @staticmethod
     def test_a_key_the_ritual_does_not_take_names_the_file_that_set_it():
         defaults = Defaults([(PROJECT, _config({"shout": True}))])
