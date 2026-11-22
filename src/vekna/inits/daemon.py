@@ -359,11 +359,15 @@ class _Daemon(Routes):
             surface.send(CastRefused(reason=reason))
             return
         root = Path(request.project_root)
+        project = await project_of(root)
+        if (cast_id := request.cast_id or uuid4().hex) in self._hub.casts:
+            surface.send(CastRefused(reason=f"a cast {cast_id} already exists"))
+            return
         self._circle.enqueue(
             CastHello(
-                cast_id=self._fresh(request.cast_id),
+                cast_id=cast_id,
                 project_root=str(root),
-                project=await project_of(root),
+                project=project,
                 ritual=request.ritual,
                 components=dict(request.components),
                 started_at=datetime.now(tz=UTC),
@@ -371,14 +375,13 @@ class _Daemon(Routes):
             )
         )
 
-    # The id the request came with, unless a cast already has it.
-    def _fresh(self, asked: str | None) -> str:
-        return uuid4().hex if asked is None or asked in self._hub.casts else asked
-
     async def admit(self, request: AdmissionRequested) -> CastAdmitted | CastRefused:
         root = Path(request.project_root)
-        full = self._circle.full(project_root=str(root), project=await project_of(root))
-        return CastAdmitted() if full is None else CastRefused(reason=full)
+        project = await project_of(root)
+        if self._circle.has_room(project_root=str(root), project=project):
+            return CastAdmitted()
+        reason = self._circle.why_full(project_root=str(root), project=project)
+        return CastRefused(reason=reason)
 
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused:
         root = request.project_root

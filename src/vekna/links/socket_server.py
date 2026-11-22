@@ -125,10 +125,8 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
                 stopping.set()
-            elif isinstance(
-                opened, (AltarRequested, VersionRequested, AdmissionRequested)
-            ):
-                writer.write(encode_frame(await _answered(opened, routes=routes)))
+            elif (answer := await _answered(opened, routes=routes)) is not None:
+                writer.write(encode_frame(answer))
                 with contextlib.suppress(OSError):
                     await writer.drain()
             # A request is a surface's to make, after it has said it is one.
@@ -153,14 +151,20 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     return Serving(server, writers, stopping)
 
 
+# The reply to an opening that is a question, or `None` for one that is not.
+# The only list of the questions the daemon answers.
 async def _answered(
-    opened: AltarRequested | VersionRequested | AdmissionRequested, *, routes: Routes
-) -> WireMessage:
-    if isinstance(opened, VersionRequested):
-        return DaemonVersion(version=VERSION)
-    if isinstance(opened, AdmissionRequested):
-        return await routes.admit(opened)
-    return await routes.altar(opened)
+    opened: WireMessage | None, *, routes: Routes
+) -> WireMessage | None:
+    match opened:
+        case VersionRequested():
+            return DaemonVersion(version=VERSION)
+        case AdmissionRequested():
+            return await routes.admit(opened)
+        case AltarRequested():
+            return await routes.altar(opened)
+        case _:
+            return None
 
 
 # A dead socket file is cleared away by `create_unix_server` itself. Anything

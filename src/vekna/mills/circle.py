@@ -316,7 +316,7 @@ class Circle:
     def _start(self) -> None:
         for reply in self._awaits.due():
             parent = self._hub.casts[reply.cast_id]
-            if self._room(parent.hello) is None:
+            if self._fits(parent.hello):
                 self._hub.apply(reply)
                 # A parent that is not attached says its await again on reattach.
                 self._hub.tell(reply.cast_id, reply)
@@ -324,25 +324,32 @@ class Circle:
             view = self._hub.casts.get(cast_id)
             if view is None or view.status != "queued":
                 self._queue.remove(cast_id)
-            elif self._room(view.hello) is None:
+            elif self._fits(view.hello):
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
 
-    # Why a cast typed by hand in `project_root` may not start now, or `None`
-    # when it may. Nothing is held for it: its hello is what takes the slot.
+    # Whether a cast in `project_root` may start now. Nothing is held for a cast
+    # typed by hand: its hello is what takes the slot.
     # shortcut: two casts typed in the same instant can both be told there is
     # room for the last slot; admitting on the hello itself is the upgrade.
-    def full(self, *, project_root: str, project: str) -> str | None:
+    def has_room(self, *, project_root: str, project: str) -> bool:
+        holders = self._holders()
+        return (
+            holders.count(project) < self._limits.processes(project_root)
+            and len(holders) < self._limits.total()
+        )
+
+    # The limit that `has_room` ran into; only to be said to a person.
+    def why_full(self, *, project_root: str, project: str) -> str:
         holders = self._holders()
         mine, allowed = holders.count(project), self._limits.processes(project_root)
         if mine >= allowed:
             return f"{mine} of {allowed} casts are running in this project"
-        if len(holders) >= (total := self._limits.total()):
-            return f"{len(holders)} of {total} casts are running on this machine"
-        return None
+        total = self._limits.total()
+        return f"{len(holders)} of {total} casts are running on this machine"
 
-    def _room(self, hello: CastHello) -> str | None:
-        return self.full(project_root=hello.project_root, project=hello.project)
+    def _fits(self, hello: CastHello) -> bool:
+        return self.has_room(project_root=hello.project_root, project=hello.project)
 
     # The project of every cast that holds a slot.
     def _holders(self) -> list[str]:

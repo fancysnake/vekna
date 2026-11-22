@@ -1541,6 +1541,36 @@ class TestSpawning:
 
         assert refused == CastRefused(reason=f"{nowhere} is not a directory")
 
+    @staticmethod
+    async def test_a_cast_id_that_is_taken_is_refused(
+        socket_path: Path, tmp_path: Path
+    ):
+        async with _served(socket_path):
+            await _say(socket_path, _hello("taken"), _started("taken"))
+            reader, writer = await attach(socket_path)
+            writer.write(encode_frame(SurfaceHello()))
+            writer.write(
+                encode_frame(
+                    CastRequested(
+                        project_root=str(tmp_path),
+                        ritual="asker",
+                        components={},
+                        cast_id="taken",
+                    )
+                )
+            )
+            await writer.drain()
+
+            async with asyncio.timeout(5):
+                refused = None
+                async for frame in read_frames(reader):
+                    if isinstance(frame, CastRefused):
+                        refused = frame
+                        break
+            writer.close()
+
+        assert refused == CastRefused(reason="a cast taken already exists")
+
 
 @pytest.mark.asyncio
 class TestCodingSlots:
@@ -2069,8 +2099,6 @@ class _Flushes(io.StringIO):
         self.calls.append(_FLUSHED)
 
 
-# The hand cast in this process, so what it does once its own steps end is
-# measured: a subprocess's lines are not.
 @pytest.mark.asyncio
 class TestRoom:
     @staticmethod
@@ -2199,6 +2227,8 @@ class TestQueueUsage:
         )
 
 
+# The hand cast in this process, so what it does once its own steps end is
+# measured: a subprocess's lines are not.
 @pytest.mark.asyncio
 class TestFollowing:
     @staticmethod

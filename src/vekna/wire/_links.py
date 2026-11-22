@@ -104,27 +104,32 @@ def default_socket_path() -> Path:
     return _owned(Path(tempfile.gettempdir()) / f"vekna-{os.getuid()}") / "vekna.sock"
 
 
-# The version of the daemon listening on `path`, or `None` for one that hangs
-# up, garbles or says nothing in time: all three are a daemon that predates the
-# question. Nobody listening is the `OSError` the connect raised. Bounded both
-# ways, because a wedged daemon would otherwise hang every `vekna` on its probe.
-async def daemon_version(path: Path) -> str | None:
+# The daemon's one reply to `question` on a fresh connection, or `None` for one
+# that hangs up, garbles or says nothing in time. Nobody listening is the
+# `OSError` the connect raised. Bounded both ways, because a wedged daemon would
+# otherwise hang every `vekna` on its probe.
+async def _asked(path: Path, question: WireMessage) -> WireMessage | None:
     async with asyncio.timeout(_PROBE_SECONDS):
         reader, writer = await asyncio.open_unix_connection(
             str(path), limit=FRAME_LIMIT
         )
     try:
-        writer.write(encode_frame(VersionRequested()))
+        writer.write(encode_frame(question))
         with contextlib.suppress(OSError, ValueError):
             async with asyncio.timeout(_PROBE_SECONDS):
-                reply = await anext(read_frames(reader), None)
-            if isinstance(reply, DaemonVersion):
-                return reply.version
+                return await anext(read_frames(reader), None)
         return None
     finally:
         writer.close()
         with contextlib.suppress(OSError):
             await writer.wait_closed()
+
+
+# The version of the daemon listening on `path`, or `None` for one that does not
+# say: a daemon that predates the question.
+async def daemon_version(path: Path) -> str | None:
+    reply = await _asked(path, VersionRequested())
+    return reply.version if isinstance(reply, DaemonVersion) else None
 
 
 # Why this vekna will not talk to the daemon on `path`, and the two ways out, or
@@ -163,24 +168,10 @@ async def daemon_refusal(path: Path) -> str | None:
 # or a daemon that hangs up on a question it predates.
 async def admission_refusal(path: Path, project_root: str) -> str | None:
     try:
-        async with asyncio.timeout(_PROBE_SECONDS):
-            reader, writer = await asyncio.open_unix_connection(
-                str(path), limit=FRAME_LIMIT
-            )
+        reply = await _asked(path, AdmissionRequested(project_root=project_root))
     except OSError:
         return None
-    try:
-        writer.write(encode_frame(AdmissionRequested(project_root=project_root)))
-        with contextlib.suppress(OSError, ValueError):
-            async with asyncio.timeout(_PROBE_SECONDS):
-                reply = await anext(read_frames(reader), None)
-            if isinstance(reply, CastRefused):
-                return reply.reason
-        return None
-    finally:
-        writer.close()
-        with contextlib.suppress(OSError):
-            await writer.wait_closed()
+    return reply.reason if isinstance(reply, CastRefused) else None
 
 
 # What a cast groups under and what a surface filters by, so both ends resolve
