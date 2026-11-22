@@ -361,6 +361,7 @@ ClaudeOptions(
     permission_mode=None,  # "default"|"acceptEdits"|"plan"|"dontAsk"|"bypassPermissions"|"auto"
     allowed_tools=None,    # list[str]
     disallowed_tools=[],   # list[str], beats allowed_tools
+    skills=[],             # list[str], skills the agent must load, by name
     max_turns=None,        # int
     effort=None,           # "low"|"medium"|"high"|"xhigh"|"max"
 )
