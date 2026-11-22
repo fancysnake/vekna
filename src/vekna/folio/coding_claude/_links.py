@@ -1,5 +1,5 @@
 import contextlib
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from claude_agent_sdk import (
@@ -76,6 +76,9 @@ _ASK_INSTRUCTION = (
     "wait for the answer rather than guessing. Pass `options` when the answer "
     "is one of a known set."
 )
+_SKILL_INSTRUCTION = (
+    "Before anything else, load these skills with the Skill tool and follow them:"
+)
 
 
 # The SDK's message dataclasses carry `Any`-typed fields, so naming those
@@ -107,6 +110,33 @@ class _ResultLike(Protocol):
     def total_cost_usd(self) -> float | None: ...
     @property
     def result(self) -> str | None: ...
+
+
+@runtime_checkable
+class _SystemLike(Protocol):
+    @property
+    def subtype(self) -> str: ...
+    @property
+    def data(self) -> Mapping[str, JsonValue]: ...
+
+
+# The session's first message lists every skill the agent has. A named skill
+# that is not on it would be skipped in silence, and the prompt no longer
+# carries the procedure the skill was to supply.
+def _check_skills(*, message: _SystemLike, named: Sequence[str]) -> None:
+    known = message.data.get("skills")
+    if message.subtype != "init" or not isinstance(known, list):
+        return
+    if missing := [name for name in named if name not in known]:
+        absent = ", ".join(repr(name) for name in missing)
+        msg = f"the agent has no skill {absent} — install it, or drop it from `skills`"
+        raise RitualError(msg)
+
+
+def _prompt(*, prompt: str, skills: Sequence[str]) -> str:
+    if not skills:
+        return prompt
+    return f"{_SKILL_INSTRUCTION} {', '.join(skills)}.\n\n{prompt}"
 
 
 def _claude_options(focus_options: BaseModel | None) -> ClaudeOptions:
@@ -169,7 +199,11 @@ def _agent_options(
     output_format: dict[str, str | dict[str, JsonValue]] | None = None
     if call.output_schema is not None:
         output_format = {"type": "json_schema", "schema": call.output_schema}
-    allowed: list[str] = [*(knobs.allowed_tools or []), _ASK_TOOL]
+    allowed: list[str] = [
+        *(knobs.allowed_tools or []),
+        _ASK_TOOL,
+        *(f"Skill({name})" for name in knobs.skills),
+    ]
     servers: (
         dict[
             str,
@@ -221,7 +255,11 @@ async def _from_agent(messages: AsyncGenerator[Message]) -> AsyncGenerator[Messa
 
 
 async def _streamed(
-    *, prompt: str, options: ClaudeAgentOptions, on_delta: Callable[[str], None]
+    *,
+    prompt: str,
+    skills: Sequence[str],
+    options: ClaudeAgentOptions,
+    on_delta: Callable[[str], None],
 ) -> FocusReply:
     parts: list[str] = []
     session_id: str | None = None
@@ -233,7 +271,7 @@ async def _streamed(
     # rite takes the session down before it closes. Typed an `AsyncIterator`,
     # which has no `aclose`, so the generator it is at runtime is asked for —
     # and anything else refused, since it could not be closed.
-    messages = query(prompt=prompt, options=options)
+    messages = query(prompt=_prompt(prompt=prompt, skills=skills), options=options)
     if not isinstance(messages, AsyncGenerator):
         msg = (
             "claude_agent_sdk.query returned "
@@ -251,6 +289,8 @@ async def _streamed(
                 num_turns = message.num_turns
                 cost_usd = message.total_cost_usd
                 result_text = message.result
+            elif isinstance(message, _SystemLike):
+                _check_skills(message=message, named=skills)
     # The SDK drops a torn last frame at debug level, so a CLI that exits clean
     # after one ends the stream with no result, and the text so far is half a
     # reply rather than the reply.
@@ -276,4 +316,7 @@ class ClaudeCodingFocus(CodingFocusProtocol):
         ask: AskFn,
     ) -> FocusReply:
         options = _agent_options(call=call, gate=gate, ask=ask)
-        return await _streamed(prompt=call.prompt, options=options, on_delta=on_delta)
+        skills = _claude_options(call.focus_options).skills
+        return await _streamed(
+            prompt=call.prompt, skills=skills, options=options, on_delta=on_delta
+        )

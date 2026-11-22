@@ -148,6 +148,24 @@ _THREADED_RITUALS = textwrap.dedent("""
     """)
 
 
+_KNOWN_SKILLS = ("other", "conflict", "tome:gate")
+_CLAUDE_IMPORT = "from vekna.folio.coding_claude import ClaudeOptions\n"
+_SKILLED_CALL = (
+    "coding(task.text, opts=CodingOpts(focus_options=ClaudeOptions(skills=[{names}])))"
+)
+
+_SKILLED_RITUALS = _CLAUDE_IMPORT + _ritual_source(
+    name="mender",
+    call=_SKILLED_CALL.format(names='"conflict", "tome:gate"'),
+    imports=", CodingOpts",
+)
+
+_UNSKILLED_RITUALS = _CLAUDE_IMPORT + _ritual_source(
+    name="mender",
+    call=_SKILLED_CALL.format(names='"conflict", "absent"'),
+    imports=", CodingOpts",
+)
+
 _SYSTEM_RITUALS = _ritual_source(
     name="poet",
     call='coding(task.text, opts=CodingOpts(system="you are a poet"))',
@@ -171,6 +189,7 @@ def _sdk_stub(
     @dataclass
     class SystemMessage:
         subtype: str
+        data: dict
 
     @dataclass
     class AssistantMessage:
@@ -217,7 +236,9 @@ def _sdk_stub(
         captured["options"] = options
         # Every call, not just the last: a thread is only visible across two.
         captured.setdefault("every_options", []).append(options)
-        yield SystemMessage(subtype="init")
+        # A real session opens with its hooks' messages, which list no skills.
+        yield SystemMessage(subtype="hook_started", data={})
+        yield SystemMessage(subtype="init", data={"skills": list(_KNOWN_SKILLS)})
         yield AssistantMessage(
             content=(
                 "drafting the haiku"
@@ -671,6 +692,56 @@ class TestFocusOptions:
 
         assert exit_code == _CAST_FAILED_EXIT
         assert "cast failed: agent output does not validate" in capsys.readouterr().err
+
+
+class TestNamedSkills:
+    @staticmethod
+    def test_the_agent_is_told_to_load_each_named_skill(tmp_path, monkeypatch):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_SKILLED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["mender", "--text", "resolve the conflict"])
+
+        assert exit_code == 0
+        assert captured["prompt"] == (
+            "Before anything else, load these skills with the Skill tool and"
+            " follow them: conflict, tome:gate.\n\nresolve the conflict"
+        )
+        assert captured["options"].allowed_tools == [
+            "mcp__vekna__ask_human",
+            "Skill(conflict)",
+            "Skill(tome:gate)",
+        ]
+
+    @staticmethod
+    def test_a_skill_the_agent_does_not_have_fails_the_cast_by_name(
+        tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub({}))
+        (tmp_path / "rituals.py").write_text(_UNSKILLED_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["mender", "--text", "resolve the conflict"])
+
+        captured = capsys.readouterr()
+        assert exit_code == _CAST_FAILED_EXIT
+        assert "the agent has no skill 'absent'" in captured.err
+        assert "drafting the haiku" not in captured.out
+
+    @staticmethod
+    def test_a_call_that_names_no_skill_is_sent_as_written(tmp_path, monkeypatch):
+        captured = {}
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", _sdk_stub(captured))
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = main(["write_haiku", "--text", "write a haiku"])
+
+        assert exit_code == 0
+        assert captured["prompt"] == "write a haiku"
+        assert captured["options"].allowed_tools == ["mcp__vekna__ask_human"]
 
 
 class TestPromptSugar:
