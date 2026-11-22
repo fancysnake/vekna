@@ -17,6 +17,12 @@ def ended_said(status: EndStatus, detail: str | None) -> str:
     return f"{_MARK[status]}: {detail}" if detail else _MARK[status]
 
 
+# A name or a notice never lands on the end of a line left unfinished.
+def _begin_row(out: Revisable) -> None:
+    if not out.row_empty:
+        out.write("\n")
+
+
 # Whose line the stream's last one was.
 @dataclass
 class _Floor:
@@ -36,6 +42,7 @@ class _Named(Revisable):
     def write(self, text: str, /) -> int:
         if text and self._floor.speaker != self._label:
             self._floor.speaker = self._label
+            _begin_row(self._out)
             self._out.write(f"── {self._label} ──\n")
         return self._out.write(text)
 
@@ -51,6 +58,11 @@ class _Named(Revisable):
     @override
     def mark(self) -> int:
         return self._out.mark
+
+    @property
+    @override
+    def row_empty(self) -> bool:
+        return self._out.row_empty
 
     @override
     def overwrite(self, mark: int, text: str) -> bool:
@@ -93,5 +105,6 @@ class Turns(Display):
     @override
     def say(self, *, cast_id: str, label: str, line: str) -> None:
         del cast_id
+        _begin_row(self._out)
         self._out.write(f"[{label}] {line}\n")
         self._out.flush()

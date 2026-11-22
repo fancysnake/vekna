@@ -114,6 +114,9 @@ class Revisable(Out, Protocol):
     @property
     def mark(self) -> int: ...
 
+    @property
+    def row_empty(self) -> bool: ...
+
     def overwrite(self, mark: int, text: str) -> bool: ...
 
 
@@ -133,6 +136,10 @@ class Tail(Revisable):
     @property
     def mark(self) -> int:
         return self._mark
+
+    @property
+    def row_empty(self) -> bool:
+        return self._row_empty
 
     # `print` writes its `end` even when empty, and that moves no cursor.
     def write(self, text: str, /) -> int:

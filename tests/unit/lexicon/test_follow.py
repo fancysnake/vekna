@@ -149,6 +149,22 @@ class TestTurns:
         )
 
     @staticmethod
+    def test_a_name_and_a_notice_follow_an_unfinished_line_on_a_row_of_their_own():
+        out = io.StringIO()
+        turns = Turns(Tail(out), typed="sweep root0000")
+        turns.entered(cast_id="c1", label="ci_watch child000")
+
+        turns.typed.write("progress")
+        turns.render("c1", _began())
+        turns.typed.write("again")
+        turns.ended(cast_id="c1", status="ok", detail=None)
+
+        assert out.getvalue() == (
+            "progress\n── ci_watch child000 ──\n▶ watch\n"
+            "── sweep root0000 ──\nagain\n[ci_watch child000] ✓ done\n"
+        )
+
+    @staticmethod
     def test_an_empty_write_takes_nothing_over():
         out = io.StringIO()
         turns = Turns(Tail(out), typed="sweep root0000")
