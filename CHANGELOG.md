@@ -17,6 +17,22 @@ when.
   The agent is told to load each one before it starts and keeps every other
   skill it has. A name the agent does not have fails the call.
 
+### Changed
+
+- **`ritual-scribe`** and the Rituals page teach failing over many items: route
+  on what the ritual reads back and not on the agent's reply, three tiers of
+  failure, a give-up path that aborts and stashes under a reported name, and
+  one failure not paid for twice.
+  ([#231](https://github.com/fancysnake/vekna/issues/231))
+
+### Fixed
+
+- **A default is not a component the caller set.** A cast that handed its own
+  components to `enqueue` passed its `[defaults.<ritual>]` values on as if it
+  had named them, and they outranked the child's own defaults. The child now
+  gets the flags of the cast that queued it and answers the rest where it
+  runs.
+
 ## [2.0.0] - 2026-11-20
 
 ### Added
