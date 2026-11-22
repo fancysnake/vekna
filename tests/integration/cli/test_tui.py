@@ -1260,6 +1260,72 @@ class TestTakingOver:
         assert sent == [_claim_then(sent)]
 
     @staticmethod
+    async def test_the_contents_keys_do_nothing_while_a_cast_is_taken_over():
+        hub = Hub()
+        _asking(hub)
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            app.query_one("#log", Log).focus()
+            await pilot.press("w", "H", "g")
+            await pilot.pause(_PAINTED)
+
+            note = _text(app, "#note")
+            where = app.sub_title
+        assert note == "took over pr_fix c1"
+        assert where == "1 waiting  (proj)"
+
+    @staticmethod
+    async def test_an_empty_line_is_not_sent_as_an_answer():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(
+            DecideRequested(cast_id="c1", request_id="q1", prompt="why?", free=True)
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press("enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+        assert note == "type an answer first"
+        assert sent == [_claim_then(sent)]
+
+    @staticmethod
+    async def test_a_draft_typed_for_one_question_is_not_sent_to_the_next():
+        hub = Hub()
+        hub.apply(_hello("c1", "pr_fix"))
+        hub.apply(
+            DecideRequested(cast_id="c1", request_id="q1", prompt="why?", free=True)
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await _take(pilot)
+            await pilot.press(*"flak")
+            hub.apply(DecideResolved(cast_id="c1", request_id="q1", answer="other"))
+            hub.apply(
+                DecideRequested(
+                    cast_id="c1", request_id="q2", prompt="when?", free=True
+                )
+            )
+            app.changed()
+            await pilot.pause(_PAINTED)
+            await pilot.press("y", "enter")
+            await pilot.pause()
+
+            note = _text(app, "#note")
+            typed = app.query_one("#command", Input).value
+        assert note == "the question changed — your answer was not sent"
+        assert not typed
+        assert [message.kind for message in sent] == ["decide_claimed"] * 2
+
+    @staticmethod
     async def test_a_answers_without_a_claim_and_refuses_what_is_not_offered():
         hub = Hub()
         _asking(hub)

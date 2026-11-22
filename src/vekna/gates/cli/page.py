@@ -46,6 +46,7 @@ _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
 NO_CAST = "no cast here — c starts one"
+LEAVES = "esc leaves"
 
 
 def where(root: str) -> str:
@@ -149,7 +150,7 @@ def taken_head(
 ) -> Text:
     return Text.assemble(
         (" ◆ taken over ", "bold reverse"),
-        (" esc leaves\n", "dim"),
+        (f" {LEAVES}\n", "dim"),
         _cast_head(view, branches, now),
     )
 
@@ -240,10 +241,14 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
 def output(entry: Entry | None) -> list[str]:
     if entry is None or entry.view is None:
         return []
-    view = entry.view
-    rite = entry.rite or _shown_rite(view)
+    return cast_output(entry.view, entry.rite)
+
+
+# The same for a cast on its own: `picked` is the rite chosen under it, if any.
+def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
+    rite = picked or _shown_rite(view)
     said = [] if rite is None else list(rite.deltas)
-    if entry.rite is None and view.detail and not live(view):
+    if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
     return [printable(line) or " " for line in said]
