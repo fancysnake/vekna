@@ -8,6 +8,7 @@ from vekna.pacts.casts import Casts, CastView
 from vekna.pacts.screen import Screen
 from vekna.wire import WireMessage
 
+from .cast_text import top_prompt
 from .commands import request_cast, send_answer
 from .screen import ordered, paint, scoped
 
@@ -174,12 +175,11 @@ class Dashboard:
             if self._scope.focus is None
             else self._casts.casts.get(self._scope.focus)
         )
-        if view is None or not view.waiting:
+        if view is None or (prompt := top_prompt(view)) is None:
             self._note = "nothing to answer — open a waiting cast first"
             return
-        request = next(iter(view.waiting.values())).request
         if (
-            refused := send_answer(request=request, typed=typed, send=self._send)
+            refused := send_answer(request=prompt.request, typed=typed, send=self._send)
         ) is not None:
             self._note = refused
 

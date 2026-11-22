@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import PurePath
 
-from vekna.pacts.casts import CastView, RiteView
+from vekna.pacts.casts import CastView, Prompt, RiteView
 from vekna.wire import SHORT_ID, CastHello
 
 _RESUMED = "↳"
@@ -42,6 +42,12 @@ def named(project: str) -> str:
 
 def live(view: CastView) -> bool:
     return view.status in {"running", "queued"}
+
+
+# The question on top: the oldest open prompt of a cast. What the operator is
+# shown and what an answer goes to are this one.
+def top_prompt(view: CastView) -> Prompt | None:
+    return next(iter(view.waiting.values()), None)
 
 
 # What a cast is inside of now: the last rite to begin of those still running,

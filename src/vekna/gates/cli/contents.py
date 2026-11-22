@@ -72,13 +72,15 @@ def cast_key(cast_id: str) -> str:
 
 # How the contents are read: the lines the operator toggled away from how they
 # start — a cast starts closed to one line, every other line starts open — the
-# tree view or the history view, and how long after it ended a cast moves from
-# the one to the other.
+# tree view or the history view, how long after it ended a cast moves from the
+# one to the other, and the cast kept open whatever was toggled: it shows its
+# rite tree, and every line it hangs under shows it.
 @dataclass
 class Reading:
     history_after: timedelta
     toggled: set[str] = field(default_factory=set)
     history: bool = False
+    kept_open: str | None = None
 
 
 def _named(entry: Entry) -> str:
@@ -141,6 +143,13 @@ def _day(day: str, views: list[CastView], reading: Reading) -> Entry:
     )
 
 
+# A line a cast kept open hangs under is never folded.
+def _folds(reading: Reading, views: Sequence[CastView]) -> AbstractSet[str]:
+    if any(view.hello.cast_id == reading.kept_open for view in views):
+        return frozenset()
+    return reading.toggled
+
+
 def _project(key: str, views: list[CastView], reading: Reading) -> Entry:
     by_ritual: dict[str, list[CastView]] = {}
     for view in views:
@@ -158,7 +167,7 @@ def _project(key: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(rituals),
         ),
-        reading.toggled,
+        _folds(reading, views),
     )
 
 
@@ -174,7 +183,7 @@ def _ritual(key: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(newest),
             children=tuple(casts),
         ),
-        reading.toggled,
+        _folds(reading, views),
     )
 
 
@@ -182,7 +191,7 @@ def _ritual(key: str, views: list[CastView], reading: Reading) -> Entry:
 # it is opened; one that has no rites has nothing to open.
 def _cast(view: CastView, reading: Reading) -> Entry:
     cast_id = view.hello.cast_id
-    opened = cast_key(cast_id) in reading.toggled
+    opened = cast_key(cast_id) in reading.toggled or cast_id == reading.kept_open
     now = [] if opened else _now(view)
     return Entry(
         key=cast_key(cast_id),

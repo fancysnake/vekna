@@ -17,6 +17,7 @@ from .cast_text import (
     labelled,
     live,
     printable,
+    top_prompt,
     word,
 )
 from .contents import Counts, Entry, rite_tree, walked
@@ -258,7 +259,7 @@ def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
 # answers: the oldest one open.
 def taken_output(view: CastView, mine: set[str]) -> list[str]:
     lines = cast_output(view)
-    if (prompt := next(iter(view.waiting.values()), None)) is None:
+    if (prompt := top_prompt(view)) is None:
         return lines
     request = prompt.request
     asked = printable(request.prompt).splitlines() or [""]

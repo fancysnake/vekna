@@ -13,6 +13,7 @@ from .cast_text import (
     innermost,
     live,
     named,
+    top_prompt,
     word,
 )
 
@@ -101,8 +102,8 @@ def _steps_done(view: CastView) -> int:
 # read to see whether it is stuck, so it shows the step, what the step is doing,
 # and how long that has been true. A cast that ended cleanly needs nothing.
 def _now(view: CastView, now: datetime) -> str:
-    if view.waiting:
-        return next(iter(view.waiting.values())).request.prompt
+    if (prompt := top_prompt(view)) is not None:
+        return prompt.request.prompt
     if view.on_children:
         return "on " + ", ".join(
             request.child[:SHORT_ID] for request in view.on_children.values()
