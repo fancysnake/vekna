@@ -118,7 +118,7 @@ submodules cooperate.
       dashboard.py # what the keys do — over the two protocols, nothing else
       contents.py # the book's contents: project › ritual › cast › rite, folds
       page.py     # what a contents line reads as, and its page in full
-      tui.py      # the Textual window: contents, page, take-over dialog
+      tui.py      # the Textual window: contents, page, takeover
   edges/
     pytest_plugin.py  # the pytest11 entry point: one `trial` fixture
   inits/

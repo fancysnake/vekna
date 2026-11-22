@@ -142,6 +142,18 @@ def _flags(hello: CastHello) -> str:
     return " ".join(f"--{name} {value}" for name, value in hello.components.items())
 
 
+# The right page's top for a cast taken over: that it is, how to leave it,
+# then the cast in full.
+def taken_head(
+    view: CastView, *, branches: dict[str, str | None], now: datetime
+) -> Text:
+    return Text.assemble(
+        (" ◆ taken over ", "bold reverse"),
+        (" esc leaves\n", "dim"),
+        _cast_head(view, branches, now),
+    )
+
+
 # The right page's top: what the line under the cursor is, in full.
 def head(
     entry: Entry | None, *, branches: dict[str, str | None], now: datetime

@@ -334,14 +334,19 @@ A value that does not read is named in the window's note line and passed over.
 | `w` | the next line that asks, a fold included |
 | `j` / `k` / `h` | down, up, to the line above in the tree |
 | `c` | start a ritual here: `c <ritual> [--flag value …]` |
-| `t` | take over the prompt under the cursor, and answer it in a dialog |
+| `t` | take over the running cast under the cursor, or the first one that asks under a fold |
 | `a` | answer it in one line: `a <answer>` |
 | `x` | cancel the cast under the cursor; twice, to be sure |
 | `:` | the command line, empty |
 | `g` / `p` | every project / this one |
 | `q` | close the window; the daemon keeps running |
 
-Esc in the dialog lets the prompt go, back to whoever was answering it.
+A cast taken over keeps the right page: its output follows, and every prompt
+it asks is claimed and answered on the line at the bottom, Enter sending it.
+The contents take no keys meanwhile, and a prompt from another cast shows as
+one line under them. Esc leaves and hands the open prompts back to whoever was
+answering them; the takeover also ends when the cast does. It covers that one
+cast: a cast it queued is taken over on its own.
 `--no-tui`, or no terminal on stdin and stdout, gives the line view described
 below, which repaints whole and reads a line at a time.
 

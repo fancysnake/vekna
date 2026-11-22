@@ -7,11 +7,8 @@ from uuid import uuid4
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.command import CommandPalette
 from textual.containers import Horizontal, Vertical
-from textual.markup import escape
-from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Log, Static, Tree
+from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
 
@@ -21,21 +18,23 @@ from vekna.wire import (
     DecideClaimed,
     DecideReleased,
     DecideRequested,
-    DecideResolved,
     WireMessage,
     allowed_answers,
 )
 
 from .cast_text import counted, labelled, live, named
 from .commands import request_cast, send_answer
-from .contents import Entry, Reading, contents, historic, walked
-from .page import head, holder, line_text, output
+from .contents import Counts, Entry, Reading, cast_key, contents, historic, walked
+from .page import head, holder, line_text, output, taken_head
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
+_ASKS_NOTHING = "the cast asks nothing right now"
+_NOTHING_TO_TAKE = "only a running cast can be taken over"
+_ANSWER_HERE = "answer here"
 
 
 # `old` is how many ended casts the history view holds.
@@ -44,53 +43,6 @@ def _hint(old: int = 0) -> str:
         f"space open/fold · H history{f' ({old})' if old else ''} · w next asking"
         " · t take over · x cancel · : command · g/p scope · q quit"
     )
-
-
-# One prompt, answered here: the answers it allows as buttons, and a line to
-# type into when it takes anything. Esc lets the claim go, and whoever was
-# answering it before asks again.
-class AnswerScreen(ModalScreen[str | None]):
-    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "let_go", "let go")]
-    DEFAULT_CSS = """
-    AnswerScreen { align: center middle; }
-    #dialog { width: 70%; height: auto; border: thick $accent; padding: 1 2; }
-    #options { height: auto; }
-    """
-
-    def __init__(self, *, label: str, request: DecideRequested) -> None:
-        super().__init__()
-        self._label = label
-        self._request = request
-        allowed = allowed_answers(options=request.options, free=request.free)
-        self._free = allowed is None
-        # Each button's answer, so a press is looked up rather than parsed.
-        self._choices = {
-            Button(escape(choice), id=f"choice-{index}"): choice
-            for index, choice in enumerate(allowed or request.options or [])
-        }
-
-    @property
-    def request_id(self) -> str:
-        return self._request.request_id
-
-    @override
-    def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Static(f"{self._label}\n\n{self._request.prompt}", markup=False)
-            with Horizontal(id="options"):
-                yield from self._choices
-            if self._free:
-                yield Input(placeholder="answer in your own words", id="free")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(self._choices[event.button])
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        event.stop()
-        self.dismiss(event.value)
-
-    def action_let_go(self) -> None:
-        self.dismiss(None)
 
 
 # The contents tree. Its folds are the window's own, not the widget's: space
@@ -134,11 +86,14 @@ class _Scope:
     every: bool = False
 
 
-# The claims this window made, and the dialog answering one of them.
+# The claims this window made, the cast it has taken over, and the prompts of
+# that cast it claimed. Each is claimed once: a claim another window takes
+# after that stays theirs.
 @dataclass
 class _Claims:
     mine: set[str] = field(default_factory=set)
-    dialog: AnswerScreen | None = None
+    taken: str | None = None
+    asked: set[str] = field(default_factory=set)
 
 
 # The contents last drawn: the line under the cursor, their shape — each line's
@@ -186,11 +141,19 @@ class _View:
     follow: _Follow = field(default_factory=_Follow)
 
 
-# Held rather than queried: `query_one` searches whichever screen is on top,
-# which is the answer dialog while one is up.
+# Where a waiting question shows: loud on top for the cast in view, and during
+# a takeover one line under the contents for the casts that ask elsewhere.
+@dataclass
+class _Asks:
+    here: Static = field(default_factory=lambda: Static(id="ask", markup=False))
+    elsewhere: Static = field(
+        default_factory=lambda: Static(id="elsewhere", markup=False)
+    )
+
+
 @dataclass
 class _Widgets:
-    ask: Static = field(default_factory=lambda: Static(id="ask", markup=False))
+    ask: _Asks = field(default_factory=_Asks)
     contents: Contents = field(default_factory=lambda: Contents("all", id="contents"))
     head: Static = field(default_factory=lambda: Static(id="head", markup=False))
     log: Log = field(default_factory=lambda: Log(id="log"))
@@ -207,7 +170,9 @@ class _Widgets:
 # turns it to the history view, the casts that ended long ago, by day. The
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
-# only while it is being typed into.
+# only while it is being typed into. `t` takes a cast over: the right page
+# stays on it, every prompt it asks is claimed and answered on the command
+# line, and the contents take no keys until Esc hands the prompts back.
 class VeknaApp(App[None]):
     TITLE = "vekna"
     CSS = """
@@ -216,10 +181,9 @@ class VeknaApp(App[None]):
         background: $warning 25%; text-style: bold;
     }
     #body { height: 1fr; }
-    #contents {
-        width: 46; max-width: 50%; padding: 0 1;
-        border-right: vkey $panel;
-    }
+    #left { width: 46; max-width: 50%; border-right: vkey $panel; }
+    #contents { height: 1fr; padding: 0 1; }
+    #elsewhere { display: none; height: auto; padding: 0 1; color: $warning; }
     #page { width: 1fr; padding: 0 1; }
     #head { height: auto; max-height: 50%; }
     #log { height: 1fr; margin-top: 1; }
@@ -261,9 +225,11 @@ class VeknaApp(App[None]):
 
     @override
     def compose(self) -> ComposeResult:
-        yield self._w.ask
+        yield self._w.ask.here
         with Horizontal(id="body"):
-            yield self._w.contents
+            with Vertical(id="left"):
+                yield self._w.contents
+                yield self._w.ask.elsewhere
             with Vertical(id="page"):
                 yield self._w.head
                 yield self._w.log
@@ -291,14 +257,25 @@ class VeknaApp(App[None]):
 
     # --- what the operator does ---
 
+    # A taken-over cast has the line for its answers, so a command's prefix
+    # stays out of it.
     def action_command(self, prefix: str) -> None:
         line = self._w.command
         line.display = True
-        line.value = prefix
+        line.value = "" if self._view.claims.taken else prefix
         line.cursor_position = len(prefix)
         line.focus()
 
     def action_close_command(self) -> None:
+        claims = self._view.claims
+        if (view := self._taken()) is not None:
+            # Heard back from the daemon or not, every claim still open goes.
+            for request_id in claims.asked.intersection(view.waiting):
+                self._send(
+                    DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
+                )
+            self._leave(f"left {labelled(view.hello)} — its prompts are handed back")
+            return
         line = self._w.command
         line.value = ""
         line.display = False
@@ -370,35 +347,30 @@ class VeknaApp(App[None]):
         self._send(CastCancelRequested(cast_id=view.hello.cast_id))
         self.say(f"asked {named_cast} to stop")
 
-    # The oldest open prompt under the cursor, claimed so whoever else was
-    # answering it stops, then asked in a dialog.
+    # The cast under the cursor, or the first one that asks under a fold. The
+    # line its answers are typed on opens at once, and stays open.
     def action_take(self) -> None:
-        if (found := self._waiting()) is None:
-            self.say(_NOTHING_WAITING)
+        claims = self._view.claims
+        if claims.taken is not None:
             return
-        view, request = found
-        self._claim(request)
-        dialog = AnswerScreen(label=labelled(view.hello), request=request)
-        self._view.claims.dialog = dialog
-
-        # A dialog closed because its prompt went has nothing to send.
-        def answered(answer: str | None) -> None:
-            if self._view.claims.dialog is not dialog:
-                return
-            self._view.claims.dialog = None
-            if answer is None:
-                self._send(
-                    DecideReleased(
-                        cast_id=request.cast_id, request_id=request.request_id
-                    )
-                )
-            else:
-                self._resolve(request, answer)
-
-        self.push_screen(dialog, answered)
+        found = self._waiting()
+        view = found[0] if found is not None else self._focused()
+        if view is None or not live(view):
+            self.say(_NOTHING_TO_TAKE)
+            return
+        claims.taken = view.hello.cast_id
+        self._w.contents.disabled = True
+        self._w.command.placeholder = _ANSWER_HERE
+        self.action_command("")
+        self.say(f"took over {labelled(view.hello)}")
+        self.changed()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         typed = event.value.strip()
+        if self._view.claims.taken is not None:
+            self._w.command.value = ""
+            self._answer(typed)
+            return
         self.action_close_command()
         if typed.lower() in {"q", "quit"}:
             self.exit()
@@ -434,7 +406,7 @@ class VeknaApp(App[None]):
 
     def _answer(self, typed: str) -> None:
         if (found := self._waiting()) is None:
-            self.say(_NOTHING_WAITING)
+            self.say(_ASKS_NOTHING if self._view.claims.taken else _NOTHING_WAITING)
             return
         _, request = found
         if (
@@ -442,7 +414,20 @@ class VeknaApp(App[None]):
         ) is not None:
             self.say(refused)
 
+    def _taken(self) -> CastView | None:
+        return self._casts.casts.get(self._view.claims.taken or "")
+
+    # The line the window acts on and the right page shows: the one under the
+    # cursor, or the cast taken over, wherever the cursor was left.
     def _entry(self) -> Entry | None:
+        if (view := self._taken()) is not None:
+            return Entry(
+                key=cast_key(view.hello.cast_id),
+                kind="cast",
+                name=view.hello.ritual,
+                counts=Counts(),
+                view=view,
+            )
         return self._view.drawn.entries.get(self._view.drawn.cursor or "")
 
     # The cast the line under the cursor belongs to: none for a project or a
@@ -475,12 +460,33 @@ class VeknaApp(App[None]):
             )
         )
 
-    def _resolve(self, request: DecideRequested, answer: str) -> None:
-        self._send(
-            DecideResolved(
-                cast_id=request.cast_id, request_id=request.request_id, answer=answer
-            )
-        )
+    # Every prompt the taken cast asks is claimed as it comes. A cast that
+    # ended has nothing left to hand back.
+    def _hold(self) -> None:
+        claims = self._view.claims
+        if claims.taken is None:
+            return
+        view = self._taken()
+        if view is None or not live(view):
+            self._leave("the cast taken over has ended")
+            return
+        for request_id, prompt in view.waiting.items():
+            if request_id not in claims.asked:
+                claims.asked.add(request_id)
+                self._claim(prompt.request)
+
+    def _leave(self, said: str) -> None:
+        claims = self._view.claims
+        claims.taken = None
+        claims.asked.clear()
+        line = self._w.command
+        line.placeholder = ""
+        line.value = ""
+        line.display = False
+        self._w.contents.disabled = False
+        self._w.contents.focus()
+        self.say(said)
+        self.changed()
 
     def _move_to(self, key: str) -> None:
         self._view.drawn.cursor = key
@@ -513,19 +519,30 @@ class VeknaApp(App[None]):
         if not self._view.dirty or not mounted:
             return
         self._view.dirty = False
+        self._hold()
+        taken = self._taken()
         listed = self._listed()
         now = datetime.now(UTC)
         where = "all projects" if self._scope.every else named(self._scope.home)
         self.sub_title = f"{counted(listed) or 'no casts'}  ({where})"
         reading = self._view.reading
         old = sum(historic(view, reading, now) for view in listed)
-        self._w.hint.update(_hint(old))
+        self._w.hint.update(
+            _hint(old)
+            if taken is None
+            else f"taken over {labelled(taken.hello)} · enter answers"
+            " · esc leaves and hands the prompts back"
+        )
         self._paint_contents(listed, now)
         entry = self._entry()
         self._paint_ask(listed, self._focused())
-        self._w.head.update(head(entry, branches=self._view.branches, now=now))
+        branches = self._view.branches
+        self._w.head.update(
+            head(entry, branches=branches, now=now)
+            if taken is None
+            else taken_head(taken, branches=branches, now=now)
+        )
         self._paint_output(entry)
-        self._close_answered()
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the
     # cursor stays on the line the operator put it on. When its line goes, the
@@ -568,9 +585,11 @@ class VeknaApp(App[None]):
 
     # Loud while the cast in view waits on the operator, and a pointer to the
     # next one while some other cast does: a question nobody sees is a cast
-    # that never ends.
+    # that never ends. During a takeover the top line is the taken cast's
+    # alone, and what asks elsewhere is one line under the contents.
     def _paint_ask(self, listed: list[CastView], view: CastView | None) -> None:
-        ask = self._w.ask
+        taken = self._view.claims.taken is not None
+        others = [other for other in listed if other.waiting and other is not view]
         text = ""
         if view is not None and view.waiting:
             prompt = next(iter(view.waiting.values()))
@@ -578,12 +597,21 @@ class VeknaApp(App[None]):
             allowed = allowed_answers(options=request.options, free=request.free)
             takes = " | ".join(allowed) if allowed is not None else "any answer"
             holds = holder(view, prompt, self._view.claims.mine)
-            text = f"⏸ {request.prompt}\n  {takes} · {holds} · t answers it"
-        elif waiting := [other for other in listed if other.waiting]:
-            many = "1 cast waits" if len(waiting) == 1 else f"{len(waiting)} casts wait"
+            key = "enter" if taken else "t"
+            text = f"⏸ {request.prompt}\n  {takes} · {holds} · {key} answers it"
+        elif others and not taken:
+            many = "1 cast waits" if len(others) == 1 else f"{len(others)} casts wait"
             text = f"⏸ {many} on you · w goes to it"
-        ask.display = bool(text)
-        ask.update(text)
+        ask = self._w.ask
+        ask.here.display = bool(text)
+        ask.here.update(text)
+        too = ""
+        if taken and len(others) == 1:
+            too = f"? {labelled(others[0].hello)} asks too"
+        elif taken and others:
+            too = f"? {len(others)} other casts ask too"
+        ask.elsewhere.display = bool(too)
+        ask.elsewhere.update(too)
 
     # Rewritten only when it changed. It follows the newest line unless the
     # operator scrolled up off where it last left it, and keeps following when
@@ -623,17 +651,3 @@ class VeknaApp(App[None]):
             return
         log.scroll_end(animate=False, immediate=True, x_axis=False)
         self._view.follow.at = log.max_scroll_y
-
-    # A prompt answered or withdrawn while its dialog is up closes the dialog:
-    # nobody is waiting on what it would send. The command palette, the one
-    # screen that can be open over it, is popped first and at once: `dismiss`
-    # pops whatever is on top.
-    def _close_answered(self) -> None:
-        if (dialog := self._view.claims.dialog) is None or any(
-            dialog.request_id in view.waiting for view in self._casts.casts.values()
-        ):
-            return
-        self._view.claims.dialog = None
-        if isinstance(self.screen, CommandPalette):
-            self.pop_screen()
-        dialog.dismiss(None)

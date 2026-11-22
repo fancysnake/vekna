@@ -11,6 +11,14 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **`t` in the window takes over a cast, not one prompt.** The right page
+  stays on the cast, and every prompt it asks is claimed and answered on the
+  line at the bottom, with no key between them. Esc hands the open prompts
+  back, and the takeover ends with the cast. A running cast can be taken over
+  before it asks. The answer dialog is gone.
+
 ## [2.0.0] - 2026-11-20
 
 ### Added
