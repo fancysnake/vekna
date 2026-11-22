@@ -11,6 +11,14 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **`ritual-scribe`** and the Rituals page teach failing over many items: route
+  on what the ritual reads back and not on the agent's reply, three tiers of
+  failure, a give-up path that aborts and stashes under a reported name, and
+  one failure not paid for twice.
+  ([#231](https://github.com/fancysnake/vekna/issues/231))
+
 ### Fixed
 
 - **A default is not a component the caller set.** A cast that handed its own
