@@ -30,7 +30,6 @@ from vekna.wire import (
     project_of,
 )
 
-from ._links.board import Board
 from ._links.daemon import DaemonLink, LinkQueue, TeeChannel, ThrottledFocus, to_wire
 from ._links.follow import Follower
 from ._links.loader import (
@@ -79,6 +78,7 @@ _USAGE = (
     "       vekna cast --continue <cast_id>\n"
     "       vekna cast --unattended <ritual> ...  (refuse every decide)\n"
     "       vekna cast --no-follow <ritual> ...  (leave the casts it queued)\n"
+    "       vekna cast --queue <ritual> ...  (hand it to the daemon and return)\n"
 )
 _RESUME_FLAG = "--resume"
 _UNATTENDED_FLAG = "--unattended"
@@ -606,6 +606,21 @@ def _resolve_cast(argv: list[str], *, unattended: bool) -> _Plan:
     )
 
 
+# Whether the daemon can be asked for this cast, said here because the daemon
+# loads no ritual: a name or a component that is wrong would otherwise be a
+# failed cast found later in `vekna log`.
+def queueable(argv: list[str]) -> int:
+    name, *flags = argv
+    try:
+        library = _build_library(Path.cwd())
+        the_ritual = library.compendium.ritual(name)
+        library.defaults.components(the_ritual, parse_flags(flags))
+    except _LOAD_ERRORS as error:
+        sys.stderr.write(f"{error}\n")
+        return 2
+    return 0
+
+
 # A cast returns a model or nothing, so its result renders as JSON rather than
 # as whatever repr the model happens to carry.
 def _rendered(result: BaseModel | None) -> str:
@@ -650,12 +665,27 @@ def _throttled(link: DaemonLink) -> contextlib.AbstractContextManager[None]:
     return CODING_FOCUS.scope(ThrottledFocus(inner=inner, link=link))
 
 
+# The one terminal a typed cast and the casts it set going share. The renderer
+# says the typed cast's own lines, under its name once another cast has spoken.
+# The asker asks every question, the followed casts' too: they share one stdin,
+# and a question is the asking cast's by its prompt, not by a line above it.
+class _Terminal(NamedTuple):
+    turns: Turns
+    renderer: StandaloneRenderer
+    asker: StandaloneRenderer
+
+
 # Every way a cast can end goes through one notify: an `except` per error type
 # would leave whatever it does not name — the AttributeError a step raises —
 # silent, which is the walked-away-from-the-terminal case the notification
 # exists for. `detail` outlives its block; `error` does not.
 async def _cast(
-    *, plan: _Plan, grimoire: Grimoire, channel: Channel, link: DaemonLink, board: Board
+    *,
+    plan: _Plan,
+    grimoire: Grimoire,
+    channel: Channel,
+    link: DaemonLink,
+    terminal: _Terminal,
 ) -> int:
     try:
         with _throttled(link):
@@ -678,8 +708,7 @@ async def _cast(
     except Exception as error:
         # A rituals.py under development dies here, and its traceback is the
         # whole diagnosis — say it to the desktop, then let it out unchanged.
-        board.asker.notify("failed", f"{plan.ritual.name}: {error}")
-        board.finish("error")
+        terminal.asker.notify("failed", f"{plan.ritual.name}: {error}")
         raise
     else:
         await link.close(
@@ -690,13 +719,11 @@ async def _cast(
                 else _RESULT.validate_json(result.model_dump_json())
             ),
         )
-        board.asker.notify("done", plan.ritual.name)
-        board.renderer.say(f"result: {_rendered(result)}\n")
-        board.finish("ok")
+        terminal.asker.notify("done", plan.ritual.name)
+        terminal.renderer.say(f"result: {_rendered(result)}\n")
         return 0
     await link.close(status="error", detail=detail)
-    board.asker.notify("failed", f"{plan.ritual.name}: {detail}")
-    board.finish("error")
+    terminal.asker.notify("failed", f"{plan.ritual.name}: {detail}")
     return code
 
 
@@ -712,32 +739,28 @@ async def _run(plan: _Plan) -> int:
     cast_id = plan.cast_id if plan.cast_id is not None else uuid4().hex
     hello = await _hello(cast_id=cast_id, plan=plan)
     screen = Tail(sys.stdout)
-    board = Board(
-        screen=screen,
+    turns = Turns(screen, typed=f"{hello.ritual} {cast_id[:SHORT_ID]}")
+    out = turns.typed
+    terminal = _Terminal(
+        turns=turns,
+        renderer=StandaloneRenderer(out=out),
         asker=StandaloneRenderer(out=screen),
-        cast_id=cast_id,
-        label=f"{hello.ritual} {cast_id[:SHORT_ID]}",
-        started_at=hello.started_at,
     )
-    out = board.out
     err: TextIO = sys.stderr
     with (
         contextlib.redirect_stdout(out),
         contextlib.redirect_stderr(out if out.isatty() and err.isatty() else err),
     ):
-        try:
-            return await _run_on(plan, board, hello=hello)
-        finally:
-            await board.close()
+        return await _run_on(plan, terminal, hello=hello)
 
 
 # The renderer and the wire both, in that order: what the operator sees does not
 # wait on a socket, and a cast with no daemon behaves exactly as it did.
-async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
+async def _run_on(plan: _Plan, terminal: _Terminal, *, hello: CastHello) -> int:
     cast_id = hello.cast_id
     link = DaemonLink(socket_path=default_socket_path(), hello=hello)
     tee = TeeChannel(
-        inner=None if plan.wired else board,
+        inner=None if plan.wired else terminal.asker,
         link=link,
         cast_id=cast_id,
         rite_id=lambda: current_rite().parent_id,
@@ -745,7 +768,7 @@ async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
     channel: Channel = UnattendedChannel() if plan.unattended else tee
 
     def emit(event: RiteEvent) -> None:
-        board.render(cast_id, event)
+        terminal.renderer.render(event)
         link.send(to_wire(event, cast_id=cast_id))
 
     grimoire = Grimoire(on_event=emit)
@@ -760,7 +783,7 @@ async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
     watcher = asyncio.create_task(link.keep_attached(backlog))
     lineage = Lineage(cast_id)
     async with _follower(
-        plan=plan, link=link, lineage=lineage, board=board
+        plan=plan, link=link, lineage=lineage, terminal=terminal
     ) as follower:
         try:
             # The queue the cast's `enqueue` and `await_cast` reach.
@@ -774,7 +797,7 @@ async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
                     grimoire=grimoire,
                     channel=channel,
                     link=link,
-                    board=board,
+                    terminal=terminal,
                 )
         finally:
             watcher.cancel()
@@ -783,28 +806,24 @@ async def _run_on(plan: _Plan, board: Board, *, hello: CastHello) -> int:
         if follower is None:
             return code
         return await _followed(
-            code, follower=follower, lineage=lineage, renderer=board.renderer
+            code, follower=follower, lineage=lineage, renderer=terminal.renderer
         )
 
 
 # Only a cast typed by hand with a daemon to hear from follows: a spawned one has
-# no terminal, and with no daemon it can have queued nothing. At a terminal the
-# casts it follows go on the board; a pipe or a log file has no screen to paint,
-# and takes them a cast at a time. The follower hangs up first, then the turns
-# are said; the board is the caller's, as it made it.
+# no terminal, and with no daemon it can have queued nothing.
 @contextlib.asynccontextmanager
 async def _follower(
-    *, plan: _Plan, link: DaemonLink, lineage: Lineage, board: Board
+    *, plan: _Plan, link: DaemonLink, lineage: Lineage, terminal: _Terminal
 ) -> AsyncGenerator[Follower | None]:
     if plan.wired or not plan.follow or not link.attached:
         yield None
         return
-    turns = None if board.out.isatty() else Turns(board.out)
     follower = Follower(
         socket_path=default_socket_path(),
         lineage=lineage,
-        display=board if turns is None else turns,
-        ask=None if plan.unattended else board.asker,
+        display=terminal.turns,
+        ask=None if plan.unattended else terminal.asker,
     )
     if not await follower.attach():
         yield None
@@ -813,8 +832,6 @@ async def _follower(
         yield follower
     finally:
         await follower.close()
-        if turns is not None:
-            await turns.close()
 
 
 # The worst of how this cast and the ones it queued ended. Ctrl-C while

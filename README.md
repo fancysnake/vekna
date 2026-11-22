@@ -107,6 +107,7 @@ claude plugin install ritual-scribe@vekna
 | --- | --- |
 | `vekna cast <ritual> [--<component> value …]` | Run a ritual from `rituals.py` |
 | `vekna cast --prompt "<text>"` | One-shot cast on the coding medium, no `rituals.py` needed |
+| `vekna cast --queue <ritual> […]` | Hand the ritual to the daemon and return |
 | `vekna rituals list` | Every ritual and the options it takes |
 | `vekna rituals show <ritual>` | A ritual's components and its step graph |
 | `vekna audit` | Check the config: what is wrong, where each setting comes from, what sets nothing |

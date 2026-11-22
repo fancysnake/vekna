@@ -16,6 +16,7 @@ from vekna.wire import (
     CastGoodbye,
     CastHello,
     CastMessage,
+    CastQueued,
     CastRefused,
     CastRequested,
     DaemonVersion,
@@ -108,6 +109,10 @@ class _Daemon(Routes):
         self.requests.append(request)
         return AltarTended(trees=[HeldTree(path=f"{request.project_root}/1")])
 
+    async def queue(self, request: CastRequested) -> CastQueued | CastRefused:
+        self.requests.append(request)
+        return CastQueued(cast_id="c1")
+
     async def start(self, path: Path) -> Serving:
         return await serve(path=path, routes=self)
 
@@ -189,6 +194,25 @@ class TestServing:
         reply = [message async for message in read_frames(reader)]
 
         assert reply == [AltarTended(trees=[HeldTree(path="/proj/1")])]
+        assert daemon.requests == [asked]
+        assert not daemon.attached
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_cast_asked_for_first_is_answered_down_its_connection(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        reader, writer = await attach(socket_path)
+        asked = CastRequested(project_root="/proj", ritual="nap", components={})
+        writer.write(encode_frame(asked))
+        await writer.drain()
+        reply = [message async for message in read_frames(reader)]
+
+        assert reply == [CastQueued(cast_id="c1")]
         assert daemon.requests == [asked]
         assert not daemon.attached
         writer.close()

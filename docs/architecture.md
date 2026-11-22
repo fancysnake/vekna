@@ -143,6 +143,8 @@ lexicon/
     unattended.py  # UnattendedChannel, which refuses every decide
     follow.py      # Follower: a hand cast streaming the casts it queued and
                    # asking their prompts on its own terminal
+    turns.py       # Turns: those casts and the typed one in one stream, each
+                   # named where it takes over
     daemon.py      # the wire client, the grimoire→wire projection, the
                    # channel that tees a prompt onto it
     resume.py      # reading a journal back for `--resume`

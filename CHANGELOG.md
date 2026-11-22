@@ -11,6 +11,29 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`vekna cast --queue <ritual>`** hands the ritual to the daemon and
+  returns, as `c` in the window does. The cast runs with no terminal, the casts
+  it queues run side by side, and `vekna` shows them. The ritual's name and
+  components are checked first; the command prints the queued cast's id.
+
+### Changed
+
+- **The casts a typed cast sets going run one at a time.** A `vekna cast`
+  typed at a terminal, the casts it queued and the ones they queued each wait
+  for the one before. A cast that awaits another carries on before the next
+  starts. Casts started from the window or with `--queue` still run side by
+  side.
+
+### Removed
+
+- **The board of a following cast.** A typed cast prints the casts it follows
+  into its terminal as they write, each named where it takes over from another,
+  so the output scrolls back and a prompt stands under what its cast printed. A
+  pipe or a file gets the same lines; lines are no longer prefixed with the
+  cast's name or held back.
+
 ## [2.0.0] - 2026-11-20
 
 ### Added

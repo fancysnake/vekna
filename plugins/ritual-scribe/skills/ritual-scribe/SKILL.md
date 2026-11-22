@@ -304,7 +304,9 @@ report = await await_cast("review", Sweep(pull_request=pr), output=Report)  # wa
 
 A sweep fans out: its first step enqueues one cast per item and ends, instead
 of walking a list in its own payload. Parallelism lives between casts; steps
-stay sequential. The name resolves the way `vekna cast` would resolve it, and
+stay sequential. Typed as `vekna cast`, the casts a cast queues run one at a
+time, so its terminal reads in order; `vekna cast --queue` and the window run
+them side by side. The name resolves the way `vekna cast` would resolve it, and
 the components must be that ritual's model, or `MediumBoundaryError`.
 
 `await_cast` gives up the parent's process slot until the child ends, keeps its

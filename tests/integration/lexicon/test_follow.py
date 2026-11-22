@@ -135,7 +135,10 @@ class TestFollowing:
         lineage.expect("child0000")
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(out), typed="sweep root0000"),
+            ask=None,
         )
         await follower.attach()
         hub.apply(_hello("stranger", by=None, ritual="other"))
@@ -161,9 +164,10 @@ class TestFollowing:
 
         assert await asyncio.wait_for(follower.until_settled(), timeout=2)
         assert out.getvalue().splitlines() == [
-            "[ci_watch child000] ▶ watch",
-            "[ci_watch child000]   checks red",
-            "[ci_watch child000] ✓ watch",
+            "── ci_watch child000 ──",
+            "▶ watch",
+            "  checks red",
+            "✓ watch",
             "[ci_watch child000] ✓ done",
         ]
         await follower.close()
@@ -178,7 +182,10 @@ class TestFollowing:
         lineage.expect("child0000")
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(out), typed="sweep root0000"),
+            ask=None,
         )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
@@ -196,9 +203,10 @@ class TestFollowing:
 
         assert await asyncio.wait_for(follower.until_settled(), timeout=2)
         assert out.getvalue().splitlines() == [
-            "[ci_watch child000] ▶ watch",
-            "[ci_watch child000]   checks red",
-            "[ci_watch child000] ✓ watch",
+            "── ci_watch child000 ──",
+            "▶ watch",
+            "  checks red",
+            "✓ watch",
             "[ci_watch child000] ✓ done",
         ]
         await follower.close()
@@ -216,7 +224,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=lineage,
-            display=Turns(Tail(out)),
+            display=Turns(Tail(out), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -254,7 +262,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=lineage,
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=None,
         )
         await follower.attach()
@@ -278,7 +286,10 @@ class TestFollowing:
         lineage.expect("child0000")
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(out), typed="sweep root0000"),
+            ask=None,
         )
         await follower.attach()
         started, _, _ = _rite("stranger")
@@ -315,7 +326,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=lineage,
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=None,
         )
         await follower.attach()
@@ -346,7 +357,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=None,
         )
         with warnings.catch_warnings(record=True) as warned:
@@ -364,7 +375,7 @@ class TestFollowing:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=None,
         )
 
@@ -384,7 +395,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -415,7 +426,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(out)),
+            display=Turns(Tail(out), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -445,7 +456,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(out)),
+            display=Turns(Tail(out), typed="sweep root0000"),
             ask=None,
         )
         await follower.attach()
@@ -471,7 +482,10 @@ class TestPrompts:
         lineage.expect("child0000")
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(out), typed="sweep root0000"),
+            ask=None,
         )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))
@@ -499,7 +513,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -527,7 +541,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -550,7 +564,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(io.StringIO())),
+            display=Turns(Tail(io.StringIO()), typed="sweep root0000"),
             ask=asker,
         )
         await follower.attach()
@@ -578,7 +592,7 @@ class TestPrompts:
         follower = Follower(
             socket_path=socket_path,
             lineage=Lineage("root"),
-            display=Turns(Tail(out)),
+            display=Turns(Tail(out), typed="sweep root0000"),
             ask=_Refuser(),
         )
         await follower.attach()
@@ -596,37 +610,6 @@ class TestPrompts:
         await server.close()
 
     @staticmethod
-    async def test_closing_the_follower_leaves_the_turns_to_whoever_made_them(
-        socket_path: Path,
-    ):
-        routed: list[Routed] = []
-        hub = Hub(on_routed=routed.append)
-        server = await serve(path=socket_path, routes=hub)
-        out = io.StringIO()
-        turns = Turns(Tail(out))
-        follower = Follower(
-            socket_path=socket_path, lineage=Lineage("root"), display=turns, ask=None
-        )
-        await follower.attach()
-        await _eventually(lambda: any(r.action == "attached" for r in routed))
-        hub.apply(_hello("aaaa0000", by="root"))
-        hub.apply(_hello("bbbb0000", by="root"))
-        hub.apply(_rite("bbbb0000")[0])
-        hub.apply(_rite("aaaa0000")[0])
-        await _eventually(lambda: "[ci_watch aaaa0000] ▶ watch" in out.getvalue())
-
-        await follower.close()
-        closed = out.getvalue()
-        await turns.close()
-
-        assert "bbbb0000" not in closed
-        assert out.getvalue().splitlines() == [
-            "[ci_watch aaaa0000] ▶ watch",
-            "[ci_watch bbbb0000] ▶ watch",
-        ]
-        await server.close()
-
-    @staticmethod
     async def test_a_prompt_of_a_cast_not_heard_from_yet_is_named_by_its_short_id(
         socket_path: Path,
     ):
@@ -637,7 +620,10 @@ class TestPrompts:
         lineage.expect("child0000")
         out = io.StringIO()
         follower = Follower(
-            socket_path=socket_path, lineage=lineage, display=Turns(Tail(out)), ask=None
+            socket_path=socket_path,
+            lineage=lineage,
+            display=Turns(Tail(out), typed="sweep root0000"),
+            ask=None,
         )
         await follower.attach()
         await _eventually(lambda: any(r.action == "attached" for r in routed))

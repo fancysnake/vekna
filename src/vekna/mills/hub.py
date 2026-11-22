@@ -171,6 +171,11 @@ class Hub(CastBoard, Routes):
         del request
         return CastRefused(reason=_KEEPS_NO_POOL)
 
+    @override
+    async def queue(self, request: CastRequested) -> CastQueued | CastRefused:
+        del request
+        return CastRefused(reason=_STARTS_NOTHING)
+
     # Forwarded, not applied: the cast's own `DecideResolved` is what closes the
     # prompt, so the journal and every surface hear one answer, from the cast
     # that took it. A prompt that is not open — answered already, withdrawn,

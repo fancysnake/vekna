@@ -1249,3 +1249,155 @@ class TestAwaits:
             "every tree is blocked or held by a cast awaiting one that needs a tree:"
             " /pool/1"
         )
+
+
+def _typed(cast_id: str) -> CastHello:
+    return _hello(cast_id).model_copy(update={"wired": False})
+
+
+def _by(parent: str, cast_id: str) -> CastHello:
+    return _hello(cast_id).model_copy(update={"enqueued_by": parent})
+
+
+def _ends(hub: Hub, spawn: _Spawn, cast_id: str) -> None:
+    hub.apply(CastGoodbye(cast_id=cast_id, status="ok"))
+    spawn.exit(cast_id)
+
+
+@pytest.mark.asyncio
+class TestTypedLine:
+    @staticmethod
+    async def test_what_a_typed_cast_queued_runs_one_at_a_time():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        hub.apply(_typed("hand"))
+        hub.apply(CastGoodbye(cast_id="hand", status="ok"))
+
+        circle.enqueue(_by("hand", "c1"))
+        circle.enqueue(_by("hand", "c2"))
+        await _settled()
+        assert spawn.spawned == ["c1"]
+
+        _ends(hub, spawn, "c1")
+        await _settled()
+        assert spawn.spawned == ["c1", "c2"]
+
+    @staticmethod
+    async def test_the_typed_cast_runs_before_what_it_queued():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        hub.apply(_typed("hand"))
+
+        circle.enqueue(_by("hand", "c1"))
+        await _settled()
+        assert not spawn.spawned
+
+        hub.apply(CastGoodbye(cast_id="hand", status="ok"))
+        circle.wake()
+        await _settled()
+        assert spawn.spawned == ["c1"]
+
+    @staticmethod
+    async def test_a_cast_queued_further_down_is_of_the_same_line():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        hub.apply(_typed("hand"))
+        hub.apply(CastGoodbye(cast_id="hand", status="ok"))
+        circle.enqueue(_by("hand", "c1"))
+        await _settled()
+
+        circle.enqueue(_by("c1", "c2"))
+        await _settled()
+
+        assert spawn.spawned == ["c1"]
+
+    @staticmethod
+    async def test_what_the_daemon_was_asked_for_queues_casts_side_by_side():
+        circle, _, spawn = _circle(_Limits(processes=4))
+        circle.enqueue(_hello("asked"))
+
+        circle.enqueue(_by("asked", "c1"))
+        circle.enqueue(_by("asked", "c2"))
+        await _settled()
+
+        assert spawn.spawned == ["asked", "c1", "c2"]
+
+    @staticmethod
+    async def test_two_typed_casts_are_two_lines():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        for hand in ("h1", "h2"):
+            hub.apply(_typed(hand))
+            hub.apply(CastGoodbye(cast_id=hand, status="ok"))
+
+        circle.enqueue(_by("h1", "c1"))
+        circle.enqueue(_by("h2", "c2"))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
+
+    @staticmethod
+    async def test_a_cast_whose_parent_nobody_heard_of_is_held_by_no_line():
+        circle, _, spawn = _circle(_Limits(processes=4))
+
+        circle.enqueue(_by("gone", "c1"))
+        circle.enqueue(_by("gone", "c2"))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
+
+    @staticmethod
+    async def test_a_loop_of_parents_is_held_by_no_line():
+        circle, _, spawn = _circle(_Limits(processes=4))
+
+        circle.enqueue(_by("c2", "c1"))
+        circle.enqueue(_by("c1", "c2"))
+        await _settled()
+
+        assert spawn.spawned == ["c1", "c2"]
+
+    # The parked cast's child goes before the sibling queued ahead of it, and
+    # the parked cast carries on before that sibling starts.
+    @staticmethod
+    async def test_an_awaited_cast_and_its_parent_go_before_a_sibling():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        hub.apply(_typed("hand"))
+        hub.apply(CastGoodbye(cast_id="hand", status="ok"))
+        circle.enqueue(_by("hand", "c1"))
+        circle.enqueue(_by("hand", "c2"))
+        await _settled()
+        hub.apply(_by("hand", "c1"))
+        peer = _Peer()
+        hub.open_cast("c1", peer)
+
+        circle.enqueue(_by("c1", "child"))
+        _said(circle, hub, _awaits("c1", "child"))
+        await _settled()
+        assert spawn.spawned == ["c1", "child"]
+
+        _ends(hub, spawn, "child")
+        await _settled()
+        assert peer.sent == [
+            AwaitEnded(cast_id="c1", request_id="w1", child="child", status="ok")
+        ]
+        assert spawn.spawned == ["c1", "child"]
+
+        _ends(hub, spawn, "c1")
+        await _settled()
+        assert spawn.spawned == ["c1", "child", "c2"]
+
+    @staticmethod
+    async def test_a_parent_waits_for_the_cast_running_in_its_line():
+        circle, hub, spawn = _circle(_Limits(processes=4))
+        hub.apply(_typed("hand"))
+        peer = _Peer()
+        hub.open_cast("hand", peer)
+        circle.enqueue(_by("hand", "c1"))
+        circle.enqueue(_by("hand", "c2"))
+        _said(circle, hub, _awaits("hand", "c2"))
+        await _settled()
+        assert spawn.spawned == ["c2"]
+
+        _ends(hub, spawn, "c2")
+        await _settled()
+
+        assert spawn.spawned == ["c2"]
+        assert peer.sent == [
+            AwaitEnded(cast_id="hand", request_id="w1", child="c2", status="ok")
+        ]

@@ -269,7 +269,9 @@ class Leasing:
 # `processes` says — every running cast of the project counts, whether the
 # daemon spawned it or somebody typed `vekna cast` — and a queued one is spawned
 # when a slot frees. A cast awaiting another holds no slot until the other ends,
-# and then comes back ahead of the queue.
+# and then comes back ahead of the queue. The casts a cast typed at a terminal
+# set going run one at a time, that cast among them: its terminal is one stream,
+# and it reads in order only if one cast writes to it at a time.
 class Circle:
     def __init__(
         self,
@@ -315,28 +317,65 @@ class Circle:
     # and a child it waited on may be the reason the queue is full.
     def _start(self) -> None:
         for reply in self._awaits.due():
-            parent = self._hub.casts[reply.cast_id]
-            if self._busy(parent) < self._limits.processes(parent.hello.project_root):
+            if self._may_run(self._hub.casts[reply.cast_id]):
                 self._hub.apply(reply)
                 # A parent that is not attached says its await again on reattach.
                 self._hub.tell(reply.cast_id, reply)
-        for cast_id in list(self._queue):
+        for cast_id in self._in_turn():
             view = self._hub.casts.get(cast_id)
             if view is None or view.status != "queued":
                 self._queue.remove(cast_id)
-            elif self._busy(view) < self._limits.processes(view.hello.project_root):
+            elif self._may_run(view):
                 self._queue.remove(cast_id)
                 self._launch(view.hello)
 
+    # The queue, with what a typed cast's line awaits ahead of the rest: of one
+    # cast at a time, the next has to be the one a parked cast is waiting on, or
+    # the terminal reads a sibling in the middle of it.
+    def _in_turn(self) -> list[str]:
+        awaited = {
+            request.child
+            for view in self._hub.casts.values()
+            for request in view.on_children.values()
+            if self._typed(view) is not None
+        }
+        ahead = [cast_id for cast_id in self._queue if cast_id in awaited]
+        return ahead + [cast_id for cast_id in self._queue if cast_id not in awaited]
+
+    def _may_run(self, view: CastView) -> bool:
+        if self._busy(view) >= self._limits.processes(view.hello.project_root):
+            return False
+        typed = self._typed(view)
+        return typed is None or all(
+            self._typed(other) != typed for other in self._active()
+        )
+
+    # The cast typed at a terminal that set this one going, itself included, or
+    # `None` for a line the daemon was asked to start. Walked up each time: no
+    # chain is longer than the casts there are, which bounds a loop a peer sent.
+    def _typed(self, view: CastView) -> str | None:
+        casts = self._hub.casts
+        for _ in casts:
+            if (parent := view.hello.enqueued_by) is None:
+                return None if view.hello.wired else view.hello.cast_id
+            if (found := casts.get(parent)) is None:
+                return None
+            view = found
+        return None
+
+    # Every cast holding a process: running or spawned, and awaiting nothing.
+    def _active(self) -> Iterator[CastView]:
+        parked = self._awaits.parked()
+        for cast_id, view in self._hub.casts.items():
+            if cast_id not in parked and (
+                view.status == "running" or cast_id in self._launching
+            ):
+                yield view
+
     def _busy(self, queued: CastView) -> int:
         project = queued.hello.project
-        parked = self._awaits.parked()
         return sum(
-            1
-            for cast_id, view in self._hub.casts.items()
-            if view.hello.project == project
-            and cast_id not in parked
-            and (view.status == "running" or cast_id in self._launching)
+            1 for view in self._active() if view.hello.project == project
         ) + self._left.count(project)
 
     # Held until the cast's process has gone: the task is its only reference.

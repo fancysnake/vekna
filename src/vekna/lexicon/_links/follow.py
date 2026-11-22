@@ -35,8 +35,6 @@ from vekna.wire import (
     read_frames,
 )
 
-from .standalone import question_height
-
 DAEMON_WENT = "the daemon went away before they ended — `vekna log` has them\n"
 _UNREAD = (
     "stopped following them: the daemon sent a frame this vekna cannot read"
@@ -181,9 +179,7 @@ class Follower:
             return
         label = f"{hello.ritual} {hello.cast_id[:SHORT_ID]}"
         self._followed[hello.cast_id] = _Followed(label=label)
-        self._display.entered(
-            cast_id=hello.cast_id, label=label, started_at=hello.started_at
-        )
+        self._display.entered(cast_id=hello.cast_id, label=label)
 
     def _replay(self, message: GrimoireBegin | GrimoireEnd) -> None:
         if (followed := self._followed.get(message.cast_id)) is not None:
@@ -246,12 +242,9 @@ class Follower:
     async def _asked(self, ask: Channel, request: DecideRequested) -> None:
         prompt = f"[{self._label(request.cast_id)}] {request.prompt}"
         try:
-            async with self._display.asking(
-                request.cast_id, question_height(prompt, request.options)
-            ):
-                answer = await ask.decide(
-                    prompt=prompt, options=request.options, free=request.free
-                )
+            answer = await ask.decide(
+                prompt=prompt, options=request.options, free=request.free
+            )
         except StandalonePromptError as error:
             self._say(request, f"{error} — answer it in `vekna`")
             return

@@ -3,7 +3,6 @@ import concurrent.futures
 import shutil
 import socket
 import sys
-import termios
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -21,9 +20,6 @@ from vekna.wire import RiteEndStatus
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
-# An answer and the line saying it was wrong for each attempt, and a row for
-# the answer typed last.
-_ANSWER_ROWS = 2 * _MAX_PROMPT_ATTEMPTS + 1
 _NOTIFY_BODY_MAX = 120
 _MARK: dict[RiteEndStatus, str] = {
     "ok": "✓",
@@ -54,14 +50,6 @@ def _one_line(text: str) -> str:
 def _menu(prompt: str, options: Sequence[str]) -> str:
     lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
     return "\n".join(lines) + "\n"
-
-
-# The rows a question takes on a screen: its prompt, its options, and under them
-# every attempt it allows with its retry line.
-# shortcut: a line counts as one row, so a prompt wider than the terminal wraps
-# and takes more. Upgrade if that shows up.
-def question_height(prompt: str, options: Sequence[str] | None) -> int:
-    return len(prompt.splitlines() or [""]) + len(options or ()) + _ANSWER_ROWS
 
 
 # `isdigit` is wider than `int` accepts — "²" is a digit and `int` raises on it,
@@ -209,18 +197,6 @@ class StandaloneRenderer(Channel):
         # stdin, and two reads at once would split one answer between them.
         self._asking = asyncio.Lock()
 
-    # Whether somebody is at the keys: from a pipe, lines are answers, and the
-    # ones that nothing has asked for yet must wait for their question.
-    @property
-    def interactive(self) -> bool:
-        return self._inp.isatty()
-
-    # Half a line typed for the board sits in the terminal's own buffer, where
-    # Enter would join it to the answer of a question that has just opened.
-    def discard_typed(self) -> None:
-        if self.interactive:
-            termios.tcflush(self._inp.fileno(), termios.TCIFLUSH)
-
     def say(self, line: str) -> None:
         self._out.write(line)
         self._out.flush()
@@ -254,16 +230,6 @@ class StandaloneRenderer(Channel):
             msg = "input ended before the question was answered"
             raise StandalonePromptError(msg)
         return line.strip()
-
-    # A line typed while no question is open, or None once input has ended. It
-    # shares the one read a question takes over, so no answer is read as this.
-    # A read that fails is not the end of input: it is raised, for the caller to
-    # say why it stopped.
-    async def line(self) -> str | None:
-        try:
-            return await self._readline()
-        except StandalonePromptError:
-            return None
 
     def _emit(self, sink: str | None, block: str) -> None:
         if sink is None:
