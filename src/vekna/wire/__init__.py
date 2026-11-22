@@ -94,7 +94,15 @@ from ._pacts import (
     encode_frame,
 )
 from ._refusals import Refusal, explained, refusals
-from ._specs import SHORT_ID, VERSION, allowed_answers, compatible, flag_of, parse_flags
+from ._specs import (
+    SHORT_ID,
+    VERSION,
+    allowed_answers,
+    compatible,
+    flag_of,
+    parse_flags,
+    picked_option,
+)
 from ._toml import TomlValue, read_toml
 
 __all__ = [
@@ -184,6 +192,7 @@ __all__ = [
     "merged_table",
     "overruled",
     "parse_flags",
+    "picked_option",
     "project_checkouts",
     "project_config_path",
     "project_of",

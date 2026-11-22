@@ -11,15 +11,17 @@ import textwrap
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import click
+import discord
 import pytest
 from click.testing import CliRunner, Result
 from typing_extensions import override
 
 from tests.conftest import versioned
 from vekna.inits.cli import init_command, tui_window, window
-from vekna.inits.daemon import CLI_MODULE, _look, serve_daemon, stop_daemon
+from vekna.inits.daemon import CLI_MODULE, _discord, _look, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
 from vekna.lexicon._links.follow import DAEMON_WENT
 from vekna.links.journal import Journal
@@ -30,6 +32,7 @@ from vekna.mills.hub import Hub
 from vekna.mills.vigils import Vigils
 from vekna.pacts.casts import DamagedRun
 from vekna.pacts.circle import Tending, VigilBook
+from vekna.pacts.remote import DiscordSetup, Hear, Heard, Posted, Remote
 from vekna.pacts.screen import Screen
 from vekna.wire import (
     VERSION,
@@ -2504,3 +2507,170 @@ def _said(caplog: pytest.LogCaptureFixture, level: int) -> str:
 def _drained(capsys: pytest.CaptureFixture[str], said: list[str]) -> str:
     said.append(capsys.readouterr().out)
     return "".join(said)
+
+
+_OPERATOR = 7
+_GUILD = 100
+
+
+# Discord, as the daemon reaches it: the module that makes the remote, and the
+# remote.
+class _Chat(Remote):
+    def __init__(self) -> None:
+        self.setups: list[DiscordSetup] = []
+        self.asked: list[tuple[str, str, str]] = []
+        self.said: list[tuple[str, str]] = []
+        self.hear: Hear | None = None
+        self.closed = False
+
+    def remote(self, setup: DiscordSetup) -> Remote:
+        self.setups.append(setup)
+        return self
+
+    @override
+    async def ask(self, *, room: str, thread: str, text: str) -> Posted:
+        self.asked.append((room, thread, text))
+        return Posted(thread="t1", message="m1")
+
+    @override
+    async def say(self, *, thread: str, text: str) -> None:
+        self.said.append((thread, text))
+
+    @override
+    async def run(self, hear: Hear) -> None:
+        self.hear = hear
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self.closed = True
+
+
+# A daemon with a `[discord]` and its token, in a project its user config
+# lists.
+@pytest.fixture(name="discord_config")
+def _discord_config(rituals: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setattr("vekna.inits.daemon._VIGIL_SECONDS", _TICK)
+    (rituals / "config" / "vekna").mkdir(parents=True)
+    config = rituals / "config" / "vekna" / "config.toml"
+    config.write_text(
+        f'[projects.here]\npath = "{rituals}"\n'
+        f"[discord]\nguild = {_GUILD}\nallow = [{_OPERATOR}]\n",
+        encoding="utf-8",
+    )
+    config.with_name("discord-token").write_text("s3cret\n", encoding="utf-8")
+    return config
+
+
+def _keep_asking(config: Path) -> None:
+    listed = config.read_text(encoding="utf-8")
+    config.write_text(
+        listed + '[vigil.asking]\nevery = 3600\nritual = "asker"\n', encoding="utf-8"
+    )
+
+
+@pytest.mark.asyncio
+class TestDiscord:
+    @staticmethod
+    async def test_a_vigil_casts_question_is_answered_from_its_thread(
+        socket_path: Path,
+        discord_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        chat = _Chat()
+        monkeypatch.setattr("vekna.inits.daemon._discord", lambda: chat)
+        runs = socket_path.parent / "runs"
+        _keep_asking(discord_config)
+        async with _served(socket_path):
+            await _spawned(lambda: bool(chat.asked))
+            assert chat.hear is not None
+            stranger = await chat.hear(
+                Heard(author=_OPERATOR + 1, thread="t1", reply_to=None, text="yes")
+            )
+            refused = await chat.hear(
+                Heard(author=_OPERATOR, thread="t1", reply_to=None, text="maybe")
+            )
+            taken = await chat.hear(
+                Heard(author=_OPERATOR, thread="t1", reply_to=None, text="Yes")
+            )
+            await _spawned(lambda: _finished(runs, "asker"))
+            await _eventually(lambda: bool(chat.said))
+
+        asker = _run_of(runs, "asker")
+        assert (asker.status, asker.hello.vigil) == ("ok", "asking")
+        assert chat.setups == [
+            DiscordSetup(
+                token="s3cret",
+                guild=_GUILD,
+                category="vekna",
+                allow=frozenset({_OPERATOR}),
+            )
+        ]
+        assert chat.asked == [
+            (
+                discord_config.parents[2].name,
+                f"asker {asker.hello.cast_id[:8]}",
+                "**asker** asks:\nmerge #74 now?\nreply yes or no",
+            )
+        ]
+        assert (stranger, refused, taken) == (
+            None,
+            "'maybe' is not one of yes, no",
+            None,
+        )
+        assert chat.said == [("t1", "→ yes")]
+        assert chat.closed
+        assert (
+            f"answering casts on Discord, in the guild {_GUILD}" in _said(
+                caplog, logging.INFO
+            ).splitlines()
+        )
+        assert not _said(caplog, logging.ERROR)
+
+    @staticmethod
+    @pytest.mark.usefixtures("discord_config")
+    async def test_without_the_install_it_is_said_once_and_the_daemon_serves(
+        socket_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        monkeypatch.setattr("vekna.inits.daemon._DISCORD", "vekna.links.not_installed")
+        async with _served(socket_path):
+            assert await alive(socket_path)
+
+        assert _said(caplog, logging.WARNING).splitlines() == [
+            "Discord is off: install vekna[discord] to answer casts there"
+        ]
+
+    @staticmethod
+    async def test_a_link_that_makes_no_remote_is_refused(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.inits.daemon._DISCORD", "json")
+
+        with pytest.raises(TypeError, match="json makes no remote"):
+            _discord()
+
+    @staticmethod
+    @pytest.mark.usefixtures("discord_config")
+    async def test_a_token_discord_refuses_is_said_and_the_daemon_serves(
+        socket_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        start = AsyncMock(
+            side_effect=discord.LoginFailure("Improper token has been passed.")
+        )
+        monkeypatch.setattr(discord.Client, "start", start)
+        async with _served(socket_path):
+            await _eventually(lambda: bool(_said(caplog, logging.ERROR)))
+            assert await alive(socket_path)
+
+        start.assert_awaited_once_with("s3cret")
+        assert _said(caplog, logging.ERROR).splitlines() == [
+            (
+                "Discord is off until the daemon restarts:"
+                " RemoteError('Improper token has been passed.')"
+            )
+        ]

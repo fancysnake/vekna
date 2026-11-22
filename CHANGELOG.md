@@ -11,6 +11,14 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **Discord answers for vigils**: with a `[discord]` table in the user config
+  and the `vekna[discord]` install, the daemon posts each question of a cast
+  that a vigil started to a thread in the project's Discord channel, and takes
+  a reply from an allowed user as the answer. `docs/cli.md` § Discord has the
+  bot setup.
+
 ## [3.0.0] - 2026-11-22
 
 ### Added

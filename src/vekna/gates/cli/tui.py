@@ -14,7 +14,7 @@ from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, CastView
+from vekna.pacts.casts import Casts, CastView, named
 from vekna.wire import (
     CastCancelRequested,
     DecideClaimed,
@@ -23,7 +23,7 @@ from vekna.wire import (
     WireMessage,
 )
 
-from .cast_text import counted, labelled, live, named, top_prompt
+from .cast_text import counted, labelled, live, top_prompt
 from .commands import request_cast, send_answer
 from .contents import Entry, Reading, cast_key, contents, historic, walked
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output

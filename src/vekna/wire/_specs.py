@@ -35,6 +35,20 @@ def allowed_answers(
     return _BOOLEAN if options is None else tuple(options)
 
 
+# The option a typed answer names: itself, or its number in the menu an
+# operator was shown. `isdigit` is wider than `int` accepts — "²" is a digit and
+# `int` raises on it, as it does on a digit string past CPython's conversion
+# limit. Neither is a menu number, and raising here would crash a prompt that
+# has an answer for anything else typed at it.
+def picked_option(answer: str, options: Sequence[str]) -> str | None:
+    if answer in options:
+        return answer
+    if not answer.isdecimal() or len(answer) > len(str(len(options))):
+        return None
+    index = int(answer)
+    return options[index - 1] if 1 <= index <= len(options) else None
+
+
 # `--key value` and `--key=value`, as `vekna cast` and the dashboard both take
 # them, so a ritual started from either reads its flags the same way.
 def parse_flags(flags: Sequence[str]) -> dict[str, str]:

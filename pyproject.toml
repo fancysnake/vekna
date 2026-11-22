@@ -56,6 +56,9 @@ Issues = "https://github.com/fancysnake/vekna/issues"
 # manager. Only the fixture needs it, and only a pytest run ever loads that.
 [project.optional-dependencies]
 trial = ["pytest (>=8.0,<10.0)"]
+# The daemon answers casts from Discord only where this is installed; without
+# it a configured `[discord]` is said once and passed over.
+discord = ["discord.py (>=2.6,<3.0)"]
 
 [project.scripts]
 vekna = 'vekna.inits.cli:run'
@@ -88,6 +91,8 @@ dev = [
     "pytest-xdist (>=3.8.0,<4.0.0)",
     "cabinet @ https://github.com/fancysnake/cabinet/releases/download/v7.3.0/cabinet-7.3.0-py3-none-any.whl",
     "mutmut (>=3.8.0,<4.0.0)",
+    # The `discord` extra, so the type checker and the tests meet its link.
+    "discord.py (>=2.6,<3.0)",
 ]
 security = ["setuptools (>=84.0.0,<85.0.0)"]
 

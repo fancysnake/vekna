@@ -1,30 +1,35 @@
 import asyncio
 import contextlib
 import fcntl
+import functools
+import importlib
 import itertools
 import logging
 import sys
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, Protocol, runtime_checkable
 from uuid import uuid4
 
 import click
 
 from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
+from vekna.links.discord_config import discord_setup
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive, signal_pid
 from vekna.links.vigil_config import ConfigVigils
-from vekna.links.worktrees import GitTrees
+from vekna.links.worktrees import GitTrees, branch_of
 from vekna.mills.circle import Awaits, Circle, CodingPool, Leasing, LeftBehind
 from vekna.mills.cutter import Cutter
 from vekna.mills.debug import debug_line
 from vekna.mills.hub import Hub
+from vekna.mills.relay import Relay
 from vekna.mills.vigils import Vigils
 from vekna.pacts.circle import TreeError, VigilBook
+from vekna.pacts.remote import DiscordSetup, Remote
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
     AdmissionRequested,
@@ -80,6 +85,26 @@ _POLLS = 100
 # How often the daemon looks for a vigil that is due, so no interval is kept
 # more closely than this.
 _VIGIL_SECONDS = 5.0
+_DISCORD = "vekna.links.discord"
+_VIGILS_LOST = "the vigils are no longer kept"
+_DISCORD_LOST = "Discord is off until the daemon restarts"
+
+
+# discord.py is an optional install and heavy to import, so its link is
+# reached by name once a `[discord]` asks for it. The module is checked against
+# this Protocol, which is what types it.
+@runtime_checkable
+class _Discord(Protocol):
+    @staticmethod
+    def remote(setup: DiscordSetup) -> Remote: ...
+
+
+def _discord() -> _Discord:
+    link = importlib.import_module(_DISCORD)
+    if not isinstance(link, _Discord):
+        msg = f"{_DISCORD} makes no remote"
+        raise TypeError(msg)
+    return link
 
 
 def _nothing(_: Routed) -> None:
@@ -190,21 +215,55 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
     keeping = asyncio.create_task(
         _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
     )
-    keeping.add_done_callback(_ended)
+    keeping.add_done_callback(functools.partial(_ended, _VIGILS_LOST))
+    relaying = await _relaying(hub=hub, routes=routes)
     try:
         await server.stopped()
     finally:
         keeping.cancel()
+        for task in relaying:
+            task.cancel()
+        # Awaited so the gateway connection closes before the loop does.
+        await asyncio.gather(*relaying, return_exceptions=True)
         await server.close()
     _log.info("stopped")
     return 0
 
 
-# The keeper ends only by cancel. Any other end leaves every vigil unwatched
+# A keeper ends only by cancel. Any other end leaves what it kept unwatched
 # until the daemon restarts, so it is logged.
-def _ended(done: asyncio.Task[None]) -> None:
+def _ended(lost: str, done: asyncio.Task[None]) -> None:
     if not done.cancelled() and (error := done.exception()) is not None:
-        _log.error("the vigils are no longer kept: %r", error, exc_info=error)
+        _log.error("%s: %r", lost, error, exc_info=error)
+
+
+# The tasks that carry questions to Discord and answers back, or none: no
+# `[discord]` is said by nothing, and one without the install by one line. A
+# token Discord refuses ends the tasks, and the daemon carries on without them.
+async def _relaying(*, hub: Hub, routes: Routes) -> list[asyncio.Task[None]]:
+    if (setup := await asyncio.to_thread(discord_setup)) is None:
+        return []
+    try:
+        remote = _discord().remote(setup)
+    except ImportError:
+        _log.warning("Discord is off: install vekna[discord] to answer casts there")
+        return []
+    relay = Relay(
+        casts=hub,
+        answer=routes.answer,
+        remote=remote,
+        allow=setup.allow,
+        branch=branch_of,
+    )
+    routes.attach_surface(relay)
+    tasks = [
+        asyncio.create_task(relay.run()),
+        asyncio.create_task(remote.run(relay.heard)),
+    ]
+    for task in tasks:
+        task.add_done_callback(functools.partial(_ended, _DISCORD_LOST))
+    _log.info("answering casts on Discord, in the guild %s", setup.guild)
+    return tasks
 
 
 # A look that fails is logged and the next one is tried: a config half written

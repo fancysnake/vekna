@@ -256,6 +256,7 @@ code alone:
   also sets, or that equals the value it overrides
 - `[circle] coding`, `total_processes` or `vigil_processes` anywhere but the
   top level of your user config
+- a `[discord]` key anywhere but the top level of your user config
 - a `[defaults.<ritual>]` table for a ritual that is not loaded here, unless
   it is in the top level of your user config, which speaks for every project
 - a table that vekna does not read and that no tome in `[rituals] modules` is
@@ -413,7 +414,9 @@ A cast the daemon started has no terminal, so its prompts are answered here:
 drill into it and type `a <answer>`. The prompt line says what it takes —
 `a yes|no`, the options offered, or `a <anything>` for free text. An answer it
 does not offer is refused before it leaves the window. A cast nobody answers
-waits. A cast typed as `vekna cast` asks its own prompts on its own terminal,
+waits; the questions of a vigil's casts can reach you on
+[Discord](#discord) too. A cast typed as `vekna cast` asks its own prompts on
+its own terminal,
 and the ones of the casts it queued; answering one from a window takes it over,
 and that terminal stops taking answers for it. Only one answer ever counts: a
 prompt taken over answers only to the window that took it, until that window
@@ -518,6 +521,99 @@ Three limits to know:
   toward `vigil_processes` while it waits.
 - For a few seconds after a restart, the daemon does not see a cast typed by
   hand that is still running, and a due vigil can start a second one.
+
+### Discord
+
+A cast that a vigil starts has no terminal, so its questions wait for a window.
+With a `[discord]` table the daemon also posts them to Discord, and takes your
+reply there as the answer:
+
+```toml
+[discord]
+guild = 123456789012345678
+allow = [234567890123456789]
+```
+
+`guild` is your server's id and `allow` the ids of the Discord users who may
+answer. Both tables are read from your user config only; a project's
+`.vekna.toml` cannot set them. Two more keys are optional: `category` names the
+channel category the bot works in, `vekna` unless you say otherwise, and
+`token_file` names the file that holds the bot's token, `discord-token` beside
+the user config unless you say otherwise.
+
+Discord needs the optional install, `pip install 'vekna[discord]'`. Without it
+the daemon notes once in `daemon.log` that Discord is off, and runs as before.
+The daemon reads `[discord]` when it starts, so run `vekna stop` after an edit.
+
+#### Setting up the bot
+
+One bot serves every project. Set it up once:
+
+1. Use a private server of your own. Whoever reaches the bot's threads can
+   answer an agent that runs on your machine.
+2. In the [Discord Developer Portal](https://discord.com/developers/applications)
+   create an application and open its **Bot** page.
+3. On that page switch **Public Bot** off, so that nobody else can invite it,
+   and switch **Message Content Intent** on. Without the intent the bot sees
+   that you replied, but not what you wrote.
+4. Press **Reset Token** and save the token as the only line of
+   `~/.config/vekna/discord-token`. Make the file readable by you alone:
+   `chmod 600 ~/.config/vekna/discord-token`.
+5. On the **OAuth2** page, under **URL Generator**, tick the scope `bot` and
+   these permissions: View Channels, Manage Channels, Send Messages, Create
+   Public Threads, Send Messages in Threads, Read Message History. Open the
+   URL it generates and add the bot to your server.
+6. In Discord's own settings, under **Advanced**, switch **Developer Mode** on.
+   Right-click the server and choose **Copy Server ID** for `guild`;
+   right-click yourself and choose **Copy User ID** for `allow`.
+7. Write the `[discord]` table, then run `vekna stop`. The next `vekna` starts
+   a daemon that says `answering casts on Discord` in `daemon.log`.
+
+Manage Channels lets the bot create the category and one channel for each
+project. To withhold it, create the category and a channel named after each
+project yourself; the bot then finds them by name.
+
+#### Answering
+
+Each project has a channel, named after its repository. A cast gets a thread
+in it the first time it asks, named after the ritual, the branch its tree
+stands on at that moment, and the cast's id. A cast that never asks gets no
+thread. The question mentions
+everyone in `allow`, which is what makes a phone notify.
+
+Write your answer in the thread:
+
+- For a question with options, reply with an option or its number.
+- For a yes-or-no question, reply `yes` or `no`; `y` and `n` work too.
+- An agent's own question takes any text. When it suggests answers, a number
+  picks one.
+
+Capital letters do not matter for an option. A reply that is no option gets
+one back that names the options, and the question stays open. With several
+questions open in one thread, a plain message answers the oldest; use
+Discord's Reply on a question to answer that one.
+
+The thread then shows the answer the cast took, as `→ yes`. It shows it for an
+answer given in a window too, and shows `withdrawn` for a question the cast
+took back. A window answers the same questions: the cast takes whichever
+answer arrives first. A question a window has taken over with `t` is answered
+there only, and a reply in the thread is told so.
+
+A message from anyone outside `allow` is ignored without a reply.
+
+Four limits to know:
+
+- Only casts started by a vigil are posted, and the casts those enqueue. A
+  cast typed by hand, or started from a window, asks where it always did.
+- Nothing else reaches Discord: no output, no status, and no word that a cast
+  ended. A cast cannot be started or cancelled from Discord.
+- After the daemon restarts, each open question is posted a second time.
+- When Discord has archived a thread, the cast's next question opens a second
+  thread of the same name.
+
+If Discord cannot be reached when a question is asked, `daemon.log` names the
+cast and the question waits for a window. If Discord refuses the token, the
+log says `Discord is off until the daemon restarts`.
 
 ### Worktrees
 
