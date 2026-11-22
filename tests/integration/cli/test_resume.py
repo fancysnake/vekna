@@ -75,6 +75,12 @@ _RITUALS = textwrap.dedent("""
         return Done(Report(said=said))
 
 
+    @ritual("named")
+    async def named(components: Greeting) -> Done[Report]:
+        Path("named.log").write_text(",".join(sorted(components.model_fields_set)))
+        return Done(Report(said="named"))
+
+
     @ritual("mode")
     async def mode(_: State) -> Done[Report]:
         Path("mode.log").write_text(str(attended()))
@@ -105,14 +111,16 @@ def _journalled(
 
 
 # As `enqueue` records it: the keys its caller set, and none it left unset.
-def _queued_greeting(project: Path, runs: Path, components: dict[str, str]) -> None:
+def _queued_greeting(
+    project: Path, runs: Path, components: dict[str, str], *, ritual: str = "greet"
+) -> None:
     journal = Journal(runs)
     journal.record(
         CastHello(
             cast_id="q1",
             project_root=str(project),
             project=str(project),
-            ritual="greet",
+            ritual=ritual,
             components=components,
             started_at=_WHEN,
         )
@@ -164,7 +172,7 @@ def _record_an_interrupted_cast(project: Path, runs: Path) -> str:
     return cast_id
 
 
-class TestResume:
+class TestQueuedRecord:
     # A queued record is a cast the daemon has not started yet: it runs from the
     # first step, with nothing to replay.
     @staticmethod
@@ -200,6 +208,19 @@ class TestResume:
 
     # Queued from a lexicon that has since changed: the record still names the
     # cast it was, so the refusal does too.
+    # What a queued cast forwards to `enqueue` in turn leaves its own defaults
+    # to the next child's repo.
+    @staticmethod
+    def test_a_queued_cast_s_default_is_not_a_key_its_enqueuer_set(
+        project: Path, tmp_path: Path
+    ):
+        (project / ".vekna.toml").write_text('[defaults.named]\nword = "hi"\n')
+        _queued_greeting(project, tmp_path / "runs", {"name": "q"}, ritual="named")
+
+        assert main(["--resume", "q1"]) == 0
+
+        assert (project / "named.log").read_text() == "name"
+
     @staticmethod
     def test_a_queued_cast_whose_components_no_longer_fit_names_the_cast(
         project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -226,6 +247,8 @@ class TestResume:
             " — it takes no 'tone'\n"
         )
 
+
+class TestResume:
     @staticmethod
     def test_a_resumed_cast_whose_components_no_longer_fit_names_the_cast(
         project: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

@@ -338,7 +338,10 @@ Per key, a flag wins, then the project `.vekna.toml`, then your
 `[projects.<name>]` table for the project in the user config, then the top
 level of the user config ([which setting wins](scopes.md#which-setting-wins)).
 TOML values arrive typed. A queued cast takes the defaults of the repo it runs
-in for every component its enqueuer left unset.
+in for every component its enqueuer left unset. A default does not count as
+set, so a ritual that hands its own components to `enqueue` passes on its flags
+and nothing else. A field copied by name — `Child(remote=components.remote)` —
+is set, whatever it came from.
 
 `rituals show` prints a configured component with its value and file:
 
