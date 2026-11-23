@@ -100,7 +100,8 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
-    # A folded line is drawn as a leaf, which the tree gives no arrow.
+    # The tree gives an arrow only to a line with lines under it, which a
+    # folded cast keeps for the casts it queued, so the fold says so itself.
     if entry.folded:
         text = Text("▸ ") + text
     return text
@@ -112,7 +113,7 @@ def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) ->
     if history:
         return _ended_said(view)
     if entry.nested:
-        return entry.name
+        return f"{view.hello.ritual} {entry.name}".rstrip()
     return f"{ago(view, now)}  {entry.name}".rstrip()
 
 
@@ -269,8 +270,8 @@ def output(entry: Entry | None) -> list[str]:
 def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
     rite = picked or _shown_rite(view)
     said = [] if rite is None else list(rite.deltas)
-    if picked is None and view.detail and not live(view):
-        said += ["", *view.detail.splitlines()]
+    if picked is None and view.ending.detail and not live(view):
+        said += ["", *view.ending.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
     return [printable(line) or " " for line in said]
 

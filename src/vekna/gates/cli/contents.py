@@ -12,6 +12,7 @@ from .streaks import Kids, flags_apart, kids_of, said_args, streaks, with_kids
 Kind = Literal["project", "ritual", "cast", "more", "rite", "day", "finished"]
 
 _FAILED = frozenset({"error", "disconnected"})
+_HOLDS_CASTS: frozenset[Kind] = frozenset({"project", "ritual", "finished", "day"})
 
 
 # What happens under a node: a fold hides the node's children, and these are
@@ -33,10 +34,11 @@ class Counts:
 # One line of the contents. The key is stable across repaints, so the cursor and
 # the operator's folds stay on the line they were put on. A folded line keeps
 # its children and is drawn without them, so what `w` and `t` reach into a fold
-# for is still there. A project, ritual or day line holds every cast of its
-# own, newest first. A cast line holds its streak, newest first: the casts
-# before it that ended as it did, which it stands for. A `nested` cast hangs
-# under the cast that queued it, and its name says which ritual it is.
+# for is still there; a folded cast still draws the casts it queued. A
+# project, ritual or day line holds every cast of its own, newest first. A cast
+# line holds its streak, newest first: the casts before it that ended as it
+# did, which it stands for, and its name is the arguments that tell it apart.
+# A `nested` cast hangs under the cast that queued it.
 @dataclass(frozen=True)
 class Entry:  # pylint: disable=too-many-instance-attributes
     key: str
@@ -50,9 +52,12 @@ class Entry:  # pylint: disable=too-many-instance-attributes
     children: tuple["Entry", ...] = ()
     nested: bool = False
 
+    # A folded cast hides its rites, not the casts it queued.
     @property
     def shown(self) -> tuple["Entry", ...]:
-        return () if self.folded else self.children
+        if not self.folded:
+            return self.children
+        return tuple(child for child in self.children if child.nested)
 
     # Every cast under the line, folded away or not.
     @property
@@ -62,7 +67,7 @@ class Entry:  # pylint: disable=too-many-instance-attributes
         return own + tuple(
             cast
             for child in self.children
-            if child.kind == "cast" or child.view is None
+            if child.kind == "cast" or child.kind in _HOLDS_CASTS
             for cast in child.casts
         )
 
@@ -85,19 +90,22 @@ def cast_key(cast_id: str) -> str:
     return f"c:{cast_id}"
 
 
+# The line holding the streaks that ended under a ritual or a project.
+def finished_key(under: str) -> str:
+    return f"f:{under}"
+
+
 # How the contents are read: the lines the operator toggled away from how they
 # start — a cast starts closed to one line, every other line starts open — the
 # tree view or the history view, how long after it ended a cast moves from the
 # one to the other, and the cast kept open whatever was toggled: it shows its
-# rite tree, and every line it hangs under shows it. `fitted` is false until a
-# window that fits its first tree to its height has done so.
+# rite tree, and every line it hangs under shows it.
 @dataclass
 class Reading:
     history_after: timedelta
     toggled: set[str] = field(default_factory=set)
     history: bool = False
     kept_open: str | None = None
-    fitted: bool = True
 
 
 def _named(entry: Entry) -> str:
@@ -110,6 +118,40 @@ def _started(view: CastView) -> datetime:
 
 def _newest_started(streak: tuple[CastView, ...]) -> datetime:
     return streak[0].hello.started_at
+
+
+# What the tree view is drawn from besides the reading: the casts each cast
+# queued that it draws, and the ids of those; for each cast drawn, the
+# arguments that tell it apart; and `ended_by`, every cast each cast queued,
+# those in the history view too, since how a cast ended takes in all of them.
+@dataclass(frozen=True)
+class _Tree:
+    reading: Reading
+    kids: Kids
+    nested: AbstractSet[str]
+    apart: Mapping[str, str]
+    ended_by: Kids
+
+
+# A cast is told apart from the casts of its ritual in its project, and a
+# queued one from the queued casts of its ritual anywhere.
+def _tree(
+    reading: Reading, *, recent: Sequence[CastView], every: Sequence[CastView]
+) -> _Tree:
+    kids = kids_of(recent)
+    nested = {kid.hello.cast_id for queued in kids.values() for kid in queued}
+    peers: dict[tuple[str | None, str], list[CastView]] = {}
+    for view in recent:
+        where = None if view.hello.cast_id in nested else view.hello.project
+        peers.setdefault((where, view.hello.ritual), []).append(view)
+    apart = {
+        cast_id: said
+        for same in peers.values()
+        for cast_id, said in flags_apart(same).items()
+    }
+    return _Tree(
+        reading=reading, kids=kids, nested=nested, apart=apart, ended_by=kids_of(every)
+    )
 
 
 # A cast that asks is the operator's business however long ago it ended.
@@ -135,27 +177,27 @@ def contents(casts: Sequence[CastView], reading: Reading, now: datetime) -> list
     old: list[CastView] = []
     for view in casts:
         (old if historic(view, reading, now) else recent).append(view)
+    tree = _tree(reading, recent=recent, every=casts)
     if reading.history:
-        return _days(old, reading)
-    read = _read(reading, recent)
+        return _days(old, tree)
     by_project: dict[str, list[CastView]] = {}
     for view in recent:
         by_project.setdefault(project_key(view), []).append(view)
-    projects = [_project(key, views, read) for key, views in by_project.items()]
+    projects = [_project(key, views, tree) for key, views in by_project.items()]
     return sorted(projects, key=_named)
 
 
 # A day is the reader's own, like every time the window says.
-def _days(views: list[CastView], reading: Reading) -> list[Entry]:
+def _days(views: list[CastView], tree: _Tree) -> list[Entry]:
     by_day: dict[str, list[CastView]] = {}
     for view in sorted(views, key=ended, reverse=True):
         day = f"{ended(view).astimezone():%Y-%m-%d %a}"
         by_day.setdefault(day, []).append(view)
-    return [_day(day, found, reading) for day, found in by_day.items()]
+    return [_day(day, found, tree) for day, found in by_day.items()]
 
 
-def _day(day: str, views: list[CastView], reading: Reading) -> Entry:
-    casts = [_cast(view, _Read(reading, {})) for view in views]
+def _day(day: str, views: list[CastView], tree: _Tree) -> Entry:
+    casts = [_cast(view, tree) for view in views]
     return _fold(
         Entry(
             key=f"d:{day}",
@@ -165,7 +207,7 @@ def _day(day: str, views: list[CastView], reading: Reading) -> Entry:
             views=tuple(views),
             children=tuple(casts),
         ),
-        reading.toggled,
+        tree.reading.toggled,
     )
 
 
@@ -176,45 +218,21 @@ def _folds(reading: Reading, views: Sequence[CastView]) -> AbstractSet[str]:
     return reading.toggled
 
 
-# How the tree view is read, the casts each cast queued, and for each of those
-# the arguments that tell it from the other queued casts of its ritual.
-@dataclass(frozen=True)
-class _Read:
-    reading: Reading
-    kids: Kids
-    apart: Mapping[str, str] = field(default_factory=dict)
-
-
-def _read(reading: Reading, casts: Sequence[CastView]) -> _Read:
-    kids = kids_of(casts)
-    by_ritual: dict[str, list[CastView]] = {}
-    for queued in kids.values():
-        for kid in queued:
-            by_ritual.setdefault(kid.hello.ritual, []).append(kid)
-    apart = {
-        cast_id: said
-        for same in by_ritual.values()
-        for cast_id, said in flags_apart(same).items()
-    }
-    return _Read(reading, kids, apart)
-
-
-def _project(key: str, views: list[CastView], read: _Read) -> Entry:
-    nested = {kid.hello.cast_id for queued in read.kids.values() for kid in queued}
+def _project(key: str, views: list[CastView], tree: _Tree) -> Entry:
     by_ritual: dict[str, list[CastView]] = {}
     for view in views:
-        if view.hello.cast_id not in nested:
+        if view.hello.cast_id not in tree.nested:
             by_ritual.setdefault(view.hello.ritual, []).append(view)
     going: list[Entry] = []
     past: list[Entry] = []
     for _, ritual_views in sorted(by_ritual.items()):
-        now, before = _streak_lines(ritual_views, read)
+        now, before = _streak_lines(ritual_views, tree)
         ritual = ritual_key(ritual_views[0])
         if now:
-            going.append(_ritual(ritual, now, read))
+            going.append(_ritual(ritual, now, tree))
         if before:
-            past.append(_ritual(f"f:{ritual}", before, read))
-    lines = [*going, *([_finished(f"f:{key}", past, read)] if past else [])]
+            past.append(_ritual(finished_key(ritual), before, tree))
+    lines = [*going, *([_finished(finished_key(key), past, tree)] if past else [])]
     return _fold(
         Entry(
             key=key,
@@ -224,11 +242,11 @@ def _project(key: str, views: list[CastView], read: _Read) -> Entry:
             views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(lines),
         ),
-        _folds(read.reading, views),
+        _folds(tree.reading, views),
     )
 
 
-def _finished(key: str, rituals: list[Entry], read: _Read) -> Entry:
+def _finished(key: str, rituals: list[Entry], tree: _Tree) -> Entry:
     views = [view for ritual in rituals for view in ritual.views]
     return _fold(
         Entry(
@@ -239,12 +257,12 @@ def _finished(key: str, rituals: list[Entry], read: _Read) -> Entry:
             views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(rituals),
         ),
-        read.reading.toggled,
+        tree.reading.toggled,
     )
 
 
 # `lines` are cast lines of one ritual, newest first, each with its streak.
-def _ritual(key: str, lines: list[Entry], read: _Read) -> Entry:
+def _ritual(key: str, lines: list[Entry], tree: _Tree) -> Entry:
     views = [view for entry in lines for view in entry.views]
     return _fold(
         Entry(
@@ -255,69 +273,61 @@ def _ritual(key: str, lines: list[Entry], read: _Read) -> Entry:
             views=tuple(views),
             children=tuple(lines),
         ),
-        _folds(read.reading, with_kids(views, read.kids)),
+        _folds(tree.reading, with_kids(views, tree.kids)),
     )
 
 
 # The streaks of one ritual as cast lines, newest first: those with anything
 # under them that still runs or asks, then those that ended.
 def _streak_lines(
-    views: list[CastView], read: _Read
+    views: list[CastView], tree: _Tree
 ) -> tuple[list[Entry], list[Entry]]:
     by_args: dict[str, list[CastView]] = {}
     for view in views:
         by_args.setdefault(said_args(view), []).append(view)
-    found = [streak for same in by_args.values() for streak in streaks(same, read.kids)]
-    apart = flags_apart(views)
+    found = [
+        streak for same in by_args.values() for streak in streaks(same, tree.ended_by)
+    ]
     going: list[Entry] = []
     past: list[Entry] = []
     for streak in sorted(found, key=_newest_started, reverse=True):
         first = streak[0]
-        entry = _cast(first, read, streak=streak, name=apart[first.hello.cast_id])
+        entry = _cast(first, tree, streak=streak)
         (going if entry.total.asks or entry.total.running else past).append(entry)
     return going, past
 
 
 # A cast with nothing to say of now is folded over its whole rite tree until
 # it is opened; one that has no rites has nothing to open. The casts it queued
-# show under it either way, so it is never folded over those.
+# show under it either way.
 def _cast(
     view: CastView,
-    read: _Read,
+    tree: _Tree,
     *,
     streak: tuple[CastView, ...] = (),
-    name: str = "",
     nested: bool = False,
 ) -> Entry:
-    reading = read.reading
+    reading = tree.reading
     cast_id = view.hello.cast_id
     opened = cast_key(cast_id) in reading.toggled or cast_id == reading.kept_open
     now = [] if opened else _now(view)
-    queued = _queued(view, read)
-    closed = not opened and not now
-    rites = now or ([] if closed and queued else rite_tree(view, reading.toggled))
     return Entry(
         key=cast_key(cast_id),
         kind="cast",
-        name=name,
+        # The history view tells casts apart by when they ended instead.
+        name=tree.apart.get(cast_id, ""),
         counts=_counts(view),
-        folded=closed and not queued and bool(view.rites),
+        folded=not opened and not now and bool(view.rites),
         view=view,
         views=streak or (view,),
-        children=(*rites, *queued),
+        children=(*(now or rite_tree(view, reading.toggled)), *_queued(view, tree)),
         nested=nested,
     )
 
 
-def _queued(view: CastView, read: _Read) -> list[Entry]:
+def _queued(view: CastView, tree: _Tree) -> list[Entry]:
     return [
-        _cast(
-            kid,
-            read,
-            name=f"{kid.hello.ritual} {read.apart[kid.hello.cast_id]}".strip(),
-            nested=True,
-        )
-        for kid in read.kids.get(view.hello.cast_id, ())
+        _cast(kid, tree, nested=True) for kid in tree.kids.get(view.hello.cast_id, ())
     ]
 
 
@@ -411,10 +421,10 @@ def _fold(entry: Entry, folded: AbstractSet[str]) -> Entry:
 def fitted(
     casts: Sequence[CastView], reading: Reading, now: datetime, rows: int
 ) -> set[str]:
-    def read(toggled: set[str]) -> list[tuple[Entry, str | None]]:
-        return walked(contents(casts, replace(reading, toggled=toggled), now))
+    def lines_with(toggled: set[str]) -> list[Entry]:
+        return _lines(casts, replace(reading, toggled=toggled), now)
 
-    lines = [entry for entry, _ in read(set())]
+    lines = lines_with(set())
     running = {
         entry.key
         for entry in lines
@@ -427,7 +437,19 @@ def fitted(
         if entry.kind == "project" and not (entry.counts.asks or entry.counts.running)
     }
     tried = (running, running | finished, finished, finished | idle)
-    return next((folds for folds in tried if len(read(folds)) <= rows), tried[-1])
+    return next((folds for folds in tried if len(lines_with(folds)) <= rows), tried[-1])
+
+
+# The lines `f` leaves toggled: every line that holds casts, folded; when they
+# all are, none, so every line is back to how it starts.
+def folded_all(casts: Sequence[CastView], reading: Reading, now: datetime) -> set[str]:
+    lines = _lines(casts, replace(reading, toggled=set()), now)
+    folds = {entry.key for entry in lines if entry.kind in _HOLDS_CASTS}
+    return set() if folds <= reading.toggled else folds
+
+
+def _lines(casts: Sequence[CastView], reading: Reading, now: datetime) -> list[Entry]:
+    return [entry for entry, _ in walked(contents(casts, reading, now))]
 
 
 # Every line in reading order, with the key of the line it hangs under.

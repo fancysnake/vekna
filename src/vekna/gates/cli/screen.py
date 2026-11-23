@@ -212,7 +212,7 @@ def _waiting_lines(view: CastView) -> list[str]:
 # text is a whole traceback's worth in one string, and the listing is a table
 # read across ten casts at once.
 def _detail_lines(view: CastView) -> list[str]:
-    lines = view.detail.splitlines() if view.detail else []
+    lines = view.ending.detail.splitlines() if view.ending.detail else []
     if (blocked := view.blocked) is not None:
         lines.append(f"tree {blocked.path} left blocked: {blocked.reason}")
     return ["", *(f" {line}" for line in lines)] if lines else []

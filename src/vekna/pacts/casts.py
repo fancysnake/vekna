@@ -7,7 +7,6 @@ from pydantic import JsonValue
 
 from vekna.wire import (
     AwaitRequested,
-    CastGoodbye,
     CastHello,
     CastMessage,
     CastStatus,
@@ -77,6 +76,13 @@ class Prompt:
     claim_id: str | None = None
 
 
+# What a cast said as it ended: why, and what the ritual returned.
+@dataclass(frozen=True)
+class Ending:
+    detail: str | None = None
+    result: JsonValue | None = None
+
+
 # Insertion-ordered, which is the order the rites began — the tree a surface
 # draws is built from each rite's `parent_id` at paint time, so nothing here has
 # to hold a second copy of the shape. `waiting` is the open prompts: the daemon
@@ -86,8 +92,7 @@ class Prompt:
 class CastView:
     hello: CastHello
     status: CastStatus = "running"
-    # What it ended with: why, and what the ritual returned.
-    goodbye: CastGoodbye | None = None
+    ending: Ending = field(default_factory=Ending)
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, Prompt] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no
@@ -95,14 +100,6 @@ class CastView:
     on_children: dict[str, AwaitRequested] = field(default_factory=dict)
     # The pooled tree it left unparkable, if it did.
     blocked: TreeBlocked | None = None
-
-    @property
-    def detail(self) -> str | None:
-        return None if self.goodbye is None else self.goodbye.detail
-
-    @property
-    def result(self) -> JsonValue | None:
-        return None if self.goodbye is None else self.goodbye.result
 
     # The last time the journal puts on the cast: nothing else in it is dated.
     @property

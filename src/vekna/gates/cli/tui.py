@@ -25,7 +25,16 @@ from vekna.wire import (
 
 from .cast_text import clock, counted, labelled, live, named, top_prompt
 from .commands import request_cast, send_answer
-from .contents import Entry, Reading, cast_key, contents, fitted, historic, walked
+from .contents import (
+    Entry,
+    Reading,
+    cast_key,
+    contents,
+    fitted,
+    folded_all,
+    historic,
+    walked,
+)
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
 from .screen import ordered, scoped
 
@@ -37,7 +46,6 @@ _ASKS_NOTHING = "the cast asks nothing right now"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
-_HOLDS_CASTS = frozenset({"project", "ritual", "finished", "day"})
 _QUESTION_CHANGED = "the question changed — your answer was not sent"
 
 
@@ -90,12 +98,14 @@ class Opened:
     fit: bool = False
 
 
-# What the window opened with, and whether it shows every project instead of
-# the project it opened in.
+# What the window opened with, whether it shows every project instead of the
+# project it opened in, and whether the first tree it draws is still to be
+# folded to fit its height.
 @dataclass
 class _Scope:
     opened: Opened
     every: bool = False
+    to_fit: bool = False
 
 
 # The claims this window made, the cast it has taken over, and the prompts of
@@ -247,12 +257,10 @@ class VeknaApp(App[None]):
     ) -> None:
         super().__init__()
         self._casts = casts
-        self._scope = _Scope(opened=opened)
+        self._scope = _Scope(opened=opened, to_fit=opened.fit)
         self._send = send
         self._branch_of = branch_of
-        self._view = _View(
-            reading=Reading(history_after=opened.history_after, fitted=not opened.fit)
-        )
+        self._view = _View(reading=Reading(history_after=opened.history_after))
         self._w = _Widgets()
 
     @override
@@ -352,10 +360,7 @@ class VeknaApp(App[None]):
     # to how it starts.
     def action_fold_all(self) -> None:
         reading = self._view.reading
-        opened = Reading(history_after=reading.history_after, history=reading.history)
-        lines = walked(contents(self._listed(), opened, datetime.now(UTC)))
-        folds = {entry.key for entry, _ in lines if entry.kind in _HOLDS_CASTS}
-        reading.toggled = set() if folds <= reading.toggled else folds
+        reading.toggled = folded_all(self._listed(), reading, datetime.now(UTC))
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
@@ -635,8 +640,8 @@ class VeknaApp(App[None]):
         )
         self.sub_title = f"{counted(listed) or 'no casts'}  ({where})"
         reading = self._view.reading
-        if not reading.fitted and listed and (rows := self._w.contents.size.height):
-            reading.fitted = True
+        if self._scope.to_fit and listed and (rows := self._w.contents.size.height):
+            self._scope.to_fit = False
             reading.toggled = fitted(listed, reading, now, rows)
         old = sum(historic(view, reading, now) for view in listed)
         self._w.hint.update(_hint(old) if taken is None else _taken_hint(taken))

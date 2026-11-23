@@ -326,13 +326,13 @@ much as fits: every running cast open to its whole rite tree; then `finished`
 folded too; then the running casts back to one line; then every project where
 nothing runs folded as well. After that the folds are yours.
 
-A cast is one line; a running one also
-shows `…` and the rite it is on now, or the rite that asks. `space` on a cast
-opens its whole rite tree, and `space` again closes it. The right page is the
-line under the cursor in full: a project's branch and directory, a ritual's
-casts with their flags, a cast's whole rite tree, or a rite's whole error. Below
-it is the output, which follows the newest line until you scroll up. The branch
-is read off git every few seconds, because a cast can switch it.
+A cast is one line; a running one also shows `…` and the rite it is on now, or
+the rite that asks. `space` on a cast opens its whole rite tree, and `space`
+again closes it. The right page is the line under the cursor in full: a
+project's branch and directory, a ritual's casts with their flags, a cast's
+whole rite tree, or a rite's whole error. Below it is the output, which follows
+the newest line until you scroll up. The branch is read off git every few
+seconds, because a cast can switch it.
 
 On any other line `space` folds: the fold hides everything under the line, and
 the line says what happens there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A

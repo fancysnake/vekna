@@ -16,8 +16,12 @@ def _started(view: CastView) -> tuple[datetime, str]:
     return view.hello.started_at, view.hello.cast_id
 
 
+def _dumped(value: object) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
 def said_args(view: CastView) -> str:
-    return json.dumps(view.hello.components, sort_keys=True, default=str)
+    return _dumped(view.hello.components)
 
 
 # The casts each cast queued, oldest first, of the ones in hand: a cast whose
@@ -58,8 +62,8 @@ def _outcome(view: CastView, kids: Kids) -> _Outcome | None:
         if (ended := _outcome(kid, kids)) is None:
             return None
         queued.append((kid.hello.ritual, said_args(kid), ended))
-    detail = None if view.status == "ok" else view.detail
-    return _Outcome(view.status, view.result, detail, tuple(queued))
+    detail = None if view.status == "ok" else view.ending.detail
+    return _Outcome(view.status, view.ending.result, detail, tuple(queued))
 
 
 # The casts of one ritual with one set of arguments, cut where a cast ended
@@ -84,12 +88,7 @@ def streaks(views: Sequence[CastView], kids: Kids) -> list[tuple[CastView, ...]]
 def flags_apart(views: Sequence[CastView]) -> dict[str, str]:
     known = [view.hello.components for view in views if view.status != "queued"]
     names = sorted({name for components in known for name in components})
-    apart = [
-        name
-        for name in names
-        if len({json.dumps(c.get(name), sort_keys=True, default=str) for c in known})
-        > 1
-    ]
+    apart = [name for name in names if len({_dumped(c.get(name)) for c in known}) > 1]
     return {
         view.hello.cast_id: " ".join(
             f"--{name} {view.hello.components[name]}"

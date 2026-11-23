@@ -741,6 +741,93 @@ class TestStreaks:
         ]
 
     @staticmethod
+    async def test_casts_whose_queued_casts_moved_to_history_still_fold_by_them():
+        hub = Hub()
+        long_ago = datetime.now(UTC) - timedelta(hours=2)
+        for parent, kid, age, status in (
+            ("c1", "k1", 30, "ok"),
+            ("c2", "k2", 20, "error"),
+        ):
+            _ran(hub, parent, age)
+            hub.apply(
+                _hello(kid, "pr_fix").model_copy(
+                    update={"enqueued_by": parent, "started_at": long_ago}
+                )
+            )
+            hub.apply(CastGoodbye(cast_id=kid, status=status))
+        app = _app(hub, [], history_after=timedelta(hours=1))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  c2",
+            "      ✓ @now  c1",
+        ]
+
+    @staticmethod
+    async def test_a_cast_that_ended_folds_its_rites_and_still_shows_its_queued():
+        hub = Hub()
+        hub.apply(_hello("c1", "sweep"))
+        hub.apply(_rite("r1", "look"))
+        hub.apply(
+            RiteFinished(cast_id="c1", rite_id="r1", status="ok", finished_at=_WHEN)
+        )
+        hub.apply(_hello("k1", "pr_fix").model_copy(update={"enqueued_by": "c1"}))
+        hub.apply(CastGoodbye(cast_id="k1", status="ok"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            folded = _contents(app)
+            _to(app, "c:c1")
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+
+            opened = _contents(app)
+        assert folded == [
+            "proj",
+            "  finished",
+            "    sweep",
+            f"      ▸ ✓ {_ago()}  c1",
+            "        ✓ pr_fix  k1",
+        ]
+        assert opened == [
+            "proj",
+            "  finished",
+            "    sweep",
+            f"      ✓ {_ago()}  c1",
+            "        ✓ look  0s",
+            "        ✓ pr_fix  k1",
+        ]
+
+    @staticmethod
+    async def test_queued_casts_of_one_ritual_say_their_ritual_and_what_differs():
+        hub = Hub()
+        hub.apply(_hello("c1", "sweep"))
+        for kid, number in (("k1", 1), ("k2", 2)):
+            hub.apply(
+                _hello(kid, "pr_fix").model_copy(
+                    update={"enqueued_by": "c1", "components": {"number": number}}
+                )
+            )
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines[-2:] == [
+            "      ▶ pr_fix --number 1  k1",
+            "      ▶ pr_fix --number 2  k2",
+        ]
+
+    @staticmethod
     async def test_a_queued_cast_hangs_under_the_cast_that_queued_it():
         hub = Hub()
         hub.apply(_hello("c1", "sweep"))
