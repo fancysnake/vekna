@@ -30,6 +30,7 @@ _NOTHING_OPEN = "no question is open in this thread"
 _CLOSED = "that question is closed: reply to an open one"
 _CLAIMED = "a window has taken this question over: answer it there"
 _EMPTY = "an empty reply answers nothing"
+_UNMATCHED = "more than one question is open: reply to the question itself"
 
 
 # A question, where it was posted, and whether it was answered or withdrawn.
@@ -156,13 +157,9 @@ class Relay(Surface):
         ]
         if not here:
             return None
-        replied = [asked for asked in here if asked.posted.message == reply.reply_to]
-        if any(asked.closed for asked in replied):
-            return _CLOSED
-        # The question replied to, or the oldest one open in the thread.
-        open_ = [asked for asked in here if not asked.closed]
-        if (asked := next(iter(replied or open_), None)) is None:
-            return _NOTHING_OPEN
+        asked = _addressed(here, reply)
+        if isinstance(asked, str):
+            return asked
         request = asked.request
         view = self._casts.casts.get(request.cast_id)
         prompt = None if view is None else view.waiting.get(request.request_id)
@@ -188,6 +185,18 @@ class Relay(Surface):
             ),
         )
         return None
+
+
+# The question replied to, or the oldest one open in the thread, or what is said
+# back when the reply names no question and more than one is open.
+def _addressed(here: list[_Asked], reply: Heard) -> _Asked | str:
+    replied = [asked for asked in here if asked.posted.message == reply.reply_to]
+    if any(asked.closed for asked in replied):
+        return _CLOSED
+    open_ = [asked for asked in here if not asked.closed]
+    if reply.reply_to is not None and not replied and len(open_) > 1:
+        return _UNMATCHED
+    return next(iter(replied or open_), _NOTHING_OPEN)
 
 
 # A phone capitalises the first word, so an option is matched whatever its

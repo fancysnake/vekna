@@ -449,6 +449,24 @@ class TestHearing:
         assert not desk.answered()
 
     @staticmethod
+    async def test_a_reply_to_no_question_is_refused_while_several_are_open(
+        desk: _Desk,
+    ):
+        await desk.told(_push(), _push("r2"))
+
+        assert await desk.hears("push", reply_to="correction") == (
+            "more than one question is open: reply to the question itself"
+        )
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_reply_to_no_question_answers_the_only_open_one(desk: _Desk):
+        await desk.told(_push())
+
+        assert await desk.hears("push", reply_to="correction") is None
+        assert desk.answered() == [("r1", "push")]
+
+    @staticmethod
     async def test_a_question_asked_after_its_thread_was_archived_lives_in_the_new_one(
         desk: _Desk,
     ):
@@ -476,7 +494,7 @@ class TestHearing:
 
         assert await desk.hears("push") is None
         assert await desk.hears("decline", reply_to="m2") is None
-        assert await desk.hears("1", reply_to="m3") is None
+        assert await desk.hears("1", reply_to="m1") is None
         assert await desk.hears("2", thread="t2") is None
         assert desk.answered() == [
             ("r1", "push"),
