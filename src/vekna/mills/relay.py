@@ -25,6 +25,7 @@ _log = logging.getLogger(__name__)
 # The remote's longest thread name.
 _THREAD_NAME = 100
 _BRIEF = {"y": "yes", "n": "no"}
+_YES_NO = tuple(_BRIEF.values())
 _NOTHING_OPEN = "no question is open in this cast"
 _CLAIMED = "a window has taken this question over: answer it there"
 _EMPTY = "an empty reply answers nothing"
@@ -146,16 +147,17 @@ class Relay(Surface):
     # What is said back to the author. `None` for an author who is not allowed
     # and for a thread that is no cast's: neither is told anything is here.
     async def heard(self, reply: Heard) -> str | None:
-        cast_id, thread = next(
+        found = next(
             (
                 (cast_id, thread)
                 for cast_id, thread in self._threads.items()
                 if thread.at == reply.thread
             ),
-            (None, None),
+            None,
         )
-        if reply.author not in self._allow or cast_id is None or thread is None:
+        if reply.author not in self._allow or found is None:
             return None
+        cast_id, thread = found
         # The question replied to, or the oldest one open in the thread.
         open_ = list(thread.asked.values())
         replied = [asked for asked in open_ if asked.posted.message == reply.reply_to]
@@ -194,7 +196,7 @@ def _read(typed: str, request: DecideRequested) -> str:
         if request.free:
             return typed
         typed = _BRIEF.get(typed.casefold(), typed)
-    offered = allowed_answers(options=request.options, free=False) or ()
+    offered = _YES_NO if request.options is None else tuple(request.options)
     if (chosen := picked_option(typed, offered)) is not None:
         return chosen
     return next(

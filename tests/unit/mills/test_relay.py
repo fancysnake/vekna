@@ -94,6 +94,8 @@ class _Desk:
             self.relay.send(message)
         running = asyncio.create_task(self.relay.run())
         await asyncio.sleep(0)
+        if running.done():
+            running.result()
         running.cancel()
 
     async def hears(
@@ -295,6 +297,17 @@ class TestAsking:
         assert desk.chat.said == [("t1", "withdrawn")]
 
     @staticmethod
+    async def test_a_question_posted_is_logged(
+        desk: _Desk, caplog: pytest.LogCaptureFixture
+    ):
+        with caplog.at_level(logging.INFO, logger="vekna.mills.relay"):
+            await desk.told(_push())
+
+        assert [record.getMessage() for record in caplog.records] == [
+            f"asked the remote r1 for cast {_CAST}"
+        ]
+
+    @staticmethod
     async def test_a_post_that_fails_is_logged_and_the_next_question_is_posted(
         desk: _Desk, caplog: pytest.LogCaptureFixture
     ):
@@ -409,6 +422,16 @@ class TestHearing:
         desk.board.casts[_CAST].waiting.clear()
 
         assert said == "no question is open in this cast"
+        assert await desk.hears("push") == "no question is open in this cast"
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_reply_in_the_thread_of_a_cast_the_daemon_forgot_says_so(
+        desk: _Desk,
+    ):
+        await desk.told(_push())
+        del desk.board.casts[_CAST]
+
         assert await desk.hears("push") == "no question is open in this cast"
         assert not desk.answered()
 
