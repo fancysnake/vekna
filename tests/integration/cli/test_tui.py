@@ -1010,6 +1010,20 @@ class TestCommands:
         assert title == "no casts  (all projects)"
 
     @staticmethod
+    async def test_an_empty_window_says_which_projects_it_shows():
+        app = _app(Hub(), [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            home = _text(app, "#head")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+
+            every = _text(app, "#head")
+        assert home != every
+        assert every.endswith("all projects")
+
+    @staticmethod
     async def test_t_typed_takes_the_prompt_over():
         hub = Hub()
         _asking(hub)
@@ -1731,7 +1745,7 @@ class TestPages:
 
             head = _text(app, "#head")
             note = _text(app, "#note")
-        assert head == "no cast here — c starts one"
+        assert head == "no cast here — c starts one\nproj"
         assert note == "only a running cast can be taken over"
 
 

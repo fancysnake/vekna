@@ -622,7 +622,9 @@ class VeknaApp(App[None]):
             )
             return
         entry = self._entry()
-        self._w.head.update(head(entry, branches=self._view.branches, now=now))
+        self._w.head.update(
+            head(entry, branches=self._view.branches, now=now, scope=where)
+        )
         self._paint_output(None if entry is None else entry.key, output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the

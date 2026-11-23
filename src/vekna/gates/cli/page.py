@@ -158,10 +158,10 @@ def taken_head(view: CastView) -> Text:
 
 # The right page's top: what the line under the cursor is, in full.
 def head(
-    entry: Entry | None, *, branches: dict[str, str | None], now: datetime
+    entry: Entry | None, *, branches: dict[str, str | None], now: datetime, scope: str
 ) -> Text:
     if entry is None:
-        return Text(NO_CAST)
+        return Text.assemble(NO_CAST, (f"\n{scope}", "dim"))
     view, rite = entry.view, entry.rite
     if rite is not None and view is not None:
         return _rite_head(view, rite, now)
