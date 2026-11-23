@@ -11,6 +11,29 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`f` in the window** folds every project, ritual and `finished` line, and
+  opens them all again.
+- **The window fits its first tree to its height**: a tall window opens with
+  every running cast's whole rite tree, a short one with `finished` and the
+  projects where nothing runs folded.
+
+### Changed
+
+- **The window's tree view** draws a cast that ended like the cast before it,
+  of the same ritual and arguments, as one line with a count (`x8`). A ritual
+  line holds only the casts that still run or ask; every ended cast is under
+  the project's `finished` line. A cast that another cast queued hangs under
+  that cast.
+- **When a cast began**, in the window, is a slot and no longer a count of
+  minutes or hours: `@<1h`, `@<3h`, `@<6h`, `@<12h`, `@<1d`, then days.
+
+### Fixed
+
+- **`H` in the window** no longer turns to an empty history view. While no
+  cast is old enough, it stays in the tree view and says when a cast moves.
+
 ## [3.0.0] - 2026-11-22
 
 ### Added

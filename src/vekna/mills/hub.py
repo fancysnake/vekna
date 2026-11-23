@@ -399,7 +399,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
 # A cast that is gone is not still asking, nor awaiting, nor inside a rite.
 def _end(view: CastView, goodbye: CastGoodbye) -> None:
     view.status = goodbye.status
-    view.detail = goodbye.detail
+    view.goodbye = goodbye
     view.waiting.clear()
     view.on_children.clear()
 

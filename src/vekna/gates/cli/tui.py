@@ -23,9 +23,9 @@ from vekna.wire import (
     WireMessage,
 )
 
-from .cast_text import counted, labelled, live, named, top_prompt
+from .cast_text import clock, counted, labelled, live, named, top_prompt
 from .commands import request_cast, send_answer
-from .contents import Entry, Reading, cast_key, contents, historic, walked
+from .contents import Entry, Reading, cast_key, contents, fitted, historic, walked
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
 from .screen import ordered, scoped
 
@@ -37,14 +37,15 @@ _ASKS_NOTHING = "the cast asks nothing right now"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
+_HOLDS_CASTS = frozenset({"project", "ritual", "finished", "day"})
 _QUESTION_CHANGED = "the question changed — your answer was not sent"
 
 
 # `old` is how many ended casts the history view holds.
 def _hint(old: int = 0) -> str:
     return (
-        f"space open/fold · H history{f' ({old})' if old else ''} · w next asking"
-        " · t take over · x cancel · : command · g/p scope · q quit"
+        f"space open/fold · f fold all · H history{f' ({old})' if old else ''}"
+        " · w next asking · t take over · x cancel · : command · g/p scope · q quit"
     )
 
 
@@ -77,7 +78,8 @@ class Contents(Tree[str]):
 # What a window is opened with: its project, the directory a ritual started
 # from it runs in, how long after it ended a cast moves to the history view,
 # the title it shows: the versions of this vekna and of its daemon, and how
-# long a cast taken over may ask nothing after an answer before it is left.
+# long a cast taken over may ask nothing after an answer before it is left,
+# and whether the first tree it draws is folded to fit its height.
 @dataclass(frozen=True)
 class Opened:
     project: str
@@ -85,6 +87,7 @@ class Opened:
     history_after: timedelta
     title: str = "vekna"
     quiet: timedelta = timedelta(seconds=5)
+    fit: bool = False
 
 
 # What the window opened with, and whether it shows every project instead of
@@ -188,7 +191,9 @@ class _Widgets:
 
 # A book of the daemon's casts. The left page is the contents: project, ritual,
 # its casts newest first, their rites — every cast as one line, a running one
-# with `…` and the rite it is on, until space opens its whole rite tree. `H`
+# with `…` and the rite it is on, until space opens its whole rite tree. The
+# casts that ended are under the project's `finished`, a streak of casts that
+# ended alike as one line. `H`
 # turns it to the history view, the casts that ended long ago, by day. The
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
@@ -224,6 +229,7 @@ class VeknaApp(App[None]):
         Binding("t", "take", "take over"),
         Binding("w", "next_waiting", "next waiting"),
         Binding("x", "cancel", "cancel"),
+        Binding("f", "fold_all", "fold all"),
         Binding("H", "history", "history"),
         Binding("g", "every", "every project"),
         Binding("p", "home", "this project"),
@@ -244,7 +250,9 @@ class VeknaApp(App[None]):
         self._scope = _Scope(opened=opened)
         self._send = send
         self._branch_of = branch_of
-        self._view = _View(reading=Reading(history_after=opened.history_after))
+        self._view = _View(
+            reading=Reading(history_after=opened.history_after, fitted=not opened.fit)
+        )
         self._w = _Widgets()
 
     @override
@@ -319,6 +327,13 @@ class VeknaApp(App[None]):
         if self._locked():
             return
         reading = self._view.reading
+        now = datetime.now(UTC)
+        if not reading.history and not any(
+            historic(view, reading, now) for view in self._listed()
+        ):
+            after = clock(reading.history_after.total_seconds())
+            self.say(f"no history yet — a cast moves there {after} after it ends")
+            return
         reading.history = not reading.history
         self.say("history view" if reading.history else "tree view")
         self.changed()
@@ -331,6 +346,16 @@ class VeknaApp(App[None]):
             return
         # Symmetric difference: a line in the set goes out, one out goes in.
         self._view.reading.toggled ^= {entry.key}
+        self.changed()
+
+    # Every line that holds casts, folded; when they all are, every line back
+    # to how it starts.
+    def action_fold_all(self) -> None:
+        reading = self._view.reading
+        opened = Reading(history_after=reading.history_after, history=reading.history)
+        lines = walked(contents(self._listed(), opened, datetime.now(UTC)))
+        folds = {entry.key for entry, _ in lines if entry.kind in _HOLDS_CASTS}
+        reading.toggled = set() if folds <= reading.toggled else folds
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
@@ -610,6 +635,9 @@ class VeknaApp(App[None]):
         )
         self.sub_title = f"{counted(listed) or 'no casts'}  ({where})"
         reading = self._view.reading
+        if not reading.fitted and listed and (rows := self._w.contents.size.height):
+            reading.fitted = True
+            reading.toggled = fitted(listed, reading, now, rows)
         old = sum(historic(view, reading, now) for view in listed)
         self._w.hint.update(_hint(old) if taken is None else _taken_hint(taken))
         self._paint_contents(listed, now)

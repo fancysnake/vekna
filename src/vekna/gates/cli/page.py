@@ -90,9 +90,13 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, _ended_said(view) if history else ago(view, now))
+        text = _cast_label(view, _cast_said(entry, view, now, history=history))
+        if len(entry.views) > 1:
+            text.append(f"  x{len(entry.views)}", "dim")
     else:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
+        if entry.kind == "finished":
+            text.stylize("dim")
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
@@ -100,6 +104,16 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     if entry.folded:
         text = Text("▸ ") + text
     return text
+
+
+# A cast under the cast that queued it says its ritual, which no line above it
+# does; any other says when it began, and the arguments that tell it apart.
+def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) -> str:
+    if history:
+        return _ended_said(view)
+    if entry.nested:
+        return entry.name
+    return f"{ago(view, now)}  {entry.name}".rstrip()
 
 
 def _ended_said(view: CastView) -> str:
@@ -166,7 +180,13 @@ def head(
     if rite is not None and view is not None:
         return _rite_head(view, rite, now)
     if view is not None:
-        return _cast_head(view, branches, now)
+        text = _cast_head(view, branches, now)
+        if len(entry.views) > 1:
+            since = f"{ended(entry.views[-1]).astimezone():%a %H:%M}"
+            text.append(
+                f"\nx{len(entry.views)} — every cast since {since} ended like this"
+            )
+        return text
     if entry.kind == "ritual":
         return _ritual_head(entry, now)
     if entry.kind == "day":

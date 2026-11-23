@@ -46,6 +46,19 @@ def _hello(cast_id: str, ritual: str, *, root: str = "/proj") -> CastHello:
     )
 
 
+def _asking_as(hub: Hub, cast_id: str) -> None:
+    hub.apply(
+        DecideRequested(
+            cast_id=cast_id, request_id="q1", prompt="push?", options=["yes", "no"]
+        )
+    )
+
+
+# What a cast that began at `_WHEN` says of when.
+def _ago() -> str:
+    return f"@{(datetime.now(UTC) - _WHEN).days}d ago"
+
+
 def _asking(hub: Hub) -> None:
     hub.apply(_hello("c1", "pr_fix"))
     hub.apply(
@@ -173,11 +186,7 @@ class TestContents:
         hub = Hub()
         hub.apply(_hello("c1abcdef9", "sweep"))
         hub.apply(_hello("c2abcdef9", "ci_watch"))
-        hub.apply(
-            _hello("c3abcdef9", "pr_fix").model_copy(
-                update={"enqueued_by": "c1abcdef9"}
-            )
-        )
+        hub.apply(_hello("c3abcdef9", "pr_fix"))
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
@@ -290,10 +299,16 @@ class TestContents:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines[:4] == ["proj (1 running)", "  nap", "    ▶ @now  c1", "  sweep"]
-        assert lines[4].startswith("    ✓ @")
-        assert lines[4].endswith("  c2")
-        assert lines[5:] == []
+        assert lines[:5] == [
+            "proj (1 running)",
+            "  nap",
+            "    ▶ @now  c1",
+            "  finished",
+            "    sweep",
+        ]
+        assert lines[5].startswith("      ✓ @")
+        assert lines[5].endswith("  c2")
+        assert lines[6:] == []
 
     @staticmethod
     async def test_a_failed_rite_says_the_first_line_of_why():
@@ -585,6 +600,240 @@ class TestVersion:
         assert hint.endswith("q quit")
 
 
+# A cast of `sweep` that began `age` seconds ago and has ended.
+def _ran(hub: Hub, cast_id: str, age: int, **said: object) -> None:
+    began = datetime.now(UTC) - timedelta(seconds=age)
+    hub.apply(_hello(cast_id, "sweep").model_copy(update={"started_at": began, **said}))
+    hub.apply(CastGoodbye(cast_id=cast_id, status="ok", result={"found": []}))
+
+
+@pytest.mark.asyncio
+class TestStreaks:
+    @staticmethod
+    async def test_casts_that_ended_alike_are_one_line_under_finished():
+        hub = Hub()
+        hub.apply(_hello("c0", "sweep"))
+        hub.apply(CastGoodbye(cast_id="c0", status="error", detail="boom"))
+        for cast_id, age in (("c1", 30), ("c2", 20), ("c3", 10)):
+            _ran(hub, cast_id, age)
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            head = _text(app, "#head").splitlines()
+        assert lines == [
+            "proj (1 fail)",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  c3  x3",
+            f"      ✗ {_ago()}  c0",
+        ]
+        assert head[-1].startswith("x3 — every cast since ")
+
+    @staticmethod
+    async def test_a_cast_still_running_is_never_folded_into_the_one_before():
+        hub = Hub()
+        _ran(hub, "c1", 20)
+        hub.apply(_hello("c2", "sweep"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj (1 running)",
+            "  sweep",
+            "    ▶ @now  c2",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  c1",
+        ]
+
+    @staticmethod
+    async def test_casts_of_other_arguments_say_which_and_do_not_fold():
+        hub = Hub()
+        _ran(hub, "c1", 20, components={"number": 1, "batch": 7})
+        _ran(hub, "c2", 10, components={"number": 2, "batch": 7})
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  --number 2  c2",
+            "      ✓ @now  --number 1  c1",
+        ]
+
+    @staticmethod
+    async def test_f_folds_every_line_and_f_again_opens_them_all():
+        hub = Hub()
+        _ran(hub, "c1", 20)
+        hub.apply(_hello("c2", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            tree = _contents(app)
+            await pilot.press("f")
+            await pilot.pause(_PAINTED)
+            folded = _contents(app)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            inside = _contents(app)
+            await pilot.press("f")
+            await pilot.pause(_PAINTED)
+            await pilot.press("f")
+            await pilot.pause(_PAINTED)
+
+            back = _contents(app)
+        assert folded == ["▸ proj (1 running)"]
+        assert inside == ["proj (1 running)", "  ▸ nap (1 running)", "  ▸ finished"]
+        assert back == tree
+
+    @staticmethod
+    async def test_a_cast_whose_queued_cast_still_runs_is_not_folded():
+        hub = Hub()
+        _ran(hub, "c1", 30)
+        _ran(hub, "c2", 20)
+        hub.apply(_hello("c3", "pr_fix").model_copy(update={"enqueued_by": "c2"}))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj (1 running)",
+            "  sweep",
+            "    ✓ @now  c2",
+            "      ▶ pr_fix  c3",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  c1",
+        ]
+
+    @staticmethod
+    async def test_casts_fold_when_what_they_queued_ended_alike_too():
+        hub = Hub()
+        for parent, kid, age in (("c1", "k1", 30), ("c2", "k2", 20)):
+            _ran(hub, parent, age)
+            hub.apply(_hello(kid, "pr_fix").model_copy(update={"enqueued_by": parent}))
+            hub.apply(CastGoodbye(cast_id=kid, status="ok"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj",
+            "  finished",
+            "    sweep",
+            "      ✓ @now  c2  x2",
+            "        ✓ pr_fix  k2",
+        ]
+
+    @staticmethod
+    async def test_a_queued_cast_hangs_under_the_cast_that_queued_it():
+        hub = Hub()
+        hub.apply(_hello("c1", "sweep"))
+        hub.apply(_hello("c2", "pr_fix").model_copy(update={"enqueued_by": "c1"}))
+        _asking_as(hub, "c2")
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            lines = _contents(app)
+            await pilot.press("w")
+            await pilot.pause(_PAINTED)
+
+            cursor = _cursor(app)
+        assert lines == [
+            "proj (1 asks, 1 running)",
+            "  sweep",
+            "    ▶ @now  c1",
+            "      ⏸ pr_fix  c2  asks",
+        ]
+        assert cursor == "c:c2"
+
+
+# A window that fits its first tree to its height, over a project with a cast
+# two rites in and a cast that ended.
+def _fitting() -> VeknaApp:
+    hub = Hub()
+    hub.apply(_hello("c1", "ci_watch"))
+    hub.apply(_rite("r1", "watch"))
+    hub.apply(RiteFinished(cast_id="c1", rite_id="r1", status="ok", finished_at=_WHEN))
+    hub.apply(_rite("r2", "report"))
+    hub.apply(_hello("c2", "sweep"))
+    hub.apply(CastGoodbye(cast_id="c2", status="ok"))
+
+    async def branch_of(_: str) -> str | None:
+        await asyncio.sleep(0)
+        return "main"
+
+    return VeknaApp(
+        casts=hub,
+        opened=Opened(
+            project="/proj/.git", root="/proj", history_after=timedelta.max, fit=True
+        ),
+        send=lambda _: None,
+        branch_of=branch_of,
+    )
+
+
+# The contents without what moves with the clock: each line to its first word
+# after the glyph.
+def _shape(app: VeknaApp) -> list[str]:
+    return [line.strip().split("  ")[0] for line in _contents(app)]
+
+
+@pytest.mark.asyncio
+class TestFitting:
+    @staticmethod
+    async def test_a_tall_window_opens_with_the_running_cast_whole():
+        app = _fitting()
+
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _shape(app)
+        assert lines == [
+            "proj (1 running)",
+            "ci_watch",
+            "▶ @now",
+            "✓ watch",
+            "▶ report",
+            "finished",
+            "sweep",
+            f"✓ {_ago()}",
+        ]
+
+    @staticmethod
+    async def test_a_short_window_opens_with_all_but_what_runs_folded():
+        app = _fitting()
+
+        async with app.run_test(size=(100, 9)) as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _shape(app)
+        assert lines == [
+            "proj (1 running)",
+            "ci_watch",
+            "▶ @now",
+            "✓ watch",
+            "▶ report",
+            "▸ finished",
+        ]
+
+
 @pytest.mark.asyncio
 class TestHistory:
     @staticmethod
@@ -624,6 +873,22 @@ class TestHistory:
         assert back == tree
 
     @staticmethod
+    async def test_h_stays_in_the_tree_view_while_no_cast_is_old_enough():
+        app = _app(_past(), [], history_after=timedelta(hours=1000000))
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            tree = _contents(app)
+            await pilot.press("g")
+            await pilot.press("H")
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            note = _text(app, "#note")
+        assert lines == tree
+        assert note == "no history yet — a cast moves there 1000000h00m after it ends"
+
+    @staticmethod
     async def test_a_history_cast_opens_and_its_day_folds_and_lists_its_casts():
         app = _app(_past(), [], history_after=timedelta(0))
 
@@ -658,7 +923,7 @@ class TestHistory:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == ["proj (1 fail)", "  sweep", "    ✗ @now  c1"]
+        assert lines == ["proj (1 fail)", "  finished", "    sweep", "      ✗ @now  c1"]
 
 
 @pytest.mark.asyncio
@@ -715,8 +980,8 @@ class TestFolding:
             await pilot.pause(_PAINTED)
 
             left = _contents(app)
-        assert left[:2] == ["proj (1 fail)", "  ci_watch"]
-        assert left[2].endswith("  c1")
+        assert left[:3] == ["proj (1 fail)", "  finished", "    ci_watch"]
+        assert left[3].endswith("  c1")
 
     @staticmethod
     async def test_space_on_a_cast_opens_its_whole_rite_tree_and_closes_it_again():
@@ -802,7 +1067,7 @@ class TestFolding:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert [line.strip().split("  ")[0] for line in lines[3:]] == ["✗ watch"]
+        assert [line.strip().split("  ")[0] for line in lines[4:]] == ["✗ watch"]
 
     @staticmethod
     async def test_a_line_with_nothing_under_it_does_not_fold():
@@ -1701,10 +1966,15 @@ class TestPages:
             await pilot.pause(_PAINTED)
 
             head = _text(app, "#head").splitlines()
+            _to(app, "f:r:/proj/.git:pr_fix")
+            await pilot.pause(_PAINTED)
+
+            finished = _text(app, "#head").splitlines()
         assert head[0] == "pr_fix"
         assert head[1].startswith("▶ @now      c1abcdef  running")
         assert head[1].endswith("  --pr 208")
-        assert head[2].startswith("✓ @")
+        assert finished[0] == "pr_fix"
+        assert finished[1].startswith("✓ @")
 
     @staticmethod
     async def test_a_project_page_says_where_it_is_and_what_it_holds():

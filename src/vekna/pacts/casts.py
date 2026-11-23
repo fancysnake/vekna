@@ -3,8 +3,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
+from pydantic import JsonValue
+
 from vekna.wire import (
     AwaitRequested,
+    CastGoodbye,
     CastHello,
     CastMessage,
     CastStatus,
@@ -83,7 +86,8 @@ class Prompt:
 class CastView:
     hello: CastHello
     status: CastStatus = "running"
-    detail: str | None = None
+    # What it ended with: why, and what the ritual returned.
+    goodbye: CastGoodbye | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, Prompt] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no
@@ -91,6 +95,14 @@ class CastView:
     on_children: dict[str, AwaitRequested] = field(default_factory=dict)
     # The pooled tree it left unparkable, if it did.
     blocked: TreeBlocked | None = None
+
+    @property
+    def detail(self) -> str | None:
+        return None if self.goodbye is None else self.goodbye.detail
+
+    @property
+    def result(self) -> JsonValue | None:
+        return None if self.goodbye is None else self.goodbye.result
 
     # The last time the journal puts on the cast: nothing else in it is dated.
     @property

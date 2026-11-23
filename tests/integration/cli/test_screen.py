@@ -10,6 +10,7 @@ from vekna.gates.cli.screen import listing, ordered, paint
 from vekna.pacts.casts import CastView, DamagedRun, Prompt, RiteStatus, RiteView
 from vekna.wire import (
     AwaitRequested,
+    CastGoodbye,
     CastHello,
     DecideRequested,
     RiteFinished,
@@ -336,7 +337,11 @@ class TestTheList:
     def test_the_listing_carries_no_error_text_and_drilling_in_does():
         view = _running("planned", ago=30)
         view.status = "error"
-        view.detail = "does not validate:\n  Invalid JSON: expected ident\n  see docs"
+        view.goodbye = CastGoodbye(
+            cast_id="planned",
+            status="error",
+            detail="does not validate:\n  Invalid JSON: expected ident\n  see docs",
+        )
 
         listed = paint(listed=[view], focus=None, project=None, now=_WHEN)
         drilled = paint(listed=[view], focus="planned", project=None, now=_WHEN)

@@ -309,9 +309,24 @@ dropped. A daemon already running is not restarted for it; the window says so.
 
 In a terminal the window is drawn with Textual, as two pages of a book. The left
 page is the contents: a tree of project, ritual, the ritual's casts newest first
-(`@now` while live, `@3h ago` once ended), and their rites. This is the tree
-view: every cast that is live, and every cast that ended less than a day ago. A
-cast does not leave it when it ends. A cast is one line; a running one also
+(`@now` while live; once ended, the slot it began in: `@<1h`, `@<3h`, `@<6h`,
+`@<12h`, `@<1d`, then `@2d ago`), and their rites. This is the tree
+view: every cast that is live, and every cast that ended less than a day ago.
+
+A ritual line holds the casts that still run or ask. A cast that ended moves
+under the project's `finished` line, which lists every ended cast by ritual. A
+cast that ended like the cast before it, of the same ritual and arguments, is
+not drawn: the newest one stands for the streak and says how long it is, `x8`.
+Two casts ended alike when their status, their result and their error are the
+same. A cast that another cast queued hangs under that cast and says its ritual;
+where casts of one ritual differ by an argument, each says which: `--number 347`.
+
+When the window opens, it folds the tree once to fit its height, and keeps as
+much as fits: every running cast open to its whole rite tree; then `finished`
+folded too; then the running casts back to one line; then every project where
+nothing runs folded as well. After that the folds are yours.
+
+A cast is one line; a running one also
 shows `…` and the rite it is on now, or the rite that asks. `space` on a cast
 opens its whole rite tree, and `space` again closes it. The right page is the
 line under the cursor in full: a project's branch and directory, a ritual's
@@ -321,9 +336,11 @@ is read off git every few seconds, because a cast can switch it.
 
 On any other line `space` folds: the fold hides everything under the line, and
 the line says what happens there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A
-project line always says it.
+project line always says it. `f` folds every project, ritual and `finished`
+line at once; when they are all folded, `f` opens them all again.
 
-`H` turns the left page to the history view, and `H` again turns it back. The
+`H` turns the left page to the history view, and `H` again turns it back. While
+no cast is old enough for it, `H` stays in the tree view and says so. The
 history view holds the casts that ended a day ago or more, grouped by the day
 they ended, newest first, each with the time it ended and its ritual. The hint
 line says how many it holds: `H history (12)`. Both views
@@ -345,6 +362,7 @@ A value that does not read is named in the window's note line and passed over.
 | --- | --- |
 | `H` | the history view, or the tree view again |
 | `space` | on a cast, open its whole rite tree or close it; elsewhere, fold the line or open it again |
+| `f` | fold every line that holds casts, or open them all again |
 | `w` | the next line that asks, a fold included |
 | `j` / `k` / `h` | down, up, to the line above in the tree |
 | `c` | start a ritual here: `c <ritual> [--flag value …]` |
