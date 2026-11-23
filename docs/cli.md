@@ -323,6 +323,11 @@ On any other line `space` folds: the fold hides everything under the line, and
 the line says what happens there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A
 project line always says it.
 
+`s` on a failed cast marks it seen, and `s` again takes the mark back. A seen
+cast keeps its `✗` and loses the red, and no fold or project line counts it as
+a fail. The daemon keeps the mark, so every window shows it, and a window you
+close and open again shows it too.
+
 `H` turns the left page to the history view, and `H` again turns it back. The
 history view holds the casts that ended a day ago or more, grouped by the day
 they ended, newest first, each with the time it ended and its ritual. The hint
@@ -351,6 +356,7 @@ A value that does not read is named in the window's note line and passed over.
 | `t` | take over the running cast under the cursor, or the first one that asks under a fold |
 | `a` | answer it in one line: `a <answer>` |
 | `x` | cancel the cast under the cursor; twice, to be sure |
+| `s` | mark the failed cast under the cursor seen, or take the mark back |
 | `:` | the command line, empty |
 | `g` / `p` | every project / this one |
 | `q` | close the window; the daemon keeps running |

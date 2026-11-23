@@ -254,6 +254,7 @@ edge, in `lexicon/_links/daemon.py` — the only place the two vocabularies meet
 | `CastQueued` | daemon → surfaces | a cast the daemon recorded and has not spawned yet: no process slot, or no worktree, is free |
 | `TreeBlocked` | daemon → surfaces | the pooled worktree a cast ran in could not be parked after it: uncommitted changes, or a merge or rebase left open. Journaled with that cast |
 | `CastGoodbye` | cast → daemon | clean exit + final status |
+| `CastSeen` | window → daemon → surfaces | on a connection of its own: marks a failed cast seen, or takes the mark back. The daemon answers the cast's `CastGoodbye` with `seen` set and sends every surface the same; a cast that did not fail gets `CastRefused`. Kept in the daemon's memory, not journaled |
 | `GrimoireBegin` / `GrimoireEnd` | cast → daemon | brackets a complete replay |
 | `RiteStarted` / `RiteDelta` / `RiteFinished` | cast → daemon | rite lifecycle |
 | `DecideRequested` / `DecideResolved` | both | every human round-trip: choice points, coding's tool-use gate, free text. A cast run by hand asks on its own stdin until a surface claims the prompt; a spawned cast has no terminal, and the hand cast following it, or any surface, answers. A surface sends `DecideResolved`, the daemon forwards it to the cast if the prompt is open and no other surface has claimed it, the cast takes whichever answer comes first, and the cast's own `DecideResolved` closes it |

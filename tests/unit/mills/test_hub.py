@@ -20,6 +20,7 @@ from vekna.wire import (
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     CodingSlotRequested,
     DecideClaimed,
     DecideReleased,
@@ -1192,3 +1193,74 @@ class TestReplayed:
 
         assert view is None
         assert cut is None
+
+
+class TestSeen:
+    @staticmethod
+    def test_a_failed_cast_marked_seen_is_said_to_every_surface_and_not_journaled():
+        journaled: list[WireMessage] = []
+        hub = Hub(on_journal=journaled.append)
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="error", detail="why"))
+        surface = _Surface()
+        hub.attach_surface(surface)
+        heard = len(surface.sent)
+        recorded = list(journaled)
+
+        reply = hub.mark(CastSeen(cast_id="c1"))
+
+        marked = CastGoodbye(cast_id="c1", status="error", detail="why", seen=True)
+        assert reply == marked
+        assert surface.sent[heard:] == [marked]
+        assert hub.casts["c1"].seen
+        assert journaled == recorded
+
+    @staticmethod
+    def test_the_mark_is_taken_back():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="disconnected"))
+        hub.mark(CastSeen(cast_id="c1"))
+
+        reply = hub.mark(CastSeen(cast_id="c1", seen=False))
+
+        assert reply == CastGoodbye(cast_id="c1", status="disconnected")
+        assert not hub.casts["c1"].seen
+
+    @staticmethod
+    def test_a_surface_arriving_late_and_one_hearing_the_goodbye_learn_the_mark():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="error"))
+        hub.mark(CastSeen(cast_id="c1"))
+        late, window = _Surface(), Hub()
+
+        hub.attach_surface(late)
+        for message in late.sent:
+            assert isinstance(message, CastMessage)
+            window.apply(message)
+
+        assert late.sent[-1] == CastGoodbye(cast_id="c1", status="error", seen=True)
+        assert window.casts["c1"].seen
+
+    @staticmethod
+    @pytest.mark.parametrize("cast_id", ["c1", "nobody"])
+    def test_a_cast_that_did_not_fail_is_refused_and_says_why(cast_id: str):
+        routed: list[Routed] = []
+        hub = Hub(on_routed=routed.append)
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        surface = _Surface()
+        hub.attach_surface(surface)
+        heard = len(surface.sent)
+
+        reply = hub.mark(CastSeen(cast_id=cast_id))
+
+        assert reply == CastRefused(reason=f"not marked {cast_id}: no such failed cast")
+        assert len(surface.sent) == heard
+        assert routed[-1] == Routed(
+            kind="cast_seen",
+            cast_id=cast_id,
+            action="dropped",
+            reason="no such failed cast",
+        )

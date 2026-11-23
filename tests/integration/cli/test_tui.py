@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from rich.text import Text
 from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
@@ -14,7 +15,9 @@ from vekna.wire import (
     CastCancelRequested,
     CastGoodbye,
     CastHello,
+    CastRefused,
     CastRequested,
+    CastSeen,
     DecideClaimed,
     DecideReleased,
     DecideRequested,
@@ -67,6 +70,12 @@ def _app(
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
 
+    # The daemon's part: it keeps the mark and says it back to the window.
+    async def mark(request: CastSeen) -> str | None:
+        await asyncio.sleep(0)
+        reply = hub.mark(request)
+        return reply.reason if isinstance(reply, CastRefused) else None
+
     async def branch_of(root: str) -> str | None:
         await asyncio.sleep(0)
         return branches.get(root)
@@ -81,6 +90,7 @@ def _app(
             quiet=quiet,
         ),
         send=sent.append,
+        mark=mark,
         branch_of=branch_of,
     )
 
@@ -1774,3 +1784,51 @@ class TestCopying:
             note = _text(app, "#note")
         assert not app.clipboard
         assert not note
+
+
+@pytest.mark.asyncio
+class TestSeen:
+    @staticmethod
+    async def test_s_takes_a_failed_cast_out_of_the_fails_and_s_again_puts_it_back():
+        hub = Hub()
+        hub.apply(_hello("c1abcdef9", "nap"))
+        hub.apply(CastGoodbye(cast_id="c1abcdef9", status="error", detail="boom"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            loud = _contents(app)[0]
+            await pilot.press("s")
+            await pilot.pause(_PAINTED)
+            quiet, marked = _contents(app)[0], _text(app, "#note")
+            head = _text(app, "#head")
+            glyph = _nodes(app)[2][1].label
+            await pilot.press("s")
+            await pilot.pause(_PAINTED)
+            again, unmarked = _contents(app)[0], _text(app, "#note")
+
+        assert loud == "proj (1 fail)"
+        assert quiet == "proj"
+        assert marked == "marked nap c1abcdef seen"
+        assert "failed · seen" in head
+        assert isinstance(glyph, Text)
+        assert glyph.plain.startswith("✗ ")
+        assert [str(span.style) for span in glyph.spans if span.start == 0] == ["dim"]
+        assert again == "proj (1 fail)"
+        assert unmarked == "unmarked nap c1abcdef"
+
+    @staticmethod
+    async def test_a_cast_that_did_not_fail_is_not_marked():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        hub.apply(CastGoodbye(cast_id="c1", status="ok"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("s")
+            await pilot.pause()
+            note = _text(app, "#note")
+
+        assert note == "only a failed cast can be marked seen"
+        assert not hub.casts["c1"].seen

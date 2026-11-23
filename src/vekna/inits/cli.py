@@ -6,6 +6,7 @@ import os
 import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Protocol, TypeVar, cast
 
@@ -45,6 +46,7 @@ from vekna.wire import (
     default_socket_path,
     default_state_root,
     encode_frame,
+    mark_seen,
     parse_flags,
     project_of,
     read_frames,
@@ -403,6 +405,7 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
             title=_versions(line.daemon),
         ),
         send=line.send,
+        mark=partial(mark_seen, default_socket_path()),
         branch_of=branch_of,
     )
 
