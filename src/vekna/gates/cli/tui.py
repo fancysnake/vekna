@@ -6,10 +6,12 @@ from time import monotonic
 from typing import ClassVar
 from uuid import uuid4
 
+from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
@@ -131,6 +133,36 @@ def _kept(
     return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
+# The output of the line under the cursor. A line wider than the pane is drawn
+# over as many rows as it needs, so `lines` holds rows, not what was said. The
+# rows are cut for the width the pane has when they are shown: `Resized` asks
+# the app to show them again.
+class Output(Log):
+    DEFAULT_CSS = """
+    Output { overflow-x: hidden; }
+    """
+
+    class Resized(Message):
+        pass
+
+    def show(self, said: list[str]) -> None:
+        # A pane with no room draws nothing, and is resized before it has any.
+        if (width := self.scrollable_content_region.width) < 1:
+            return
+        rows = [
+            row.plain or " "
+            for line in said
+            for row in Text(line).wrap(self.app.console, width)
+        ]
+        if list(self.lines) != rows:
+            self.auto_scroll = False
+            self.clear()
+            self.write_lines(rows)
+
+    def on_resize(self) -> None:
+        self.post_message(self.Resized())
+
+
 # Whether the output follows its newest line, the line it was left on when it
 # last did, and the line under the cursor it was drawn for. Scrolling up off
 # that line stops the follow; reaching the end starts it again.
@@ -178,7 +210,7 @@ class _Widgets:
     ask: _Asks = field(default_factory=_Asks)
     contents: Contents = field(default_factory=lambda: Contents("all", id="contents"))
     head: Static = field(default_factory=lambda: Static(id="head", markup=False))
-    log: Log = field(default_factory=lambda: Log(id="log"))
+    log: Output = field(default_factory=lambda: Output(id="log"))
     note: Static = field(default_factory=lambda: Static(id="note", markup=False))
     command: Input = field(
         default_factory=lambda: Input(id="command", select_on_focus=False)
@@ -435,6 +467,10 @@ class VeknaApp(App[None]):
             self._answer(typed[2:].strip(), nothing=_NOTHING_WAITING)
         elif typed:
             self.say(f"{typed!r} means nothing here — {_hint()}")
+        self.changed()
+
+    @on(Output.Resized)
+    def rewrap(self) -> None:
         self.changed()
 
     # A cleared tree highlights its hidden root, which is no line to stand on.
@@ -698,10 +734,7 @@ class VeknaApp(App[None]):
             follow.page, follow.on = page, True
         else:
             self._follows()
-        if list(log.lines) != lines:
-            log.auto_scroll = False
-            log.clear()
-            log.write_lines(lines)
+        log.show(lines)
         if follow.on:
             log.call_after_refresh(self._to_end, log.scroll_y)
 

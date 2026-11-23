@@ -426,15 +426,10 @@ class TestContents:
             output = list(log.lines)
             drawn = [log.render_line(y) for y in range(len(output))]
             width = log.size.width
-        assert output == [
-            "moved red link",
-            "10%",
-            "20%",
-            "bell� csi�2K",
-            "prose " * 100,
-        ]
-        assert [strip.cell_length for strip in drawn] == [width] * 5
-        assert [strip.text.isprintable() for strip in drawn] == [True] * 5
+        assert output[:4] == ["moved red link", "10%", "20%", "bell� csi�2K"]
+        assert "".join(output[4:]) == "prose " * 100
+        assert [strip.cell_length for strip in drawn] == [width] * len(output)
+        assert [strip.text.isprintable() for strip in drawn] == [True] * len(output)
 
     @staticmethod
     async def test_the_cursor_stays_on_its_cast_when_another_arrives():
@@ -1603,47 +1598,58 @@ class TestFollowing:
         assert end[0] == end[1]
 
     @staticmethod
-    async def test_following_keeps_the_column_the_operator_scrolled_to():
+    async def test_a_line_wider_than_the_pane_is_drawn_over_several_rows():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
         hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
         hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
             log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
-            log.scroll_to(x=_UP, animate=False, immediate=True)
-            await pilot.pause(_PAINTED)
+            await _eventually(pilot, lambda: _at_end(log))
 
-            column = (log.scroll_x, log.max_scroll_x)
-        assert column[0] == _UP
-        assert column[1] > _UP
+            rows = list(log.lines)
+            width = log.scrollable_content_region.width
+            sideways = (log.max_scroll_x, log.show_horizontal_scrollbar)
+        assert "".join(rows) == "wide " * 100 + "w" * 500
+        assert max(len(row) for row in rows) == width
+        assert sideways == (0, False)
+
+    @staticmethod
+    async def test_a_resized_window_draws_the_rows_again_at_its_width():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            before = len(log.lines[0])
+            await pilot.resize_terminal(120, 24)
+            await _eventually(pilot, lambda: len(log.lines[0]) != before)
+
+            rows = list(log.lines)
+            width = log.scrollable_content_region.width
+        assert width > before
+        assert "".join(rows) == "w" * 500
+        assert len(rows[0]) == width
 
     # Textual highlights the root of a tree it has just cleared, and that
     # highlight can land after the page is drawn.
     @staticmethod
     async def test_a_highlight_of_the_hidden_root_keeps_the_page():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
+        async with _long_output() as (_, app, pilot, log):
             tree: Tree[str] = app.query_one("#contents", Tree)
-            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
-            log.scroll_to(x=_UP, animate=False, immediate=True)
+            log.scroll_to(y=_UP, animate=False, immediate=True)
             tree.post_message(Tree.NodeHighlighted(tree.root))
             await pilot.pause(_PAINTED)
 
-            column = log.scroll_x
-        assert column == _UP
+            line = log.scroll_y
+        assert line == _UP
 
     # An animated scroll starts within a rounding of the end.
     @staticmethod

@@ -11,6 +11,12 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **The window wraps its output.** A line wider than the output pane is drawn
+  over as many rows as it needs, and again at the new width when the window
+  is resized. The pane no longer scrolls sideways. (#348)
+
 ## [3.0.0] - 2026-11-22
 
 ### Added
