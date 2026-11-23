@@ -644,6 +644,10 @@ ignore = [
 # package with it. The module says so at length.
 "src/vekna/edges/pytest_plugin.py" = ["PLC0415"]
 
+# discord.py is an optional install and heavy to import, so the daemon imports
+# its link only once a `[discord]` asks for it.
+"src/vekna/inits/daemon.py" = ["PLC0415"]
+
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 

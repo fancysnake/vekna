@@ -25,6 +25,10 @@ class _File(BaseModel):
     discord: _Discord | None = None
 
 
+class _TokenError(Exception):
+    pass
+
+
 # The user's own `[discord]` and the token its file holds, or `None` with the
 # reason logged. A project's `.vekna.toml` is not asked: a repository must not
 # say where its casts' questions go, or who may answer them. The token is in a
@@ -34,17 +38,12 @@ def discord_setup() -> DiscordSetup | None:
     read = read_user_layers(table=_TABLE, model=_File)
     for problem in read.problems:
         _log.warning("%s", problem)
-    said = next((file.discord for file in read.found if file.discord), None)
-    if said is None:
+    if (said := _said(read.found)) is None:
         return None
-    path = said.token_file or default_config_path().with_name(_BESIDE_CONFIG)
     try:
-        token = path.expanduser().read_text(encoding="utf-8").strip()
-    except OSError as error:
-        _log.warning("Discord is off: its token could not be read: %s", error)
-        return None
-    if not token:
-        _log.warning("Discord is off: %s is empty", path)
+        token = _token(said)
+    except _TokenError as error:
+        _log.warning("%s", error)
         return None
     return DiscordSetup(
         token=token, guild=said.guild, category=said.category, allow=said.allow
@@ -55,5 +54,30 @@ def discord_setup() -> DiscordSetup | None:
 DISCORD_KEYS = tuple(_Discord.model_fields)
 
 
+# The token itself is never part of a problem.
 def discord_problems() -> list[str]:
-    return read_user_layers(table=_TABLE, model=_File).problems
+    read = read_user_layers(table=_TABLE, model=_File)
+    if (said := _said(read.found)) is None:
+        return read.problems
+    try:
+        _token(said)
+    except _TokenError as error:
+        return [*read.problems, str(error)]
+    return read.problems
+
+
+def _said(found: list[_File]) -> _Discord | None:
+    return next((file.discord for file in found if file.discord), None)
+
+
+def _token(said: _Discord) -> str:
+    path = said.token_file or default_config_path().with_name(_BESIDE_CONFIG)
+    try:
+        token = path.expanduser().read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError) as error:
+        msg = f"Discord is off: its token could not be read: {error}"
+        raise _TokenError(msg) from error
+    if not token:
+        msg = f"Discord is off: {path} is empty"
+        raise _TokenError(msg)
+    return token

@@ -2,11 +2,11 @@ import asyncio
 import itertools
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, named
+from vekna.pacts.casts import Casts, ancestry, named
 from vekna.pacts.remote import Heard, Posted, Remote, RemoteError
 from vekna.pacts.routing import Surface
 from vekna.wire import (
@@ -26,30 +26,32 @@ _log = logging.getLogger(__name__)
 _THREAD_NAME = 100
 _BRIEF = {"y": "yes", "n": "no"}
 _YES_NO = tuple(_BRIEF.values())
-_NOTHING_OPEN = "no question is open in this cast"
+_NOTHING_OPEN = "no question is open in this thread"
+_CLOSED = "that question is closed: reply to an open one"
 _CLAIMED = "a window has taken this question over: answer it there"
 _EMPTY = "an empty reply answers nothing"
 
 
-@dataclass(frozen=True, kw_only=True)
+# A question, where it was posted, and whether it was answered or withdrawn.
+@dataclass(kw_only=True)
 class _Asked:
     request: DecideRequested
     posted: Posted
+    closed: bool = False
 
 
-# A cast's thread: its name, what the remote calls it, and the questions open
-# in it by request, oldest first.
-@dataclass(kw_only=True)
-class _Thread:
-    name: str
-    at: str
-    asked: dict[str, _Asked] = field(default_factory=dict)
+# A question is told apart by its cast and its request.
+_Question = tuple[str, str]
+
+
+def _question(message: DecideRequested | DecideResolved | DecideWithdrawn) -> _Question:
+    return message.cast_id, message.request_id
 
 
 # A surface with no screen: the questions of casts a vigil started go to a
-# remote, each in its cast's thread of its project's room, and what an allowed
-# author writes there is the answer. It claims nothing, so a window answers
-# the same prompts, and whichever answer the cast takes is said in the thread.
+# remote, each in its cast's thread of its project's room, and what is written
+# there is the answer. It claims nothing, so a window answers the same prompts,
+# and whichever answer the cast takes is said in the thread.
 # shortcut: what was posted is remembered in memory, so a restarted daemon
 # posts every open question again; a file of what was posted is the upgrade.
 class Relay(Surface):
@@ -59,18 +61,19 @@ class Relay(Surface):
         casts: Casts,
         answer: Callable[[Surface, DecideResolved], None],
         remote: Remote,
-        allow: frozenset[int],
         branch: Callable[[str], Awaitable[str | None]],
     ) -> None:
         self._casts = casts
         self._answer = answer
         self._remote = remote
-        self._allow = allow
         self._branch = branch
         self._told: asyncio.Queue[
             DecideRequested | DecideResolved | DecideWithdrawn
         ] = asyncio.Queue()
-        self._threads: dict[str, _Thread] = {}
+        # Every question posted, oldest first. A cast has more than one thread
+        # when the remote archived the first, so each question has its own.
+        self._asked: dict[_Question, _Asked] = {}
+        self._names: dict[str, str] = {}
 
     @override
     def send(self, message: WireMessage) -> None:
@@ -98,78 +101,76 @@ class Relay(Surface):
     ) -> None:
         if isinstance(message, DecideRequested):
             await self._ask(message)
-        elif (
-            thread := self._threads.get(message.cast_id)
-        ) is not None and thread.asked.pop(message.request_id, None) is not None:
+        elif (asked := self._asked.get(_question(message))) is not None and (
+            not asked.closed
+        ):
+            asked.closed = True
             said = (
                 f"→ {message.answer}"
                 if isinstance(message, DecideResolved)
                 else "withdrawn"
             )
-            await self._remote.say(thread=thread.at, text=said)
+            await self._remote.say(thread=asked.posted.thread, text=said)
 
     async def _ask(self, request: DecideRequested) -> None:
         view = self._casts.casts.get(request.cast_id)
-        thread = self._threads.get(request.cast_id)
         if (
             view is None
-            or (thread is not None and request.request_id in thread.asked)
+            or _question(request) in self._asked
             or not self._kept(view.hello)
         ):
             return
-        name = (
-            _thread(view.hello, branch=await self._branch(view.hello.project_root))
-            if thread is None
-            else thread.name
-        )
+        if (name := self._names.get(request.cast_id)) is None:
+            name = _thread(
+                view.hello, branch=await self._branch(view.hello.project_root)
+            )
         posted = await self._remote.ask(
             room=named(view.hello.project),
             thread=name,
             text=_worded(view.hello, request),
         )
-        self._threads.setdefault(
-            request.cast_id, _Thread(name=name, at=posted.thread)
-        ).asked[request.request_id] = _Asked(request=request, posted=posted)
+        self._names[request.cast_id] = name
+        self._asked[_question(request)] = _Asked(request=request, posted=posted)
         _log.info(
             "asked the remote %s for cast %s", request.request_id, request.cast_id
         )
 
     # A cast a vigil started, or one enqueued under it: nobody sits at a
-    # terminal for those. An ancestor the daemon no longer knows counts as a
-    # vigil's, because a question asked twice costs less than a cast that waits
-    # on nobody.
+    # terminal for those. An ancestor the daemon no longer knows, or a chain
+    # that loops, counts as a vigil's, because a question asked twice costs less
+    # than a cast that waits on nobody.
     def _kept(self, hello: CastHello) -> bool:
-        if hello.vigil is not None or hello.enqueued_by is None:
-            return hello.vigil is not None
-        parent = self._casts.casts.get(hello.enqueued_by)
-        return parent is None or self._kept(parent.hello)
+        for each in ancestry(self._casts, hello):
+            if each.vigil is not None:
+                return True
+            if each.enqueued_by is None:
+                return False
+        return True
 
-    # What is said back to the author. `None` for an author who is not allowed
-    # and for a thread that is no cast's: neither is told anything is here.
+    # What is said back to the writer, or `None` for a thread that is no cast's.
     async def heard(self, reply: Heard) -> str | None:
-        found = next(
-            (
-                (cast_id, thread)
-                for cast_id, thread in self._threads.items()
-                if thread.at == reply.thread
-            ),
-            None,
-        )
-        if reply.author not in self._allow or found is None:
+        here = [
+            asked
+            for asked in self._asked.values()
+            if asked.posted.thread == reply.thread
+        ]
+        if not here:
             return None
-        cast_id, thread = found
+        replied = [asked for asked in here if asked.posted.message == reply.reply_to]
+        if any(asked.closed for asked in replied):
+            return _CLOSED
         # The question replied to, or the oldest one open in the thread.
-        open_ = list(thread.asked.values())
-        replied = [asked for asked in open_ if asked.posted.message == reply.reply_to]
+        open_ = [asked for asked in here if not asked.closed]
         if (asked := next(iter(replied or open_), None)) is None:
             return _NOTHING_OPEN
-        view = self._casts.casts.get(cast_id)
-        prompt = None if view is None else view.waiting.get(asked.request.request_id)
+        request = asked.request
+        view = self._casts.casts.get(request.cast_id)
+        prompt = None if view is None else view.waiting.get(request.request_id)
         if prompt is None:
             return _NOTHING_OPEN
         if prompt.claim_id is not None:
             return _CLAIMED
-        return self._answered(asked.request, typed=reply.text.strip())
+        return self._answered(request, typed=reply.text.strip())
 
     # Checked by the rule the cast checks it by, so a typo is said in the
     # thread rather than ignored there.

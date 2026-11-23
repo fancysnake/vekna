@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, call
 import discord
 import pytest
 
-from vekna.links.discord import _Client, channel_name, remote
+from vekna.links.discord import DiscordRemote, _Client, channel_name
 from vekna.pacts.remote import DiscordSetup, Heard, Posted, Remote, RemoteError
 
 _GUILD = 100
 _OPERATOR = 7
 _OTHER = 9
+_STRANGER = 8
 _THREAD = 555
 _SETUP = DiscordSetup(
     token="s3cret", guild=_GUILD, category="vekna", allow=frozenset({_OTHER, _OPERATOR})
@@ -101,7 +102,7 @@ async def _connected(
     monkeypatch: pytest.MonkeyPatch, setup: DiscordSetup = _SETUP
 ) -> AsyncGenerator[Remote]:
     monkeypatch.setattr(discord.Client, "start", _connected_for_good)
-    made = remote(setup)
+    made = DiscordRemote(setup)
     running = asyncio.create_task(made.run(AsyncMock()))
     await asyncio.sleep(0)
     try:
@@ -210,7 +211,7 @@ class TestAsk:
     ):
         guild.settled()
         monkeypatch.setattr(discord.Client, "start", _connected_for_good)
-        chat = remote(_SETUP)
+        chat = DiscordRemote(_SETUP)
         asking = asyncio.create_task(
             chat.ask(room="app", thread="heal · c0ffee00", text="push?")
         )
@@ -229,7 +230,7 @@ class TestAsk:
 @pytest.mark.asyncio
 class TestSay:
     @staticmethod
-    async def test_it_is_sent_to_the_thread_cut_to_what_a_message_holds(
+    async def test_it_is_sent_to_the_thread_over_as_many_messages_as_it_takes(
         monkeypatch: pytest.MonkeyPatch,
     ):
         thread = MagicMock(send=AsyncMock())
@@ -240,10 +241,10 @@ class TestSay:
             lambda _, thread_id: got.append(thread_id) or thread,
         )
 
-        await remote(_SETUP).say(thread="555", text="→ " + "y" * 2000)
+        await DiscordRemote(_SETUP).say(thread="555", text="→ " + "y" * 2000)
 
         assert got == [_THREAD]
-        thread.send.assert_awaited_once_with("→ " + "y" * 1898)
+        assert thread.send.await_args_list == [call("→ " + "y" * 1898), call("y" * 102)]
 
     @staticmethod
     async def test_what_discord_refuses_is_a_remote_error(
@@ -255,7 +256,7 @@ class TestSay:
         )
 
         with pytest.raises(RemoteError, match="no"):
-            await remote(_SETUP).say(thread="555", text="→ push")
+            await DiscordRemote(_SETUP).say(thread="555", text="→ push")
 
 
 @pytest.mark.asyncio
@@ -269,30 +270,31 @@ class TestRun:
         tokens = _gateway(monkeypatch, plain, replying)
         hear = AsyncMock(side_effect=[None, "'2' is not one of a"])
 
-        await remote(_SETUP).run(hear)
+        await DiscordRemote(_SETUP).run(hear)
 
         assert tokens == ["s3cret"]
         assert hear.await_args_list == [
-            call(Heard(author=_OPERATOR, thread="555", reply_to=None, text="push")),
-            call(Heard(author=_OPERATOR, thread="555", reply_to="42", text="2")),
+            call(Heard(thread="555", reply_to=None, text="push")),
+            call(Heard(thread="555", reply_to="42", text="2")),
         ]
         plain.reply.assert_not_awaited()
         replying.reply.assert_awaited_once_with("'2' is not one of a")
 
     @staticmethod
-    async def test_a_bot_another_guild_a_dm_and_a_channel_are_not_heard(
+    async def test_a_bot_a_stranger_another_guild_a_dm_and_a_channel_are_not_heard(
         monkeypatch: pytest.MonkeyPatch,
     ):
         _gateway(
             monkeypatch,
             _message(author=MagicMock(bot=True, id=_OPERATOR)),
+            _message(author=MagicMock(bot=False, id=_STRANGER)),
             _message(guild=MagicMock(id=404)),
             _message(guild=None),
             _message(channel=MagicMock(spec=discord.TextChannel, id=_THREAD)),
         )
         hear = AsyncMock()
 
-        await remote(_SETUP).run(hear)
+        await DiscordRemote(_SETUP).run(hear)
 
         hear.assert_not_awaited()
 
@@ -307,4 +309,4 @@ class TestRun:
         )
 
         with pytest.raises(RemoteError, match="Improper token"):
-            await remote(_SETUP).run(AsyncMock())
+            await DiscordRemote(_SETUP).run(AsyncMock())

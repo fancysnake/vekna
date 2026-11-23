@@ -6,20 +6,21 @@ from typing_extensions import override
 
 from vekna.pacts.remote import DiscordSetup, Hear, Heard, Posted, Remote, RemoteError
 
-# Discord takes 2000 characters a message; the rest of a long question goes in
-# the messages after it.
+# Discord takes 2000 characters a message; the rest of a long text goes in the
+# messages after it.
 _MESSAGE = 1900
 _NOT_A_CHANNEL_NAME = re.compile(r"[^a-z0-9_-]+")
 
 
 class _Client(discord.Client):
-    def __init__(self, *, guild: int) -> None:
+    def __init__(self, *, guild: int, allow: frozenset[int]) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         intents.guild_messages = True
         intents.message_content = True
         super().__init__(intents=intents)
         self._guild = guild
+        self._allow = allow
         self.hear: Hear | None = None
 
     # discord.py finds this by its name.
@@ -27,7 +28,11 @@ class _Client(discord.Client):
         if (
             self.hear is None
             or message.author.bot
-            or message.guild is None
+            or message.author.id not in self._allow
+        ):
+            return
+        if (
+            message.guild is None
             or message.guild.id != self._guild
             or not isinstance(message.channel, discord.Thread)
         ):
@@ -35,7 +40,6 @@ class _Client(discord.Client):
         replied = message.reference.message_id if message.reference else None
         said = await self.hear(
             Heard(
-                author=message.author.id,
                 thread=str(message.channel.id),
                 reply_to=None if replied is None else str(replied),
                 text=message.content,
@@ -48,11 +52,11 @@ class _Client(discord.Client):
 # One bot in one guild, dialling out over Discord's gateway. A room is a text
 # channel under the configured category and a thread a public thread in it.
 # Every question mentions the allowed users: a mention is what puts them in the
-# thread and reaches their phone.
+# thread and reaches their phone. Nobody else is heard.
 class DiscordRemote(Remote):
     def __init__(self, setup: DiscordSetup) -> None:
         self._setup = setup
-        self._client = _Client(guild=setup.guild)
+        self._client = _Client(guild=setup.guild, allow=setup.allow)
         self._mentions = " ".join(f"<@{user}>" for user in sorted(setup.allow))
         # The client refuses to be waited on before `run` has entered it, and a
         # question the daemon held from before it started is asked at once.
@@ -78,8 +82,7 @@ class DiscordRemote(Remote):
         worded = f"{self._mentions}\n{text}"
         try:
             found = await self._thread(await self._room(guild, room), thread)
-            for at in range(0, len(worded), _MESSAGE):
-                message = await found.send(worded[at : at + _MESSAGE])
+            message = await _sent(found, worded)
         except discord.DiscordException as error:
             raise RemoteError(str(error)) from error
         return Posted(thread=str(found.id), message=str(message.id))
@@ -87,9 +90,7 @@ class DiscordRemote(Remote):
     @override
     async def say(self, *, thread: str, text: str) -> None:
         try:
-            await self._client.get_partial_messageable(int(thread)).send(
-                text[:_MESSAGE]
-            )
+            await _sent(self._client.get_partial_messageable(int(thread)), text)
         except discord.DiscordException as error:
             raise RemoteError(str(error)) from error
 
@@ -114,11 +115,16 @@ class DiscordRemote(Remote):
         return found
 
 
+# The message a reply to the text is aimed at: the last of the messages the
+# text is split over.
+async def _sent(target: discord.abc.Messageable, text: str) -> discord.Message:
+    return [
+        await target.send(text[at : at + _MESSAGE])
+        for at in range(0, len(text), _MESSAGE)
+    ][-1]
+
+
 # Discord rewrites a channel's name on its side. Written its way here, so the
 # channel made for a project is the one found for it the next time.
 def channel_name(room: str) -> str:
     return _NOT_A_CHANNEL_NAME.sub("-", room.lower()).strip("-") or "project"
-
-
-def remote(setup: DiscordSetup) -> Remote:
-    return DiscordRemote(setup)

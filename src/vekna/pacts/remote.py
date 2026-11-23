@@ -15,7 +15,6 @@ class Posted:
 # the remote says which.
 @dataclass(frozen=True, kw_only=True)
 class Heard:
-    author: int
     thread: str
     reply_to: str | None
     text: str

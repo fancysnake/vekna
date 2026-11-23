@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import JsonValue
 from typing_extensions import override
 
-from vekna.pacts.casts import CastBoard, Casts, CastView
+from vekna.pacts.casts import CastBoard, Casts, CastView, ancestry
 from vekna.pacts.circle import (
     CastQueue,
     Exited,
@@ -398,16 +398,11 @@ class Circle(CastQueue):
         )
 
     # The cast typed at a terminal that set this one going, itself included, or
-    # `None` for a line the daemon was asked to start. Walked up each time: no
-    # chain is longer than the casts there are, which bounds a loop a peer sent.
+    # `None` for a line the daemon was asked to start. Walked up each time.
     def _typed(self, view: CastView) -> str | None:
-        casts = self._hub.casts
-        for _ in casts:
-            if (parent := view.hello.enqueued_by) is None:
-                return None if view.hello.wired else view.hello.cast_id
-            if (found := casts.get(parent)) is None:
-                return None
-            view = found
+        for hello in ancestry(self._hub, view.hello):
+            if hello.enqueued_by is None:
+                return None if hello.wired else hello.cast_id
         return None
 
     # Every cast holding a process: running or spawned, and awaiting nothing.

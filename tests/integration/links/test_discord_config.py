@@ -44,6 +44,7 @@ class TestDiscordSetup:
         assert discord_setup() == DiscordSetup(
             token="s3cret", guild=_GUILD, category="vekna", allow=frozenset({_OPERATOR})
         )
+        assert discord_problems() == []
         assert not caplog.records
 
     @staticmethod
@@ -61,23 +62,34 @@ class TestDiscordSetup:
         )
 
     @staticmethod
-    def test_a_token_that_cannot_be_read_or_is_empty_is_said(
+    def test_a_token_that_cannot_be_read_or_is_empty_is_said_and_audited(
         config: Path, caplog: pytest.LogCaptureFixture
     ):
         config.write_text(_TABLE, encoding="utf-8")
         token = config.with_name("discord-token")
+        audited: list[str] = []
 
-        assert discord_setup() is None
-        token.write_text("\n", encoding="utf-8")
-        assert discord_setup() is None
+        for content in (None, b"\xff\xfe", b"\n"):
+            if content is not None:
+                token.write_bytes(content)
+            assert discord_setup() is None
+            audited += discord_problems()
 
-        assert _warned(caplog) == [
-            (
-                "Discord is off: its token could not be read:"
-                f" [Errno 2] No such file or directory: '{token}'"
-            ),
-            f"Discord is off: {token} is empty",
-        ]
+        assert (
+            _warned(caplog)
+            == audited
+            == [
+                (
+                    "Discord is off: its token could not be read:"
+                    f" [Errno 2] No such file or directory: '{token}'"
+                ),
+                (
+                    "Discord is off: its token could not be read: 'utf-8' codec"
+                    " can't decode byte 0xff in position 0: invalid start byte"
+                ),
+                f"Discord is off: {token} is empty",
+            ]
+        )
 
     @staticmethod
     @pytest.mark.parametrize(

@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import logging
 from datetime import UTC, datetime
 
@@ -18,8 +19,6 @@ from vekna.wire import (
 )
 
 _NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
-_OPERATOR = 7
-_STRANGER = 8
 _CAST = "c0ffee00" + "0" * 24
 _THREAD = "pr_fix fix/login c0ffee00"
 _LONGEST_NAME = 100
@@ -42,11 +41,14 @@ class _Board(Casts):
         )
 
 
-# Threads are numbered as they are first asked in, and messages as posted.
+# Threads are numbered as they are made, and messages as posted. A name taken
+# out of `threads` is a thread the remote archived: the next ask makes another.
 class _Chat(Remote):
     def __init__(self) -> None:
         self.asked: list[tuple[str, str, str]] = []
         self.said: list[tuple[str, str]] = []
+        self.threads: dict[str, str] = {}
+        self.made = itertools.count(1)
         self.failing = False
 
     async def ask(self, *, room: str, thread: str, text: str) -> Posted:
@@ -54,10 +56,9 @@ class _Chat(Remote):
             msg = "Discord is down"
             raise RemoteError(msg)
         self.asked.append((room, thread, text))
-        names = list(dict.fromkeys(name for _, name, _ in self.asked))
-        return Posted(
-            thread=f"t{names.index(thread) + 1}", message=f"m{len(self.asked)}"
-        )
+        if thread not in self.threads:
+            self.threads[thread] = f"t{next(self.made)}"
+        return Posted(thread=self.threads[thread], message=f"m{len(self.asked)}")
 
     async def say(self, *, thread: str, text: str) -> None:
         self.said.append((thread, text))
@@ -77,7 +78,6 @@ class _Desk:
             casts=self.board,
             answer=lambda surface, resolved: self.answers.append((surface, resolved)),
             remote=self.chat,
-            allow=frozenset({_OPERATOR}),
             branch=self._branch_of,
         )
 
@@ -99,15 +99,10 @@ class _Desk:
         running.cancel()
 
     async def hears(
-        self,
-        text: str,
-        *,
-        author: int = _OPERATOR,
-        thread: str = "t1",
-        reply_to: str | None = None,
+        self, text: str, *, thread: str = "t1", reply_to: str | None = None
     ) -> str | None:
         return await self.relay.heard(
-            Heard(author=author, thread=thread, reply_to=reply_to, text=text)
+            Heard(thread=thread, reply_to=reply_to, text=text)
         )
 
     def answered(self) -> list[tuple[str, str]]:
@@ -241,6 +236,14 @@ class TestAsking:
         desk.board.seen(_hello("orphan", vigil=None, enqueued_by="gone"))
 
         await desk.told(_push(cast_id="orphan"))
+
+        assert len(desk.chat.asked) == 1
+
+    @staticmethod
+    async def test_a_cast_that_names_itself_as_its_parent_is_asked_for(desk: _Desk):
+        desk.board.seen(_hello("loop", vigil=None, enqueued_by="loop"))
+
+        await desk.told(_push(cast_id="loop"))
 
         assert len(desk.chat.asked) == 1
 
@@ -393,12 +396,9 @@ class TestHearing:
         assert not desk.answered()
 
     @staticmethod
-    async def test_an_author_not_allowed_and_a_thread_of_no_cast_get_no_word(
-        desk: _Desk,
-    ):
+    async def test_a_thread_of_no_cast_gets_no_word(desk: _Desk):
         await desk.told(_push())
 
-        assert await desk.hears("push", author=_STRANGER) is None
         assert await desk.hears("push", thread="t9") is None
         assert not desk.answered()
 
@@ -421,8 +421,8 @@ class TestHearing:
         await desk.told(_push("r2"))
         desk.board.casts[_CAST].waiting.clear()
 
-        assert said == "no question is open in this cast"
-        assert await desk.hears("push") == "no question is open in this cast"
+        assert said == "no question is open in this thread"
+        assert await desk.hears("push") == "no question is open in this thread"
         assert not desk.answered()
 
     @staticmethod
@@ -432,8 +432,40 @@ class TestHearing:
         await desk.told(_push())
         del desk.board.casts[_CAST]
 
-        assert await desk.hears("push") == "no question is open in this cast"
+        assert await desk.hears("push") == "no question is open in this thread"
         assert not desk.answered()
+
+    @staticmethod
+    async def test_a_reply_to_a_closed_question_answers_no_other(desk: _Desk):
+        await desk.told(
+            _push(),
+            _push("r2"),
+            DecideResolved(cast_id=_CAST, request_id="r1", answer="push"),
+        )
+
+        assert await desk.hears("push", reply_to="m1") == (
+            "that question is closed: reply to an open one"
+        )
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_question_asked_after_its_thread_was_archived_lives_in_the_new_one(
+        desk: _Desk,
+    ):
+        await desk.told(_push())
+        del desk.chat.threads[_THREAD]
+        await desk.told(_push("r2"))
+
+        assert await desk.hears("decline", thread="t2") is None
+        assert await desk.hears("push", thread="t1") is None
+        await desk.told(
+            DecideResolved(cast_id=_CAST, request_id="r1", answer="push"),
+            DecideResolved(cast_id=_CAST, request_id="r2", answer="decline"),
+        )
+
+        assert [thread for _, thread, _ in desk.chat.asked] == [_THREAD] * 2
+        assert desk.answered() == [("r2", "decline"), ("r1", "push")]
+        assert desk.chat.said == [("t1", "→ push"), ("t2", "→ decline")]
 
     @staticmethod
     async def test_a_reply_answers_the_oldest_question_unless_it_replies_to_one(

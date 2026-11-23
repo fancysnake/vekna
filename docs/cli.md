@@ -591,7 +591,8 @@ Write your answer in the thread:
 Capital letters do not matter for an option. A reply that is no option gets
 one back that names the options, and the question stays open. With several
 questions open in one thread, a plain message answers the oldest; use
-Discord's Reply on a question to answer that one.
+Discord's Reply on a question to answer that one. A Reply on a question that is
+already answered gets a reply that says so, and answers nothing.
 
 The thread then shows the answer the cast took, as `→ yes`. It shows it for an
 answer given in a window too, and shows `withdrawn` for a question the cast
