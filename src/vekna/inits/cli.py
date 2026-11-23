@@ -27,7 +27,7 @@ from vekna.links.service import (
     user_vekna,
     write_unit,
 )
-from vekna.links.socket_server import attach
+from vekna.links.socket_server import alive, attach
 from vekna.links.terminal import Terminal
 from vekna.links.vigil_config import vigil_problems
 from vekna.links.window_config import history_after, window_problems
@@ -507,27 +507,33 @@ def _service_disable() -> None:
     click.echo("the daemon no longer starts at login")
 
 
-# A daemon started by hand holds the socket's lock, so it is stopped before
-# systemd starts its own. One systemd already runs is left alone: stopping it
-# here would race the start that follows.
-async def _started(*, again: bool) -> None:
+# A daemon started by hand holds the socket's lock, so systemd cannot start
+# its own beside it. It is never stopped from here: the windows and followers
+# attached to it would end with it.
+async def _started(*, verb: str) -> None:
     if not unit_path().is_file():
         message = f"no unit at {unit_path()}: `vekna service enable` first"
         raise click.ClickException(message)
-    if again or await systemctl("is-active", "--quiet", UNIT) is not None:
-        await stop_daemon()
-    await _systemd("restart" if again else "start", UNIT)
+    if await systemctl("is-active", "--quiet", UNIT) is not None and await alive(
+        default_socket_path()
+    ):
+        message = (
+            "a daemon started by hand is running, and the service leaves it"
+            f" alone: `vekna stop` when you are ready, then `vekna service {verb}`"
+        )
+        raise click.ClickException(message)
+    await _systemd(verb, UNIT)
 
 
 @click.command("start", help="Start the daemon under systemd.")
 def _service_start() -> None:
-    asyncio.run(_started(again=False))
+    asyncio.run(_started(verb="start"))
     click.echo("started the daemon under systemd")
 
 
-@click.command("restart", help="Stop the daemon and start it under systemd.")
+@click.command("restart", help="Restart the daemon systemd runs.")
 def _service_restart() -> None:
-    asyncio.run(_started(again=True))
+    asyncio.run(_started(verb="restart"))
     click.echo("restarted the daemon under systemd")
 
 

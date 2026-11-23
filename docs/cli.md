@@ -647,8 +647,9 @@ same `PATH`, so the agent's CLI has to be on it. `enable` replaces the unit
 each time, so put changes of your own in a drop-in with `systemctl --user edit
 vekna`.
 
-`start` and `restart` first stop a daemon started by hand, since only one can
-hold the socket. `stop` runs `vekna stop`, so casts carry on and rejoin the
+Only one daemon can hold the socket, and the service never stops one started
+by hand: while it runs, `start` and `restart` do nothing but say to `vekna
+stop` it first. `stop` runs `vekna stop`, so casts carry on and rejoin the
 next daemon, and `vekna stop` typed by hand stops the service too. Under
 systemd the daemon writes to the journal, not to `daemon.log`: `journalctl
 --user -u vekna`.

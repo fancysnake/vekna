@@ -1,4 +1,5 @@
 import os
+import socket
 from pathlib import Path
 
 import pytest
@@ -179,6 +180,7 @@ class TestServiceRuns:
         assert ran.output == "restarted the daemon under systemd\n"
         assert _asked(home)[3:] == [
             "--user show-environment",
+            "--user is-active --quiet vekna.service",
             "--user restart vekna.service",
         ]
 
@@ -212,3 +214,29 @@ class TestServiceRuns:
         assert ran.output == (
             "Error: `systemctl --user stop vekna.service` failed (5): not loaded\n"
         )
+
+    @staticmethod
+    @pytest.mark.parametrize("verb", ["start", "restart"])
+    def test_a_daemon_started_by_hand_is_left_alone(home: Path, verb: str):
+        _service("enable")
+        with socket.socket(socket.AF_UNIX) as by_hand:
+            by_hand.bind(str(home.parent / "vekna.sock"))
+            by_hand.listen()
+
+            ran = _service(verb)
+
+            probe, _ = by_hand.accept()
+            with probe:
+                sent = probe.recv(1024)
+
+        assert ran.exit_code == 1
+        assert ran.output == (
+            "Error: a daemon started by hand is running, and the service leaves"
+            " it alone: `vekna stop` when you are ready, then"
+            f" `vekna service {verb}`\n"
+        )
+        assert sent == b""
+        assert _asked(home)[3:] == [
+            "--user show-environment",
+            "--user is-active --quiet vekna.service",
+        ]
