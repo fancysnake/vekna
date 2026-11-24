@@ -17,6 +17,7 @@ from typing_extensions import override
 from vekna.pacts.casts import Casts, CastView
 from vekna.wire import (
     CastCancelRequested,
+    CastSeen,
     DecideClaimed,
     DecideReleased,
     DecideRequested,
@@ -34,6 +35,7 @@ _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
 _ASKS_NOTHING = "the cast asks nothing right now"
+_NOTHING_TO_MARK = "only a failed cast can be marked seen"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
@@ -44,7 +46,7 @@ _QUESTION_CHANGED = "the question changed — your answer was not sent"
 def _hint(old: int = 0) -> str:
     return (
         f"space open/fold · H history{f' ({old})' if old else ''} · w next asking"
-        " · t take over · x cancel · : command · g/p scope · q quit"
+        " · t take over · x cancel · s seen · : command · g/p scope · q quit"
     )
 
 
@@ -72,6 +74,14 @@ class Contents(Tree[str]):
         Binding("k", "cursor_up", show=False),
         Binding("h", "cursor_parent", show=False),
     ]
+
+
+# What the window says to the daemon: frames down its own connection, and a
+# mark on a connection of its own. `mark` answers why the daemon refused it.
+@dataclass(frozen=True)
+class _ToDaemon:
+    send: Callable[[WireMessage], None]
+    mark: Callable[[CastSeen], Awaitable[str | None]]
 
 
 # What a window is opened with: its project, the directory a ritual started
@@ -199,11 +209,12 @@ class _Widgets:
 # turns it to the history view, the casts that ended long ago, by day. The
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
-# only while it is being typed into. `t` takes a cast over: the left page opens
-# its rite tree, the right page is its output, every prompt it asks is claimed
-# and shown at the end of that output, and the line under the output answers
-# it. The contents take no keys until Esc hands the prompts back, or the cast
-# asks nothing more for a while after an answer.
+# only while it is being typed into. `s` marks a failed cast seen, which takes
+# the red off its line and the cast out of every count of fails. `t` takes a
+# cast over: the left page opens its rite tree, the right page is its output,
+# every prompt it asks is claimed and shown at the end of that output, and the
+# line under the output answers it. The contents take no keys until Esc hands
+# the prompts back, or the cast asks nothing more for a while after an answer.
 class VeknaApp(App[None]):
     TITLE = "vekna"
     CSS = """
@@ -231,6 +242,7 @@ class VeknaApp(App[None]):
         Binding("t", "take", "take over"),
         Binding("w", "next_waiting", "next waiting"),
         Binding("x", "cancel", "cancel"),
+        Binding("s", "seen", "seen"),
         Binding("H", "history", "history"),
         Binding("g", "every", "every project"),
         Binding("p", "home", "this project"),
@@ -244,12 +256,13 @@ class VeknaApp(App[None]):
         casts: Casts,
         opened: Opened,
         send: Callable[[WireMessage], None],
+        mark: Callable[[CastSeen], Awaitable[str | None]],
         branch_of: Callable[[str], Awaitable[str | None]],
     ) -> None:
         super().__init__()
         self._casts = casts
         self._scope = _Scope(opened=opened)
-        self._send = send
+        self._daemon = _ToDaemon(send=send, mark=mark)
         self._branch_of = branch_of
         self._view = _View(reading=Reading(history_after=opened.history_after))
         self._w = _Widgets()
@@ -382,8 +395,25 @@ class VeknaApp(App[None]):
             self.say(f"x again cancels {named_cast}")
             return
         self._view.arming = None
-        self._send(CastCancelRequested(cast_id=view.hello.cast_id))
+        self._daemon.send(CastCancelRequested(cast_id=view.hello.cast_id))
         self.say(f"asked {named_cast} to stop")
+
+    # A failed cast is marked seen, and a seen one unmarked. The daemon keeps
+    # the mark and says it to every window, so the line changes when this
+    # window hears it.
+    async def action_seen(self) -> None:
+        view = self._focused()
+        if view is None or not view.failed:
+            self.say(_NOTHING_TO_MARK)
+            return
+        seen = not view.seen
+        refused = await self._daemon.mark(
+            CastSeen(cast_id=view.hello.cast_id, seen=seen)
+        )
+        named_cast = labelled(view.hello)
+        marked = f"marked {named_cast} seen" if seen else f"unmarked {named_cast}"
+        self.say(refused or marked)
+        self.changed()
 
     # The cast under the cursor, or the first one that asks under a fold. The
     # line its answers are typed on opens at once, and stays open.
@@ -436,7 +466,9 @@ class VeknaApp(App[None]):
         elif typed.lower().startswith("c "):
             self.say(
                 request_cast(
-                    typed=typed[2:], root=self._scope.opened.root, send=self._send
+                    typed=typed[2:],
+                    root=self._scope.opened.root,
+                    send=self._daemon.send,
                 )
             )
         elif typed.lower().startswith("a "):
@@ -470,7 +502,7 @@ class VeknaApp(App[None]):
         if not typed:
             self.say(_TYPE_FIRST)
             return False
-        refused = send_answer(request=request, typed=typed, send=self._send)
+        refused = send_answer(request=request, typed=typed, send=self._daemon.send)
         self.say(refused or f"answered {typed}")
         return refused is None
 
@@ -515,7 +547,7 @@ class VeknaApp(App[None]):
     def _claim(self, request: DecideRequested) -> None:
         claim_id = uuid4().hex
         self._view.claims.mine.add(claim_id)
-        self._send(
+        self._daemon.send(
             DecideClaimed(
                 cast_id=request.cast_id,
                 request_id=request.request_id,
@@ -554,7 +586,7 @@ class VeknaApp(App[None]):
         if (view := self._taken()) is not None:
             # Heard back from the daemon or not, every claim still open goes.
             for request_id in claims.asked.intersection(view.waiting):
-                self._send(
+                self._daemon.send(
                     DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
                 )
         claims.taken = None

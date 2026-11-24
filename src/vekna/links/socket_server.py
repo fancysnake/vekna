@@ -14,6 +14,7 @@ from vekna.wire import (
     CastGoodbye,
     CastMessage,
     CastRequested,
+    CastSeen,
     DaemonVersion,
     DecideClaimed,
     DecideReleased,
@@ -111,10 +112,10 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
     stopping = asyncio.Event()
 
     # What a connection opens with is what it is, and that is settled once: a
-    # surface is fanned out to, a stop ends the daemon, an altar, a version and
-    # an admission are answered, a cast to queue is too, anything else is a cast
-    # and is routed. The first frame is the only place they can be told apart, so
-    # it is the only place that asks.
+    # surface is fanned out to, a stop ends the daemon, an altar, a version, an
+    # admission and a mark are answered, a cast to queue is too, anything else
+    # is a cast and is routed. The first frame is the only place they can be
+    # told apart, so it is the only place that asks.
     async def handle(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -159,6 +160,8 @@ async def _answer(opened: Asked, routes: Routes) -> WireMessage:
             return await routes.altar(opened)
         case AdmissionRequested():
             return await routes.admit(opened)
+        case CastSeen():
+            return routes.mark(opened)
         case _:
             return await routes.queue(opened)
 

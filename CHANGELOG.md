@@ -13,6 +13,11 @@ when.
 
 ### Added
 
+- **`s` in the window marks a failed cast seen.** The cast keeps its `✗` and
+  loses the red, and no fold or project line counts it as a fail. `s` again
+  takes the mark back. The daemon keeps the mark, so every window shows it. A
+  daemon older than this release does not take the mark, and the window says
+  so.
 - **`vekna service enable|start|stop|restart|disable`** runs the daemon as a
   systemd user service. The unit runs the user's own `vekna` from the home
   directory, with a `PATH` of the user's own tools, so nothing of the project

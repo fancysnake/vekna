@@ -63,6 +63,9 @@ class CastGoodbye(BaseModel):
     # The ritual's return model as JSON, for a cast that awaits this one. The
     # daemon relays it; the awaiting cast validates it, having the lexicon.
     result: JsonValue | None = None
+    # The operator marked the failure seen. Only the daemon says it, on the
+    # goodbye it sends surfaces again for a `CastSeen`.
+    seen: bool = False
 
 
 # What a connection opens with is what it is. A cast says `CastHello`; anything
@@ -123,6 +126,17 @@ class AdmissionRequested(BaseModel):
 
 class CastAdmitted(BaseModel):
     kind: Literal["cast_admitted"] = "cast_admitted"
+
+
+# A window opens a connection with this and nothing else to mark a failed cast
+# seen, or with `seen` false to take the mark back. Answered the cast's
+# `CastGoodbye` carrying the mark, which every surface is sent too, or
+# `CastRefused`. The daemon keeps the mark for as long as it holds the cast. A
+# daemon that predates the question hangs up.
+class CastSeen(BaseModel):
+    kind: Literal["cast_seen"] = "cast_seen"
+    cast_id: str
+    seen: bool = True
 
 
 # A cast the daemon has a record of and no process for yet: it waits for a
@@ -489,11 +503,14 @@ Opening = (
     | AltarRequested
     | VersionRequested
     | AdmissionRequested
+    | CastSeen
 )
 
 # A request the daemon answers on a connection of its own, with one frame. Not in
 # `Opening`: a surface sends `CastRequested` later in its connection too.
-Asked = AltarRequested | VersionRequested | CastRequested | AdmissionRequested
+Asked = (
+    AltarRequested | VersionRequested | CastRequested | AdmissionRequested | CastSeen
+)
 
 # Between a surface and the daemon, and never about a cast that exists yet.
 Request = CastRequested | CastRefused | AltarTended | DaemonVersion | CastAdmitted

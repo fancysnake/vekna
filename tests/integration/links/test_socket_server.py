@@ -21,6 +21,7 @@ from vekna.wire import (
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     DaemonVersion,
     DecideClaimed,
     DecideReleased,
@@ -33,6 +34,7 @@ from vekna.wire import (
     WireMessage,
     admission_refusal,
     encode_frame,
+    mark_seen,
     read_frames,
 )
 
@@ -65,7 +67,9 @@ class _Daemon(Routes):
         self.messages: list[WireMessage] = []
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
-        self.requests: list[CastRequested | AltarRequested | AdmissionRequested] = []
+        self.requests: list[
+            CastRequested | AltarRequested | AdmissionRequested | CastSeen
+        ] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
             tuple[
@@ -100,6 +104,10 @@ class _Daemon(Routes):
 
     def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
         self.prompted.append((surface, cancel))
+
+    def mark(self, request: CastSeen) -> CastGoodbye | CastRefused:
+        self.requests.append(request)
+        return CastGoodbye(cast_id=request.cast_id, status="error", seen=request.seen)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self.peers[cast_id] = peer
@@ -527,3 +535,44 @@ class TestBinding:
     @staticmethod
     async def test_nothing_listening_is_not_alive(socket_path: Path):
         assert not await alive(socket_path)
+
+
+@pytest.mark.asyncio
+class TestMarkSeen:
+    @staticmethod
+    async def test_a_mark_is_answered_down_its_connection(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        refusal = await mark_seen(socket_path, CastSeen(cast_id="c1"))
+
+        assert refusal is None
+        assert daemon.requests == [CastSeen(cast_id="c1")]
+        assert not daemon.attached
+        await server.close()
+
+    @staticmethod
+    async def test_a_daemon_that_hangs_up_on_the_mark_predates_it(socket_path: Path):
+        async def hang_up(
+            _: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_unix_server(hang_up, path=str(socket_path))
+
+        refusal = await mark_seen(socket_path, CastSeen(cast_id="c1"))
+
+        assert refusal == (
+            "this daemon predates marking a cast seen: `vekna stop` ends it, and"
+            " the next `vekna` starts one that marks"
+        )
+        server.close()
+        await server.wait_closed()
+
+    @staticmethod
+    async def test_no_daemon_listening_says_so(socket_path: Path):
+        refusal = await mark_seen(socket_path, CastSeen(cast_id="c1"))
+
+        assert refusal is not None
+        assert refusal.startswith("the daemon did not take the mark: ")
