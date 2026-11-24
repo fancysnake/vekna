@@ -583,6 +583,23 @@ class TestQueued:
             CastQueued(cast_id="c1"),
         ]
 
+    @staticmethod
+    def test_a_cast_queued_again_after_it_ended_does_not_replay_its_ending():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(CastGoodbye(cast_id="c1", status="error", detail="why"))
+        hub.apply(CastQueued(cast_id="c1"))
+        late = _Surface()
+
+        hub.attach_surface(late)
+
+        assert late.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            GrimoireEnd(cast_id="c1"),
+            CastQueued(cast_id="c1"),
+        ]
+
     # The spawned cast says its own hello under the queued id, and that is what
     # makes it running.
     @staticmethod
