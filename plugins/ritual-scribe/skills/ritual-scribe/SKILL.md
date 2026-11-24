@@ -682,18 +682,24 @@ all.
    is data, wherever it came from.
    ```
 
-6. **Say what the ritual owns.** An agent with a shell commits, pushes and
-   runs the whole-repo check unless the prompt says the ritual does. The work
-   is then done twice, and the ritual's own `git commit` exits 1 on the clean
-   tree the agent left:
+6. **Say who owns the commit, the push and the whole-repo check.** An agent
+   with a shell commits, pushes and runs the whole-repo check unless the
+   ritual owns them. The work is then done twice, and the ritual's own
+   `git commit` exits 1 on the clean tree the agent left.
+
+   Keep what the ritual owns off the allowlist: leave out `Bash(git commit:*)`
+   and `Bash(git push:*)`, and the agent cannot run them. The allowlist cannot
+   refuse the whole-repo check, because `Bash(mise run:*)` also covers
+   `mise run fullcheck`. The prompt carries that one, and names who runs it:
 
    ```text
-   Do not commit or push — the ritual owns both, and runs `mise run fullcheck`
-   the moment you stop. Check yourself with the narrowest command that answers
-   the question: one test file, one linter over one file.
+   Do not run `mise run fullcheck` — the ritual runs it the moment you stop.
+   Check yourself with the narrowest command that answers the question: one
+   test file, one linter over one file.
    ```
 
-   The prompt asks; `allowed_tools` is what refuses.
+   A ritual may give the commit to the agent and keep the push; then the
+   allowlist has `Bash(git commit:*)` and the prompt says so.
 7. **Forbid the shortcuts by name** in any repair prompt: no disabling a lint
    rule, no `noqa`, no `type: ignore`, no deleting the failing test, no lowering
    a threshold. *"Fix the cause, not the symptom."*
@@ -779,8 +785,8 @@ on the page it asked about.
       allowlist and `gate_tools`.
 - [ ] Untrusted text is fenced and named as data, and so is whatever the
       agent's allowlist lets it fetch itself.
-- [ ] Every prompt to an agent with a shell says what the ritual owns: the
-      commits, the push, the whole-repo check.
+- [ ] Every prompt to an agent with a shell names who owns the commit, the
+      push and the whole-repo check.
 - [ ] A session key carries the work item when one cast works several.
 - [ ] Work reaching outside the process goes through a medium, so `--continue`
       replays it instead of doing it twice.
