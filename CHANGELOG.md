@@ -18,6 +18,13 @@ when.
   directory, with a `PATH` of the user's own tools, so nothing of the project
   it was enabled in reaches the daemon or its casts.
 
+### Changed
+
+- **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
+  the agent does not commit, push or run the whole-repo check a second time;
+  name as data what the agent fetches itself, which no marker surrounds; key a
+  session thread on the work item when one cast works several.
+
 ## [3.0.0] - 2026-11-22
 
 ### Added

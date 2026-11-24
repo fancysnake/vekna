@@ -20,6 +20,10 @@ type: ignore, skip or delete a test, or lower a threshold. Ask me rather than
 guessing when the choice is mine — a failing assertion that may be the test's
 fault rather than the code's, for one.
 
+Do not commit. Do not run either gate yourself: the ritual runs both again the
+moment you stop. Check yourself with the narrowest command that answers the
+question: one test file, one linter over one file.
+
 """
 
 

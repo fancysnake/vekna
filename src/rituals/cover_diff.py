@@ -24,6 +24,10 @@ intent, a test that belongs somewhere the layout does not obviously cover, a
 line that looks deliberately unreachable. Do not lower the coverage threshold,
 edit the coverage configuration, or delete the offending code.
 
+Do not commit. Do not run the coverage check yourself: the ritual runs it again
+the moment you stop. Check yourself with the narrowest command that answers the
+question: one test file.
+
 The report:
 
 """
