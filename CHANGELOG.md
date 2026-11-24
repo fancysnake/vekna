@@ -38,6 +38,10 @@ when.
   that cast. A cast line says no argument; the right page has them.
 - **When a cast began**, in the window, is a slot and no longer a count of
   minutes or hours: `@<1h`, `@<3h`, `@<6h`, `@<12h`, `@<1d`, then days.
+- **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
+  the agent does not commit, push or run the whole-repo check a second time;
+  name as data what the agent fetches itself, which no marker surrounds; key a
+  session thread on the work item when one cast works several.
 
 ### Fixed
 
