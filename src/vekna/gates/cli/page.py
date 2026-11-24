@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import assert_never
 
 from rich.text import Text
 
@@ -103,16 +104,31 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, _ended_said(view) if history else ago(view, now))
+        text = _cast_label(view, _cast_said(entry, view, now, history=history))
+        if len(entry.streak) > 1:
+            text.append(f"  x{len(entry.streak)}", "dim")
     else:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
+        if entry.kind == "finished":
+            text.stylize("dim")
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
-    # A folded line is drawn as a leaf, which the tree gives no arrow.
+    # The tree gives an arrow only to a line with lines under it, which a
+    # folded cast keeps for the casts it queued, so the fold says so itself.
     if entry.folded:
         text = Text("▸ ") + text
     return text
+
+
+# A cast under the cast that queued it says its ritual, which no line above it
+# does; any other says when it began.
+def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) -> str:
+    if history:
+        return _ended_said(view)
+    if entry.nested:
+        return view.hello.ritual
+    return ago(view, now)
 
 
 def _ended_said(view: CastView) -> str:
@@ -179,12 +195,28 @@ def head(
     if rite is not None and view is not None:
         return _rite_head(view, rite, now)
     if view is not None:
-        return _cast_head(view, branches, now)
-    if entry.kind == "ritual":
-        return _ritual_head(entry, now)
-    if entry.kind == "day":
-        return _day_head(entry, now)
-    return _project_head(entry, branches)
+        text = _cast_head(view, branches, now)
+        if len(entry.streak) > 1:
+            since = f"{ended(entry.streak[-1]).astimezone():%a %H:%M}"
+            text.append(
+                f"\nx{len(entry.streak)} — every cast since {since} ended like this"
+            )
+        return text
+    return _group_head(entry, branches, now)
+
+
+def _group_head(entry: Entry, branches: dict[str, str | None], now: datetime) -> Text:
+    match entry.kind:
+        case "ritual" | "finished":
+            return _ritual_head(entry, now)
+        case "day":
+            return _day_head(entry, now)
+        case "project":
+            return _project_head(entry, branches)
+        case "cast" | "more" | "rite":
+            return Text(NO_CAST)
+        case _:
+            assert_never(entry.kind)
 
 
 def _project_head(entry: Entry, branches: dict[str, str | None]) -> Text:

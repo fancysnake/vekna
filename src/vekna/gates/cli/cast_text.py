@@ -11,6 +11,7 @@ _RESUMED = "↳"
 _MINUTE = 60
 _HOUR = 3600
 _DAY = 86400
+_SLOTS = (1, 3, 6, 12)
 # The word, not the glyph: the list is read across a row of casts, and "aborted"
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
@@ -118,15 +119,17 @@ def _recovering(view: CastView) -> bool:
 
 
 # Which cast of a ritual this is, by when it began: a live one is happening now
-# whenever it began, and one that ended is placed by how long ago that was.
+# whenever it began, and one that ended is placed in the slot it began in, the
+# hours it is younger than, since a list of casts is read by slot, not minute.
 def ago(view: CastView, now: datetime) -> str:
     seconds = (now - view.hello.started_at).total_seconds()
     if live(view) or seconds < _MINUTE:
         return "@now"
-    if seconds < _HOUR:
-        return f"@{int(seconds // _MINUTE)}m ago"
+    for hours in _SLOTS:
+        if seconds < hours * _HOUR:
+            return f"@<{hours}h"
     if seconds < _DAY:
-        return f"@{int(seconds // _HOUR)}h ago"
+        return "@<1d"
     return f"@{int(seconds // _DAY)}d ago"
 
 

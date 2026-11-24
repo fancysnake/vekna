@@ -324,6 +324,7 @@ A value that does not read is named in the window's note line and passed over.
 | --- | --- |
 | `H` | the history view, or the tree view again |
 | `space` | on a cast, open its whole rite tree or close it; elsewhere, fold the line or open it again |
+| `f` | fold every line that holds casts, or open them all again |
 | `w` | the next line that asks, a fold included |
 | `j` / `k` / `h` | down, up, to the line above in the tree |
 | `c` | start a ritual here: `c <ritual> [--flag value …]` |

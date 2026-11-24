@@ -412,6 +412,7 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
             root=str(Path.cwd()),
             history_after=after,
             title=_versions(line.daemon),
+            fit=True,
         ),
         send=line.send,
         mark=partial(mark_seen, default_socket_path()),
