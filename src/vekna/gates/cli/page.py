@@ -56,6 +56,14 @@ def _look(view: CastView, look: Text) -> Text:
     return Text(look.plain, "dim") if view.seen else look.copy()
 
 
+def _cast_glyph(view: CastView) -> Text:
+    return _look(view, _CAST_LOOK[word(view)])
+
+
+def _error_style(view: CastView) -> str:
+    return "dim" if view.seen else "red"
+
+
 def where(root: str) -> str:
     path, home = Path(root), Path.home()
     return str(Path("~", path.relative_to(home))) if path.is_relative_to(home) else root
@@ -113,7 +121,7 @@ def _ended_said(view: CastView) -> str:
 
 def _cast_label(view: CastView, said: str) -> Text:
     text = Text.assemble(
-        _look(view, _CAST_LOOK[word(view)]),
+        _cast_glyph(view),
         " ",
         (said, _ASKS if view.waiting else ""),
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
@@ -137,9 +145,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
-        text.append(
-            f"  {clipped(printable(rite.error), _ERROR)}", "dim" if view.seen else "red"
-        )
+        text.append(f"  {clipped(printable(rite.error), _ERROR)}", _error_style(view))
     if any(
         prompt.request.rite_id == rite.started.rite_id
         for prompt in view.waiting.values()
@@ -194,7 +200,7 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
     text = Text(entry.name, "bold")
     for view in entry.views:
         text.append("\n")
-        text.append_text(_look(view, _CAST_LOOK[word(view)]))
+        text.append_text(_cast_glyph(view))
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
@@ -205,7 +211,7 @@ def _day_head(entry: Entry, now: datetime) -> Text:
     text = Text(entry.name, "bold")
     for view in entry.views:
         text.append("\n")
-        text.append_text(_look(view, _CAST_LOOK[word(view)]))
+        text.append_text(_cast_glyph(view))
         text.append(f" {_ended_said(view)}  {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
