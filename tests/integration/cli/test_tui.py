@@ -584,6 +584,17 @@ class TestVersion:
         assert version == "vekna 1.2.0 · daemon 1.1.0"
         assert hint.endswith("q quit")
 
+    @staticmethod
+    async def test_the_hint_stays_whole_in_80_columns():
+        app = _app(Hub(), [], title="vekna 3.0.0")
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause(_PAINTED)
+
+            hint_height = app.query_one("#hint", Static).size.height
+            foot_height = app.query_one("#foot").size.height
+        assert foot_height == hint_height
+
 
 @pytest.mark.asyncio
 class TestHistory:

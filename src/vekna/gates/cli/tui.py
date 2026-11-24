@@ -220,7 +220,7 @@ class VeknaApp(App[None]):
     #log { height: 1fr; margin-top: 1; }
     #note { height: auto; padding: 0 1; color: $warning; }
     #command, #answer { display: none; border: none; height: 1; }
-    #foot { height: 1; }
+    #foot { height: auto; }
     #hint { width: 1fr; padding: 0 1; color: $text-muted; }
     #scope, #version { width: auto; padding: 0 1; color: $text-muted; }
     """
