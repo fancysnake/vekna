@@ -251,8 +251,7 @@ def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
     said = [] if rite is None else list(rite.deltas)
     if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
-    # Log.write_lines drops an empty line, so a blank one is drawn as a space.
-    return [printable(line) or " " for line in said]
+    return [printable(line) for line in said]
 
 
 # The output of a cast taken over ends with the question the answer line

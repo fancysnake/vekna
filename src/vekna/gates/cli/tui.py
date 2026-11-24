@@ -11,7 +11,6 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
@@ -135,32 +134,39 @@ def _kept(
 
 # The output of the line under the cursor. A line wider than the pane is drawn
 # over as many rows as it needs, so `lines` holds rows, not what was said. The
-# rows are cut for the width the pane has when they are shown: `Resized` asks
-# the app to show them again.
+# rows are cut for the width the pane has when they are shown. The pane keeps
+# what it was told to show and draws it again when its width changes; cutting
+# rows is slow for a long output, so what was drawn at that width stays.
 class Output(Log):
     DEFAULT_CSS = """
     Output { overflow-x: hidden; }
     """
 
-    class Resized(Message):
-        pass
+    _said: tuple[str, ...] = ()
+    _drawn: tuple[tuple[str, ...], int] | None = None
 
     def show(self, said: list[str]) -> None:
-        # A pane with no room draws nothing, and is resized before it has any.
-        if (width := self.scrollable_content_region.width) < 1:
-            return
-        rows = [
-            row.plain or " "
-            for line in said
-            for row in Text(line).wrap(self.app.console, width)
-        ]
-        if list(self.lines) != rows:
-            self.auto_scroll = False
-            self.clear()
-            self.write_lines(rows)
+        self._said = tuple(said)
+        self._draw()
 
     def on_resize(self) -> None:
-        self.post_message(self.Resized())
+        self._draw()
+
+    def _draw(self) -> None:
+        # A pane with no room draws nothing; the resize that gives it room draws.
+        if (width := self.scrollable_content_region.width) < 1:
+            return
+        if self._drawn == (self._said, width):
+            return
+        self._drawn = (self._said, width)
+        # Log.write_lines drops an empty line, so a blank row is drawn as a space.
+        rows = [
+            row.plain or " "
+            for line in self._said
+            for row in Text(line).wrap(self.app.console, width)
+        ]
+        self.clear()
+        self.write_lines(rows)
 
 
 # Whether the output follows its newest line, the line it was left on when it
@@ -210,7 +216,7 @@ class _Widgets:
     ask: _Asks = field(default_factory=_Asks)
     contents: Contents = field(default_factory=lambda: Contents("all", id="contents"))
     head: Static = field(default_factory=lambda: Static(id="head", markup=False))
-    log: Output = field(default_factory=lambda: Output(id="log"))
+    log: Output = field(default_factory=lambda: Output(id="log", auto_scroll=False))
     note: Static = field(default_factory=lambda: Static(id="note", markup=False))
     command: Input = field(
         default_factory=lambda: Input(id="command", select_on_focus=False)
@@ -467,10 +473,6 @@ class VeknaApp(App[None]):
             self._answer(typed[2:].strip(), nothing=_NOTHING_WAITING)
         elif typed:
             self.say(f"{typed!r} means nothing here — {_hint()}")
-        self.changed()
-
-    @on(Output.Resized)
-    def rewrap(self) -> None:
         self.changed()
 
     # A cleared tree highlights its hidden root, which is no line to stand on.

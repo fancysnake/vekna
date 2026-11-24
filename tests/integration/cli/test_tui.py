@@ -2,8 +2,10 @@ import asyncio
 import contextlib
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
+from rich.text import Text
 from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
@@ -1637,6 +1639,26 @@ class TestFollowing:
         assert width > before
         assert "".join(rows) == "w" * 500
         assert len(rows[0]) == width
+
+    @staticmethod
+    async def test_a_pane_that_changed_only_in_height_does_not_cut_rows_again():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            rows = list(log.lines)
+            with patch.object(Text, "wrap", autospec=True) as wrap:
+                await pilot.resize_terminal(80, 12)
+                await pilot.pause(_PAINTED)
+
+            after = list(log.lines)
+        assert wrap.call_args_list == []
+        assert after == rows
 
     # Textual highlights the root of a tree it has just cleared, and that
     # highlight can land after the page is drawn.
