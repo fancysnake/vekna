@@ -40,6 +40,7 @@ from vekna.wire import (
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     CodingSlotReleased,
     CodingSlotRequested,
     DecideClaimed,
@@ -386,6 +387,9 @@ class _Daemon(Routes):
     def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None:
         if self._hub.forward_cancel(surface, cancel):
             self._cutter.cut(cancel.cast_id)
+
+    def mark(self, request: CastSeen) -> CastGoodbye | CastRefused:
+        return self._hub.mark(request)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

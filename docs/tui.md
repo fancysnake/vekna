@@ -118,6 +118,11 @@ A rite line shows how long the rite took. A failed rite shows the first words
 of its error. Put the cursor on the rite: the right page shows the whole error
 and the output of that rite alone.
 
+`s` on a failed cast marks it seen, and `s` again takes the mark back. A seen
+cast keeps its `✗` and loses the red, and no fold or project line counts it as
+a fail. The daemon keeps the mark, so every window shows it, and a window you
+close and open again shows it too.
+
 ## Fold what you do not watch
 
 ![Three rituals folded to one line each; the ci_watch line says 1 fail, 1

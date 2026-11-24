@@ -10,8 +10,10 @@ from pydantic import ValidationError
 
 from ._pacts import (
     AdmissionRequested,
+    CastGoodbye,
     CastMessage,
     CastRefused,
+    CastSeen,
     DaemonVersion,
     RunRecord,
     VersionRequested,
@@ -32,6 +34,10 @@ _OWN_STATE_ENV = "VEKNA_STATE"
 _PRIVATE = 0o700
 _OPEN_TO_OTHERS = 0o077
 _PROBE_SECONDS = 2.0
+_PREDATES_SEEN = (
+    "this daemon predates marking a cast seen: `vekna stop` ends it, and the"
+    " next `vekna` starts one that marks"
+)
 _UNSAID = "does not say its version, so it predates this check"
 # One frame is one line, and a rite's result is a field of it: a shell medium
 # hands back everything the command printed, so `git diff` against a branch is a
@@ -172,6 +178,19 @@ async def admission_refusal(path: Path, project_root: str) -> str | None:
     except OSError:
         return None
     return reply.reason if isinstance(reply, CastRefused) else None
+
+
+# Why the daemon on `path` did not take the mark, or `None` when it did. Asked
+# on a connection of its own: a daemon that predates `CastSeen` hangs up on the
+# frame, and on the window's connection that ends the window.
+async def mark_seen(path: Path, mark: CastSeen) -> str | None:
+    try:
+        reply = await _asked(path, mark)
+    except OSError as error:
+        return f"the daemon did not take the mark: {error}"
+    if isinstance(reply, CastRefused):
+        return reply.reason
+    return None if isinstance(reply, CastGoodbye) else _PREDATES_SEEN
 
 
 # What a cast groups under and what a surface filters by, so both ends resolve

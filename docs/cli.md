@@ -331,6 +331,7 @@ A value that does not read is named in the window's note line and passed over.
 | `t` | take over the running cast under the cursor, or the first one that asks under a fold |
 | `a` | answer it in one line: `a <answer>` |
 | `x` | cancel the cast under the cursor; twice, to be sure |
+| `s` | mark the failed cast under the cursor seen, or take the mark back |
 | `:` | the command line, empty |
 | `g` / `p` | every project / this one |
 | `q` | close the window; the daemon keeps running |

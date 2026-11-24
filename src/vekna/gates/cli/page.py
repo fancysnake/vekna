@@ -52,6 +52,19 @@ NO_CAST = "no cast here — c starts one"
 LEAVES = "esc leaves"
 
 
+# A cast marked seen keeps its glyphs and loses their colour.
+def _look(view: CastView, look: Text) -> Text:
+    return Text(look.plain, "dim") if view.seen else look.copy()
+
+
+def _cast_glyph(view: CastView) -> Text:
+    return _look(view, _CAST_LOOK[word(view)])
+
+
+def _error_style(view: CastView) -> str:
+    return "dim" if view.seen else "red"
+
+
 def where(root: str) -> str:
     path, home = Path(root), Path.home()
     return str(Path("~", path.relative_to(home))) if path.is_relative_to(home) else root
@@ -124,7 +137,7 @@ def _ended_said(view: CastView) -> str:
 
 def _cast_label(view: CastView, said: str) -> Text:
     text = Text.assemble(
-        _CAST_LOOK[word(view)].copy(),
+        _cast_glyph(view),
         " ",
         (said, _ASKS if view.waiting else ""),
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
@@ -142,13 +155,13 @@ def _took(view: CastView, rite: RiteView, now: datetime) -> str:
 def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
     medium = "italic" if rite.started.category == "medium" else ""
     text = Text.assemble(
-        _RITE_LOOK[view.rite_status(rite)].copy(),
+        _look(view, _RITE_LOOK[view.rite_status(rite)]),
         " ",
         (rite.started.name, medium),
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
-        text.append(f"  {clipped(printable(rite.error), _ERROR)}", "red")
+        text.append(f"  {clipped(printable(rite.error), _ERROR)}", _error_style(view))
     if any(
         prompt.request.rite_id == rite.started.rite_id
         for prompt in view.waiting.values()
@@ -219,7 +232,7 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
     text = Text(entry.name, "bold")
     for view in entry.views:
         text.append("\n")
-        text.append_text(_CAST_LOOK[word(view)].copy())
+        text.append_text(_cast_glyph(view))
         text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
@@ -230,7 +243,7 @@ def _day_head(entry: Entry, now: datetime) -> Text:
     text = Text(entry.name, "bold")
     for view in entry.views:
         text.append("\n")
-        text.append_text(_CAST_LOOK[word(view)].copy())
+        text.append_text(_cast_glyph(view))
         text.append(f" {_ended_said(view)}  {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
@@ -242,7 +255,8 @@ def _cast_head(view: CastView, branches: dict[str, str | None], now: datetime) -
     root = hello.project_root
     text = Text.assemble(
         (f"{hello.ritual}  {hello.cast_id[:SHORT_ID]}", "bold"),
-        f"  {word(view)}  {elapsed(view, now)}{carried(hello)}",
+        f"  {word(view)}{' · seen' if view.seen else ''}"
+        f"  {elapsed(view, now)}{carried(hello)}",
         (f"\n{branches.get(root) or '—'} · {where(root)}", "dim"),
     )
     if flags := _flags(hello):
