@@ -149,8 +149,15 @@ class Output(Log):
         self._said = tuple(said)
         self._draw()
 
+    # Textual has already pulled the scroll up to the old rows' end when the pane
+    # got taller; the new rows then make the page longer than that end.
     def on_resize(self) -> None:
+        at_end = self.is_vertical_scroll_end
         self._draw()
+        if at_end:
+            self.call_after_refresh(
+                self.scroll_end, animate=False, immediate=True, x_axis=False
+            )
 
     def _draw(self) -> None:
         # A pane with no room draws nothing; the resize that gives it room draws.
