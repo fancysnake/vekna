@@ -18,6 +18,10 @@ when.
   takes the mark back. The daemon keeps the mark, so every window shows it. A
   daemon older than this release does not take the mark, and the window says
   so.
+- **`vekna service enable|start|stop|restart|disable`** runs the daemon as a
+  systemd user service. The unit runs the user's own `vekna` from the home
+  directory, with a `PATH` of the user's own tools, so nothing of the project
+  it was enabled in reaches the daemon or its casts.
 
 ## [3.0.0] - 2026-11-22
 
