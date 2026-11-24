@@ -315,16 +315,21 @@ view: every cast that is live, and every cast that ended less than a day ago.
 
 A ritual line holds the casts that still run or ask. A cast that ended moves
 under the project's `finished` line, which lists every ended cast by ritual. A
-cast that ended like the cast before it, of the same ritual and arguments, is
-not drawn: the newest one stands for the streak and says how long it is, `x8`.
-Two casts ended alike when their status, their result and their error are the
-same. A cast that another cast queued hangs under that cast and says its ritual;
-where casts of one ritual differ by an argument, each says which: `--number 347`.
+cast that ended like the cast before it, of the same ritual and arguments, and
+began in the same slot, is not drawn: the newest one stands for the streak and
+says how long it is, `x8`. Two casts ended alike when their status is the
+same, and so are the statuses of the casts they queued: a slot is one line
+unless a cast in it failed. A cast that another cast queued hangs
+under that cast and says its ritual. A cast line says no argument: the right
+page has them.
 
-When the window opens, it folds the tree once to fit its height, and keeps as
-much as fits: every running cast open to its whole rite tree; then `finished`
+When the window opens, and each time `g` or `p` changes what it shows, it folds
+the tree once to fit its height, so that the tree needs no scrolling, and keeps
+as much as fits: every running cast open to its whole rite tree; then `finished`
 folded too; then the running casts back to one line; then every project where
-nothing runs folded as well. After that the folds are yours.
+nothing runs folded as well; then every project folded. After that the folds
+are yours. On opening, the tree is drawn once the daemon has replayed its
+casts. A line wider than the page is cut: the tree does not scroll sideways.
 
 A cast is one line; a running one also shows `…` and the rite it is on now, or
 the rite that asks. `space` on a cast opens its whole rite tree, and `space`

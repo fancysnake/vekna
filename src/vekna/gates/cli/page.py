@@ -108,13 +108,13 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
 
 
 # A cast under the cast that queued it says its ritual, which no line above it
-# does; any other says when it began, and the arguments that tell it apart.
+# does; any other says when it began.
 def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) -> str:
     if history:
         return _ended_said(view)
     if entry.nested:
-        return f"{view.hello.ritual} {entry.name}".rstrip()
-    return f"{ago(view, now)}  {entry.name}".rstrip()
+        return view.hello.ritual
+    return ago(view, now)
 
 
 def _ended_said(view: CastView) -> str:

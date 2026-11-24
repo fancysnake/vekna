@@ -30,6 +30,8 @@ _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
 _PAINTED = 0.3
 _TICK = 0.01
 _PATIENCE = 1000
+# The least a Textual tree indents a level by.
+_NARROWEST_GUIDES = 2
 # A line above the end of a long output, for scrolling up to.
 _UP = 10
 
@@ -633,6 +635,51 @@ class TestStreaks:
         assert head[-1].startswith("x3 — every cast since ")
 
     @staticmethod
+    async def test_a_line_stands_for_the_casts_of_one_slot_only():
+        hub = Hub()
+        minutes = {"c1": 150, "c2": 120, "c3": 30}
+        for cast_id, age in minutes.items():
+            _ran(hub, cast_id, age * 60)
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj",
+            "  finished",
+            "    sweep",
+            "      ✓ @<1h  c3",
+            "      ✓ @<3h  c2  x2",
+        ]
+
+    @staticmethod
+    async def test_casts_of_one_slot_that_did_not_fail_are_one_line():
+        hub = Hub()
+        began = datetime.now(UTC) - timedelta(hours=4)
+        for cast_id, found in (("c1", ["a"]), ("c2", [])):
+            began += timedelta(minutes=1)
+            hello = _hello(cast_id, "sweep").model_copy(update={"started_at": began})
+            hub.apply(hello)
+            hub.apply(CastGoodbye(cast_id=cast_id, status="ok", result=found))
+        hub.apply(_hello("k1", "look").model_copy(update={"enqueued_by": "c2"}))
+        hub.apply(CastGoodbye(cast_id="k1", status="ok"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj",
+            "  finished",
+            "    sweep",
+            "      ✓ @<6h  c2  x2",
+            "        ✓ look  k1",
+        ]
+
+    @staticmethod
     async def test_a_cast_still_running_is_never_folded_into_the_one_before():
         hub = Hub()
         _ran(hub, "c1", 20)
@@ -653,7 +700,7 @@ class TestStreaks:
         ]
 
     @staticmethod
-    async def test_casts_of_other_arguments_say_which_and_do_not_fold():
+    async def test_casts_of_other_arguments_do_not_fold_and_say_no_argument():
         hub = Hub()
         _ran(hub, "c1", 20, components={"number": 1, "batch": 7})
         _ran(hub, "c2", 10, components={"number": 2, "batch": 7})
@@ -667,8 +714,8 @@ class TestStreaks:
             "proj",
             "  finished",
             "    sweep",
-            "      ✓ @now  --number 2  c2",
-            "      ✓ @now  --number 1  c1",
+            "      ✓ @now  c2",
+            "      ✓ @now  c1",
         ]
 
     @staticmethod
@@ -807,7 +854,7 @@ class TestStreaks:
         ]
 
     @staticmethod
-    async def test_queued_casts_of_one_ritual_say_their_ritual_and_what_differs():
+    async def test_queued_casts_of_one_ritual_say_their_ritual_and_no_argument():
         hub = Hub()
         hub.apply(_hello("c1", "sweep"))
         for kid, number in (("k1", 1), ("k2", 2)):
@@ -822,10 +869,7 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines[-2:] == [
-            "      ▶ pr_fix --number 1  k1",
-            "      ▶ pr_fix --number 2  k2",
-        ]
+        assert lines[-2:] == ["      ▶ pr_fix  k1", "      ▶ pr_fix  k2"]
 
     @staticmethod
     async def test_a_queued_cast_hangs_under_the_cast_that_queued_it():
@@ -851,16 +895,29 @@ class TestStreaks:
         assert cursor == "c:c2"
 
 
-# A window that fits its first tree to its height, over a project with a cast
-# two rites in and a cast that ended.
-def _fitting() -> VeknaApp:
-    hub = Hub()
+# Longer than a fitting window waits for its casts to stop arriving.
+_SETTLED = 0.8
+
+
+def _running(hub: Hub) -> None:
     hub.apply(_hello("c1", "ci_watch"))
     hub.apply(_rite("r1", "watch"))
     hub.apply(RiteFinished(cast_id="c1", rite_id="r1", status="ok", finished_at=_WHEN))
     hub.apply(_rite("r2", "report"))
+
+
+def _ended(hub: Hub) -> None:
     hub.apply(_hello("c2", "sweep"))
     hub.apply(CastGoodbye(cast_id="c2", status="ok"))
+
+
+# A window that fits its tree to its height, over a project with a cast two
+# rites in and a cast that ended.
+def _fitting(hub: Hub | None = None) -> VeknaApp:
+    if hub is None:
+        hub = Hub()
+        _running(hub)
+        _ended(hub)
 
     async def branch_of(_: str) -> str | None:
         await asyncio.sleep(0)
@@ -889,7 +946,7 @@ class TestFitting:
         app = _fitting()
 
         async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause(_PAINTED)
+            await pilot.pause(_SETTLED)
 
             lines = _shape(app)
         assert lines == [
@@ -908,6 +965,73 @@ class TestFitting:
         app = _fitting()
 
         async with app.run_test(size=(100, 9)) as pilot:
+            await pilot.pause(_SETTLED)
+
+            lines = _shape(app)
+        assert lines == [
+            "proj (1 running)",
+            "ci_watch",
+            "▶ @now",
+            "✓ watch",
+            "▶ report",
+            "▸ finished",
+        ]
+
+    @staticmethod
+    async def test_the_tree_is_fitted_to_every_cast_the_daemon_replays():
+        hub = Hub()
+        _running(hub)
+        app = _fitting(hub)
+
+        async with app.run_test(size=(100, 9)) as pilot:
+            await pilot.pause(_PAINTED / 2)
+            early = _shape(app)
+            _ended(hub)
+            app.changed()
+            await pilot.pause(_SETTLED)
+
+            lines = _shape(app)
+        assert early == []
+        assert lines == [
+            "proj (1 running)",
+            "ci_watch",
+            "▶ @now",
+            "✓ watch",
+            "▶ report",
+            "▸ finished",
+        ]
+
+    @staticmethod
+    @pytest.mark.parametrize("key", ["g", "p"])
+    async def test_a_change_of_scope_fits_the_tree_again(key: str):
+        app = _fitting()
+
+        async with app.run_test(size=(100, 9)) as pilot:
+            await pilot.pause(_SETTLED)
+            await pilot.press("f")
+            await pilot.pause(_PAINTED)
+            folded = _shape(app)
+            await pilot.press(key)
+            await pilot.pause(_PAINTED)
+
+            lines = _shape(app)
+        assert folded == ["▸ proj (1 running)"]
+        assert lines == [
+            "proj (1 running)",
+            "ci_watch",
+            "▶ @now",
+            "✓ watch",
+            "▶ report",
+            "▸ finished",
+        ]
+
+    @staticmethod
+    async def test_the_every_project_command_fits_the_tree_again():
+        app = _fitting()
+
+        async with app.run_test(size=(100, 9)) as pilot:
+            await pilot.pause(_SETTLED)
+            await pilot.press("f", ":", "g", "enter")
             await pilot.pause(_PAINTED)
 
             lines = _shape(app)
@@ -919,6 +1043,25 @@ class TestFitting:
             "▶ report",
             "▸ finished",
         ]
+
+
+@pytest.mark.asyncio
+class TestWidth:
+    @staticmethod
+    async def test_a_line_wider_than_the_contents_is_cut_not_scrolled():
+        hub = Hub()
+        hub.apply(_hello("c1", "a_ritual_with_a_name_wider_than_the_contents_page"))
+        app = _app(hub, [])
+
+        async with app.run_test(size=(60, 20)) as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("k", "j", "j", "right", "end")
+            await pilot.pause(_PAINTED)
+
+            tree = app.query_one("#contents", Tree)
+        assert not tree.show_horizontal_scrollbar
+        assert tree.scroll_x == 0
+        assert tree.guide_depth == _NARROWEST_GUIDES
 
 
 @pytest.mark.asyncio

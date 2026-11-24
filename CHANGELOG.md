@@ -17,15 +17,21 @@ when.
   opens them all again.
 - **The window fits its first tree to its height**: a tall window opens with
   every running cast's whole rite tree, a short one with `finished` and the
-  projects where nothing runs folded.
+  projects where nothing runs folded. `g` and `p` fit the tree the same way.
+  The first tree is drawn once the daemon has replayed its casts, not cast by
+  cast.
+- **The window's tree is narrower**: a level indents by two columns, not
+  four, and a line wider than the page is cut where the tree used to scroll
+  sideways.
 
 ### Changed
 
 - **The window's tree view** draws a cast that ended like the cast before it,
-  of the same ritual and arguments, as one line with a count (`x8`). A ritual
+  of the same ritual and arguments, and began in the same slot, as one line
+  with a count (`x8`). A ritual
   line holds only the casts that still run or ask; every ended cast is under
   the project's `finished` line. A cast that another cast queued hangs under
-  that cast.
+  that cast. A cast line says no argument; the right page has them.
 - **When a cast began**, in the window, is a slot and no longer a count of
   minutes or hours: `@<1h`, `@<3h`, `@<6h`, `@<12h`, `@<1d`, then days.
 

@@ -39,8 +39,14 @@ from .page import LEAVES, head, holder, line_text, output, taken_head, taken_out
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
+# The least a Textual tree takes: the contents page is narrow, and what a line
+# says is worth more of it than the lines that join it to its parent.
+_GUIDE_DEPTH = 2
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
+# shortcut: a replay is taken as over when no cast came or ended for this
+# long, since the wire has no message that ends one; add one when it does.
+_SETTLE_SECONDS = 0.3
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
 _ASKS_NOTHING = "the cast asks nothing right now"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
@@ -87,7 +93,8 @@ class Contents(Tree[str]):
 # from it runs in, how long after it ended a cast moves to the history view,
 # the title it shows: the versions of this vekna and of its daemon, and how
 # long a cast taken over may ask nothing after an answer before it is left,
-# and whether the first tree it draws is folded to fit its height.
+# and whether a tree is folded to fit the window's height: the first it draws,
+# and the one it draws when it turns to every project or back to its own.
 @dataclass(frozen=True)
 class Opened:
     project: str
@@ -99,13 +106,28 @@ class Opened:
 
 
 # What the window opened with, whether it shows every project instead of the
-# project it opened in, and whether the first tree it draws is still to be
-# folded to fit its height.
+# project it opened in, and whether the next tree it draws is to be folded to
+# fit its height. A tree is fitted to casts that have stopped arriving: `seen`
+# is how many there are and how many of them run, and `seen_at` when that last
+# changed. Until then the contents are not drawn, so a daemon replaying its
+# casts does not show each of them come and end.
 @dataclass
 class _Scope:
     opened: Opened
     every: bool = False
     to_fit: bool = False
+    seen: tuple[int, int] = (0, 0)
+    seen_at: float = field(default_factory=monotonic)
+
+    def show(self, *, every: bool) -> None:
+        self.every = every
+        self.to_fit = self.opened.fit
+
+    def settled(self, casts: Casts) -> bool:
+        views = casts.casts.values()
+        if (seen := (len(views), sum(live(view) for view in views))) != self.seen:
+            self.seen, self.seen_at = seen, monotonic()
+        return monotonic() - self.seen_at >= _SETTLE_SECONDS
 
 
 # The claims this window made, the cast it has taken over, and the prompts of
@@ -221,7 +243,7 @@ class VeknaApp(App[None]):
     }
     #body { height: 1fr; }
     #left { width: 46; max-width: 50%; border-right: vkey $panel; }
-    #contents { height: 1fr; padding: 0 1; }
+    #contents { height: 1fr; padding: 0 1; overflow-x: hidden; }
     #elsewhere { display: none; height: auto; padding: 0 1; color: $warning; }
     #page { width: 1fr; padding: 0 1; }
     #head { height: auto; max-height: 50%; }
@@ -284,6 +306,7 @@ class VeknaApp(App[None]):
         tree = self._w.contents
         tree.show_root = False
         tree.auto_expand = False
+        tree.guide_depth = _GUIDE_DEPTH
         tree.focus()
         self.set_interval(_COALESCE_SECONDS, self._paced)
         self.set_interval(_TICK_SECONDS, self.changed)
@@ -322,13 +345,13 @@ class VeknaApp(App[None]):
     def action_every(self) -> None:
         if self._locked():
             return
-        self._scope.every = True
+        self._scope.show(every=True)
         self.changed()
 
     def action_home(self) -> None:
         if self._locked():
             return
-        self._scope.every = False
+        self._scope.show(every=False)
         self.changed()
 
     def action_history(self) -> None:
@@ -452,7 +475,7 @@ class VeknaApp(App[None]):
         if typed.lower() in {"q", "quit"}:
             self.exit()
         elif typed.lower() in {"g", "p"}:
-            self._scope.every = typed.lower() == "g"
+            self._scope.show(every=typed.lower() == "g")
         elif typed.lower() == "t":
             self.action_take()
         elif typed.lower().startswith("c "):
@@ -629,7 +652,10 @@ class VeknaApp(App[None]):
         # window, leaves the output short of its newest line.
         if mounted and not self._view.dirty and self._follows():
             self._to_end(self._w.log.scroll_y)
+        settled = self._scope.settled(self._casts)
         if not self._view.dirty or not mounted:
+            return
+        if self._scope.to_fit and not settled:
             return
         self._view.dirty = False
         taken = self._taken()
