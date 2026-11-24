@@ -548,11 +548,11 @@ class TestContents:
             await pilot.pause(_PAINTED)
             await pilot.press("g")
             await pilot.pause(_PAINTED)
-            every = (app.sub_title, _contents(app)[::3])
+            every = (_text(app, "#scope"), _contents(app)[::3])
             await pilot.press("p")
             await pilot.pause(_PAINTED)
 
-            home = (app.sub_title, _contents(app)[::3])
+            home = (_text(app, "#scope"), _contents(app)[::3])
         assert every == (
             "2 running  (all projects)",
             ["other (1 running)", "proj (1 running)"],
@@ -600,6 +600,17 @@ class TestVersion:
             hint = _text(app, "#hint")
         assert version == "vekna 1.2.0 · daemon 1.1.0"
         assert hint.endswith("q quit")
+
+    @staticmethod
+    async def test_the_hint_stays_whole_in_80_columns():
+        app = _app(Hub(), [], title="vekna 3.0.0")
+
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause(_PAINTED)
+
+            hint_height = app.query_one("#hint", Static).size.height
+            foot_height = app.query_one("#foot").size.height
+        assert foot_height == hint_height
 
 
 # A cast of `sweep` that began `age` seconds ago and has ended.
@@ -1501,8 +1512,22 @@ class TestCommands:
             await pilot.press("c", "ctrl+u", "g", "enter")
             await pilot.pause(_PAINTED)
 
-            title = app.sub_title
+            title = _text(app, "#scope")
         assert title == "no casts  (all projects)"
+
+    @staticmethod
+    async def test_an_empty_window_says_which_projects_it_shows():
+        app = _app(Hub(), [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            home = _text(app, "#scope")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+
+            every = _text(app, "#scope")
+        assert home == "no casts  (proj)"
+        assert every == "no casts  (all projects)"
 
     @staticmethod
     async def test_t_typed_takes_the_prompt_over():
@@ -1844,7 +1869,7 @@ class TestTakingOver:
             await pilot.pause(_PAINTED)
 
             note = _text(app, "#note")
-            where = app.sub_title
+            where = _text(app, "#scope")
         assert note == "took over pr_fix c1"
         assert where == "1 waiting  (proj)"
 

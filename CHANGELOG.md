@@ -23,6 +23,10 @@ when.
 - **The window's tree is narrower**: a level indents by two columns, not
   four, and a line wider than the page is cut where the tree used to scroll
   sideways.
+- **`vekna service enable|start|stop|restart|disable`** runs the daemon as a
+  systemd user service. The unit runs the user's own `vekna` from the home
+  directory, with a `PATH` of the user's own tools, so nothing of the project
+  it was enabled in reaches the daemon or its casts.
 
 ### Changed
 

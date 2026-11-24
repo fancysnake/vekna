@@ -643,6 +643,44 @@ Prints `stopped the daemon` once the socket stops answering, so `vekna stop &&
 vekna` starts a fresh one. With nothing listening, `no daemon running`; both
 exit `0`.
 
+## `vekna service`
+
+Runs the daemon as a systemd user service, so it starts at login and vigils run
+with no `vekna` typed first. The subcommands are systemd's own:
+
+```bash
+vekna service enable
+vekna service start
+vekna service stop
+vekna service restart
+vekna service disable
+```
+
+`enable` writes `~/.config/systemd/user/vekna.service` and has systemd start it
+at login; `start` starts it now. On a system that does not run systemd, `enable`
+fails and writes nothing.
+
+The service takes nothing from the project or the shell `enable` was typed in.
+It runs from the home directory, with a `PATH` of the user's own tools and no
+other variable of the shell's:
+`~/.local/bin:~/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin`. The
+`vekna` it runs is the first one on that `PATH`, so a `vekna` installed only in
+a project's environment is refused: `pipx install vekna`. Casts inherit the
+same `PATH`, so the agent's CLI has to be on it. `enable` replaces the unit
+each time, so put changes of your own in a drop-in with `systemctl --user edit
+vekna`.
+
+Only one daemon can hold the socket, and the service never stops one started
+by hand: while it runs, `start`, `restart` and `stop` do nothing but say to
+`vekna stop` it. When the service runs the daemon, `stop` runs `vekna stop`, so
+casts carry on and rejoin the next daemon, and `vekna stop` typed by hand stops
+the service too. Under
+systemd the daemon writes to the journal, not to `daemon.log`: `journalctl
+--user -u vekna`.
+
+A user service stops at logout. `loginctl enable-linger "$USER"` starts it at
+boot and keeps it running with nobody logged in.
+
 ## `vekna version`
 
 Prints this vekna's version, then the version of the daemon on the socket. It
