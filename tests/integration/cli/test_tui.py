@@ -1686,6 +1686,33 @@ class TestFollowing:
         assert arrived[0] == arrived[1]
         assert arrived[1] == resized[1] + 1
 
+    @staticmethod
+    async def test_a_pane_that_got_narrower_and_taller_leaves_a_scrolled_up_reader():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        for number in range(60):
+            hub.apply(
+                RiteDelta(cast_id="c1", rite_id="r1", delta=f"{number} {'w' * 70}")
+            )
+        app = _app(hub, [])
+
+        async with app.run_test(size=(120, 24)) as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: _at_end(log))
+            log.scroll_to(y=log.max_scroll_y - _UP, animate=False, immediate=True)
+            await pilot.pause(_PAINTED)
+            await pilot.resize_terminal(60, 40)
+            await pilot.pause(_PAINTED)
+            resized = (log.scroll_y, log.max_scroll_y)
+
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="newest"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            arrived = (log.scroll_y, log.max_scroll_y)
+        assert resized[0] < resized[1]
+        assert arrived[0] < arrived[1]
+
     # Textual highlights the root of a tree it has just cleared, and that
     # highlight can land after the page is drawn.
     @staticmethod
