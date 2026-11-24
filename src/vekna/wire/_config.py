@@ -15,14 +15,19 @@ _CONFIG_ENV = "XDG_CONFIG_HOME"
 _PROJECT_CONFIG = ".vekna.toml"
 
 
+# The directory every program of the user's keeps its config under.
+def config_home() -> Path:
+    if (named := os.environ.get(_CONFIG_ENV)) is not None:
+        return Path(named)
+    return Path.home() / ".config"
+
+
 # What the user configured, which is the one thing of vekna's that belongs in
 # the config namespace — the journal and the debug log are state and live under
 # `default_state_root()`. Here because the cast reads `[rituals]` from it and
 # the daemon reads `[circle]`.
 def default_config_path() -> Path:
-    if (named := os.environ.get(_CONFIG_ENV)) is not None:
-        return Path(named) / "vekna" / "config.toml"
-    return Path.home() / ".config" / "vekna" / "config.toml"
+    return config_home() / "vekna" / "config.toml"
 
 
 # The project's own config, nearest first, as both ends find it.

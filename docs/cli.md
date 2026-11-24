@@ -634,8 +634,8 @@ vekna service disable
 ```
 
 `enable` writes `~/.config/systemd/user/vekna.service` and has systemd start it
-at login; `start` starts it now. On a system that does not run systemd, every
-subcommand fails and nothing is written.
+at login; `start` starts it now. On a system that does not run systemd, `enable`
+fails and writes nothing.
 
 The service takes nothing from the project or the shell `enable` was typed in.
 It runs from the home directory, with a `PATH` of the user's own tools and no
@@ -648,9 +648,10 @@ each time, so put changes of your own in a drop-in with `systemctl --user edit
 vekna`.
 
 Only one daemon can hold the socket, and the service never stops one started
-by hand: while it runs, `start` and `restart` do nothing but say to `vekna
-stop` it first. `stop` runs `vekna stop`, so casts carry on and rejoin the
-next daemon, and `vekna stop` typed by hand stops the service too. Under
+by hand: while it runs, `start`, `restart` and `stop` do nothing but say to
+`vekna stop` it. When the service runs the daemon, `stop` runs `vekna stop`, so
+casts carry on and rejoin the next daemon, and `vekna stop` typed by hand stops
+the service too. Under
 systemd the daemon writes to the journal, not to `daemon.log`: `journalctl
 --user -u vekna`.
 

@@ -4,12 +4,14 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
-from vekna.wire import default_config_path
+from vekna.wire import config_home
 
 UNIT = "vekna.service"
 _SYSTEMCTL = "systemctl"
 _VEKNA = "vekna"
 _NO_SYSTEMCTL = "systemctl is not on PATH"
+# What `systemctl is-active` exits with for a unit that is not running.
+_INACTIVE = 3
 # Where a user's own tools are installed, under home: pip and pipx, then mise.
 _HOME_TOOLS = (".local/bin", ".local/share/mise/shims")
 _SYSTEM_TOOLS = "/usr/local/bin:/usr/bin:/bin"
@@ -50,7 +52,7 @@ def _line(words: Sequence[str]) -> str:
 
 # Where systemd looks for a user's own units.
 def unit_path() -> Path:
-    return default_config_path().parents[1] / "systemd" / "user" / UNIT
+    return config_home() / "systemd" / "user" / UNIT
 
 
 def search_path() -> str:
@@ -79,10 +81,15 @@ def write_unit(*, vekna: str) -> Path:
     return path
 
 
-# What went wrong, in a sentence, or `None`.
-async def systemctl(*args: str) -> str | None:
+class SystemctlError(OSError):
+    def __init__(self, message: str, *, code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+async def systemctl(*args: str) -> None:
     if (found := shutil.which(_SYSTEMCTL)) is None:
-        return _NO_SYSTEMCTL
+        raise SystemctlError(_NO_SYSTEMCTL)
     ran = await asyncio.create_subprocess_exec(
         found,
         "--user",
@@ -94,5 +101,18 @@ async def systemctl(*args: str) -> str | None:
     said, _ = await ran.communicate()
     if ran.returncode:
         told = said.decode(errors="replace").strip()
-        return f"`systemctl --user {' '.join(args)}` failed ({ran.returncode}): {told}"
-    return None
+        message = (
+            f"`systemctl --user {' '.join(args)}` failed ({ran.returncode}): {told}"
+        )
+        raise SystemctlError(message, code=ran.returncode)
+
+
+# Not running is an answer; anything else systemctl fails with is not.
+async def unit_running() -> bool:
+    try:
+        await systemctl("is-active", "--quiet", UNIT)
+    except SystemctlError as error:
+        if error.code == _INACTIVE:
+            return False
+        raise
+    return True

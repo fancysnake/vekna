@@ -4,10 +4,10 @@ import importlib
 import logging
 import os
 import sys
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Coroutine, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, TypeVar, cast
+from typing import Literal, Protocol, TypeVar, cast
 
 import click
 from click import Group
@@ -21,9 +21,10 @@ from vekna.links.circle_config import MACHINE_KEYS, circle_problems
 from vekna.links.journal import Journal
 from vekna.links.service import (
     UNIT,
+    SystemctlError,
     search_path,
     systemctl,
-    unit_path,
+    unit_running,
     user_vekna,
     write_unit,
 )
@@ -463,21 +464,25 @@ def _stop() -> None:
     click.echo(asyncio.run(stop_daemon()))
 
 
-# Asked before any subcommand runs: with no user manager answering there is
-# nothing to enable, and nothing is written.
 @click.group("service", help="Run the daemon as a systemd user service.")
-def _service() -> None:
-    if (problem := asyncio.run(systemctl("show-environment"))) is not None:
-        message = f"`vekna service` needs systemd, and it is not answering: {problem}"
-        raise click.ClickException(message)
+def _service() -> None: ...
 
 
-async def _systemd(*args: str) -> None:
-    if (problem := await systemctl(*args)) is not None:
-        raise click.ClickException(problem)
+def _systemd(work: Coroutine[object, object, _Reply]) -> _Reply:
+    try:
+        return asyncio.run(work)
+    except SystemctlError as error:
+        raise click.ClickException(str(error)) from error
 
 
+# With no user manager answering there is nothing to enable, and nothing is
+# written.
 async def _enabled() -> str:
+    try:
+        await systemctl("show-environment")
+    except SystemctlError as error:
+        message = f"`vekna service` needs systemd, and it is not answering: {error}"
+        raise click.ClickException(message) from error
     if (vekna := user_vekna()) is None:
         message = (
             f"no vekna of your own on {search_path()}: the service never runs a"
@@ -489,8 +494,8 @@ async def _enabled() -> str:
     except OSError as error:
         message = f"could not write the unit: {error}"
         raise click.ClickException(message) from error
-    await _systemd("daemon-reload")
-    await _systemd("enable", UNIT)
+    await systemctl("daemon-reload")
+    await systemctl("enable", UNIT)
     return f"wrote {unit}: {vekna} starts at login — `vekna service start` for now"
 
 
@@ -498,48 +503,52 @@ async def _enabled() -> str:
     "enable", help="Write the unit and have systemd start the daemon at login."
 )
 def _service_enable() -> None:
-    click.echo(asyncio.run(_enabled()))
+    click.echo(_systemd(_enabled()))
 
 
 @click.command("disable", help="No longer start the daemon at login.")
 def _service_disable() -> None:
-    asyncio.run(_systemd("disable", UNIT))
+    _systemd(systemctl("disable", UNIT))
     click.echo("the daemon no longer starts at login")
 
 
 # A daemon started by hand holds the socket's lock, so systemd cannot start
 # its own beside it. It is never stopped from here: the windows and followers
 # attached to it would end with it.
-async def _started(*, verb: str) -> None:
-    if not unit_path().is_file():
-        message = f"no unit at {unit_path()}: `vekna service enable` first"
-        raise click.ClickException(message)
-    if await systemctl("is-active", "--quiet", UNIT) is not None and await alive(
-        default_socket_path()
-    ):
+async def _leave_hand_started(*, then: str) -> None:
+    if not await unit_running() and await alive(default_socket_path()):
         message = (
             "a daemon started by hand is running, and the service leaves it"
-            f" alone: `vekna stop` when you are ready, then `vekna service {verb}`"
+            f" alone: `vekna stop` {then}"
         )
         raise click.ClickException(message)
-    await _systemd(verb, UNIT)
+
+
+async def _under_systemd(*, verb: Literal["start", "restart"]) -> None:
+    await _leave_hand_started(then=f"when you are ready, then `vekna service {verb}`")
+    await systemctl(verb, UNIT)
+
+
+async def _stopped() -> None:
+    await _leave_hand_started(then="ends it")
+    await systemctl("stop", UNIT)
 
 
 @click.command("start", help="Start the daemon under systemd.")
 def _service_start() -> None:
-    asyncio.run(_started(verb="start"))
+    _systemd(_under_systemd(verb="start"))
     click.echo("started the daemon under systemd")
 
 
 @click.command("restart", help="Restart the daemon systemd runs.")
 def _service_restart() -> None:
-    asyncio.run(_started(verb="restart"))
+    _systemd(_under_systemd(verb="restart"))
     click.echo("restarted the daemon under systemd")
 
 
 @click.command("stop", help="Stop the daemon. Running casts rejoin the next one.")
 def _service_stop() -> None:
-    asyncio.run(_systemd("stop", UNIT))
+    _systemd(_stopped())
     click.echo("stopped the daemon")
 
 

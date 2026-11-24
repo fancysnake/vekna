@@ -120,10 +120,19 @@ class TestServiceWithoutSystemd:
         assert not _unit(home).exists()
 
     @staticmethod
+    def test_help_needs_no_systemd(home: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("PATH", str(home / "empty"))
+
+        ran = _service("enable", "--help")
+
+        assert ran.exit_code == 0
+        assert ran.output.startswith("Usage: ")
+
+    @staticmethod
     def test_a_user_manager_that_does_not_answer_fails_the_command(home: Path):
         _tool(home.parent / "project" / "systemctl", "echo no user bus\nexit 1\n")
 
-        ran = _service("stop")
+        ran = _service("enable")
 
         assert ran.exit_code == 1
         assert ran.output == (
@@ -133,16 +142,6 @@ class TestServiceWithoutSystemd:
 
 class TestServiceRuns:
     @staticmethod
-    def test_start_without_a_unit_says_to_enable_first(home: Path):
-        ran = _service("start")
-
-        assert ran.exit_code == 1
-        assert ran.output == (
-            f"Error: no unit at {_unit(home)}: `vekna service enable` first\n"
-        )
-        assert _asked(home) == ["--user show-environment"]
-
-    @staticmethod
     def test_start_starts_a_unit_that_is_not_running(home: Path):
         _service("enable")
 
@@ -151,7 +150,6 @@ class TestServiceRuns:
         assert ran.exit_code == 0
         assert ran.output == "started the daemon under systemd\n"
         assert _asked(home)[3:] == [
-            "--user show-environment",
             "--user is-active --quiet vekna.service",
             "--user start vekna.service",
         ]
@@ -165,7 +163,6 @@ class TestServiceRuns:
 
         assert ran.exit_code == 0
         assert _asked(home)[3:] == [
-            "--user show-environment",
             "--user is-active --quiet vekna.service",
             "--user start vekna.service",
         ]
@@ -179,7 +176,6 @@ class TestServiceRuns:
         assert ran.exit_code == 0
         assert ran.output == "restarted the daemon under systemd\n"
         assert _asked(home)[3:] == [
-            "--user show-environment",
             "--user is-active --quiet vekna.service",
             "--user restart vekna.service",
         ]
@@ -195,9 +191,8 @@ class TestServiceRuns:
             "the daemon no longer starts at login\n",
         )
         assert _asked(home) == [
-            "--user show-environment",
+            "--user is-active --quiet vekna.service",
             "--user stop vekna.service",
-            "--user show-environment",
             "--user disable vekna.service",
         ]
 
@@ -214,6 +209,41 @@ class TestServiceRuns:
         assert ran.output == (
             "Error: `systemctl --user stop vekna.service` failed (5): not loaded\n"
         )
+
+    @staticmethod
+    def test_start_says_a_systemctl_that_cannot_tell_if_the_unit_runs(home: Path):
+        _tool(
+            home.parent / "project" / "systemctl",
+            '[ "$2" = is-active ] && echo no user bus && exit 1\nexit 0\n',
+        )
+
+        ran = _service("start")
+
+        assert ran.exit_code == 1
+        assert ran.output == (
+            "Error: `systemctl --user is-active --quiet vekna.service`"
+            " failed (1): no user bus\n"
+        )
+
+    @staticmethod
+    def test_stop_leaves_a_daemon_started_by_hand_running(home: Path):
+        with socket.socket(socket.AF_UNIX) as by_hand:
+            by_hand.bind(str(home.parent / "vekna.sock"))
+            by_hand.listen()
+
+            ran = _service("stop")
+
+            probe, _ = by_hand.accept()
+            with probe:
+                sent = probe.recv(1024)
+
+        assert ran.exit_code == 1
+        assert ran.output == (
+            "Error: a daemon started by hand is running, and the service leaves"
+            " it alone: `vekna stop` ends it\n"
+        )
+        assert sent == b""
+        assert _asked(home) == ["--user is-active --quiet vekna.service"]
 
     @staticmethod
     @pytest.mark.parametrize("verb", ["start", "restart"])
@@ -236,7 +266,4 @@ class TestServiceRuns:
             f" `vekna service {verb}`\n"
         )
         assert sent == b""
-        assert _asked(home)[3:] == [
-            "--user show-environment",
-            "--user is-active --quiet vekna.service",
-        ]
+        assert _asked(home)[3:] == ["--user is-active --quiet vekna.service"]
