@@ -23,6 +23,10 @@ when.
 - **The window wraps its output.** A line wider than the output pane is drawn
   over as many rows as it needs, and again at the new width when the window
   is resized. The pane no longer scrolls sideways. (#348)
+- **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
+  the agent does not commit, push or run the whole-repo check a second time;
+  name as data what the agent fetches itself, which no marker surrounds; key a
+  session thread on the work item when one cast works several.
 
 ## [3.0.0] - 2026-11-22
 

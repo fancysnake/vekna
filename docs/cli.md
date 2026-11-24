@@ -307,29 +307,8 @@ vekna --no-tui
 passes, and the log says what it did with each one, including the ones it
 dropped. A daemon already running is not restarted for it; the window says so.
 
-In a terminal the window is drawn with Textual, as two pages of a book. The left
-page is the contents: a tree of project, ritual, the ritual's casts newest first
-(`@now` while live, `@3h ago` once ended), and their rites. This is the tree
-view: every cast that is live, and every cast that ended less than a day ago. A
-cast does not leave it when it ends. A cast is one line; a running one also
-shows `…` and the rite it is on now, or the rite that asks. `space` on a cast
-opens its whole rite tree, and `space` again closes it. The right page is the
-line under the cursor in full: a project's branch and directory, a ritual's
-casts with their flags, a cast's whole rite tree, or a rite's whole error. Below
-it is the output, which follows the newest line until you scroll up. The branch
-is read off git every few seconds, because a cast can switch it.
-
-On any other line `space` folds: the fold hides everything under the line, and
-the line says what happens there: `▸ ci_watch (1 asks, 1 fail, 2 running)`. A
-project line always says it.
-
-`H` turns the left page to the history view, and `H` again turns it back. The
-history view holds the casts that ended a day ago or more, grouped by the day
-they ended, newest first, each with the time it ended and its ritual. The hint
-line says how many it holds: `H history (12)`. Both views
-show what the daemon has held since it started; `vekna log` has the rest.
-
-How long a cast stays in the tree view after it ends is `history_after`, an
+In a terminal the window is drawn with Textual. How long a cast stays in the
+tree view after it ends is `history_after`, an
 [ISO 8601 duration](https://en.wikipedia.org/wiki/ISO_8601#Durations), in the
 project's `.vekna.toml` or in `~/.config/vekna/config.toml`, the
 [nearest that sets it](scopes.md#which-setting-wins):
@@ -355,22 +334,10 @@ A value that does not read is named in the window's note line and passed over.
 | `g` / `p` | every project / this one |
 | `q` | close the window; the daemon keeps running |
 
-A cast that waits on you is one line on top, naming the cast. Take it over to
-read the question. The left page then opens the cast's whole rite tree, and
-the right page is its output. Every prompt it asks is claimed and shown at the
-end of that output, and the line under the output answers it on Enter. The
-contents take no keys meanwhile, and a prompt from another cast shows as one
-line under them. Esc leaves and hands the open prompts back to whoever was
-answering them. The takeover also ends when the cast does, and when the cast
-asks nothing for five seconds after an answer. It covers that one
-cast: a cast it queued is taken over on its own.
 `--no-tui`, or no terminal on stdin and stdout, gives the line view described
 below, which repaints whole and reads a line at a time.
-
-A project is a repository, not a directory: every worktree of one shares its git
-common dir, and its casts group under that. A directory in no repository is its
-own project. `g` shows every project's casts, read only; `p` comes back to this
-one.
+[The window](tui.md) walks through the tree view, the takeover, the fold, the
+history view and the scope, with a screenshot of each screen.
 
 One row per cast, and no output in any of them — the row is for deciding which
 cast to go and look at:
