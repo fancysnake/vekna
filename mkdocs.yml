@@ -78,6 +78,7 @@ nav:
   - Going further:
       - testing.md
       - examples.md
+      - tui.md
       - cli.md
   - Before you cast:
       - safety.md

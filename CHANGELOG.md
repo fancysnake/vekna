@@ -18,10 +18,22 @@ when.
   that a vigil started to a thread in the project's Discord channel, and takes
   a reply from an allowed user as the answer. `docs/cli.md` § Discord has the
   bot setup.
+- **`s` in the window marks a failed cast seen.** The cast keeps its `✗` and
+  loses the red, and no fold or project line counts it as a fail. `s` again
+  takes the mark back. The daemon keeps the mark, so every window shows it. A
+  daemon older than this release does not take the mark, and the window says
+  so.
 - **`vekna service enable|start|stop|restart|disable`** runs the daemon as a
   systemd user service. The unit runs the user's own `vekna` from the home
   directory, with a `PATH` of the user's own tools, so nothing of the project
   it was enabled in reaches the daemon or its casts.
+
+### Changed
+
+- **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
+  the agent does not commit, push or run the whole-repo check a second time;
+  name as data what the agent fetches itself, which no marker surrounds; key a
+  session thread on the work item when one cast works several.
 
 ## [3.0.0] - 2026-11-22
 

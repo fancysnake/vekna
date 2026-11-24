@@ -10,11 +10,10 @@ from .cast_text import ended, innermost, live
 
 Kind = Literal["project", "ritual", "cast", "more", "rite", "day"]
 
-_FAILED = frozenset({"error", "disconnected"})
-
 
 # What happens under a node: a fold hides the node's children, and these are
-# what it says instead. A cast that asks is counted as asking only.
+# what it says instead. A cast that asks is counted as asking only, and a
+# failed one marked seen is not counted.
 @dataclass(frozen=True)
 class Counts:
     asks: int = 0
@@ -209,7 +208,7 @@ def _counts(view: CastView) -> Counts:
         return Counts(asks=1)
     if live(view):
         return Counts(running=1)
-    return Counts(fails=int(view.status in _FAILED))
+    return Counts(fails=int(view.failed and not view.seen))
 
 
 # The rite that says what the cast is doing: the one that asks, else the

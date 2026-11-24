@@ -21,6 +21,7 @@ from vekna.wire import (
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     CastUpdate,
     CodingSlotGranted,
     CodingSlotReleased,
@@ -59,6 +60,7 @@ _NO_AWAIT = "no such await"
 _CLAIMED_ELSEWHERE = "another surface has claimed the prompt"
 _STARTS_NOTHING = "this daemon starts no casts"
 _KEEPS_NO_POOL = "this daemon keeps no worktree pool"
+_NOT_FAILED = "no such failed cast"
 _NOT_BLOCKED = "the cast left no such tree blocked"
 _LOCKS = (LockAcquireRequested, LockGranted, LockDenied, LockReleased)
 _SLOTS = (CodingSlotRequested, CodingSlotGranted, CodingSlotReleased)
@@ -227,6 +229,22 @@ class Hub(CastBoard, Routes):
         )
         return False
 
+    # Said to every surface as the cast's goodbye again: a surface that predates
+    # `seen` reads the ending it already has. Not journaled.
+    @override
+    def mark(self, request: CastSeen) -> CastGoodbye | CastRefused:
+        view = self._casts.get(request.cast_id)
+        if view is None or view.ended is None or not view.failed:
+            self._drop(request, reason=_NOT_FAILED)
+            return CastRefused(
+                reason=f"not marked {request.cast_id[:SHORT_ID]}: {_NOT_FAILED}"
+            )
+        view.ended = view.ended.model_copy()
+        view.ended.seen = request.seen
+        self._fan_out(view.ended)
+        self._say(kind=request.kind, cast_id=request.cast_id, action="applied")
+        return view.ended
+
     # Told to every surface and to the cast, so whoever was answering it stops.
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None:
         view = self._casts.get(claimed.cast_id)
@@ -312,7 +330,9 @@ class Hub(CastBoard, Routes):
         for surface in gone:
             self.detach_surface(surface)
 
-    def _drop(self, message: CastMessage | CastCancelRequested, *, reason: str) -> None:
+    def _drop(
+        self, message: CastMessage | CastCancelRequested | CastSeen, *, reason: str
+    ) -> None:
         self._say(
             kind=message.kind, cast_id=message.cast_id, action="dropped", reason=reason
         )
@@ -399,7 +419,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
 # A cast that is gone is not still asking, nor awaiting, nor inside a rite.
 def _end(view: CastView, goodbye: CastGoodbye) -> None:
     view.status = goodbye.status
-    view.detail = goodbye.detail
+    view.ended = goodbye
     view.waiting.clear()
     view.on_children.clear()
 
@@ -495,12 +515,9 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
 # A cast that ended before this surface arrived still shows, and shows how it
 # ended — `vekna log` lists recent casts, and the daemon has not forgotten
 # this one yet.
-def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
-    match view.status:
-        case "ok" | "error" | "disconnected" as status:
-            yield CastGoodbye(
-                cast_id=view.hello.cast_id, status=status, detail=view.detail
-            )
+def _replay_goodbye(view: CastView) -> Iterator[CastGoodbye]:
+    if view.ended is not None and view.status != "queued":
+        yield view.ended
 
 
 def _hold(view: CastView, request_id: str, *, claim_id: str | None) -> str | None:

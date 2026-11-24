@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 
 from vekna.wire import (
     AwaitRequested,
+    CastGoodbye,
     CastHello,
     CastMessage,
     CastStatus,
@@ -85,7 +86,9 @@ class Prompt:
 class CastView:
     hello: CastHello
     status: CastStatus = "running"
-    detail: str | None = None
+    # The goodbye it ended with, carrying the operator's mark on a failure
+    # seen: a surface stops drawing that one loud.
+    ended: CastGoodbye | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, Prompt] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no
@@ -93,6 +96,18 @@ class CastView:
     on_children: dict[str, AwaitRequested] = field(default_factory=dict)
     # The pooled tree it left unparkable, if it did.
     blocked: TreeBlocked | None = None
+
+    @property
+    def detail(self) -> str | None:
+        return None if self.ended is None else self.ended.detail
+
+    @property
+    def seen(self) -> bool:
+        return self.ended is not None and self.ended.seen
+
+    @property
+    def failed(self) -> bool:
+        return self.status in {"error", "disconnected"}
 
     # The last time the journal puts on the cast: nothing else in it is dated.
     @property

@@ -7,10 +7,12 @@ from vekna.wire import (
     AltarTended,
     CastAdmitted,
     CastCancelRequested,
+    CastGoodbye,
     CastMessage,
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     DecideClaimed,
     DecideReleased,
     DecideResolved,
@@ -29,7 +31,8 @@ class Surface(Protocol):
 # surface is attached, and can ask for a cast, claim a prompt, release its
 # claim, answer a prompt and cancel a cast. An altar, a cast asked for by a
 # connection that says nothing else, and a cast typed by hand asking whether
-# there is room are answered down their own connection.
+# there is room are answered down their own connection, and so is a window
+# marking a failed cast seen.
 class Routes(Protocol):
     def apply(self, message: CastMessage) -> None: ...
     def attach_surface(self, surface: Surface) -> None: ...
@@ -39,6 +42,7 @@ class Routes(Protocol):
     def claim(self, surface: Surface, claimed: DecideClaimed) -> None: ...
     def release(self, surface: Surface, released: DecideReleased) -> None: ...
     def cancel(self, surface: Surface, cancel: CastCancelRequested) -> None: ...
+    def mark(self, request: CastSeen) -> CastGoodbye | CastRefused: ...
     def open_cast(self, cast_id: str, peer: Surface) -> None: ...
     def close_cast(self, cast_id: str, peer: Surface) -> None: ...
     async def altar(self, request: AltarRequested) -> AltarTended | CastRefused: ...

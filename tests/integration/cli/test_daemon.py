@@ -42,6 +42,7 @@ from vekna.wire import (
     CastQueued,
     CastRefused,
     CastRequested,
+    CastSeen,
     CodingSlotGranted,
     CodingSlotReleased,
     CodingSlotRequested,
@@ -62,6 +63,7 @@ from vekna.wire import (
     WireMessage,
     default_state_root,
     encode_frame,
+    mark_seen,
     project_of,
     read_frames,
 )
@@ -331,6 +333,26 @@ class TestProjects:
 
 @pytest.mark.asyncio
 class TestPeers:
+    @staticmethod
+    async def test_a_failed_cast_is_marked_seen_and_no_other_cast_is(socket_path: Path):
+        async with _served(socket_path):
+            writer = await _say(
+                socket_path, _hello(), CastGoodbye(cast_id="c1", status="error")
+            )
+
+            refused = await mark_seen(socket_path, CastSeen(cast_id="nobody"))
+            marked: str | None = "never asked"
+            for _ in range(_PATIENCE):
+                if (
+                    marked := await mark_seen(socket_path, CastSeen(cast_id="c1"))
+                ) is None:
+                    break
+                await asyncio.sleep(_TICK)
+
+            assert refused == "not marked nobody: no such failed cast"
+            assert marked is None
+            writer.close()
+
     @staticmethod
     async def test_two_windows_see_the_same_casts(socket_path: Path):
         first, second = _Keys(), _Keys()
