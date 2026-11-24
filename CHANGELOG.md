@@ -18,6 +18,16 @@ when.
   that a vigil started to a thread in the project's Discord channel, and takes
   a reply from an allowed user as the answer. `docs/cli.md` § Discord has the
   bot setup.
+- **`f` in the window** folds every project, ritual and `finished` line, and
+  opens them all again.
+- **The window fits its first tree to its height**: a tall window opens with
+  every running cast's whole rite tree, a short one with `finished` and the
+  projects where nothing runs folded. `g` and `p` fit the tree the same way.
+  The first tree is drawn once the daemon has replayed its casts, not cast by
+  cast.
+- **The window's tree is narrower**: a level indents by two columns, not
+  four, and a line wider than the page is cut where the tree used to scroll
+  sideways.
 - **`s` in the window marks a failed cast seen.** The cast keeps its `✗` and
   loses the red, and no fold or project line counts it as a fail. `s` again
   takes the mark back. The daemon keeps the mark, so every window shows it. A
@@ -30,10 +40,23 @@ when.
 
 ### Changed
 
+- **The window's tree view** draws a cast that ended like the cast before it,
+  of the same ritual and arguments, and began in the same slot, as one line
+  with a count (`x8`). A ritual
+  line holds only the casts that still run or ask; every ended cast is under
+  the project's `finished` line. A cast that another cast queued hangs under
+  that cast. A cast line says no argument; the right page has them.
+- **When a cast began**, in the window, is a slot and no longer a count of
+  minutes or hours: `@<1h`, `@<3h`, `@<6h`, `@<12h`, `@<1d`, then days.
 - **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
   the agent does not commit, push or run the whole-repo check a second time;
   name as data what the agent fetches itself, which no marker surrounds; key a
   session thread on the work item when one cast works several.
+
+### Fixed
+
+- **`H` in the window** no longer turns to an empty history view. While no
+  cast is old enough, it stays in the tree view and says when a cast moves.
 
 ## [3.0.0] - 2026-11-22
 

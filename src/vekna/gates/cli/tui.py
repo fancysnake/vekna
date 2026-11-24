@@ -24,15 +24,33 @@ from vekna.wire import (
     WireMessage,
 )
 
-from .cast_text import counted, labelled, live, top_prompt
+from .cast_text import clock, counted, labelled, live, top_prompt
 from .commands import request_cast, send_answer
-from .contents import Entry, Reading, cast_key, contents, historic, walked
+from .contents import (
+    Entry,
+    Reading,
+    cast_key,
+    contents,
+    fitted,
+    folded_all,
+    historic,
+    walked,
+)
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
+# The least a Textual tree takes: the contents page is narrow, and what a line
+# says is worth more of it than the lines that join it to its parent.
+_GUIDE_DEPTH = 2
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
+# shortcut: a replay is taken as over when no cast came or ended for this
+# long, since the wire has no message that ends one; add one when it does.
+_SETTLE_SECONDS = 0.3
+# A tree that casts keep changing is still drawn: the question line and the
+# output must not wait on a daemon that never goes quiet.
+_FIT_WAIT_SECONDS = 2.0
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
 _ASKS_NOTHING = "the cast asks nothing right now"
 _NOTHING_TO_MARK = "only a failed cast can be marked seen"
@@ -45,8 +63,9 @@ _QUESTION_CHANGED = "the question changed — your answer was not sent"
 # `old` is how many ended casts the history view holds.
 def _hint(old: int = 0) -> str:
     return (
-        f"space open/fold · H history{f' ({old})' if old else ''} · w next asking"
-        " · t take over · x cancel · s seen · : command · g/p scope · q quit"
+        f"space open/fold · f fold all · H history{f' ({old})' if old else ''}"
+        " · w next asking · t take over · x cancel · s seen · : command"
+        " · g/p scope · q quit"
     )
 
 
@@ -87,7 +106,9 @@ class _ToDaemon:
 # What a window is opened with: its project, the directory a ritual started
 # from it runs in, how long after it ended a cast moves to the history view,
 # the title it shows: the versions of this vekna and of its daemon, and how
-# long a cast taken over may ask nothing after an answer before it is left.
+# long a cast taken over may ask nothing after an answer before it is left,
+# and whether a tree is folded to fit the window's height: the first it draws,
+# and the one it draws when it turns to every project or back to its own.
 @dataclass(frozen=True)
 class Opened:
     project: str
@@ -95,14 +116,39 @@ class Opened:
     history_after: timedelta
     title: str = "vekna"
     quiet: timedelta = timedelta(seconds=5)
+    fit: bool = False
 
 
-# What the window opened with, and whether it shows every project instead of
-# the project it opened in.
+# What the window opened with, whether it shows every project instead of the
+# project it opened in, and whether the next tree it draws is to be folded to
+# fit its height. A tree is fitted to casts that have stopped arriving: `seen`
+# is how many there are and how many of them run, and `seen_at` when that last
+# changed. Until then the contents are not drawn, so a daemon replaying its
+# casts does not show each of them come and end. It waits at most
+# `_FIT_WAIT_SECONDS` from when the fit was asked for.
 @dataclass
 class _Scope:
     opened: Opened
     every: bool = False
+    to_fit: bool = False
+    seen: tuple[int, int] = (0, 0)
+    seen_at: float = field(default_factory=monotonic)
+    fit_asked_at: float = field(default_factory=monotonic)
+
+    def show(self, *, every: bool) -> None:
+        self.every = every
+        self.to_fit = self.opened.fit
+        self.fit_asked_at = monotonic()
+
+    def settled(self, casts: Casts) -> bool:
+        views = casts.casts.values()
+        if (seen := (len(views), sum(live(view) for view in views))) != self.seen:
+            self.seen, self.seen_at = seen, monotonic()
+        at = monotonic()
+        return (
+            at - self.seen_at >= _SETTLE_SECONDS
+            or at - self.fit_asked_at >= _FIT_WAIT_SECONDS
+        )
 
 
 # The claims this window made, the cast it has taken over, and the prompts of
@@ -205,7 +251,9 @@ class _Widgets:
 
 # A book of the daemon's casts. The left page is the contents: project, ritual,
 # its casts newest first, their rites — every cast as one line, a running one
-# with `…` and the rite it is on, until space opens its whole rite tree. `H`
+# with `…` and the rite it is on, until space opens its whole rite tree. The
+# casts that ended are under the project's `finished`, a streak of casts that
+# ended alike as one line. `H`
 # turns it to the history view, the casts that ended long ago, by day. The
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
@@ -224,7 +272,7 @@ class VeknaApp(App[None]):
     }
     #body { height: 1fr; }
     #left { width: 46; max-width: 50%; border-right: vkey $panel; }
-    #contents { height: 1fr; padding: 0 1; }
+    #contents { height: 1fr; padding: 0 1; overflow-x: hidden; }
     #elsewhere { display: none; height: auto; padding: 0 1; color: $warning; }
     #page { width: 1fr; padding: 0 1; }
     #head { height: auto; max-height: 50%; }
@@ -242,6 +290,7 @@ class VeknaApp(App[None]):
         Binding("t", "take", "take over"),
         Binding("w", "next_waiting", "next waiting"),
         Binding("x", "cancel", "cancel"),
+        Binding("f", "fold_all", "fold all"),
         Binding("s", "seen", "seen"),
         Binding("H", "history", "history"),
         Binding("g", "every", "every project"),
@@ -261,7 +310,7 @@ class VeknaApp(App[None]):
     ) -> None:
         super().__init__()
         self._casts = casts
-        self._scope = _Scope(opened=opened)
+        self._scope = _Scope(opened=opened, to_fit=opened.fit)
         self._daemon = _ToDaemon(send=send, mark=mark)
         self._branch_of = branch_of
         self._view = _View(reading=Reading(history_after=opened.history_after))
@@ -289,6 +338,7 @@ class VeknaApp(App[None]):
         tree = self._w.contents
         tree.show_root = False
         tree.auto_expand = False
+        tree.guide_depth = _GUIDE_DEPTH
         tree.focus()
         self.set_interval(_COALESCE_SECONDS, self._paced)
         self.set_interval(_TICK_SECONDS, self.changed)
@@ -327,19 +377,26 @@ class VeknaApp(App[None]):
     def action_every(self) -> None:
         if self._locked():
             return
-        self._scope.every = True
+        self._scope.show(every=True)
         self.changed()
 
     def action_home(self) -> None:
         if self._locked():
             return
-        self._scope.every = False
+        self._scope.show(every=False)
         self.changed()
 
     def action_history(self) -> None:
         if self._locked():
             return
         reading = self._view.reading
+        now = datetime.now(UTC)
+        if not reading.history and not any(
+            historic(view, reading, now) for view in self._listed()
+        ):
+            after = clock(reading.history_after.total_seconds())
+            self.say(f"no history yet — a cast moves there {after} after it ends")
+            return
         reading.history = not reading.history
         self.say("history view" if reading.history else "tree view")
         self.changed()
@@ -352,6 +409,15 @@ class VeknaApp(App[None]):
             return
         # Symmetric difference: a line in the set goes out, one out goes in.
         self._view.reading.toggled ^= {entry.key}
+        self.changed()
+
+    # Every line that holds casts, folded; when they all are, every line back
+    # to how it starts.
+    def action_fold_all(self) -> None:
+        reading = self._view.reading
+        reading.toggled = folded_all(
+            casts=self._listed(), reading=reading, now=datetime.now(UTC)
+        )
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
@@ -460,7 +526,7 @@ class VeknaApp(App[None]):
         if typed.lower() in {"q", "quit"}:
             self.exit()
         elif typed.lower() in {"g", "p"}:
-            self._scope.every = typed.lower() == "g"
+            self._scope.show(every=typed.lower() == "g")
         elif typed.lower() == "t":
             self.action_take()
         elif typed.lower().startswith("c "):
@@ -639,7 +705,10 @@ class VeknaApp(App[None]):
         # window, leaves the output short of its newest line.
         if mounted and not self._view.dirty and self._follows():
             self._to_end(self._w.log.scroll_y)
+        settled = self._scope.settled(self._casts)
         if not self._view.dirty or not mounted:
+            return
+        if self._scope.to_fit and not settled:
             return
         self._view.dirty = False
         taken = self._taken()
@@ -650,6 +719,9 @@ class VeknaApp(App[None]):
         )
         self._w.foot.scope.update(f"{counted(listed) or 'no casts'}  ({where})")
         reading = self._view.reading
+        if self._scope.to_fit and listed and (rows := self._w.contents.size.height):
+            self._scope.to_fit = False
+            reading.toggled = fitted(casts=listed, reading=reading, now=now, rows=rows)
         old = sum(historic(view, reading, now) for view in listed)
         self._w.foot.hint.update(_hint(old) if taken is None else _taken_hint(taken))
         self._paint_contents(listed, now)

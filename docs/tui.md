@@ -44,7 +44,19 @@ A cast is one line. The glyph says its state:
 | `⚠` | lost its connection; `vekna cast --continue` carries it on |
 
 A running cast shows `…` and the rite it is on now. A cast shows `@now` while
-it lives and `@3h ago` once it ended.
+it lives. Once it ended, it shows the slot it began in: `@<1h`, `@<3h`, `@<6h`,
+`@<12h`, `@<1d`, then `@2d ago`.
+
+A ritual line holds the casts that still run or ask. A cast that ended moves
+under the `finished` line of its project, which lists every ended cast by
+ritual. A cast that another cast queued hangs under that cast and says its
+ritual. A cast line says no argument: the right page has them.
+
+A cast that ended like the cast before it is not drawn. It has the same ritual
+and arguments, it began in the same slot, and its status is the same, as are
+the statuses of the casts it queued. The newest cast of the streak stands for
+it and says how long it is: `x8`. A slot is one line unless a cast in it
+failed.
 
 The line of the project counts its casts by state: `shop (1 asks, 1 fail, 1
 running)`. Asks and fails are the casts that need you. A running cast needs
@@ -116,9 +128,27 @@ close and open again shows it too.
 ![Three rituals folded to one line each; the ci_watch line says 1 fail, 1
 running, and the right page lists its two casts](assets/tui-fold.svg)
 
-`space` on a project or a ritual folds it. The folded line says what still
-happens under it: `▸ ci_watch (1 fail, 1 running)`. A project line always says
-it. `w` and `t` still reach a cast that asks under a fold.
+`space` on a project, a ritual or the `finished` line folds it. The folded
+line says what still happens under it: `▸ ci_watch (1 fail, 1 running)`. A
+project line always says it. `w` and `t` still reach a cast that asks under a
+fold.
+
+`f` folds every project, ritual and `finished` line at once. When they are all
+folded, `f` opens them all again.
+
+The window folds the tree once to fit its height, so that the tree needs no
+scrolling. It does this when it opens, once the daemon has replayed its casts,
+and each time `g` or `p` changes what it shows. It keeps as much as fits, in
+this order:
+
+1. Every running cast open to its whole rite tree.
+2. `finished` folded.
+3. The running casts back to one line.
+4. Every project where nothing runs folded.
+5. Every project folded.
+
+After that the folds are yours. A line wider than the page is cut. The tree
+does not scroll sideways.
 
 The right page of a ritual lists its casts with their state, their time and
 their flags.
@@ -131,6 +161,7 @@ ended and its ritual](assets/tui-history.svg)
 A cast stays in the tree for a day after it ends. After that it moves to the
 history view. `H` opens the history view and `H` again goes back to the tree.
 The hint line says how many casts the history view holds: `H history (4)`.
+While no cast is old enough, `H` stays in the tree view and says so.
 
 The history view groups casts by the day they ended, newest first. Both views
 hold what the daemon has seen since it started. `vekna log` has the rest.

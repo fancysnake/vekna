@@ -26,8 +26,11 @@ class TestAgo:
         ("since", "said"),
         [
             (timedelta(seconds=30), "@now"),
-            (timedelta(minutes=5), "@5m ago"),
-            (timedelta(hours=3, minutes=59), "@3h ago"),
+            (timedelta(minutes=5), "@<1h"),
+            (timedelta(hours=1), "@<3h"),
+            (timedelta(hours=3, minutes=59), "@<6h"),
+            (timedelta(hours=11), "@<12h"),
+            (timedelta(hours=23), "@<1d"),
             (timedelta(days=2, hours=1), "@2d ago"),
         ],
     )
