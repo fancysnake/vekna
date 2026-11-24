@@ -317,13 +317,23 @@ def _cast(
         key=cast_key(cast_id),
         kind="cast",
         name="",
-        counts=sum((_counts(stood) for stood in streak or (view,)), Counts()),
+        counts=sum(
+            (_counts(stood) for stood in _stood_for(view, streak, tree)), Counts()
+        ),
         folded=not opened and not now and bool(view.rites),
         view=view,
         streak=streak or (view,),
         children=(*(now or rite_tree(view, reading.toggled)), *_queued(view, tree)),
         nested=nested,
     )
+
+
+# The casts a line counts itself: the newest cast, whose queued casts are drawn
+# under it and counted there, and the casts it stands for with all they queued.
+def _stood_for(
+    view: CastView, streak: tuple[CastView, ...], tree: _Tree
+) -> list[CastView]:
+    return [view, *with_kids(streak[1:], tree.kids)]
 
 
 def _queued(view: CastView, tree: _Tree) -> list[Entry]:

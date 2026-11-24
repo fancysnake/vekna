@@ -666,6 +666,25 @@ class TestStreaks:
         ]
 
     @staticmethod
+    async def test_a_line_counts_the_failures_of_every_cast_it_stands_for():
+        hub = Hub()
+        for parent, kid, age in (("p1", "k1", 30), ("p2", "k2", 20)):
+            _ran(hub, parent, age)
+            began = datetime.now(UTC) - timedelta(seconds=age - 1)
+            hello = _hello(kid, "look").model_copy(
+                update={"enqueued_by": parent, "started_at": began}
+            )
+            hub.apply(hello)
+            hub.apply(CastGoodbye(cast_id=kid, status="error", detail="boom"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines[0] == "proj (2 fail)"
+
+    @staticmethod
     async def test_the_finished_line_lists_its_casts_on_the_right_page():
         hub = Hub()
         for cast_id, age in (("c1", 30), ("c2", 20)):
