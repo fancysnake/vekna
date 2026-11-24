@@ -161,10 +161,10 @@ class Output(Log):
     def _size_updated(
         self, size: Size, virtual_size: Size, container_size: Size, layout: bool = True
     ) -> bool:
-        if grew := size != self._size:
+        if changed_size := size != self._size:
             self.resizing()
         changed = super()._size_updated(size, virtual_size, container_size, layout)
-        if grew:
+        if changed_size:
             self._draw()
             self.resized()
         return changed
