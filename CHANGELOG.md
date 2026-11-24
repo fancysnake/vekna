@@ -11,6 +11,13 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **`vekna service enable|start|stop|restart|disable`** runs the daemon as a
+  systemd user service. The unit runs the user's own `vekna` from the home
+  directory, with a `PATH` of the user's own tools, so nothing of the project
+  it was enabled in reaches the daemon or its casts.
+
 ### Changed
 
 - **`ritual-scribe`** teaches three prompt rules: say what the ritual owns, so
