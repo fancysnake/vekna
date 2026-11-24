@@ -307,6 +307,8 @@ vekna --no-tui
 passes, and the log says what it did with each one, including the ones it
 dropped. A daemon already running is not restarted for it; the window says so.
 
+[The window](tui.md) walks through it with a screenshot of each screen.
+
 In a terminal the window is drawn with Textual, as two pages of a book. The left
 page is the contents: a tree of project, ritual, the ritual's casts newest first
 (`@now` while live, `@3h ago` once ended), and their rites. This is the tree
