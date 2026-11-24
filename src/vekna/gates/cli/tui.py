@@ -171,6 +171,13 @@ class _Asks:
     )
 
 
+# The bottom row's two lines of text: the keys, and which casts are listed.
+@dataclass
+class _Foot:
+    hint: Static = field(default_factory=lambda: Static(_hint(0), id="hint"))
+    scope: Static = field(default_factory=lambda: Static(id="scope", markup=False))
+
+
 # Held rather than queried, so each widget is reached typed and without a
 # lookup. The two question lines are one field: pylint caps a class at seven.
 @dataclass
@@ -183,7 +190,7 @@ class _Widgets:
     command: Input = field(
         default_factory=lambda: Input(id="command", select_on_focus=False)
     )
-    hint: Static = field(default_factory=lambda: Static(_hint(0), id="hint"))
+    foot: _Foot = field(default_factory=_Foot)
 
 
 # A book of the daemon's casts. The left page is the contents: project, ritual,
@@ -215,7 +222,7 @@ class VeknaApp(App[None]):
     #command, #answer { display: none; border: none; height: 1; }
     #foot { height: 1; }
     #hint { width: 1fr; padding: 0 1; color: $text-muted; }
-    #version { width: auto; padding: 0 1; color: $text-muted; }
+    #scope, #version { width: auto; padding: 0 1; color: $text-muted; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "quit"),
@@ -261,7 +268,8 @@ class VeknaApp(App[None]):
         yield self._w.note
         yield self._w.command
         with Horizontal(id="foot"):
-            yield self._w.hint
+            yield self._w.foot.hint
+            yield self._w.foot.scope
             yield Static(self._scope.opened.title, id="version", markup=False)
 
     def on_mount(self) -> None:
@@ -608,10 +616,10 @@ class VeknaApp(App[None]):
         where = (
             "all projects" if self._scope.every else named(self._scope.opened.project)
         )
-        self.sub_title = f"{counted(listed) or 'no casts'}  ({where})"
+        self._w.foot.scope.update(f"{counted(listed) or 'no casts'}  ({where})")
         reading = self._view.reading
         old = sum(historic(view, reading, now) for view in listed)
-        self._w.hint.update(_hint(old) if taken is None else _taken_hint(taken))
+        self._w.foot.hint.update(_hint(old) if taken is None else _taken_hint(taken))
         self._paint_contents(listed, now)
         self._paint_ask(listed, self._focused())
         if taken is not None:
@@ -622,9 +630,7 @@ class VeknaApp(App[None]):
             )
             return
         entry = self._entry()
-        self._w.head.update(
-            head(entry, branches=self._view.branches, now=now, scope=where)
-        )
+        self._w.head.update(head(entry, branches=self._view.branches, now=now))
         self._paint_output(None if entry is None else entry.key, output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the

@@ -531,11 +531,11 @@ class TestContents:
             await pilot.pause(_PAINTED)
             await pilot.press("g")
             await pilot.pause(_PAINTED)
-            every = (app.sub_title, _contents(app)[::3])
+            every = (_text(app, "#scope"), _contents(app)[::3])
             await pilot.press("p")
             await pilot.pause(_PAINTED)
 
-            home = (app.sub_title, _contents(app)[::3])
+            home = (_text(app, "#scope"), _contents(app)[::3])
         assert every == (
             "2 running  (all projects)",
             ["other (1 running)", "proj (1 running)"],
@@ -1006,7 +1006,7 @@ class TestCommands:
             await pilot.press("c", "ctrl+u", "g", "enter")
             await pilot.pause(_PAINTED)
 
-            title = app.sub_title
+            title = _text(app, "#scope")
         assert title == "no casts  (all projects)"
 
     @staticmethod
@@ -1015,13 +1015,13 @@ class TestCommands:
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            home = _text(app, "#head")
+            home = _text(app, "#scope")
             await pilot.press("g")
             await pilot.pause(_PAINTED)
 
-            every = _text(app, "#head")
-        assert home != every
-        assert every.endswith("all projects")
+            every = _text(app, "#scope")
+        assert home == "no casts  (proj)"
+        assert every == "no casts  (all projects)"
 
     @staticmethod
     async def test_t_typed_takes_the_prompt_over():
@@ -1363,7 +1363,7 @@ class TestTakingOver:
             await pilot.pause(_PAINTED)
 
             note = _text(app, "#note")
-            where = app.sub_title
+            where = _text(app, "#scope")
         assert note == "took over pr_fix c1"
         assert where == "1 waiting  (proj)"
 
@@ -1745,7 +1745,7 @@ class TestPages:
 
             head = _text(app, "#head")
             note = _text(app, "#note")
-        assert head == "no cast here — c starts one\nproj"
+        assert head == "no cast here — c starts one"
         assert note == "only a running cast can be taken over"
 
 
