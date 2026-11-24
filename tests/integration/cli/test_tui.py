@@ -1666,6 +1666,29 @@ class TestFollowing:
         assert len(rows[0]) == width
 
     @staticmethod
+    async def test_a_pane_with_no_room_draws_nothing_until_it_has_room():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            drawn = list(log.lines)
+            await pilot.resize_terminal(4, 24)
+            await pilot.pause(_PAINTED)
+            narrow = (log.scrollable_content_region.width, list(log.lines))
+            await pilot.resize_terminal(80, 24)
+            await _eventually(pilot, lambda: len(log.lines) > 1)
+
+            rows = list(log.lines)
+        assert narrow[0] < 1
+        assert narrow[1] == drawn
+        assert "".join(rows) == "w" * 500
+
+    @staticmethod
     async def test_a_pane_that_changed_only_in_height_does_not_cut_rows_again():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
