@@ -47,6 +47,9 @@ _BRANCH_SECONDS = 3.0
 # shortcut: a replay is taken as over when no cast came or ended for this
 # long, since the wire has no message that ends one; add one when it does.
 _SETTLE_SECONDS = 0.3
+# A tree that casts keep changing is still drawn: the question line and the
+# output must not wait on a daemon that never goes quiet.
+_FIT_WAIT_SECONDS = 2.0
 _NOTHING_WAITING = "nothing to answer — pick a waiting cast first"
 _ASKS_NOTHING = "the cast asks nothing right now"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
@@ -110,7 +113,8 @@ class Opened:
 # fit its height. A tree is fitted to casts that have stopped arriving: `seen`
 # is how many there are and how many of them run, and `seen_at` when that last
 # changed. Until then the contents are not drawn, so a daemon replaying its
-# casts does not show each of them come and end.
+# casts does not show each of them come and end. It waits at most
+# `_FIT_WAIT_SECONDS` from when the fit was asked for.
 @dataclass
 class _Scope:
     opened: Opened
@@ -118,16 +122,22 @@ class _Scope:
     to_fit: bool = False
     seen: tuple[int, int] = (0, 0)
     seen_at: float = field(default_factory=monotonic)
+    fit_asked_at: float = field(default_factory=monotonic)
 
     def show(self, *, every: bool) -> None:
         self.every = every
         self.to_fit = self.opened.fit
+        self.fit_asked_at = monotonic()
 
     def settled(self, casts: Casts) -> bool:
         views = casts.casts.values()
         if (seen := (len(views), sum(live(view) for view in views))) != self.seen:
             self.seen, self.seen_at = seen, monotonic()
-        return monotonic() - self.seen_at >= _SETTLE_SECONDS
+        at = monotonic()
+        return (
+            at - self.seen_at >= _SETTLE_SECONDS
+            or at - self.fit_asked_at >= _FIT_WAIT_SECONDS
+        )
 
 
 # The claims this window made, the cast it has taken over, and the prompts of
@@ -391,7 +401,9 @@ class VeknaApp(App[None]):
     # to how it starts.
     def action_fold_all(self) -> None:
         reading = self._view.reading
-        reading.toggled = folded_all(self._listed(), reading, datetime.now(UTC))
+        reading.toggled = folded_all(
+            casts=self._listed(), reading=reading, now=datetime.now(UTC)
+        )
         self.changed()
 
     # The cursor onto the next line down that is waiting on the operator — a
@@ -676,7 +688,7 @@ class VeknaApp(App[None]):
         reading = self._view.reading
         if self._scope.to_fit and listed and (rows := self._w.contents.size.height):
             self._scope.to_fit = False
-            reading.toggled = fitted(listed, reading, now, rows)
+            reading.toggled = fitted(casts=listed, reading=reading, now=now, rows=rows)
         old = sum(historic(view, reading, now) for view in listed)
         self._w.foot.hint.update(_hint(old) if taken is None else _taken_hint(taken))
         self._paint_contents(listed, now)

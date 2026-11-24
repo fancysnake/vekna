@@ -125,7 +125,7 @@ class TestCastLifecycle:
         hub.apply(CastGoodbye(cast_id="c1", status="disconnected", detail="socket eof"))
 
         assert hub.casts["c1"].status == "disconnected"
-        assert hub.casts["c1"].ending.detail == "socket eof"
+        assert hub.casts["c1"].detail == "socket eof"
 
     @staticmethod
     def test_ending_a_cast_closes_what_it_was_asking():
@@ -526,15 +526,13 @@ class TestLateSurface:
     ):
         hub = Hub()
         hub.apply(_hello())
-        hub.apply(
-            CastGoodbye(cast_id="c1", status=status, detail="why", result={"n": 7})
-        )
+        hub.apply(CastGoodbye(cast_id="c1", status=status, detail="why"))
         surface = _Surface()
 
         hub.attach_surface(surface)
 
         assert surface.sent[-1] == CastGoodbye(
-            cast_id="c1", status=status, detail="why", result={"n": 7}
+            cast_id="c1", status=status, detail="why"
         )
 
     @staticmethod

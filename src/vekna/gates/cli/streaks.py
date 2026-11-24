@@ -1,10 +1,10 @@
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from vekna.pacts.casts import CastView
 
-from .cast_text import live
+from .cast_text import ago, live
 
 Kids = Mapping[str, Sequence[CastView]]
 
@@ -38,9 +38,9 @@ def with_kids(views: Sequence[CastView], kids: Kids) -> list[CastView]:
 
 # How a cast ended: its status, and the other statuses the casts under it
 # ended with, so a cast that queued none ended like one whose casts all ended
-# as it did. What it returned and what it said are on the right page, cast by
-# cast, so a slot is one line unless a cast in it failed. None while the cast
-# or one it queued still runs.
+# as it did. What the cast said is not part of it, so casts that said different
+# things still stand for each other; the right page shows the newest of them.
+# None while the cast or one it queued still runs.
 def _outcome(view: CastView, kids: Kids) -> tuple[str, frozenset[str]] | None:
     if live(view):
         return None
@@ -53,18 +53,18 @@ def _outcome(view: CastView, kids: Kids) -> tuple[str, frozenset[str]] | None:
 
 
 # The casts of one ritual with one set of arguments, cut where a cast ended
-# differently from the one before it, and where it began in another `slot`, so
+# differently from the one before it, and where it began in another slot of `ago`, so
 # the line of a streak says when every cast of it began: newest streak first,
 # and in a streak the newest cast first. A cast still running is a streak of
 # its own.
 def streaks(
-    views: Sequence[CastView], kids: Kids, *, slot: Callable[[CastView], str]
+    views: Sequence[CastView], kids: Kids, *, now: datetime
 ) -> list[tuple[CastView, ...]]:
     found: list[list[CastView]] = []
     last: tuple[tuple[str, frozenset[str]], str] | None = None
     for view in sorted(views, key=_started):
         outcome = _outcome(view, kids)
-        ended = None if outcome is None else (outcome, slot(view))
+        ended = None if outcome is None else (outcome, ago(view, now))
         if found and ended is not None and ended == last:
             found[-1].append(view)
         else:

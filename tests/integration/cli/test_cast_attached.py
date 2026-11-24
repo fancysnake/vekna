@@ -153,7 +153,7 @@ class TestAttachedCast:
         assert exit_code == 1
         daemon.wait_for(lambda: bool(daemon.hub.casts))
         daemon.wait_for(lambda: daemon.only_cast().status == "error")
-        assert "max_steps" in (daemon.only_cast().ending.detail or "")
+        assert "max_steps" in (daemon.only_cast().detail or "")
 
     # Which cast this one carries on from is on the hello, so the daemon and
     # anything watching it learn it the same way they learn everything else.

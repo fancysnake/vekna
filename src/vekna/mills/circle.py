@@ -145,7 +145,7 @@ class Awaits:
             return None
         record = self._records(child)
         if view is not None:
-            status, detail = view.status, view.ending.detail
+            status, detail = view.status, view.detail
         elif record is not None:
             status, detail = record.status, record.detail
         else:

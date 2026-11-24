@@ -3,7 +3,7 @@ from typing import assert_never
 
 from typing_extensions import override
 
-from vekna.pacts.casts import CastBoard, CastView, Ending, Prompt, RiteView
+from vekna.pacts.casts import CastBoard, CastView, Prompt, RiteView
 from vekna.pacts.routing import Action, Routed, Routes, Surface
 from vekna.wire import (
     SHORT_ID,
@@ -399,7 +399,7 @@ def _update(view: CastView, message: _Viewed) -> str | None:
 # A cast that is gone is not still asking, nor awaiting, nor inside a rite.
 def _end(view: CastView, goodbye: CastGoodbye) -> None:
     view.status = goodbye.status
-    view.ending = Ending(detail=goodbye.detail, result=goodbye.result)
+    view.detail = goodbye.detail
     view.waiting.clear()
     view.on_children.clear()
 
@@ -499,10 +499,7 @@ def _replay_goodbye(view: CastView) -> Iterator[WireMessage]:
     match view.status:
         case "ok" | "error" | "disconnected" as status:
             yield CastGoodbye(
-                cast_id=view.hello.cast_id,
-                status=status,
-                detail=view.ending.detail,
-                result=view.ending.result,
+                cast_id=view.hello.cast_id, status=status, detail=view.detail
             )
 
 

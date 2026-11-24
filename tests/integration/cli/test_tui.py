@@ -646,6 +646,60 @@ class TestStreaks:
         assert head[-1].startswith("x3 — every cast since ")
 
     @staticmethod
+    async def test_a_line_of_failed_casts_counts_every_failure():
+        hub = Hub()
+        for cast_id, age in (("c1", 30), ("c2", 20), ("c3", 10)):
+            began = datetime.now(UTC) - timedelta(seconds=age)
+            hub.apply(_hello(cast_id, "sweep").model_copy(update={"started_at": began}))
+            hub.apply(CastGoodbye(cast_id=cast_id, status="error", detail="boom"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj (3 fail)",
+            "  finished",
+            "    sweep",
+            "      ✗ @now  c3  x3",
+        ]
+
+    @staticmethod
+    async def test_the_finished_line_lists_its_casts_on_the_right_page():
+        hub = Hub()
+        for cast_id, age in (("c1", 30), ("c2", 20)):
+            _ran(hub, cast_id, age)
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "f:p:/proj/.git")
+            await pilot.pause(_PAINTED)
+
+            head = _text(app, "#head")
+        assert head.splitlines()[0] == "finished"
+        assert "c1" in head
+        assert "c2" in head
+        assert "/proj" not in head
+
+    @staticmethod
+    async def test_a_ritual_line_lists_the_casts_queued_under_its_casts():
+        hub = Hub()
+        hub.apply(_hello("c1", "sweep"))
+        hub.apply(_hello("k1", "look").model_copy(update={"enqueued_by": "c1"}))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "r:/proj/.git:sweep")
+            await pilot.pause(_PAINTED)
+
+            head = _text(app, "#head")
+        assert "c1" in head
+        assert "k1" in head
+
+    @staticmethod
     async def test_a_line_stands_for_the_casts_of_one_slot_only():
         hub = Hub()
         minutes = {"c1": 150, "c2": 120, "c3": 30}
@@ -1054,6 +1108,24 @@ class TestFitting:
             "▶ report",
             "▸ finished",
         ]
+
+    @staticmethod
+    async def test_a_daemon_that_never_goes_quiet_does_not_hold_the_tree_back(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._FIT_WAIT_SECONDS", 0.5)
+        hub = Hub()
+        _running(hub)
+        app = _fitting(hub)
+
+        async with app.run_test(size=(100, 9)) as pilot:
+            for number in range(8):
+                hub.apply(_hello(f"n{number}", "sweep"))
+                app.changed()
+                await pilot.pause(_PAINTED / 3)
+
+            lines = _shape(app)
+        assert lines
 
 
 @pytest.mark.asyncio

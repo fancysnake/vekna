@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-from pydantic import JsonValue
-
 from vekna.wire import (
     AwaitRequested,
     CastHello,
@@ -76,13 +74,6 @@ class Prompt:
     claim_id: str | None = None
 
 
-# What a cast said as it ended: why, and what the ritual returned.
-@dataclass(frozen=True)
-class Ending:
-    detail: str | None = None
-    result: JsonValue | None = None
-
-
 # Insertion-ordered, which is the order the rites began — the tree a surface
 # draws is built from each rite's `parent_id` at paint time, so nothing here has
 # to hold a second copy of the shape. `waiting` is the open prompts: the daemon
@@ -92,7 +83,7 @@ class Ending:
 class CastView:
     hello: CastHello
     status: CastStatus = "running"
-    ending: Ending = field(default_factory=Ending)
+    detail: str | None = None
     rites: dict[str, RiteView] = field(default_factory=dict)
     waiting: dict[str, Prompt] = field(default_factory=dict)
     # The casts it is blocked on, by request: while any is here it holds no

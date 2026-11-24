@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import assert_never
 
 from rich.text import Text
 
@@ -91,8 +92,8 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
         text = Text("…", "dim")
     elif view is not None:
         text = _cast_label(view, _cast_said(entry, view, now, history=history))
-        if len(entry.views) > 1:
-            text.append(f"  x{len(entry.views)}", "dim")
+        if len(entry.streak) > 1:
+            text.append(f"  x{len(entry.streak)}", "dim")
     else:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
         if entry.kind == "finished":
@@ -182,17 +183,27 @@ def head(
         return _rite_head(view, rite, now)
     if view is not None:
         text = _cast_head(view, branches, now)
-        if len(entry.views) > 1:
-            since = f"{ended(entry.views[-1]).astimezone():%a %H:%M}"
+        if len(entry.streak) > 1:
+            since = f"{ended(entry.streak[-1]).astimezone():%a %H:%M}"
             text.append(
-                f"\nx{len(entry.views)} — every cast since {since} ended like this"
+                f"\nx{len(entry.streak)} — every cast since {since} ended like this"
             )
         return text
-    if entry.kind == "ritual":
-        return _ritual_head(entry, now)
-    if entry.kind == "day":
-        return _day_head(entry, now)
-    return _project_head(entry, branches)
+    return _group_head(entry, branches, now)
+
+
+def _group_head(entry: Entry, branches: dict[str, str | None], now: datetime) -> Text:
+    match entry.kind:
+        case "ritual" | "finished":
+            return _ritual_head(entry, now)
+        case "day":
+            return _day_head(entry, now)
+        case "project":
+            return _project_head(entry, branches)
+        case "cast" | "more" | "rite":
+            return Text(NO_CAST)
+        case _:
+            assert_never(entry.kind)
 
 
 def _project_head(entry: Entry, branches: dict[str, str | None]) -> Text:
@@ -270,8 +281,8 @@ def output(entry: Entry | None) -> list[str]:
 def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
     rite = picked or _shown_rite(view)
     said = [] if rite is None else list(rite.deltas)
-    if picked is None and view.ending.detail and not live(view):
-        said += ["", *view.ending.detail.splitlines()]
+    if picked is None and view.detail and not live(view):
+        said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
     return [printable(line) or " " for line in said]
 

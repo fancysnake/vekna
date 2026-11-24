@@ -284,7 +284,7 @@ class TestProcesses:
 
         assert spawn.spawned == ["c1", "c2"]
         assert hub.casts["c1"].status == "ok"
-        assert hub.casts["c1"].ending.detail is None
+        assert hub.casts["c1"].detail is None
 
     @staticmethod
     async def test_a_cast_that_has_exited_leaves_the_loop_nothing_to_report():
@@ -444,7 +444,7 @@ class TestProcesses:
         await _settled()
 
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].ending.detail == why
+        assert hub.casts["c1"].detail == why
 
 
 # A cast learns its ritual wants a tree only once spawned, so it exits saying so
@@ -572,7 +572,7 @@ class TestTrees:
 
         assert spawn.spawned == ["c1"]
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].ending.detail == refused
+        assert hub.casts["c1"].detail == refused
 
     # The cast never ran, so nothing holds its tree or its slot.
     @staticmethod
@@ -585,7 +585,7 @@ class TestTrees:
         await _settled()
 
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].ending.detail == "mark not written"
+        assert hub.casts["c1"].detail == "mark not written"
         assert trees.released == ["/pool/1"]
         assert spawn.spawned == ["c1", "c2"]
         assert spawn.trees == ["/pool/1", "/pool/1"]
@@ -627,7 +627,7 @@ class TestTrees:
         await _settled()
 
         assert hub.casts["c1"].status == "error"
-        assert hub.casts["c1"].ending.detail == "exited 1 before its hello: boom"
+        assert hub.casts["c1"].detail == "exited 1 before its hello: boom"
 
     @staticmethod
     async def test_a_lease_that_fails_gives_its_slot_back():
@@ -1209,8 +1209,8 @@ class TestAwaits:
             "error",
             "queued",
         ]
-        failed = next(hub.casts[c] for c in ("a1", "b1") if hub.casts[c].ending.detail)
-        assert failed.ending.detail == (
+        failed = next(hub.casts[c] for c in ("a1", "b1") if hub.casts[c].detail)
+        assert failed.detail == (
             "every tree is blocked or held by a cast awaiting one that needs a tree:"
             " /pool/1, /pool/2"
         )
@@ -1317,7 +1317,7 @@ class TestAwaits:
 
         assert len(trees.asked) == 1
         assert hub.casts["child"].status == "error"
-        assert hub.casts["child"].ending.detail == (
+        assert hub.casts["child"].detail == (
             "every tree is blocked or held by a cast awaiting one that needs a tree:"
             " /pool/1"
         )
