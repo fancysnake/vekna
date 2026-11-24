@@ -11,7 +11,7 @@ hk = { version = "2.12.0", workflow = "release.yml" }
 jq = "1.8.2"
 markdownlint-cli2 = "0.24.1"
 node = "26"
-pipx = "1.18.16"
+pipx = "1.18.19"
 "pipx:poetry" = "2.5.1"
 pkl = "0.33.0"
 python = "3.11"
