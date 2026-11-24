@@ -198,8 +198,9 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
     )
     keeping.add_done_callback(functools.partial(_ended, _VIGILS_LOST))
-    relaying = await _relaying(hub=hub, routes=routes)
+    relaying: asyncio.Task[None] | None = None
     try:
+        relaying = await _relaying(hub=hub, routes=routes)
         await server.stopped()
     finally:
         keeping.cancel()
