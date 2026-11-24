@@ -112,6 +112,7 @@ claude plugin install ritual-scribe@vekna
 | `vekna rituals show <ritual>` | A ritual's components and its step graph |
 | `vekna audit` | Check the config: what is wrong, where each setting comes from, what sets nothing |
 | `vekna altar list\|init\|fix\|reset` | Show, make, repair or rebuild the pooled worktrees |
+| `vekna service enable\|start\|stop\|restart\|disable` | Run the daemon as a systemd user service |
 
 ## Contributing
 

@@ -374,6 +374,7 @@ vekna rituals show <ritual>                   # Component schema + inferred step
 vekna audit                                   # check the config: errors, each setting's layer, what sets nothing
 vekna                                         # this project's dashboard; starts the daemon if none
 vekna stop                                    # end the daemon; running casts rejoin the next
+vekna service enable|start|stop|restart|disable  # run the daemon as a systemd user service
 vekna version                                 # this vekna's version, and the running daemon's
 vekna altar list|init|fix|reset               # show, make, repair or rebuild the pooled worktrees
 vekna log                                     # list active + recent casts
