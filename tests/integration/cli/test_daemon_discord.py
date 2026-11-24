@@ -11,6 +11,7 @@ import discord
 import pytest
 from typing_extensions import override
 
+from tests.conftest import end_spawned_casts
 from vekna.inits.daemon import serve_daemon, stop_daemon
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive
@@ -77,6 +78,7 @@ async def _served(
     finally:
         await stop_daemon()
         await host
+        await end_spawned_casts(socket_path.parent / "runs")
 
 
 @pytest.fixture(name="socket_path")

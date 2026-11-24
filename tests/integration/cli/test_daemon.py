@@ -17,7 +17,7 @@ import pytest
 from click.testing import CliRunner, Result
 from typing_extensions import override
 
-from tests.conftest import versioned
+from tests.conftest import end_spawned_casts, versioned
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, _look, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
@@ -153,7 +153,7 @@ async def _say(path: Path, *messages: WireMessage) -> asyncio.StreamWriter:
 # it — which is also what proves it was still up after every `q` in the test.
 @contextlib.asynccontextmanager
 async def _served(
-    socket_path: Path, *, debug: Path | None = None
+    socket_path: Path, *, debug: Path | None = None, ends_casts: bool = True
 ) -> AsyncGenerator[asyncio.Task[int]]:
     host = asyncio.create_task(serve_daemon(debug=debug))
     await _eventually(socket_path.exists)
@@ -162,6 +162,8 @@ async def _served(
     finally:
         await stop_daemon()
         await host
+        if ends_casts:
+            await end_spawned_casts(socket_path.parent / "runs")
 
 
 @pytest.fixture(name="socket_path")
@@ -2296,7 +2298,7 @@ class TestFollowing:
         socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
     ):
         said: list[str] = []
-        async with _served(socket_path):
+        async with _served(socket_path, ends_casts=False):
             cast = asyncio.create_task(_drive(["hold_one"]))
             await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
 
