@@ -24,6 +24,8 @@ output of a running ci_watch cast on the right](assets/tui-overview.svg)
 The left page is the contents: project, ritual, the ritual's casts newest
 first, and their rites. The right page is the line under the cursor in full,
 with its output below. The output follows the newest line until you scroll up.
+The branch of a project is read off git every few seconds, because a cast can
+switch it.
 
 `j` and `k` move the cursor down and up. `h` moves it to the line above in the
 tree.
@@ -41,8 +43,12 @@ A cast is one line. The glyph says its state:
 | `✗` | failed |
 | `⚠` | lost its connection; `vekna cast --continue` carries it on |
 
-A running cast shows `…` and the rite it is on now. The line of the project
-counts what needs you: `shop (1 asks, 1 fail, 1 running)`.
+A running cast shows `…` and the rite it is on now. A cast shows `@now` while
+it lives and `@3h ago` once it ended.
+
+The line of the project counts its casts by state: `shop (1 asks, 1 fail, 1
+running)`. Asks and fails are the casts that need you. A running cast needs
+nothing from you.
 
 ## Find the cast that waits on you
 
@@ -84,6 +90,8 @@ The takeover ends in three ways:
 - The cast ends.
 - The cast asks nothing for five seconds after an answer.
 
+A takeover covers that one cast. A cast it queued is taken over on its own.
+
 To answer without a takeover, put the cursor on the cast and type
 `a <answer>`.
 
@@ -104,8 +112,8 @@ and the output of that rite alone.
 running, and the right page lists its two casts](assets/tui-fold.svg)
 
 `space` on a project or a ritual folds it. The folded line says what still
-happens under it: `▸ ci_watch (1 fail, 1 running)`. `w` and `t` still reach a
-cast that asks under a fold.
+happens under it: `▸ ci_watch (1 fail, 1 running)`. A project line always says
+it. `w` and `t` still reach a cast that asks under a fold.
 
 The right page of a ritual lists its casts with their state, their time and
 their flags.
@@ -153,7 +161,8 @@ cast of blog](assets/tui-every.svg)
 
 `g` shows the casts of every project. `p` goes back to the project you opened
 the window in. A project is a repository: every worktree of one repository
-groups under the same project line.
+groups under the same project line. A directory in no repository is its own
+project.
 
 A cast you start with `c` still runs in the directory of this window, whatever
 the scope shows.
