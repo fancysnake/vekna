@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from rich.text import Text
-from textual.geometry import Region
 from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
@@ -160,15 +159,6 @@ async def _eventually(pilot: Pilot[None], ready: Callable[[], bool]) -> None:
         await pilot.pause(_TICK)
     msg = f"gave up after {_PATIENCE * _TICK:.1f}s waiting for the output to catch up"
     raise AssertionError(msg)
-
-
-def _settled(app: VeknaApp, log: Log, placed: list[Region]) -> bool:
-    before, placed[0] = placed[0], log.region
-    return (
-        _text(app, "#head").startswith("check")
-        and list(log.lines) == ["one two"]
-        and before == log.region
-    )
 
 
 def _at_end(log: Log) -> bool:
@@ -2390,12 +2380,13 @@ class TestCopying:
             await pilot.pause(_PAINTED)
             await pilot.press("space")
             await pilot.pause(_PAINTED)
-            _to(app, "t:c1:r1")
-            # The rite's head is shorter than the cast's, so the log moves up;
-            # a press aimed before it has settled lands on what sat there.
             log = app.query_one("#log", Log)
-            placed = [log.region]
-            await _eventually(pilot, lambda: _settled(app, log, placed))
+            under_the_cast = log.region.y
+            _to(app, "t:c1:r1")
+            # The rite's head is shorter than the cast's, so the log moves up,
+            # a layout pass after the head's text changes; a press aimed before
+            # then lands below the first line.
+            await _eventually(pilot, lambda: log.region.y < under_the_cast)
             await pilot.mouse_down("#log", offset=(0, 0))
             await pilot.hover("#log", offset=(2, 0))
             await pilot.mouse_up("#log", offset=(2, 0))
