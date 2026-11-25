@@ -35,6 +35,9 @@ when.
 
 ### Changed
 
+- **The window wraps its output.** A line wider than the output pane is drawn
+  over as many rows as it needs, and again at the new width when the window
+  is resized. The pane no longer scrolls sideways. (#348)
 - **The window's tree view** draws a cast that ended like the cast before it,
   of the same ritual and arguments, and began in the same slot, as one line
   with a count (`x8`). A ritual
