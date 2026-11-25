@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from rich.text import Text
@@ -175,6 +176,22 @@ async def _long_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log
         hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
     app = _app(hub, [])
     async with app.run_test() as pilot:
+        log = app.query_one("#log", Log)
+        await _eventually(pilot, lambda: _at_end(log))
+        yield hub, app, pilot, log
+
+
+# Sixty lines of seventy characters, drawn and followed to the end in a window
+# of 120 by 24.
+@contextlib.asynccontextmanager
+async def _wrapping_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log]]:
+    hub = Hub()
+    hub.apply(_hello("c1", "ci_watch"))
+    hub.apply(_rite("r1", "watch"))
+    for number in range(60):
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"{number} {'w' * 70}"))
+    app = _app(hub, [])
+    async with app.run_test(size=(120, 24)) as pilot:
         log = app.query_one("#log", Log)
         await _eventually(pilot, lambda: _at_end(log))
         yield hub, app, pilot, log
@@ -515,15 +532,10 @@ class TestContents:
             output = list(log.lines)
             drawn = [log.render_line(y) for y in range(len(output))]
             width = log.size.width
-        assert output == [
-            "moved red link",
-            "10%",
-            "20%",
-            "bell� csi�2K",
-            "prose " * 100,
-        ]
-        assert [strip.cell_length for strip in drawn] == [width] * 5
-        assert [strip.text.isprintable() for strip in drawn] == [True] * 5
+        assert output[:4] == ["moved red link", "10%", "20%", "bell� csi�2K"]
+        assert "".join(output[4:]) == "prose " * 100
+        assert [strip.cell_length for strip in drawn] == [width] * len(output)
+        assert [strip.text.isprintable() for strip in drawn] == [True] * len(output)
 
     @staticmethod
     async def test_the_cursor_stays_on_its_cast_when_another_arrives():
@@ -2291,47 +2303,132 @@ class TestFollowing:
         assert end[0] == end[1]
 
     @staticmethod
-    async def test_following_keeps_the_column_the_operator_scrolled_to():
+    async def test_a_line_wider_than_the_pane_is_drawn_over_several_rows():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
         hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
         hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
             log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
-            log.scroll_to(x=_UP, animate=False, immediate=True)
-            await pilot.pause(_PAINTED)
+            await _eventually(pilot, lambda: _at_end(log))
 
-            column = (log.scroll_x, log.max_scroll_x)
-        assert column[0] == _UP
-        assert column[1] > _UP
+            rows = list(log.lines)
+            width = log.scrollable_content_region.width
+            sideways = (log.max_scroll_x, log.show_horizontal_scrollbar)
+        assert "".join(rows) == "wide " * 100 + "w" * 500
+        assert max(len(row) for row in rows) == width
+        assert sideways == (0, False)
+
+    @staticmethod
+    async def test_a_resized_window_draws_the_rows_again_at_its_width():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            before = len(log.lines[0])
+            await pilot.resize_terminal(120, 24)
+            await _eventually(pilot, lambda: len(log.lines[0]) != before)
+
+            rows = list(log.lines)
+            width = log.scrollable_content_region.width
+        assert width > before
+        assert "".join(rows) == "w" * 500
+        assert len(rows[0]) == width
+
+    @staticmethod
+    async def test_a_pane_with_no_room_draws_nothing_until_it_has_room():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            drawn = list(log.lines)
+            await pilot.resize_terminal(4, 24)
+            await pilot.pause(_PAINTED)
+            narrow = (log.scrollable_content_region.width, list(log.lines))
+            await pilot.resize_terminal(80, 24)
+            await _eventually(pilot, lambda: len(log.lines) > 1)
+
+            rows = list(log.lines)
+        assert narrow[0] < 1
+        assert narrow[1] == drawn
+        assert "".join(rows) == "w" * 500
+
+    @staticmethod
+    async def test_a_pane_that_changed_only_in_height_does_not_cut_rows_again():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "watch"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="w" * 500))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            log = app.query_one("#log", Log)
+            await _eventually(pilot, lambda: log.line_count > 1)
+            rows = list(log.lines)
+            with patch.object(Text, "wrap", autospec=True) as wrap:
+                await pilot.resize_terminal(80, 12)
+                await pilot.pause(_PAINTED)
+
+            after = list(log.lines)
+        assert wrap.call_args_list == []
+        assert after == rows
+
+    @staticmethod
+    async def test_a_pane_that_got_narrower_and_taller_keeps_following_the_end():
+        async with _wrapping_output() as (hub, app, pilot, log):
+            await pilot.resize_terminal(60, 40)
+            await pilot.pause(_PAINTED)
+            resized = (log.scroll_y, log.max_scroll_y)
+
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="newest"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            arrived = (log.scroll_y, log.max_scroll_y)
+        assert resized[0] == resized[1]
+        assert arrived[0] == arrived[1]
+        assert arrived[1] == resized[1] + 1
+
+    @staticmethod
+    async def test_a_pane_that_got_narrower_and_taller_leaves_a_scrolled_up_reader():
+        async with _wrapping_output() as (hub, app, pilot, log):
+            log.scroll_to(y=log.max_scroll_y - _UP, animate=False, immediate=True)
+            await pilot.pause(_PAINTED)
+            await pilot.resize_terminal(60, 40)
+            await pilot.pause(_PAINTED)
+            resized = (log.scroll_y, log.max_scroll_y)
+
+            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="newest"))
+            app.changed()
+            await pilot.pause(_PAINTED)
+            arrived = (log.scroll_y, log.max_scroll_y)
+        assert resized[0] < resized[1]
+        assert arrived[0] < arrived[1]
 
     # Textual highlights the root of a tree it has just cleared, and that
     # highlight can land after the page is drawn.
     @staticmethod
     async def test_a_highlight_of_the_hidden_root_keeps_the_page():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for line in range(100):
-            hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"line {line}"))
-        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="wide " * 100))
-        app = _app(hub, [])
-
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", Log)
+        async with _long_output() as (_, app, pilot, log):
             tree: Tree[str] = app.query_one("#contents", Tree)
-            await _eventually(pilot, lambda: _at_end(log) and log.max_scroll_x > 0)
-            log.scroll_to(x=_UP, animate=False, immediate=True)
+            log.scroll_to(y=_UP, animate=False, immediate=True)
             tree.post_message(Tree.NodeHighlighted(tree.root))
             await pilot.pause(_PAINTED)
 
-            column = log.scroll_x
-        assert column == _UP
+            line = log.scroll_y
+        assert line == _UP
 
     # An animated scroll starts within a rounding of the end.
     @staticmethod
@@ -2442,8 +2539,13 @@ class TestCopying:
             await pilot.pause(_PAINTED)
             await pilot.press("space")
             await pilot.pause(_PAINTED)
+            log = app.query_one("#log", Log)
+            under_the_cast = log.region.y
             _to(app, "t:c1:r1")
-            await pilot.pause(_PAINTED)
+            # The rite's head is shorter than the cast's, so the log moves up,
+            # a layout pass after the head's text changes; a press aimed before
+            # then lands below the first line.
+            await _eventually(pilot, lambda: log.region.y < under_the_cast)
             await pilot.mouse_down("#log", offset=(0, 0))
             await pilot.hover("#log", offset=(2, 0))
             await pilot.mouse_up("#log", offset=(2, 0))

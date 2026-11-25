@@ -16,7 +16,7 @@ from vekna.lexicon._pacts import (
     RiteStreamed,
     StandalonePromptError,
 )
-from vekna.wire import RiteEndStatus
+from vekna.wire import RiteEndStatus, picked_option
 
 _PROBE_TIMEOUT_SECONDS = 0.5
 _MAX_PROMPT_ATTEMPTS = 3
@@ -50,19 +50,6 @@ def _one_line(text: str) -> str:
 def _menu(prompt: str, options: Sequence[str]) -> str:
     lines = [prompt, *(f"  {i}) {opt}" for i, opt in enumerate(options, start=1))]
     return "\n".join(lines) + "\n"
-
-
-# `isdigit` is wider than `int` accepts — "²" is a digit and `int` raises on it,
-# as it does on a digit string past CPython's conversion limit. Neither is a menu
-# number, and raising here would crash a prompt that has an answer for anything
-# else typed at it.
-def _picked(answer: str, options: Sequence[str]) -> str | None:
-    if answer in options:
-        return answer
-    if not answer.isdecimal() or len(answer) > len(str(len(options))):
-        return None
-    index = int(answer)
-    return options[index - 1] if 1 <= index <= len(options) else None
 
 
 def _socket_alive(socket_path: str, connect_timeout: float) -> bool:
@@ -362,7 +349,7 @@ class StandaloneRenderer(Channel):
     async def _choose(self, prompt: str, options: Sequence[str]) -> str:
         self.say(_menu(prompt, options))
         for _ in range(_MAX_PROMPT_ATTEMPTS):
-            if (picked := _picked(await self._readline(), options)) is not None:
+            if (picked := picked_option(await self._readline(), options)) is not None:
                 return picked
             self.say("invalid choice; try again\n")
         msg = "no valid choice provided"
@@ -375,7 +362,7 @@ class StandaloneRenderer(Channel):
     async def _suggest(self, prompt: str, options: Sequence[str]) -> str:
         self.say(_menu(prompt, options) + "  or answer in your own words\n")
         answer = await self._readline()
-        picked = _picked(answer, options)
+        picked = picked_option(answer, options)
         return answer if picked is None else picked
 
     async def _confirm(self, prompt: str) -> str:

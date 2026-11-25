@@ -10,11 +10,11 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Input, Log, Static, Tree
+from textual.widgets import Input, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, CastView
+from vekna.pacts.casts import Casts, CastView, named
 from vekna.wire import (
     CastCancelRequested,
     CastSeen,
@@ -24,7 +24,7 @@ from vekna.wire import (
     WireMessage,
 )
 
-from .cast_text import clock, counted, labelled, live, named, top_prompt
+from .cast_text import clock, counted, labelled, live, top_prompt
 from .commands import request_cast, send_answer
 from .contents import (
     Entry,
@@ -37,6 +37,7 @@ from .contents import (
     walked,
 )
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
+from .pane import Output
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
@@ -187,19 +188,9 @@ def _kept(
     return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
-# Whether the output follows its newest line, the line it was left on when it
-# last did, and the line under the cursor it was drawn for. Scrolling up off
-# that line stops the follow; reaching the end starts it again.
-@dataclass
-class _Follow:
-    on: bool = True
-    at: float = 0
-    page: str | None = None
-
-
 # What the window is showing and what it has done: the folds of the contents,
 # whether it needs repainting, the cast one more x cancels, the branch each tree
-# was last seen on, its claims, the contents drawn, and the output's follow.
+# was last seen on, its claims, and the contents drawn.
 @dataclass
 class _View:
     reading: Reading
@@ -208,7 +199,6 @@ class _View:
     branches: dict[str, str | None] = field(default_factory=dict)
     claims: _Claims = field(default_factory=_Claims)
     drawn: _Drawn = field(default_factory=_Drawn)
-    follow: _Follow = field(default_factory=_Follow)
 
 
 # Where a waiting question shows: loud on top for the cast in view, and during
@@ -241,7 +231,7 @@ class _Widgets:
     ask: _Asks = field(default_factory=_Asks)
     contents: Contents = field(default_factory=lambda: Contents("all", id="contents"))
     head: Static = field(default_factory=lambda: Static(id="head", markup=False))
-    log: Log = field(default_factory=lambda: Log(id="log"))
+    log: Output = field(default_factory=lambda: Output(id="log", auto_scroll=False))
     note: Static = field(default_factory=lambda: Static(id="note", markup=False))
     command: Input = field(
         default_factory=lambda: Input(id="command", select_on_focus=False)
@@ -370,7 +360,9 @@ class VeknaApp(App[None]):
 
     def action_close_command(self) -> None:
         if (view := self._taken()) is not None:
-            self._leave(f"left {labelled(view.hello)} — its prompts are handed back")
+            self._leave(
+                view, f"left {labelled(view.hello)} — its prompts are handed back"
+            )
             return
         self._close_line()
 
@@ -630,7 +622,7 @@ class VeknaApp(App[None]):
             return
         view = self._casts.casts[claims.taken]
         if not live(view):
-            self._leave("the cast taken over has ended")
+            self._leave(view, "the cast taken over has ended")
             return
         for request_id, prompt in view.waiting.items():
             if request_id not in claims.asked:
@@ -643,18 +635,16 @@ class VeknaApp(App[None]):
         elif (
             monotonic() - claims.idle_since >= self._scope.opened.quiet.total_seconds()
         ):
-            self._leave(f"left {labelled(view.hello)} — it asks nothing more")
+            self._leave(view, f"left {labelled(view.hello)} — it asks nothing more")
 
-    # A cast that ended asks nothing, so only a live one has claims to hand
-    # back.
-    def _leave(self, said: str) -> None:
+    # Heard back from the daemon or not, every claim still open goes. A cast
+    # that ended waits on nothing, so it has none to hand back.
+    def _leave(self, view: CastView, said: str) -> None:
         claims = self._view.claims
-        if (view := self._taken()) is not None:
-            # Heard back from the daemon or not, every claim still open goes.
-            for request_id in claims.asked.intersection(view.waiting):
-                self._daemon.send(
-                    DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
-                )
+        for request_id in claims.asked.intersection(view.waiting):
+            self._daemon.send(
+                DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
+            )
         claims.taken = None
         claims.asked.clear()
         claims.draft = None
@@ -701,10 +691,8 @@ class VeknaApp(App[None]):
     def _repaint(self) -> None:
         # A tick can land while the app is closing and its widgets are gone.
         mounted = self._w.contents.is_mounted
-        # A layout that lands after the last scroll to the end, or a resized
-        # window, leaves the output short of its newest line.
-        if mounted and not self._view.dirty and self._follows():
-            self._to_end(self._w.log.scroll_y)
+        if mounted and not self._view.dirty:
+            self._w.log.keep_end()
         settled = self._scope.settled(self._casts)
         if not self._view.dirty or not mounted:
             return
@@ -728,14 +716,14 @@ class VeknaApp(App[None]):
         self._paint_ask(listed, self._focused())
         if taken is not None:
             self._w.head.update(taken_head(taken))
-            self._paint_output(
-                cast_key(taken.hello.cast_id),
-                taken_output(taken, self._view.claims.mine),
+            self._w.log.show(
+                page=cast_key(taken.hello.cast_id),
+                said=taken_output(taken, self._view.claims.mine),
             )
             return
         entry = self._entry()
         self._w.head.update(head(entry, branches=self._view.branches, now=now))
-        self._paint_output(None if entry is None else entry.key, output(entry))
+        self._w.log.show(page=None if entry is None else entry.key, said=output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the
     # cursor stays on the line the operator put it on. When its line goes, the
@@ -800,41 +788,3 @@ class VeknaApp(App[None]):
             too = f"? {len(others)} other casts ask too"
         ask.elsewhere.display = bool(too)
         ask.elsewhere.update(too)
-
-    # Rewritten only when it changed. It follows the newest line unless the
-    # operator scrolled up off where it last left it, and keeps following when
-    # the page above it grows and pushes the end further down.
-    def _paint_output(self, page: str | None, lines: list[str]) -> None:
-        log, follow = self._w.log, self._view.follow
-        if page != follow.page:
-            follow.page, follow.on = page, True
-        else:
-            self._follows()
-        if list(log.lines) != lines:
-            log.auto_scroll = False
-            log.clear()
-            log.write_lines(lines)
-        if follow.on:
-            log.call_after_refresh(self._to_end, log.scroll_y)
-
-    def _follows(self) -> bool:
-        log, follow = self._w.log, self._view.follow
-        # An upward scroll that has only begun still rounds to the end.
-        leaving = log.scroll_target_y < log.scroll_y
-        if log.is_vertical_scroll_end and not leaving:
-            follow.on = True
-        elif leaving or log.scroll_y < follow.at:
-            follow.on = False
-        return follow.on
-
-    # A scroll the operator made while the refresh was pending stands, one that
-    # has only begun included; Textual clamping it onto a shorter page's end is
-    # no scroll of theirs.
-    def _to_end(self, asked_at: float) -> None:
-        log = self._w.log
-        if log.scroll_target_y < log.scroll_y:
-            return
-        if log.scroll_y != asked_at and not log.is_vertical_scroll_end:
-            return
-        log.scroll_end(animate=False, immediate=True, x_axis=False)
-        self._view.follow.at = log.max_scroll_y

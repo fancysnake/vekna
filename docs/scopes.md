@@ -142,7 +142,8 @@ Three settings are the machine's and not a project's, and are read from the
 top level only: `[circle] coding`, the limit on agents running at once,
 `[circle] total_processes`, the limit on casts running at once, and
 `[circle] vigil_processes`, the limit on casts that
-[vigils](cli.md#vigils) started.
+[vigils](cli.md#vigils) started. The whole of [`[discord]`](cli.md#discord) is
+the machine's too.
 
 ### When a project still needs a `.vekna.toml`
 

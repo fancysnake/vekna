@@ -1,6 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import PurePath
 from typing import Literal, Protocol
 
 from vekna.wire import (
@@ -132,6 +133,13 @@ class CastView:
         if rite.finished is not None:
             return rite.finished.finished_at
         return None if self.rite_status(rite) == "running" else self.last_seen
+
+
+# A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
+# repository's name is what an operator calls it either way.
+def named(project: str) -> str:
+    where = PurePath(project)
+    return where.parent.name if where.name == ".git" else where.name
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator

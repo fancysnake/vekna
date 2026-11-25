@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
 import io
+import os
+import signal
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from vekna.lexicon import NoComponents
 from vekna.lexicon._mills.ledger import Ledger
 from vekna.lexicon._pacts import Resumption, Ritual, Transition
 from vekna.lexicon._specs import DEFAULT_MAX_STEPS
+from vekna.links.spawner import Spawner, pid_alive, signal_pid
 from vekna.wire import (
     VERSION,
     CastHello,
@@ -24,6 +27,8 @@ from vekna.wire import (
 )
 
 _WHEN = datetime(2026, 1, 1, tzinfo=UTC)
+_REAP_TICK = 0.05
+_REAP_PATIENCE = 100
 
 
 # A cast with nothing said to it dials `$XDG_RUNTIME_DIR/vekna.sock` and writes
@@ -154,3 +159,21 @@ def journalled(
             ],
         )
     )
+
+
+# A stopped daemon leaves its spawned casts running, and a child that exits
+# after its loop has closed makes asyncio log "Loop ... is closed" into
+# whichever test the worker runs next. Ending them while the loop is open keeps
+# that out of the next test's log.
+async def end_spawned_casts(runs: Path) -> None:
+    marked = await asyncio.to_thread(Spawner(command=[], runs=runs).left_behind)
+    # Some tests stand this very process in for a cast.
+    left = [spawned for spawned in marked if spawned.pid != os.getpid()]
+    for spawned in left:
+        signal_pid(spawned.pid, signal.SIGKILL)
+    for spawned in left:
+        for _ in range(_REAP_PATIENCE):
+            if not pid_alive(spawned.pid):
+                break
+            await asyncio.sleep(_REAP_TICK)
+    await asyncio.sleep(_REAP_TICK)

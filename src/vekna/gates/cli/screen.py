@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run
+from vekna.pacts.casts import CastView, DamagedRun, RiteStatus, RiteView, Run, named
 from vekna.wire import SHORT_ID, DecideRequested, RunRecord, allowed_answers
 
 from .cast_text import (
@@ -12,7 +12,6 @@ from .cast_text import (
     elapsed,
     innermost,
     live,
-    named,
     top_prompt,
     word,
 )
