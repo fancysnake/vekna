@@ -11,13 +11,14 @@ import textwrap
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import click
 import pytest
 from click.testing import CliRunner, Result
 from typing_extensions import override
 
-from tests.conftest import versioned
+from tests.conftest import end_spawned_casts, versioned
 from vekna.inits.cli import init_command, tui_window, window
 from vekna.inits.daemon import CLI_MODULE, _look, serve_daemon, stop_daemon
 from vekna.lexicon._inits import _FOLLOWING, _LEFT, _drive
@@ -155,7 +156,7 @@ async def _say(path: Path, *messages: WireMessage) -> asyncio.StreamWriter:
 # it — which is also what proves it was still up after every `q` in the test.
 @contextlib.asynccontextmanager
 async def _served(
-    socket_path: Path, *, debug: Path | None = None
+    socket_path: Path, *, debug: Path | None = None, ends_casts: bool = True
 ) -> AsyncGenerator[asyncio.Task[int]]:
     host = asyncio.create_task(serve_daemon(debug=debug))
     await _eventually(socket_path.exists)
@@ -164,6 +165,8 @@ async def _served(
     finally:
         await stop_daemon()
         await host
+        if ends_casts:
+            await end_spawned_casts(socket_path.parent / "runs")
 
 
 @pytest.fixture(name="socket_path")
@@ -2115,6 +2118,27 @@ class TestVigils:
             ).splitlines()
         )
 
+    # The keeper never ends by itself, so its looks are counted here: one that
+    # ends without an error is not said to be lost.
+    @staticmethod
+    async def test_a_keeper_that_ends_without_an_error_is_not_said_lost(
+        socket_path: Path,
+        vigil_config: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(
+            "vekna.inits.daemon.itertools", SimpleNamespace(count=lambda: range(1))
+        )
+        project = socket_path.parent
+        _keep_tally(vigil_config)
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(project / "runs", "count"))
+            await asyncio.sleep(_TICK * 10)
+
+        assert _run_of(project / "runs", "count").status == "ok"
+        assert "the vigils are no longer kept" not in _said(caplog, logging.ERROR)
+
     # A journal that cannot be listed is the look failing. The vigil is written
     # into the config of a daemon already up, and is cast once the disk reads.
     @staticmethod
@@ -2318,7 +2342,7 @@ class TestFollowing:
         socket_path: Path, queue_rituals: Path, capsys: pytest.CaptureFixture[str]
     ):
         said: list[str] = []
-        async with _served(socket_path):
+        async with _served(socket_path, ends_casts=False):
             cast = asyncio.create_task(_drive(["hold_one"]))
             await _spawned(lambda: _FOLLOWING in _drained(capsys, said))
 

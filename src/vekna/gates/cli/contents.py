@@ -4,9 +4,9 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal, Self
 
-from vekna.pacts.casts import CastView, RiteView
+from vekna.pacts.casts import CastView, RiteView, named
 
-from .cast_text import ended, innermost, live, named
+from .cast_text import ended, innermost, live
 from .streaks import Kids, kids_of, said_args, streaks, with_kids
 
 Kind = Literal["project", "ritual", "cast", "more", "rite", "day", "finished"]

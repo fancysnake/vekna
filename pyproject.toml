@@ -1,6 +1,6 @@
 [project]
 name = "vekna"
-version = "3.0.0"
+version = "3.1.0"
 description = "Run coding agents as rituals: ordinary Python programs whose steps you control"
 authors = [{ name = "Radosław Ganczarek", email = "radoslaw@ganczarek.in" }]
 license = "BSD-3-Clause"
@@ -56,6 +56,9 @@ Issues = "https://github.com/fancysnake/vekna/issues"
 # manager. Only the fixture needs it, and only a pytest run ever loads that.
 [project.optional-dependencies]
 trial = ["pytest (>=8.0,<10.0)"]
+# The daemon answers casts from Discord only where this is installed; without
+# it a configured `[discord]` is said once and passed over.
+discord = ["discord.py (>=2.6,<3.0)"]
 
 [project.scripts]
 vekna = 'vekna.inits.cli:run'
@@ -88,6 +91,8 @@ dev = [
     "pytest-xdist (>=3.8.0,<4.0.0)",
     "cabinet @ https://github.com/fancysnake/cabinet/releases/download/v7.3.0/cabinet-7.3.0-py3-none-any.whl",
     "mutmut (>=3.8.0,<4.0.0)",
+    # The `discord` extra, so the type checker and the tests meet its link.
+    "discord.py (>=2.6,<3.0)",
 ]
 security = ["setuptools (>=84.0.0,<85.0.0)"]
 
@@ -638,6 +643,10 @@ ignore = [
 # plugin before coverage starts, and a top-level import would take the whole
 # package with it. The module says so at length.
 "src/vekna/edges/pytest_plugin.py" = ["PLC0415"]
+
+# discord.py is an optional install and heavy to import, so the daemon imports
+# its link only once a `[discord]` asks for it.
+"src/vekna/inits/daemon.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]

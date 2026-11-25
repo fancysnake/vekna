@@ -19,6 +19,7 @@ from vekna.gates.cli.screen import listing, recorded
 from vekna.gates.cli.tui import Opened, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.circle_config import MACHINE_KEYS, circle_problems
+from vekna.links.discord_config import DISCORD_KEYS, discord_problems
 from vekna.links.journal import Journal
 from vekna.links.service import (
     UNIT,
@@ -195,8 +196,8 @@ def _rituals_show(name: str) -> None:
 
 
 # The cast runtime writes the report: most of what a config says is about
-# rituals. `[circle]`, `[window]` and `[vigil]` are read on this side, so
-# their problems are handed over.
+# rituals. `[circle]`, `[window]`, `[vigil]` and `[discord]` are read on this
+# side, so their problems are handed over.
 @click.command(
     "audit",
     help="Check the config that speaks for this directory: what is wrong, which"
@@ -204,8 +205,18 @@ def _rituals_show(name: str) -> None:
 )
 def _audit() -> None:
     cwd = Path.cwd()
-    problems = [*circle_problems(cwd), *window_problems(cwd), *vigil_problems(cwd)]
-    machine = {"circle": MACHINE_KEYS, "window": (), "vigil": ()}
+    problems = [
+        *circle_problems(cwd),
+        *window_problems(cwd),
+        *vigil_problems(cwd),
+        *discord_problems(),
+    ]
+    machine = {
+        "circle": MACHINE_KEYS,
+        "window": (),
+        "vigil": (),
+        "discord": DISCORD_KEYS,
+    }
     raise SystemExit(_runtime().audit(problems, machine))
 
 

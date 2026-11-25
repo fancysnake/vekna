@@ -2,7 +2,6 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
-from pathlib import PurePath
 
 from vekna.pacts.casts import CastView, Prompt, RiteView
 from vekna.wire import SHORT_ID, CastHello
@@ -32,13 +31,6 @@ _TALLY = (
     "failed",
     "aborted",
 )
-
-
-# A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
-# repository's name is what an operator calls it either way.
-def named(project: str) -> str:
-    where = PurePath(project)
-    return where.parent.name if where.name == ".git" else where.name
 
 
 def live(view: CastView) -> bool:

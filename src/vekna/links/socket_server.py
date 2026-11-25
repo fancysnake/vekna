@@ -1,5 +1,8 @@
 import asyncio
 import contextlib
+import logging
+import socket
+import struct
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
@@ -32,6 +35,10 @@ _SOCKET_MODE = 0o600
 _CONNECT_SECONDS = 2.0
 _GONE = "socket closed without a goodbye"
 _NOT_ITS_OWN = "sent a frame for cast"
+# What Linux hands out for `SO_PEERCRED`: pid, uid, gid.
+_CREDENTIALS = struct.Struct("3i")
+
+_log = logging.getLogger(__name__)
 
 
 # Writes are buffered, never awaited: a surface that has stopped reading must
@@ -54,11 +61,14 @@ class Serving:
         self,
         server: asyncio.Server,
         writers: set[asyncio.StreamWriter],
+        *,
         stopping: asyncio.Event,
+        ending: asyncio.Event,
     ) -> None:
         self._server = server
         self._writers = writers
         self._stopping = stopping
+        self._ending = ending
 
     # Until a connection opens with `StopRequested`. What ending means is the
     # caller's: this only says that somebody asked.
@@ -69,6 +79,7 @@ class Serving:
     # back the moment the server stops accepting: what is buffered for a peer
     # surface is written as the daemon ends, not dropped with it.
     async def close(self) -> None:
+        self._ending.set()
         self._server.close()
         closing = list(self._writers)
         for writer in closing:
@@ -110,6 +121,7 @@ async def attach(path: Path) -> tuple[asyncio.StreamReader, asyncio.StreamWriter
 async def serve(*, path: Path, routes: Routes) -> Serving:
     writers: set[asyncio.StreamWriter] = set()
     stopping = asyncio.Event()
+    ending = asyncio.Event()
 
     # What a connection opens with is what it is, and that is settled once: a
     # surface is fanned out to, a stop ends the daemon, an altar, a version, an
@@ -126,6 +138,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
             if isinstance(opened, SurfaceHello):
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
+                _log.info("stop asked by %s", _asker(writer))
                 stopping.set()
             elif isinstance(opened, Asked):
                 writer.write(encode_frame(await _answer(opened, routes)))
@@ -137,6 +150,7 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
                     cast_frames(frames),
                     peer=SocketSurface(writer),
                     routes=routes,
+                    ending=ending,
                 )
         finally:
             writers.discard(writer)
@@ -149,7 +163,36 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
         raise SocketPathError(msg)
     server = await asyncio.start_unix_server(handle, path=str(path), limit=FRAME_LIMIT)
     await asyncio.to_thread(path.chmod, _SOCKET_MODE)
-    return Serving(server, writers, stopping)
+    return Serving(server, writers, stopping=stopping, ending=ending)
+
+
+# The process on the other end and the one that started it, for a stop nobody
+# remembers asking for. Only Linux names a socket's peer. Never raises: the
+# stop it is logged for must not wait on it.
+def _asker(writer: asyncio.StreamWriter) -> str:
+    unnamed = "a process this system does not name"
+    if not hasattr(socket, "SO_PEERCRED"):
+        return unnamed
+    peer: socket.socket = writer.get_extra_info("socket")
+    try:
+        held = peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, _CREDENTIALS.size)
+    except OSError:
+        return unnamed
+    credentials: tuple[int, int, int] = _CREDENTIALS.unpack(held)
+    pid = credentials[0]
+    try:
+        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+        parent = int(status.partition("PPid:")[2].split()[0])
+        return f"{_process(pid)}, started by {_process(parent)}"
+    except OSError:
+        return f"pid {pid} (gone)"
+    except (IndexError, ValueError):
+        return f"pid {pid}"
+
+
+def _process(pid: int) -> str:
+    command = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+    return f"pid {pid} ({command.decode(errors='replace').strip()})"
 
 
 async def _answer(opened: Asked, routes: Routes) -> WireMessage:
@@ -205,7 +248,9 @@ async def _as_surface(
 
 
 # A cast that goes without a goodbye gets one anyway, or the daemon would hold
-# it as running for as long as it runs.
+# it as running for as long as it runs. A cast this daemon hangs up on as it
+# ends gets none: it runs on and rejoins the next daemon, and a goodbye would
+# free its tree under it and end the await of the cast that queued it.
 # A frame this daemon cannot read, and a connection lost mid-frame, both end
 # this one connection and say so in that goodbye: killing the daemon over
 # either would take every other cast down with it.
@@ -221,6 +266,7 @@ async def _as_cast(
     *,
     peer: Surface,
     routes: Routes,
+    ending: asyncio.Event,
 ) -> None:
     said_goodbye = isinstance(opened, CastGoodbye)
     on_message = routes.apply
@@ -244,7 +290,7 @@ async def _as_cast(
         detail = f"connection lost: {error}"
     finally:
         routes.close_cast(opened.cast_id, peer)
-        if not said_goodbye:
+        if not said_goodbye and not ending.is_set():
             on_message(
                 CastGoodbye(
                     cast_id=opened.cast_id, status="disconnected", detail=detail

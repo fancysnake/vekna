@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 240" width="680" height="240" role="img" aria-labelledby="t d">
+  <title id="t">vekna — run coding agents as rituals</title>
+  <desc id="d">Discord profile banner. A cast of pr_fix shows two finished rites and a decide rite that asks: push the fix? yes or no.</desc>
+  <style>
+    text { font-family: "Inter", "Segoe UI", system-ui, sans-serif; fill: #f3efe7; }
+    .mono { font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; font-size: 14px; }
+    .name { font-size: 68px; font-weight: 700; letter-spacing: 0.5px; }
+    .tag { font-size: 19px; fill: #c9cfbf; }
+    .medium { fill: #a7bd86; }
+    .soft { fill: #9aa391; }
+    .branch { fill: none; stroke: #5d6b4c; stroke-width: 1.4; }
+    .ok { fill: none; stroke: #a7bd86; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+  <defs>
+    <radialGradient id="glow" cx="0.78" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#3b4a2a"/>
+      <stop offset="1" stop-color="#1f241b"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="680" height="240" fill="url(#glow)"/>
+
+  <!-- Discord draws the avatar over the bottom-left corner, so that corner stays empty. -->
+  <text x="38" y="92" class="name">vekna</text>
+  <text x="42" y="124" class="tag">Run coding agents as rituals.</text>
+
+  <g transform="translate(372,30)">
+    <rect width="278" height="180" rx="12" fill="#1a1e16" stroke="#4a6127" stroke-width="1.4"/>
+
+    <text x="20" y="36" class="mono" font-weight="700">cast <tspan class="medium">pr_fix</tspan></text>
+
+    <path class="branch" d="M26,46 V120 M26,62 H36 M26,91 H36 M26,120 H36"/>
+
+    <path class="ok" d="M43,62 l4,4 l7,-8"/>
+    <text x="64" y="67" class="mono"><tspan class="medium">shell</tspan><tspan class="soft" dx="17">gh pr checks</tspan></text>
+
+    <path class="ok" d="M43,91 l4,4 l7,-8"/>
+    <text x="64" y="96" class="mono"><tspan class="medium">coding</tspan><tspan class="soft" dx="9">repair the lint</tspan></text>
+
+    <rect x="38" y="105" width="226" height="30" rx="6" fill="#3b4a2a"/>
+    <text x="45" y="125" class="mono" font-weight="700" style="fill: #e8c46a">?</text>
+    <text x="64" y="125" class="mono"><tspan class="medium">decide</tspan><tspan dx="9">push the fix?</tspan></text>
+
+    <rect x="64" y="145" width="52" height="24" rx="12" fill="#a7bd86"/>
+    <text x="90" y="162" class="mono" text-anchor="middle" font-weight="700" style="fill: #1f241b">yes</text>
+    <rect x="124" y="145" width="44" height="24" rx="12" fill="none" stroke="#5d6b4c" stroke-width="1.4"/>
+    <text x="146" y="162" class="mono soft" text-anchor="middle">no</text>
+  </g>
+</svg>

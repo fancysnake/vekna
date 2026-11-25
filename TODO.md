@@ -4,6 +4,17 @@
 
 ## Friction
 
+- `mise exec -- pytest` in the main checkout imported `vekna` from a cast's
+  pooled worktree: that cast's `prepare` ran `poetry install` there and
+  re-pointed the editable install in the `.venv` both share. An absolute
+  `PYTHONPATH=$PWD/src` got the tests onto this checkout; a relative one is
+  lost by every test that spawns a cast in another directory.
+- A daemon test that left a vigil's asking cast unanswered leaked the cast
+  process: a spawned cast outlives `stop_daemon`, and nothing in the test
+  harness ends one that still waits on a prompt.
+- `discord.Client.wait_until_ready` raises before the client is entered rather
+  than waiting, so a question replayed at daemon start killed the relay; the
+  link now waits on an event of its own first.
 - `git grep ... | head -20` to find a class's tests cut off the one file that
   held them, and Write then replaced the committed `test_follow.py` instead of
   refusing; `git status` marking a "new" file as modified is what caught it.

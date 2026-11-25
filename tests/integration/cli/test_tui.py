@@ -2477,8 +2477,13 @@ class TestCopying:
             await pilot.pause(_PAINTED)
             await pilot.press("space")
             await pilot.pause(_PAINTED)
+            log = app.query_one("#log", Log)
+            under_the_cast = log.region.y
             _to(app, "t:c1:r1")
-            await pilot.pause(_PAINTED)
+            # The rite's head is shorter than the cast's, so the log moves up,
+            # a layout pass after the head's text changes; a press aimed before
+            # then lands below the first line.
+            await _eventually(pilot, lambda: log.region.y < under_the_cast)
             await pilot.mouse_down("#log", offset=(0, 0))
             await pilot.hover("#log", offset=(2, 0))
             await pilot.mouse_up("#log", offset=(2, 0))
