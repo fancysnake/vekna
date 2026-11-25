@@ -18,8 +18,9 @@ running, so the casts carry on.
 
 ## Read the two pages
 
-![The window on project shop: three rituals with their casts on the left, the
-output of a running ci_watch cast on the right](assets/tui-overview.svg)
+![The window on project shop: the casts that run or ask under their rituals
+and the ended casts under finished on the left, the output of a running
+ci_watch cast on the right](assets/tui-overview.svg)
 
 The left page is the contents: project, ritual, the ritual's casts newest
 first, and their rites. The right page is the line under the cursor in full,
@@ -125,8 +126,9 @@ close and open again shows it too.
 
 ## Fold what you do not watch
 
-![Three rituals folded to one line each; the ci_watch line says 1 fail, 1
-running, and the right page lists its two casts](assets/tui-fold.svg)
+![Two rituals and the finished line folded to one line each; the ci_watch
+line says 1 running, the finished line says 1 fail, and the right page lists
+the running ci_watch cast](assets/tui-fold.svg)
 
 `space` on a project, a ritual or the `finished` line folds it. The folded
 line says what still happens under it: `▸ ci_watch (1 fail, 1 running)`. A

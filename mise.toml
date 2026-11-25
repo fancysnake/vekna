@@ -31,7 +31,7 @@ enter = ["poetry install", "hk install --mise"]
 # Mise creates and activates this virtualenv automatically
 _.python.venv = { path = ".venv", create = true }
 PACKAGE = "vekna"
-SRC_PATHS = "src"
+SRC_PATHS = "src scripts"
 TEST_PATHS = "tests"
 SCRIPT_PATHS = ""
 TOML_PATHS = ".taplo.toml .vekna.toml pyproject.toml mise.toml tingle.toml"
