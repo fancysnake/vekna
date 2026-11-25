@@ -181,6 +181,22 @@ async def _long_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log
         yield hub, app, pilot, log
 
 
+# Sixty lines of seventy characters, drawn and followed to the end in a window
+# of 120 by 24.
+@contextlib.asynccontextmanager
+async def _wrapping_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log]]:
+    hub = Hub()
+    hub.apply(_hello("c1", "ci_watch"))
+    hub.apply(_rite("r1", "watch"))
+    for number in range(60):
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta=f"{number} {'w' * 70}"))
+    app = _app(hub, [])
+    async with app.run_test(size=(120, 24)) as pilot:
+        log = app.query_one("#log", Log)
+        await _eventually(pilot, lambda: _at_end(log))
+        yield hub, app, pilot, log
+
+
 def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
     return RiteStarted(
         cast_id="c1",
@@ -2310,18 +2326,7 @@ class TestFollowing:
 
     @staticmethod
     async def test_a_pane_that_got_narrower_and_taller_keeps_following_the_end():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for number in range(60):
-            hub.apply(
-                RiteDelta(cast_id="c1", rite_id="r1", delta=f"{number} {'w' * 70}")
-            )
-        app = _app(hub, [])
-
-        async with app.run_test(size=(120, 24)) as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _wrapping_output() as (hub, app, pilot, log):
             await pilot.resize_terminal(60, 40)
             await pilot.pause(_PAINTED)
             resized = (log.scroll_y, log.max_scroll_y)
@@ -2336,18 +2341,7 @@ class TestFollowing:
 
     @staticmethod
     async def test_a_pane_that_got_narrower_and_taller_leaves_a_scrolled_up_reader():
-        hub = Hub()
-        hub.apply(_hello("c1", "ci_watch"))
-        hub.apply(_rite("r1", "watch"))
-        for number in range(60):
-            hub.apply(
-                RiteDelta(cast_id="c1", rite_id="r1", delta=f"{number} {'w' * 70}")
-            )
-        app = _app(hub, [])
-
-        async with app.run_test(size=(120, 24)) as pilot:
-            log = app.query_one("#log", Log)
-            await _eventually(pilot, lambda: _at_end(log))
+        async with _wrapping_output() as (hub, app, pilot, log):
             log.scroll_to(y=log.max_scroll_y - _UP, animate=False, immediate=True)
             await pilot.pause(_PAINTED)
             await pilot.resize_terminal(60, 40)

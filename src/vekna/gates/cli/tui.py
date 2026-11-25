@@ -6,13 +6,11 @@ from time import monotonic
 from typing import ClassVar
 from uuid import uuid4
 
-from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
-from textual.geometry import Size
-from textual.widgets import Input, Log, Static, Tree
+from textual.widgets import Input, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
 
@@ -39,6 +37,7 @@ from .contents import (
     walked,
 )
 from .page import LEAVES, head, holder, line_text, output, taken_head, taken_output
+from .pane import Output
 from .screen import ordered, scoped
 
 _COALESCE_SECONDS = 0.1
@@ -189,72 +188,9 @@ def _kept(
     return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
-# The output of the line under the cursor. A line wider than the pane is drawn
-# over as many rows as it needs, so `lines` holds rows, not what was said. The
-# rows are cut for the width the pane has when they are shown. The pane keeps
-# what it was told to show and draws it again when its width changes; cutting
-# rows is slow for a long output, so what was drawn at that width stays.
-class Output(Log):
-    DEFAULT_CSS = """
-    Output { overflow-x: hidden; }
-    """
-
-    _said: tuple[str, ...] = ()
-    _drawn: tuple[tuple[str, ...], int] | None = None
-
-    def show(self, said: list[str]) -> None:
-        self._said = tuple(said)
-        self._draw()
-
-    # The pane draws its rows in the layout that resized it, so the window sees
-    # the page once, after Textual has pulled the scroll up to the old rows' end
-    # and the new rows are in. The window is told before, while the scroll is
-    # still the operator's, and after.
-    resizing: Callable[[], None]
-    resized: Callable[[], None]
-
-    @override
-    def _size_updated(
-        self, size: Size, virtual_size: Size, container_size: Size, layout: bool = True
-    ) -> bool:
-        if changed_size := size != self._size:
-            self.resizing()
-        changed = super()._size_updated(size, virtual_size, container_size, layout)
-        if changed_size:
-            self._draw()
-            self.resized()
-        return changed
-
-    def _draw(self) -> None:
-        # A pane with no room draws nothing; the resize that gives it room draws.
-        if (width := self.scrollable_content_region.width) < 1:
-            return
-        if self._drawn == (self._said, width):
-            return
-        self._drawn = (self._said, width)
-        # Log.write_lines drops an empty line, so a blank row is drawn as a space.
-        rows = [
-            row.plain or " "
-            for line in self._said
-            for row in Text(line).wrap(self.app.console, width)
-        ]
-        self.clear()
-        self.write_lines(rows)
-
-
-# Whether the output follows its newest line, the line it was left on when it
-# last did, and the line under the cursor it was drawn for. Scrolling up off
-# that line stops the follow; reaching the end starts it again.
-@dataclass
-class _Follow:
-    on: bool = True
-    at: float = 0
-    page: str | None = None
-
-
 # What the window is showing and what it has done: the folds of the contents,
 # whether it needs repainting, the cast one more x cancels, the branch each tree
-# was last seen on, its claims, the contents drawn, and the output's follow.
+# was last seen on, its claims, and the contents drawn.
 @dataclass
 class _View:
     reading: Reading
@@ -263,7 +199,6 @@ class _View:
     branches: dict[str, str | None] = field(default_factory=dict)
     claims: _Claims = field(default_factory=_Claims)
     drawn: _Drawn = field(default_factory=_Drawn)
-    follow: _Follow = field(default_factory=_Follow)
 
 
 # Where a waiting question shows: loud on top for the cast in view, and during
@@ -395,8 +330,6 @@ class VeknaApp(App[None]):
         tree.auto_expand = False
         tree.guide_depth = _GUIDE_DEPTH
         tree.focus()
-        self._w.log.resizing = self._resizing
-        self._w.log.resized = self._resized
         self.set_interval(_COALESCE_SECONDS, self._paced)
         self.set_interval(_TICK_SECONDS, self.changed)
         self.set_interval(_BRANCH_SECONDS, self._look_up_branches)
@@ -608,17 +541,6 @@ class VeknaApp(App[None]):
             self.copy_to_clipboard(text)
             self.say(f"copied {len(text)} characters")
 
-    def _resizing(self) -> None:
-        self._follows()
-
-    # Textual pulled the scroll up to the old rows' end, and the new rows make
-    # the page longer than that: a pull is no scroll of the operator's.
-    def _resized(self) -> None:
-        log, follow = self._w.log, self._view.follow
-        if follow.on:
-            follow.at = log.scroll_y
-            log.call_after_refresh(self._to_end, log.scroll_y)
-
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[str]) -> None:
         if (key := event.node.data) is None:
             return
@@ -769,10 +691,8 @@ class VeknaApp(App[None]):
     def _repaint(self) -> None:
         # A tick can land while the app is closing and its widgets are gone.
         mounted = self._w.contents.is_mounted
-        # A layout that lands after the last scroll to the end, or a resized
-        # window, leaves the output short of its newest line.
-        if mounted and not self._view.dirty and self._follows():
-            self._to_end(self._w.log.scroll_y)
+        if mounted and not self._view.dirty:
+            self._w.log.keep_end()
         settled = self._scope.settled(self._casts)
         if not self._view.dirty or not mounted:
             return
@@ -796,14 +716,14 @@ class VeknaApp(App[None]):
         self._paint_ask(listed, self._focused())
         if taken is not None:
             self._w.head.update(taken_head(taken))
-            self._paint_output(
-                cast_key(taken.hello.cast_id),
-                taken_output(taken, self._view.claims.mine),
+            self._w.log.show(
+                page=cast_key(taken.hello.cast_id),
+                said=taken_output(taken, self._view.claims.mine),
             )
             return
         entry = self._entry()
         self._w.head.update(head(entry, branches=self._view.branches, now=now))
-        self._paint_output(None if entry is None else entry.key, output(entry))
+        self._w.log.show(page=None if entry is None else entry.key, said=output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the
     # cursor stays on the line the operator put it on. When its line goes, the
@@ -868,38 +788,3 @@ class VeknaApp(App[None]):
             too = f"? {len(others)} other casts ask too"
         ask.elsewhere.display = bool(too)
         ask.elsewhere.update(too)
-
-    # Rewritten only when it changed. It follows the newest line unless the
-    # operator scrolled up off where it last left it, and keeps following when
-    # the page above it grows and pushes the end further down.
-    def _paint_output(self, page: str | None, lines: list[str]) -> None:
-        log, follow = self._w.log, self._view.follow
-        if page != follow.page:
-            follow.page, follow.on = page, True
-        else:
-            self._follows()
-        log.show(lines)
-        if follow.on:
-            log.call_after_refresh(self._to_end, log.scroll_y)
-
-    def _follows(self) -> bool:
-        log, follow = self._w.log, self._view.follow
-        # An upward scroll that has only begun still rounds to the end.
-        leaving = log.scroll_target_y < log.scroll_y
-        if log.is_vertical_scroll_end and not leaving:
-            follow.on = True
-        elif leaving or log.scroll_y < follow.at:
-            follow.on = False
-        return follow.on
-
-    # A scroll the operator made while the refresh was pending stands, one that
-    # has only begun included; Textual clamping it onto a shorter page's end is
-    # no scroll of theirs.
-    def _to_end(self, asked_at: float) -> None:
-        log = self._w.log
-        if log.scroll_target_y < log.scroll_y:
-            return
-        if log.scroll_y != asked_at and not log.is_vertical_scroll_end:
-            return
-        log.scroll_end(animate=False, immediate=True, x_axis=False)
-        self._view.follow.at = log.max_scroll_y
