@@ -109,11 +109,7 @@ class Relay(Surface):
             not asked.closed
         ):
             asked.closed = True
-            said = (
-                f"✅ {message.answer}"
-                if isinstance(message, DecideResolved)
-                else "🚫 withdrawn"
-            )
+            said = "✅ ACK" if isinstance(message, DecideResolved) else "🚫 withdrawn"
             await self._remote.say(thread=asked.posted.thread, text=said)
 
     async def _ask(self, request: DecideRequested) -> None:

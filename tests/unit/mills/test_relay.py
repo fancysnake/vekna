@@ -2,6 +2,7 @@ import asyncio
 import itertools
 import logging
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -274,13 +275,31 @@ class TestAsking:
         assert not desk.chat.asked
         assert not desk.chat.said
 
+    # The relay never ends by itself, so its rounds are counted here to see
+    # one through to the end.
     @staticmethod
-    async def test_the_answer_the_cast_took_is_said_in_the_thread(desk: _Desk):
+    async def test_one_round_carries_one_message(
+        desk: _Desk, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setattr(
+            "vekna.mills.relay.itertools", SimpleNamespace(count=lambda: range(1))
+        )
+        desk.board.asks(_push())
+        desk.relay.send(_push())
+        desk.relay.send(DecideResolved(cast_id=_CAST, request_id="r1", answer="push"))
+
+        await desk.relay.run()
+
+        assert len(desk.chat.asked) == 1
+        assert not desk.chat.said
+
+    @staticmethod
+    async def test_an_answer_the_cast_took_is_acknowledged_in_the_thread(desk: _Desk):
         await desk.told(
             _push(), DecideResolved(cast_id=_CAST, request_id="r1", answer="push")
         )
 
-        assert desk.chat.said == [("t1", "✅ push")]
+        assert desk.chat.said == [("t1", "✅ ACK")]
 
     @staticmethod
     async def test_a_withdrawn_question_is_said_and_one_never_posted_is_not(
@@ -479,7 +498,7 @@ class TestHearing:
 
         assert [thread for _, thread, _ in desk.chat.asked] == [_THREAD] * 2
         assert desk.answered() == [("r2", "decline"), ("r1", "push")]
-        assert desk.chat.said == [("t1", "✅ push"), ("t2", "✅ decline")]
+        assert desk.chat.said == [("t1", "✅ ACK"), ("t2", "✅ ACK")]
 
     @staticmethod
     async def test_what_was_written_while_nobody_listened_answers_the_question(

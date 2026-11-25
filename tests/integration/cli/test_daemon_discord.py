@@ -235,7 +235,7 @@ class TestDiscord:
             )
         ]
         assert (refused, taken) == ("'maybe' is not one of yes, no", None)
-        assert chat.said == [("t1", "✅ yes")]
+        assert chat.said == [("t1", "✅ ACK")]
         assert chat.closed
         assert (
             f"answering casts on Discord, in the guild {_GUILD}" in _said(
