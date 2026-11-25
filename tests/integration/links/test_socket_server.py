@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import os
 import socket
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -139,6 +141,15 @@ class _Unwritable(_Daemon):
             raise OSError(28, "No space left on device")
 
 
+def _command(pid: int) -> str:
+    said = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+    return said.decode().strip()
+
+
+def _unreadable(_: Path, **__: object) -> bytes:
+    raise ProcessLookupError
+
+
 # The daemon reacts on its own turn of the event loop, so a client that has
 # written and closed has not necessarily been heard yet. Waited for by what
 # arrives rather than by a count of turns, which is the same wait until the
@@ -194,6 +205,64 @@ class TestServing:
         await asyncio.wait_for(server.stopped(), timeout=2)
 
         assert not daemon.messages
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_is_logged_with_who_asked_and_who_started_them(
+        socket_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
+        server = await _Daemon().start(socket_path)
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        [said] = caplog.messages
+        assert said.startswith(
+            f"stop asked by pid {os.getpid()} ({_command(os.getpid())}),"
+            f" started by pid {os.getppid()} ("
+        )
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_from_a_process_that_cannot_be_named_is_still_logged(
+        socket_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        caplog.set_level(logging.INFO)
+        monkeypatch.delattr(socket, "SO_PEERCRED")
+        server = await _Daemon().start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        assert caplog.messages == ["stop asked by a process this system does not name"]
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_from_a_process_already_gone_is_logged_by_its_pid(
+        socket_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        caplog.set_level(logging.INFO)
+        monkeypatch.setattr(Path, "read_bytes", _unreadable)
+        monkeypatch.setattr(Path, "read_text", _unreadable)
+        server = await _Daemon().start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        assert caplog.messages == [f"stop asked by pid {os.getpid()} (gone)"]
         writer.close()
         await server.close()
 
@@ -342,6 +411,27 @@ class TestUncleanExits:
             detail="socket closed without a goodbye",
         )
         await server.close()
+
+    # The cast runs on and rejoins the next daemon: ended here, its tree would
+    # be freed under it and the cast awaiting it told that it died.
+    @staticmethod
+    async def test_a_cast_the_daemon_hangs_up_on_is_not_said_goodbye_for(
+        socket_path: Path,
+    ):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+        reader, writer = await attach(socket_path)
+        writer.write(encode_frame(_hello()))
+        await writer.drain()
+        await _eventually(lambda: bool(daemon.messages))
+
+        await server.close()
+        assert not await reader.read()
+        await _settle()
+
+        assert daemon.messages == [_hello()]
+        assert daemon.closed == ["c1"]
+        writer.close()
 
     @staticmethod
     async def test_a_cast_that_said_goodbye_is_not_said_for(socket_path: Path):
