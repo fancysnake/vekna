@@ -227,12 +227,15 @@ class TestDiscord:
         assert chat.asked == [
             (
                 discord_config.parents[2].name,
-                f"asker {asker.hello.cast_id[:8]}",
-                "**asker** asks:\nmerge #74 now?\nreply yes or no",
+                "asker",
+                (
+                    f"❓ **asker** `{asker.hello.cast_id[:8]}` asks\n"
+                    "merge #74 now?\n💬 _reply yes or no_"
+                ),
             )
         ]
         assert (refused, taken) == ("'maybe' is not one of yes, no", None)
-        assert chat.said == [("t1", "→ yes")]
+        assert chat.said == [("t1", "✅ yes")]
         assert chat.closed
         assert (
             f"answering casts on Discord, in the guild {_GUILD}" in _said(

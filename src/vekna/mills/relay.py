@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, ancestry, named
+from vekna.pacts.casts import Casts, named
 from vekna.pacts.remote import Heard, Posted, Remote, RemoteError
 from vekna.pacts.routing import Surface
 from vekna.wire import (
@@ -49,12 +49,13 @@ def _question(message: DecideRequested | DecideResolved | DecideWithdrawn) -> _Q
     return message.cast_id, message.request_id
 
 
-# A surface with no screen: the questions of casts a vigil started go to a
+# A surface with no screen: the questions of casts the daemon spawned go to a
 # remote, each in its cast's thread of its project's room, and what is written
 # there is the answer. It claims nothing, so a window answers the same prompts,
 # and whichever answer the cast takes is said in the thread.
 # shortcut: what was posted is remembered in memory, so a restarted daemon
-# posts every open question again; a file of what was posted is the upgrade.
+# asks every open question again, and the remote posts again each one that no
+# longer stands last in its thread; a file of what was posted is the upgrade.
 class Relay(Surface):
     def __init__(
         self,
@@ -71,8 +72,10 @@ class Relay(Surface):
         self._told: asyncio.Queue[
             DecideRequested | DecideResolved | DecideWithdrawn
         ] = asyncio.Queue()
-        # Every question posted, oldest first. A cast has more than one thread
-        # when the remote archived the first, so each question has its own.
+        # Every question posted, oldest first. A thread holds the questions of
+        # every cast of its ritual on its branch, and a cast has a second
+        # thread when the remote archived the first, so each question has its
+        # own.
         self._asked: dict[_Question, _Asked] = {}
         self._names: dict[str, str] = {}
 
@@ -107,9 +110,9 @@ class Relay(Surface):
         ):
             asked.closed = True
             said = (
-                f"→ {message.answer}"
+                f"✅ {message.answer}"
                 if isinstance(message, DecideResolved)
-                else "withdrawn"
+                else "🚫 withdrawn"
             )
             await self._remote.say(thread=asked.posted.thread, text=said)
 
@@ -118,7 +121,10 @@ class Relay(Surface):
         if (
             view is None
             or _question(request) in self._asked
-            or not self._kept(view.hello)
+            # A cast typed at a terminal asks there. What it enqueued is asked
+            # for here as well as there: the terminal may be gone by now, and a
+            # question asked twice costs less than a cast that waits on nobody.
+            or not view.hello.wired
         ):
             return
         if (name := self._names.get(request.cast_id)) is None:
@@ -135,18 +141,13 @@ class Relay(Surface):
         _log.info(
             "asked the remote %s for cast %s", request.request_id, request.cast_id
         )
-
-    # A cast a vigil started, or one enqueued under it: nobody sits at a
-    # terminal for those. An ancestor the daemon no longer knows, or a chain
-    # that loops, counts as a vigil's, because a question asked twice costs less
-    # than a cast that waits on nobody.
-    def _kept(self, hello: CastHello) -> bool:
-        for each in ancestry(self._casts, hello):
-            if each.vigil is not None:
-                return True
-            if each.enqueued_by is None:
-                return False
-        return True
+        # The first of them the question takes answers it; one it refuses is
+        # told why, as a reply written now would be.
+        for typed in posted.unheard:
+            reply = Heard(thread=posted.thread, reply_to=posted.message, text=typed)
+            if (said := await self.heard(reply)) is None:
+                break
+            await self._remote.say(thread=posted.thread, text=said)
 
     # What is said back to the writer, or `None` for a thread that is no cast's.
     async def heard(self, reply: Heard) -> str | None:
@@ -214,24 +215,22 @@ def _read(typed: str, request: DecideRequested) -> str:
     )
 
 
-# Named once, at the cast's first question: a cast switches the branch under
-# its own feet, and a second name would be a second thread. The cast's short id
-# ends the name, and a thread is found again by its name.
+# Named after the ritual and the branch, so every cast of one ritual on one
+# branch asks in one thread and the thread is found again by its name. Named
+# once, at the cast's first question: a cast switches the branch under its own
+# feet, and a second name would be a second thread.
 def _thread(hello: CastHello, *, branch: str | None) -> str:
-    ending = f" {hello.cast_id[:SHORT_ID]}"
     title = hello.ritual if branch is None else f"{hello.ritual} {branch}"
-    return title[: _THREAD_NAME - len(ending)] + ending
+    return title[:_THREAD_NAME]
 
 
 def _worded(hello: CastHello, request: DecideRequested) -> str:
-    lines = [f"**{hello.ritual}** asks:", request.prompt]
+    asking = f"**{hello.ritual}** `{hello.cast_id[:SHORT_ID]}`"
+    lines = [f"❓ {asking} asks", request.prompt]
     if request.options:
         lines += [f"{at}. {option}" for at, option in enumerate(request.options, 1)]
-        lines.append(
-            "reply with a number, or in your own words"
-            if request.free
-            else "reply with a number"
-        )
-    elif not request.free:
-        lines.append("reply yes or no")
-    return "\n".join(lines)
+        how = "reply with a number"
+        how += ", or in your own words" if request.free else ""
+    else:
+        how = "reply in your own words" if request.free else "reply yes or no"
+    return "\n".join([*lines, f"💬 _{how}_"])

@@ -6,9 +6,10 @@ from typing_extensions import override
 
 from vekna.pacts.remote import DiscordSetup, Hear, Heard, Posted, Remote, RemoteError
 
-# Discord takes 2000 characters a message; the rest of a long text goes in the
-# messages after it.
+# Discord takes 2000 characters a message.
 _MESSAGE = 1900
+# How far back in a thread a question still waiting is looked for.
+_LOOK_BACK = 50
 _NOT_A_CHANNEL_NAME = re.compile(r"[^a-z0-9_-]+")
 
 
@@ -79,10 +80,12 @@ class DiscordRemote(Remote):
         if (guild := self._client.get_guild(self._setup.guild)) is None:
             msg = f"the bot is not in the guild {self._setup.guild}"
             raise RemoteError(msg)
-        worded = f"{self._mentions}\n{text}"
+        pieces = _pieces(f"{self._mentions}\n{text}".strip())
         try:
             found = await self._thread(await self._room(guild, room), thread)
-            message = await _sent(found, worded)
+            if (waiting := await self._waiting(found, pieces[-1])) is not None:
+                return waiting
+            message = await _sent(found, pieces)
         except discord.DiscordException as error:
             raise RemoteError(str(error)) from error
         return Posted(thread=str(found.id), message=str(message.id))
@@ -90,9 +93,28 @@ class DiscordRemote(Remote):
     @override
     async def say(self, *, thread: str, text: str) -> None:
         try:
-            await _sent(self._client.get_partial_messageable(int(thread)), text)
+            target = self._client.get_partial_messageable(int(thread))
+            await _sent(target, _pieces(text.strip()))
         except discord.DiscordException as error:
             raise RemoteError(str(error)) from error
+
+    # The question as the last thing the bot said in the thread, with what the
+    # allowed users wrote under it: a daemon that restarted finds the question
+    # it posted before, and the answers written while it was away.
+    async def _waiting(self, thread: discord.Thread, ending: str) -> Posted | None:
+        unheard: list[str] = []
+        async for message in thread.history(limit=_LOOK_BACK):
+            if message.author.bot:
+                if message.content != ending:
+                    return None
+                return Posted(
+                    thread=str(thread.id),
+                    message=str(message.id),
+                    unheard=tuple(reversed(unheard)),
+                )
+            if message.author.id in self._setup.allow:
+                unheard.append(message.content)
+        return None
 
     async def _room(self, guild: discord.Guild, room: str) -> discord.TextChannel:
         category = discord.utils.get(guild.categories, name=self._setup.category)
@@ -117,11 +139,24 @@ class DiscordRemote(Remote):
 
 # The message a reply to the text is aimed at: the last of the messages the
 # text is split over.
-async def _sent(target: discord.abc.Messageable, text: str) -> discord.Message:
-    return [
-        await target.send(text[at : at + _MESSAGE])
-        for at in range(0, len(text), _MESSAGE)
-    ][-1]
+async def _sent(target: discord.abc.Messageable, pieces: list[str]) -> discord.Message:
+    return [await target.send(piece) for piece in pieces][-1]
+
+
+# A long text over several messages, cut at the last line break that fits,
+# else at the last space, else inside a word.
+# shortcut: a cut inside a code span leaves it open in one message and
+# unopened in the next; closing and reopening the span is the upgrade.
+def _pieces(text: str) -> list[str]:
+    if len(text) <= _MESSAGE:
+        return [text]
+    fits = _MESSAGE + 1
+    cut = (
+        max(text.rfind("\n", 0, fits), 0)
+        or max(text.rfind(" ", 0, fits), 0)
+        or _MESSAGE
+    )
+    return [text[:cut], *_pieces(text[cut:].strip())]
 
 
 # Discord rewrites a channel's name on its side. Written its way here, so the

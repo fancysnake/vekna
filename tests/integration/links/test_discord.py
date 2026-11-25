@@ -66,6 +66,17 @@ def _guild(monkeypatch: pytest.MonkeyPatch) -> _Guild:
     return _Guild(monkeypatch)
 
 
+# What a thread already holds, newest first, as Discord hands history out.
+def _history(*messages: MagicMock) -> MagicMock:
+    held = MagicMock()
+    held.__aiter__.return_value = list(messages)
+    return MagicMock(return_value=held)
+
+
+def _written(content: str, *, author: int = _OPERATOR, bot: bool = False) -> MagicMock:
+    return MagicMock(id=40, content=content, author=MagicMock(bot=bot, id=author))
+
+
 def _message(**attributes: object) -> MagicMock:
     settings: dict[str, object] = {
         "author": MagicMock(bot=False, id=_OPERATOR),
@@ -166,18 +177,56 @@ class TestAsk:
         guild: _Guild, monkeypatch: pytest.MonkeyPatch
     ):
         guild.settled()
-        worded = f"{_MENTIONS}\n" + "x" * 1900
+        first, second = "x " * 600, "y" * 800
 
         async with _connected(monkeypatch) as chat:
             posted = await chat.ask(
-                room="app", thread="heal · c0ffee00", text="x" * 1900
+                room="app", thread="heal · c0ffee00", text=f"{first}\n{second}"
             )
 
         assert posted.message == "2"
         assert guild.thread.send.await_args_list == [
-            call(worded[:1900]),
-            call(worded[1900:]),
+            call(f"{_MENTIONS}\n{first}"),
+            call(second),
         ]
+
+    @staticmethod
+    async def test_a_question_still_waiting_in_its_thread_is_not_posted_again(
+        guild: _Guild, monkeypatch: pytest.MonkeyPatch
+    ):
+        guild.settled()
+        guild.thread.history = _history(
+            _written("later"),
+            _written("not mine", author=_STRANGER),
+            _written("push"),
+            _written(f"{_MENTIONS}\npush?", bot=True),
+            _written("older"),
+        )
+
+        async with _connected(monkeypatch) as chat:
+            posted = await chat.ask(room="app", thread="heal · c0ffee00", text="push?")
+
+        assert posted == Posted(
+            thread=str(_THREAD), message="40", unheard=("push", "later")
+        )
+        guild.thread.send.assert_not_awaited()
+
+    @staticmethod
+    async def test_a_question_asked_after_another_post_of_the_bots_is_posted(
+        guild: _Guild, monkeypatch: pytest.MonkeyPatch
+    ):
+        guild.settled()
+        guild.thread.history = _history(
+            _written("push"),
+            _written("✅ push", bot=True),
+            _written(f"{_MENTIONS}\npush?", bot=True),
+        )
+
+        async with _connected(monkeypatch) as chat:
+            posted = await chat.ask(room="app", thread="heal · c0ffee00", text="push?")
+
+        assert posted == Posted(thread=str(_THREAD), message="1")
+        guild.thread.send.assert_awaited_once_with(f"{_MENTIONS}\npush?")
 
     @staticmethod
     async def test_a_guild_the_bot_is_not_in_is_said(
@@ -241,10 +290,16 @@ class TestSay:
             lambda _, thread_id: got.append(thread_id) or thread,
         )
 
-        await DiscordRemote(_SETUP).say(thread="555", text="→ " + "y" * 2000)
+        await DiscordRemote(_SETUP).say(
+            thread="555", text="y" * 1000 + " " + "y" * 2000
+        )
 
         assert got == [_THREAD]
-        assert thread.send.await_args_list == [call("→ " + "y" * 1898), call("y" * 102)]
+        assert thread.send.await_args_list == [
+            call("y" * 1000),
+            call("y" * 1900),
+            call("y" * 100),
+        ]
 
     @staticmethod
     async def test_what_discord_refuses_is_a_remote_error(

@@ -4,11 +4,13 @@ from typing import Protocol
 
 
 # Where a question went: the thread it was posted in and its message there, as
-# the remote names them.
+# the remote names them. `unheard` is what was written under a question found
+# already posted, oldest first: replies from while nothing listened.
 @dataclass(frozen=True, kw_only=True)
 class Posted:
     thread: str
     message: str
+    unheard: tuple[str, ...] = ()
 
 
 # What somebody wrote in a thread. `reply_to` is the message it answers, when
@@ -29,9 +31,11 @@ class RemoteError(Exception):
     pass
 
 
-# A chat service the daemon dials out to. A room is a project's and a thread a
-# cast's: both are made when first asked in, and found by name after that.
+# A chat service the daemon dials out to. A room is a project's and a thread
+# is named by the asker: both are made when first asked in, and found by name
+# after that.
 class Remote(Protocol):
+    # A question that already stands last in its thread is not posted again.
     async def ask(self, *, room: str, thread: str, text: str) -> Posted: ...
     async def say(self, *, thread: str, text: str) -> None: ...
 

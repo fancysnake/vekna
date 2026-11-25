@@ -4,6 +4,11 @@
 
 ## Friction
 
+- `mise exec -- pytest` in the main checkout imported `vekna` from a cast's
+  pooled worktree: that cast's `prepare` ran `poetry install` there and
+  re-pointed the editable install in the `.venv` both share. An absolute
+  `PYTHONPATH=$PWD/src` got the tests onto this checkout; a relative one is
+  lost by every test that spawns a cast in another directory.
 - A daemon test that left a vigil's asking cast unanswered leaked the cast
   process: a spawned cast outlives `stop_daemon`, and nothing in the test
   harness ends one that still waits on a prompt.

@@ -20,7 +20,7 @@ from vekna.wire import (
 
 _NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c0ffee00" + "0" * 24
-_THREAD = "pr_fix fix/login c0ffee00"
+_THREAD = "pr_fix fix/login"
 _LONGEST_NAME = 100
 
 
@@ -50,6 +50,7 @@ class _Chat(Remote):
         self.threads: dict[str, str] = {}
         self.made = itertools.count(1)
         self.failing = False
+        self.unheard: tuple[str, ...] = ()
 
     async def ask(self, *, room: str, thread: str, text: str) -> Posted:
         if self.failing:
@@ -58,7 +59,11 @@ class _Chat(Remote):
         self.asked.append((room, thread, text))
         if thread not in self.threads:
             self.threads[thread] = f"t{next(self.made)}"
-        return Posted(thread=self.threads[thread], message=f"m{len(self.asked)}")
+        return Posted(
+            thread=self.threads[thread],
+            message=f"m{len(self.asked)}",
+            unheard=self.unheard,
+        )
 
     async def say(self, *, thread: str, text: str) -> None:
         self.said.append((thread, text))
@@ -167,8 +172,8 @@ class TestAsking:
                 "app",
                 _THREAD,
                 (
-                    "**pr_fix** asks:\npush the fix to #74?\n1. push\n2. decline\n"
-                    "reply with a number"
+                    "❓ **pr_fix** `c0ffee00` asks\npush the fix to #74?\n"
+                    "1. push\n2. decline\n💬 _reply with a number_"
                 ),
             )
         ]
@@ -185,18 +190,18 @@ class TestAsking:
 
         await desk.told(_push("r2"))
 
-        assert [thread for _, thread, _ in desk.chat.asked] == ["pr_fix c0ffee00"] * 2
+        assert [thread for _, thread, _ in desk.chat.asked] == ["pr_fix"] * 2
         assert desk.looked == ["/app"]
 
     @staticmethod
     @pytest.mark.parametrize(
         ("request_", "ending"),
         [
-            (_question(), "which?\nreply yes or no"),
-            (_question(free=True), "which?"),
+            (_question(), "which?\n💬 _reply yes or no_"),
+            (_question(free=True), "which?\n💬 _reply in your own words_"),
             (
                 _question(options=["a", "b"], free=True),
-                "which?\n1. a\n2. b\nreply with a number, or in your own words",
+                "which?\n1. a\n2. b\n💬 _reply with a number, or in your own words_",
             ),
         ],
     )
@@ -206,56 +211,47 @@ class TestAsking:
         await desk.told(request_)
 
         [(_, _, text)] = desk.chat.asked
-        assert text == f"**pr_fix** asks:\n{ending}"
+        assert text == f"❓ **pr_fix** `c0ffee00` asks\n{ending}"
 
     @staticmethod
-    async def test_a_thread_name_keeps_the_casts_id_however_long_the_branch(
-        desk: _Desk,
-    ):
+    async def test_a_thread_name_is_cut_to_what_the_remote_takes(desk: _Desk):
         desk.branch = "x" * 200
 
         await desk.told(_push())
 
         [(_, thread, _)] = desk.chat.asked
-        assert len(thread) == _LONGEST_NAME
-        assert thread.startswith("pr_fix xxx")
-        assert thread.endswith("x c0ffee00")
+        assert thread == "pr_fix " + "x" * (_LONGEST_NAME - len("pr_fix "))
 
     @staticmethod
-    async def test_a_cast_enqueued_under_a_vigils_cast_is_asked_for_too(desk: _Desk):
-        desk.board.seen(_hello("child", vigil=None, enqueued_by=_CAST))
-        desk.board.seen(_hello("grandchild", vigil=None, enqueued_by="child"))
+    async def test_casts_of_one_ritual_on_one_branch_ask_in_one_thread(desk: _Desk):
+        desk.board.seen(_hello("another"))
 
-        await desk.told(_push(cast_id="grandchild"))
+        await desk.told(_push(), _push(cast_id="another"))
+
+        assert [thread for _, thread, _ in desk.chat.asked] == [_THREAD] * 2
+        assert [text.splitlines()[0] for _, _, text in desk.chat.asked] == [
+            "❓ **pr_fix** `c0ffee00` asks",
+            "❓ **pr_fix** `another` asks",
+        ]
+
+    @staticmethod
+    @pytest.mark.parametrize("asking", ["started", "child", "typed child"])
+    async def test_every_cast_the_daemon_spawned_is_asked_for(desk: _Desk, asking: str):
+        desk.board.seen(_hello("started", vigil=None))
+        desk.board.seen(_hello("child", vigil=None, enqueued_by="started"))
+        desk.board.seen(_hello("typed", vigil=None, wired=False))
+        desk.board.seen(_hello("typed child", vigil=None, enqueued_by="typed"))
+
+        await desk.told(_push(cast_id=asking))
 
         [(room, thread, _)] = desk.chat.asked
-        assert (room, thread) == ("app", "pr_fix fix/login grandchi")
+        assert (room, thread) == ("app", _THREAD)
 
     @staticmethod
-    async def test_a_cast_whose_ancestor_is_forgotten_is_asked_for(desk: _Desk):
-        desk.board.seen(_hello("orphan", vigil=None, enqueued_by="gone"))
-
-        await desk.told(_push(cast_id="orphan"))
-
-        assert len(desk.chat.asked) == 1
-
-    @staticmethod
-    async def test_a_cast_that_names_itself_as_its_parent_is_asked_for(desk: _Desk):
-        desk.board.seen(_hello("loop", vigil=None, enqueued_by="loop"))
-
-        await desk.told(_push(cast_id="loop"))
-
-        assert len(desk.chat.asked) == 1
-
-    @staticmethod
-    @pytest.mark.parametrize("enqueued_by", [None, "typed"])
-    async def test_a_cast_typed_by_hand_and_what_it_enqueued_are_not_asked_for(
-        desk: _Desk, enqueued_by: str | None
-    ):
+    async def test_a_cast_typed_by_hand_is_not_asked_for(desk: _Desk):
         desk.board.seen(_hello("typed", vigil=None, wired=False))
-        desk.board.seen(_hello("other", vigil=None, enqueued_by=enqueued_by))
 
-        await desk.told(_push(cast_id="other"))
+        await desk.told(_push(cast_id="typed"))
 
         assert not desk.chat.asked
 
@@ -284,7 +280,7 @@ class TestAsking:
             _push(), DecideResolved(cast_id=_CAST, request_id="r1", answer="push")
         )
 
-        assert desk.chat.said == [("t1", "→ push")]
+        assert desk.chat.said == [("t1", "✅ push")]
 
     @staticmethod
     async def test_a_withdrawn_question_is_said_and_one_never_posted_is_not(
@@ -297,7 +293,7 @@ class TestAsking:
             DecideResolved(cast_id=_CAST, request_id="never", answer="push"),
         )
 
-        assert desk.chat.said == [("t1", "withdrawn")]
+        assert desk.chat.said == [("t1", "🚫 withdrawn")]
 
     @staticmethod
     async def test_a_question_posted_is_logged(
@@ -483,14 +479,27 @@ class TestHearing:
 
         assert [thread for _, thread, _ in desk.chat.asked] == [_THREAD] * 2
         assert desk.answered() == [("r2", "decline"), ("r1", "push")]
-        assert desk.chat.said == [("t1", "→ push"), ("t2", "→ decline")]
+        assert desk.chat.said == [("t1", "✅ push"), ("t2", "✅ decline")]
+
+    @staticmethod
+    async def test_what_was_written_while_nobody_listened_answers_the_question(
+        desk: _Desk,
+    ):
+        desk.chat.unheard = ("maybe", "Push", "decline")
+
+        await desk.told(_push())
+
+        assert desk.answered() == [("r1", "push")]
+        assert desk.chat.said == [("t1", "'maybe' is not one of push, decline")]
 
     @staticmethod
     async def test_a_reply_answers_the_oldest_question_unless_it_replies_to_one(
         desk: _Desk,
     ):
         desk.board.seen(_hello("other"))
-        await desk.told(_push(), _push("r2"), _push("r3", cast_id="other"))
+        await desk.told(_push(), _push("r2"))
+        desk.branch = "fix/other"
+        await desk.told(_push("r3", cast_id="other"))
 
         assert await desk.hears("push") is None
         assert await desk.hears("decline", reply_to="m2") is None

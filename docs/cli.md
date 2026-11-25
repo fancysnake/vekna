@@ -115,8 +115,9 @@ said in a line and holds nothing:
 Output to a pipe or a file reads the same.
 
 The cast exits `1` if any of them failed. Ctrl-C stops following and leaves
-them running; `--no-follow` ends the cast with its own steps. Either way they
-still run one at a time:
+them running; `--no-follow` ends the cast with its own steps. Either way
+their questions still reach a window and [Discord](#discord), and they still
+run one at a time:
 
 ```bash
 vekna cast --no-follow sweep
@@ -383,11 +384,10 @@ A cast the daemon started has no terminal, so its prompts are answered here:
 drill into it and type `a <answer>`. The prompt line says what it takes —
 `a yes|no`, the options offered, or `a <anything>` for free text. An answer it
 does not offer is refused before it leaves the window. A cast nobody answers
-waits; the questions of a vigil's casts can reach you on
-[Discord](#discord) too. A cast typed as `vekna cast` asks its own prompts on
-its own terminal,
-and the ones of the casts it queued; answering one from a window takes it over,
-and that terminal stops taking answers for it. Only one answer ever counts: a
+waits; its questions can reach you on [Discord](#discord) too. A cast typed as
+`vekna cast` asks its own prompts on its own terminal, and the ones of the
+casts it queued; answering one from a window takes it over, and that terminal
+stops taking answers for it. Only one answer ever counts: a
 prompt taken over answers only to the window that took it, until that window
 lets it go or closes.
 
@@ -493,9 +493,11 @@ Three limits to know:
 
 ### Discord
 
-A cast that a vigil starts has no terminal, so its questions wait for a window.
-With a `[discord]` table the daemon also posts them to Discord, and takes your
-reply there as the answer:
+A cast that the daemon starts has no terminal, so its questions wait for a
+window. That is a cast started by a vigil, from a window or with `vekna cast
+--queue`, and every cast that another cast queued. With a `[discord]` table
+the daemon also posts their questions to Discord, and takes your reply there
+as the answer:
 
 ```toml
 [discord]
@@ -544,11 +546,11 @@ project yourself; the bot then finds them by name.
 
 #### Answering
 
-Each project has a channel, named after its repository. A cast gets a thread
-in it the first time it asks, named after the ritual, the branch its tree
-stands on at that moment, and the cast's id. A cast that never asks gets no
-thread. The question mentions
-everyone in `allow`, which is what makes a phone notify.
+Each project has a channel, named after its repository. A cast asks in a
+thread in it, named after the ritual and the branch its tree stands on when it
+first asks. Every cast of that ritual on that branch asks in the same thread,
+and each question says which cast asks it. The question mentions everyone in
+`allow`, which is what makes a phone notify.
 
 Write your answer in the thread:
 
@@ -563,8 +565,8 @@ questions open in one thread, a plain message answers the oldest; use
 Discord's Reply on a question to answer that one. A Reply on a question that is
 already answered gets a reply that says so, and answers nothing.
 
-The thread then shows the answer the cast took, as `→ yes`. It shows it for an
-answer given in a window too, and shows `withdrawn` for a question the cast
+The thread then shows the answer the cast took, as `✅ yes`. It shows it for an
+answer given in a window too, and shows `🚫 withdrawn` for a question the cast
 took back. A window answers the same questions: the cast takes whichever
 answer arrives first. A question a window has taken over with `t` is answered
 there only, and a reply in the thread is told so.
@@ -573,13 +575,18 @@ A message from anyone outside `allow` is ignored without a reply.
 
 Four limits to know:
 
-- Only casts started by a vigil are posted, and the casts those enqueue. A
-  cast typed by hand, or started from a window, asks where it always did.
+- The questions of a cast typed as `vekna cast` are not posted: its terminal
+  asks them. The questions of the casts it queued are posted, and its terminal
+  asks them too while it follows. After `--no-follow` or Ctrl-C only Discord
+  and a window ask them.
 - Nothing else reaches Discord: no output, no status, and no word that a cast
   ended. A cast cannot be started or cancelled from Discord.
-- After the daemon restarts, each open question is posted a second time.
-- When Discord has archived a thread, the cast's next question opens a second
-  thread of the same name.
+- After the daemon restarts, an open question that is still the bot's last
+  message in its thread is not posted again, and the first reply written under
+  it while the daemon was away answers it. An open question with a later
+  message of the bot under it is posted a second time.
+- When Discord has archived a thread, the next question opens a second thread
+  of the same name.
 
 If Discord cannot be reached when a question is asked, `daemon.log` names the
 cast and the question waits for a window. If Discord refuses the token, the

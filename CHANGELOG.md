@@ -13,11 +13,14 @@ when.
 
 ### Added
 
-- **Discord answers for vigils**: with a `[discord]` table in the user config
-  and the `vekna[discord]` install, the daemon posts each question of a cast
-  that a vigil started to a thread in the project's Discord channel, and takes
-  a reply from an allowed user as the answer. `docs/cli.md` § Discord has the
-  bot setup.
+- **Discord answers for casts with no terminal**: with a `[discord]` table in
+  the user config and the `vekna[discord]` install, the daemon posts each
+  question of a cast it started to a thread in the project's Discord channel,
+  and takes a reply from an allowed user as the answer. That is every cast but
+  one typed as `vekna cast`, whose own questions stay on its terminal. A
+  ritual has one thread for each branch, and a daemon that restarts reads the
+  replies written while it was away. `docs/cli.md` § Discord has the bot
+  setup.
 - **`f` in the window** folds every project, ritual and `finished` line, and
   opens them all again.
 - **The window fits its first tree to its height**: a tall window opens with
@@ -55,6 +58,11 @@ when.
 
 ### Fixed
 
+- **`daemon.log` names who stopped the daemon**: the process that asked and
+  the one that started it, on Linux.
+- **`vekna stop` no longer ends the casts it leaves running**: a daemon that
+  stopped recorded every connected cast as disconnected, which freed the
+  cast's worktree under it and told the cast awaiting it that it had failed.
 - **`H` in the window** no longer turns to an empty history view. While no
   cast is old enough, it stays in the tree view and says when a cast moves.
 
