@@ -2381,7 +2381,8 @@ class TestCopying:
             await pilot.press("space")
             await pilot.pause(_PAINTED)
             _to(app, "t:c1:r1")
-            await pilot.pause(_PAINTED)
+            # The rite's head is shorter than the cast's, so the log moves up.
+            await _eventually(pilot, lambda: _text(app, "#head").startswith("check"))
             await pilot.mouse_down("#log", offset=(0, 0))
             await pilot.hover("#log", offset=(2, 0))
             await pilot.mouse_up("#log", offset=(2, 0))
