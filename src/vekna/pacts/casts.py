@@ -1,5 +1,4 @@
 from collections import deque
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePath
@@ -146,20 +145,6 @@ def named(project: str) -> str:
 class Casts(Protocol):
     @property
     def casts(self) -> dict[str, CastView]: ...
-
-
-# A cast, then the cast that enqueued it, and so on up to one nobody enqueued.
-# It stops short at an ancestor the daemon no longer knows. No chain is longer
-# than the casts there are, which bounds a loop a peer sent.
-def ancestry(casts: Casts, hello: CastHello) -> Iterator[CastHello]:
-    for _ in casts.casts:
-        yield hello
-        parent = (
-            None if hello.enqueued_by is None else casts.casts.get(hello.enqueued_by)
-        )
-        if parent is None:
-            return
-        hello = parent.hello
 
 
 # What the circle keeps casts in: it reads their views, and writes the records

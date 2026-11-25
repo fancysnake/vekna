@@ -25,29 +25,16 @@ class _File(BaseModel):
     discord: _Discord | None = None
 
 
-class _TokenError(Exception):
-    pass
-
-
 # The user's own `[discord]` and the token its file holds, or `None` with the
 # reason logged. A project's `.vekna.toml` is not asked: a repository must not
 # say where its casts' questions go, or who may answer them. The token is in a
 # file because the daemon is started by whichever `vekna` runs first, with
 # that shell's environment.
 def discord_setup() -> DiscordSetup | None:
-    read = read_user_layers(table=_TABLE, model=_File)
-    for problem in read.problems:
+    setup, problems = _read()
+    for problem in problems:
         _log.warning("%s", problem)
-    if (said := _said(read.found)) is None:
-        return None
-    try:
-        token = _token(said)
-    except _TokenError as error:
-        _log.warning("%s", error)
-        return None
-    return DiscordSetup(
-        token=token, guild=said.guild, category=said.category, allow=said.allow
-    )
+    return setup
 
 
 # Every key is the machine's: only the user's top-level `[discord]` is read.
@@ -56,28 +43,25 @@ DISCORD_KEYS = tuple(_Discord.model_fields)
 
 # The token itself is never part of a problem.
 def discord_problems() -> list[str]:
+    return _read()[1]
+
+
+def _read() -> tuple[DiscordSetup | None, list[str]]:
     read = read_user_layers(table=_TABLE, model=_File)
-    if (said := _said(read.found)) is None:
-        return read.problems
-    try:
-        _token(said)
-    except _TokenError as error:
-        return [*read.problems, str(error)]
-    return read.problems
-
-
-def _said(found: list[_File]) -> _Discord | None:
-    return next((file.discord for file in found if file.discord), None)
-
-
-def _token(said: _Discord) -> str:
+    said = next((file.discord for file in read.found if file.discord), None)
+    if said is None:
+        return None, read.problems
     path = said.token_file or default_config_path().with_name(_BESIDE_CONFIG)
     try:
         token = path.expanduser().read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError) as error:
-        msg = f"Discord is off: its token could not be read: {error}"
-        raise _TokenError(msg) from error
+        return None, [
+            *read.problems,
+            f"Discord is off: its token could not be read: {error}",
+        ]
     if not token:
-        msg = f"Discord is off: {path} is empty"
-        raise _TokenError(msg)
-    return token
+        return None, [*read.problems, f"Discord is off: {path} is empty"]
+    setup = DiscordSetup(
+        token=token, guild=said.guild, category=said.category, allow=said.allow
+    )
+    return setup, read.problems

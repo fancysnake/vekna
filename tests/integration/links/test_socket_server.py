@@ -150,6 +150,10 @@ def _unreadable(_: Path, **__: object) -> bytes:
     raise ProcessLookupError
 
 
+def _without_parent(_: Path, **__: object) -> str:
+    return "Name:\tvekna\n"
+
+
 # The daemon reacts on its own turn of the event loop, so a client that has
 # written and closed has not necessarily been heard yet. Waited for by what
 # arrives rather than by a count of turns, which is the same wait until the
@@ -263,6 +267,44 @@ class TestServing:
         await asyncio.wait_for(server.stopped(), timeout=2)
 
         assert caplog.messages == [f"stop asked by pid {os.getpid()} (gone)"]
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_from_a_peer_the_system_will_not_describe_is_still_logged(
+        socket_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        caplog.set_level(logging.INFO)
+        monkeypatch.setattr(socket, "SO_PEERCRED", 0)
+        server = await _Daemon().start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        assert caplog.messages == ["stop asked by a process this system does not name"]
+        writer.close()
+        await server.close()
+
+    @staticmethod
+    async def test_a_stop_from_a_process_with_no_parent_field_is_logged_by_its_pid(
+        socket_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        caplog.set_level(logging.INFO)
+        monkeypatch.setattr(Path, "read_text", _without_parent)
+        server = await _Daemon().start(socket_path)
+
+        _, writer = await attach(socket_path)
+        writer.write(encode_frame(StopRequested()))
+        await writer.drain()
+        await asyncio.wait_for(server.stopped(), timeout=2)
+
+        assert caplog.messages == [f"stop asked by pid {os.getpid()}"]
         writer.close()
         await server.close()
 

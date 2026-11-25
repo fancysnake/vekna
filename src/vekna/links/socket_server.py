@@ -138,11 +138,8 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
             if isinstance(opened, SurfaceHello):
                 await _as_surface(frames, SocketSurface(writer), routes=routes)
             elif isinstance(opened, StopRequested):
-                # Whatever naming the asker raises, the daemon stops.
-                try:
-                    _log.info("stop asked by %s", _asker(writer))
-                finally:
-                    stopping.set()
+                _log.info("stop asked by %s", _asker(writer))
+                stopping.set()
             elif isinstance(opened, Asked):
                 writer.write(encode_frame(await _answer(opened, routes)))
                 with contextlib.suppress(OSError):
@@ -170,12 +167,17 @@ async def serve(*, path: Path, routes: Routes) -> Serving:
 
 
 # The process on the other end and the one that started it, for a stop nobody
-# remembers asking for. Only Linux names a socket's peer.
+# remembers asking for. Only Linux names a socket's peer. Never raises: the
+# stop it is logged for must not wait on it.
 def _asker(writer: asyncio.StreamWriter) -> str:
+    unnamed = "a process this system does not name"
     if not hasattr(socket, "SO_PEERCRED"):
-        return "a process this system does not name"
+        return unnamed
     peer: socket.socket = writer.get_extra_info("socket")
-    held = peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, _CREDENTIALS.size)
+    try:
+        held = peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, _CREDENTIALS.size)
+    except OSError:
+        return unnamed
     credentials: tuple[int, int, int] = _CREDENTIALS.unpack(held)
     pid = credentials[0]
     try:
@@ -184,6 +186,8 @@ def _asker(writer: asyncio.StreamWriter) -> str:
         return f"{_process(pid)}, started by {_process(parent)}"
     except OSError:
         return f"pid {pid} (gone)"
+    except (IndexError, ValueError):
+        return f"pid {pid}"
 
 
 def _process(pid: int) -> str:
