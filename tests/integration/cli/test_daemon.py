@@ -11,6 +11,7 @@ import textwrap
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import click
 import pytest
@@ -2116,6 +2117,27 @@ class TestVigils:
                 caplog, logging.INFO
             ).splitlines()
         )
+
+    # The keeper never ends by itself, so its looks are counted here: one that
+    # ends without an error is not said to be lost.
+    @staticmethod
+    async def test_a_keeper_that_ends_without_an_error_is_not_said_lost(
+        socket_path: Path,
+        vigil_config: Path,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr(
+            "vekna.inits.daemon.itertools", SimpleNamespace(count=lambda: range(1))
+        )
+        project = socket_path.parent
+        _keep_tally(vigil_config)
+        async with _served(socket_path):
+            await _spawned(lambda: _finished(project / "runs", "count"))
+            await asyncio.sleep(_TICK * 10)
+
+        assert _run_of(project / "runs", "count").status == "ok"
+        assert "the vigils are no longer kept" not in _said(caplog, logging.ERROR)
 
     # A journal that cannot be listed is the look failing. The vigil is written
     # into the config of a daemon already up, and is cast once the disk reads.

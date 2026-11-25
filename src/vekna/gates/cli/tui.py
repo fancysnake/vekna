@@ -370,7 +370,9 @@ class VeknaApp(App[None]):
 
     def action_close_command(self) -> None:
         if (view := self._taken()) is not None:
-            self._leave(f"left {labelled(view.hello)} — its prompts are handed back")
+            self._leave(
+                view, f"left {labelled(view.hello)} — its prompts are handed back"
+            )
             return
         self._close_line()
 
@@ -630,7 +632,7 @@ class VeknaApp(App[None]):
             return
         view = self._casts.casts[claims.taken]
         if not live(view):
-            self._leave("the cast taken over has ended")
+            self._leave(view, "the cast taken over has ended")
             return
         for request_id, prompt in view.waiting.items():
             if request_id not in claims.asked:
@@ -643,18 +645,16 @@ class VeknaApp(App[None]):
         elif (
             monotonic() - claims.idle_since >= self._scope.opened.quiet.total_seconds()
         ):
-            self._leave(f"left {labelled(view.hello)} — it asks nothing more")
+            self._leave(view, f"left {labelled(view.hello)} — it asks nothing more")
 
-    # A cast that ended asks nothing, so only a live one has claims to hand
-    # back.
-    def _leave(self, said: str) -> None:
+    # Heard back from the daemon or not, every claim still open goes. A cast
+    # that ended waits on nothing, so it has none to hand back.
+    def _leave(self, view: CastView, said: str) -> None:
         claims = self._view.claims
-        if (view := self._taken()) is not None:
-            # Heard back from the daemon or not, every claim still open goes.
-            for request_id in claims.asked.intersection(view.waiting):
-                self._daemon.send(
-                    DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
-                )
+        for request_id in claims.asked.intersection(view.waiting):
+            self._daemon.send(
+                DecideReleased(cast_id=view.hello.cast_id, request_id=request_id)
+            )
         claims.taken = None
         claims.asked.clear()
         claims.draft = None
