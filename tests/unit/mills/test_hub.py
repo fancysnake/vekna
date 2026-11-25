@@ -505,6 +505,26 @@ class TestLateSurface:
         ]
 
     @staticmethod
+    def test_quiet_output_replays_quiet():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="loud"))
+        surface = _Surface()
+
+        hub.attach_surface(surface)
+
+        assert surface.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            _started(),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo", quiet=True),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="loud"),
+            GrimoireEnd(cast_id="c1"),
+        ]
+
+    @staticmethod
     def test_a_rite_that_has_said_nothing_replays_no_output():
         hub = Hub()
         hub.apply(_hello())

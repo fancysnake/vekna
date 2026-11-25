@@ -158,6 +158,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         _look(view, _RITE_LOOK[view.rite_status(rite)]),
         " ",
         (rite.started.name, medium),
+        (_given(rite), "dim"),
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
@@ -168,6 +169,11 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
     ):
         text.append("  asks", _ASKS)
     return text
+
+
+def _given(rite: RiteView) -> str:
+    summary = rite.started.summary
+    return f"  {printable(summary)}" if summary else ""
 
 
 def _flags(hello: CastHello) -> str:
@@ -277,14 +283,16 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
         (rite.started.name, "bold"),
         f"  {view.rite_status(rite)}  {_took(view, rite, now)}",
     )
+    if rite.started.summary:
+        text.append(f"\n{printable(rite.started.summary)}")
     if rite.error is not None:
         text.append(f"\n{printable(rite.error)}", "red")
     return text
 
 
-# The right page's output: the rite under the cursor, or for a cast the latest
-# rite still talking, else the last one that said anything. Why a cast ended
-# follows it.
+# The right page's output: what the rite under the cursor and every rite under
+# it wrote, or for a cast what all its rites wrote, in the order they began.
+# Why a cast ended follows it.
 def output(entry: Entry | None) -> list[str]:
     if entry is None or entry.view is None:
         return []
@@ -293,8 +301,15 @@ def output(entry: Entry | None) -> list[str]:
 
 # The same for a cast on its own: `picked` is the rite chosen under it, if any.
 def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
-    rite = picked or _shown_rite(view)
-    said = [] if rite is None else list(rite.deltas)
+    wrote = [rite for rite in view.rites.values() if rite.deltas]
+    if picked is not None:
+        wrote = [rite for rite in wrote if _within(view, rite, picked)]
+    said: list[str] = []
+    for rite in wrote:
+        # One rite's output needs no name over it: the line picked says it.
+        if len(wrote) > 1:
+            said.append(f"── {rite.started.name}{_given(rite)}")
+        said += rite.deltas
     if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
     # Log.write_lines drops an empty line, so a blank one is drawn as a space.
@@ -319,6 +334,17 @@ def taken_output(view: CastView, mine: set[str]) -> list[str]:
         *(f"  {more}" for more in asked[1:]),
         f"    {takes}",
     ]
+
+
+# The chain of parents is what a peer said it was, so it is walked no further
+# than the cast has rites: a loop in it ends there.
+def _within(view: CastView, rite: RiteView, picked: RiteView) -> bool:
+    at: RiteView | None = rite
+    for _ in view.rites:
+        if at is None or at is picked:
+            break
+        at = view.rites.get(at.started.parent_id or "")
+    return at is picked
 
 
 def _shown_rite(view: CastView) -> RiteView | None:

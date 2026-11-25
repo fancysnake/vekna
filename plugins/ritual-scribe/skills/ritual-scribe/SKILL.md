@@ -203,7 +203,8 @@ result = await shell(
 raises nothing and its rite reads `✗ … — exit <code>`; the step decides what it
 means. Runs under
 `bash -c`. `stream=True` (default) pumps both pipes live into the rite;
-`stream=False` for bulk output that is payload rather than progress. Stdin is
+`stream=False` for bulk output that is payload rather than progress: it stays
+off the terminal that follows the cast, and the window still shows it. Stdin is
 `/dev/null` — a command that prompts gets EOF.
 
 **`bash -c` means every interpolated component is shell syntax until you quote

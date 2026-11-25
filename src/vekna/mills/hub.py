@@ -493,20 +493,39 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
     if (rite := view.rites.get(message.rite_id)) is None:
         return _NO_RITE
     if isinstance(message, RiteDelta):
-        rite.deltas.extend(message.delta.splitlines() or [""])
+        lines = message.delta.splitlines() or [""]
+        rite.deltas.extend(lines)
+        rite.quiet.extend([message.quiet] * len(lines))
     else:
         rite.finished = message
     return None
 
 
+# A rite's output as runs of lines said the same way: quiet or not, the lines.
+def _runs(rite: RiteView) -> Iterator[tuple[bool, list[str]]]:
+    run: list[str] = []
+    was = False
+    for quiet, line in zip(rite.quiet, rite.deltas, strict=True):
+        if run and quiet is not was:
+            yield was, run
+            run = []
+        was = quiet
+        run.append(line)
+    if run:
+        yield was, run
+
+
 def _replay_rites(view: CastView) -> Iterator[WireMessage]:
     for rite in view.rites.values():
         yield rite.started
-        if rite.deltas:
+        # A run of lines said the same way is one delta, so a terminal that
+        # follows the replay is spared what it was spared live.
+        for quiet, run in _runs(rite):
             yield RiteDelta(
                 cast_id=view.hello.cast_id,
                 rite_id=rite.started.rite_id,
-                delta="\n".join(rite.deltas),
+                delta="\n".join(run),
+                quiet=quiet,
             )
         if rite.finished is not None:
             yield rite.finished

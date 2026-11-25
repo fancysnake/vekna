@@ -151,9 +151,13 @@ class TestFollowing:
                 name="watch",
                 category="step",
                 started_at=_WHEN,
+                summary="gh pr checks 7",
             )
         )
         hub.apply(RiteDelta(cast_id="child0000", rite_id="r1", delta="checks red"))
+        hub.apply(
+            RiteDelta(cast_id="child0000", rite_id="r1", delta="bulk", quiet=True)
+        )
         hub.apply(
             RiteFinished(
                 cast_id="child0000", rite_id="r1", status="ok", finished_at=_WHEN
@@ -165,9 +169,9 @@ class TestFollowing:
         assert await asyncio.wait_for(follower.until_settled(), timeout=2)
         assert out.getvalue().splitlines() == [
             "── ci_watch child000 ──",
-            "▶ watch",
+            "▶ watch  gh pr checks 7",
             "  checks red",
-            "✓ watch",
+            "✓ watch  gh pr checks 7",
             "[ci_watch child000] ✓ done",
         ]
         await follower.close()

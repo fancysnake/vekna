@@ -58,6 +58,8 @@ class RiteView:
     started: RiteStarted
     finished: RiteFinished | None = None
     deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
+    # Line for line with `deltas`: whether the line was kept off the terminal.
+    quiet: deque[bool] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
 
     @property
     def error(self) -> str | None:

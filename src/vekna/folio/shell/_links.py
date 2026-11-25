@@ -14,6 +14,7 @@ from vekna.lexicon import (
     ShellFocusProtocol,
     ShellReply,
     emit_delta,
+    emit_quiet_delta,
     medium,
     record_result,
     replayed,
@@ -251,7 +252,8 @@ async def shell(
     else:
         focus = SHELL_FOCUS.resolve(default=_BASH)
         reply = await focus.run(
-            ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
+            ShellCall(command=command, cwd=cwd),
+            on_line=emit_delta if stream else emit_quiet_delta,
         )
         result = ShellResult(
             stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code

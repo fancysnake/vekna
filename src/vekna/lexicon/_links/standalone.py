@@ -289,6 +289,8 @@ class StandaloneRenderer(Channel):
         rite.shown = self._out.mark
 
     def _streamed(self, event: RiteStreamed) -> None:
+        if event.quiet:
+            return
         rite = self._rites.get(event.rite_id)
         pad = "  " * ((0 if rite is None else rite.depth) + 1)
         lines = event.delta.splitlines() or [""]

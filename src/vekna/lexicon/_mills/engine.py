@@ -89,6 +89,9 @@ class Grimoire:
     def rite_delta(self, rite_id: str, delta: str) -> None:
         self._append(RiteStreamed(rite_id=rite_id, delta=delta))
 
+    def rite_quiet_delta(self, rite_id: str, delta: str) -> None:
+        self._append(RiteStreamed(rite_id=rite_id, delta=delta, quiet=True))
+
     def rite_finished(
         self,
         rite_id: str,
@@ -418,6 +421,13 @@ def _current_rite_id(rite: RiteContext) -> str:
 def emit_delta(text: str) -> None:
     rite = current_rite()
     rite.grimoire.rite_delta(_current_rite_id(rite), text)
+
+
+# Output the terminal is spared and a window still shows: bulk a step reads as
+# payload, which whoever watches the cast's own terminal did not ask to scroll.
+def emit_quiet_delta(text: str) -> None:
+    rite = current_rite()
+    rite.grimoire.rite_quiet_delta(_current_rite_id(rite), text)
 
 
 # What a rite leaves its opener: the id it was journaled under, and what its

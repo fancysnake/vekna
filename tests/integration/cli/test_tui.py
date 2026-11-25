@@ -180,7 +180,9 @@ async def _long_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None], Log
         yield hub, app, pilot, log
 
 
-def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
+def _rite(
+    rite_id: str, name: str, *, parent: str | None = None, summary: str | None = None
+) -> RiteStarted:
     return RiteStarted(
         cast_id="c1",
         rite_id=rite_id,
@@ -188,6 +190,7 @@ def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
         name=name,
         category="step" if parent is None else "medium",
         started_at=_WHEN,
+        summary=summary,
     )
 
 
@@ -408,6 +411,65 @@ class TestContents:
 
             output = list(app.query_one("#log", Log).lines)
         assert output == ["said", " ", "boom", "trace"]
+
+    @staticmethod
+    async def test_a_rite_says_what_its_call_was_given():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(_rite("r2", "shell", parent="r1", summary="gh pr checks 7"))
+        app = _app(hub, [])
+
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r2")
+            await pilot.pause(_PAINTED)
+
+            line = next(line for line in _contents(app) if "shell" in line)
+            head = _text(app, "#head")
+        assert "shell  gh pr checks 7  " in line
+        assert head.endswith("\ngh pr checks 7")
+
+    @staticmethod
+    async def test_a_step_shows_the_output_of_every_rite_under_it():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(_rite("r2", "shell", parent="r1", summary="ls"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="one"))
+        hub.apply(_rite("r3", "shell", parent="r1"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r3", delta="two"))
+        hub.apply(_rite("r4", "other"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r4", delta="elsewhere"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["── shell  ls", "one", "── shell", "two"]
+
+    @staticmethod
+    async def test_a_cast_shows_the_output_of_every_rite():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "first"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one"))
+        hub.apply(_rite("r2", "second"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="two"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "c:c1")
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["── first", "one", "── second", "two"]
 
     @staticmethod
     async def test_an_empty_delta_shows_as_a_blank_line():

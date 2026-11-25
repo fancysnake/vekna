@@ -41,6 +41,7 @@ class TestRoundTrip:
             parent_id=None,
             name="run_tests",
             category="step",
+            summary="mise run test",
             started_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
         )
 

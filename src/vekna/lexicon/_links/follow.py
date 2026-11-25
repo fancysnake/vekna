@@ -297,9 +297,11 @@ def _event(
                 name=message.name,
                 category=message.category,
                 started_at=message.started_at,
+                summary=message.summary,
             )
         case RiteDelta():
-            if followed.replayed is not None and rite_id in followed.replayed:
+            shown = followed.replayed is not None and rite_id in followed.replayed
+            if shown or message.quiet:
                 return None
             return RiteStreamed(rite_id=rite_id, delta=message.delta)
         case _:

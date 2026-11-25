@@ -95,8 +95,8 @@ async def run_quiet(_state: Quiet) -> Done[ShellResult]:
 
 @step
 async def run_quiet_partial(_state: QuietPartial) -> Done[ShellResult]:
-    # Silent *and* without a trailing newline: the tail of the last chunk has
-    # no `on_line` to reach, which is the one path the two apart never take.
+    # Off the terminal *and* without a trailing newline: the tail of the last
+    # chunk is output too.
     return Done(await shell("printf 'hushed'", stream=False))
 
 
@@ -222,8 +222,16 @@ class TestResumedRites:
             _resumed({"text": "that was a coding rite"})
 
 
+def _streamed(grimoire: Grimoire, *, hushed: bool) -> list[str]:
+    return [
+        event.delta
+        for event in grimoire.events
+        if isinstance(event, RiteStreamed) and event.quiet is hushed
+    ]
+
+
 def _deltas(grimoire: Grimoire) -> list[str]:
-    return [event.delta for event in grimoire.events if isinstance(event, RiteStreamed)]
+    return _streamed(grimoire, hushed=False)
 
 
 class TestShell:
@@ -283,10 +291,11 @@ class TestShellStreaming:
         assert result.stdout == f"{'☃' * _LONG_LINE}\n"
 
     @staticmethod
-    def test_stream_false_stays_silent():
+    def test_stream_false_keeps_its_output_off_the_terminal():
         result, grimoire, out = _run(quiet)
 
         assert not _deltas(grimoire)
+        assert _streamed(grimoire, hushed=True) == ["hush"]
         # Counted, not matched: the command is quoted in the rite's own two
         # lines, so what has to stay off the surface is the *output* — and here
         # the two are the same word. The tree's format is the renderer's test.
@@ -298,6 +307,7 @@ class TestShellStreaming:
         result, grimoire, out = _run(quiet_partial)
 
         assert not _deltas(grimoire)
+        assert _streamed(grimoire, hushed=True) == ["hushed"]
         assert out.getvalue().count("hushed") == _RITE_LINES
         assert result.stdout == "hushed"
 

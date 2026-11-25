@@ -13,6 +13,15 @@ when.
 
 ### Added
 
+- **A rite's line in the window says what its call was given**: the command a
+  `shell` ran, the prompt an agent got, cut to one line. `RiteStarted` carries
+  it as the optional `summary`.
+- **The window shows the output of every rite**: a step shows what the rites
+  under it wrote, a cast what all its rites wrote, each under its rite's name.
+- **`shell(stream=False)` output shows in the window.** It still stays off the
+  terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
+  `emit_quiet_delta` is how a medium writes it.
+
 - **`f` in the window** folds every project, ritual and `finished` line, and
   opens them all again.
 - **The window fits its first tree to its height**: a tall window opens with

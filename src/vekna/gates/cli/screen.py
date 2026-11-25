@@ -175,7 +175,8 @@ def _rite_line(view: CastView, rite: RiteView, pad: str) -> str:
     medium = rite.started.category == "medium" and status in {"running", "ok"}
     mark = _MEDIUM if medium else _RITE_GLYPH[status]
     said = "" if rite.error is None else f"  — {rite.error}"
-    return f" {pad}{mark} {rite.started.name}{said}"
+    given = f"  {rite.started.summary}" if rite.started.summary else ""
+    return f" {pad}{mark} {rite.started.name}{given}{said}"
 
 
 def _rite_lines(view: CastView) -> list[str]:
