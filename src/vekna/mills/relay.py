@@ -146,7 +146,7 @@ class Relay(Surface):
         for typed in posted.unheard:
             reply = Heard(thread=posted.thread, reply_to=posted.message, text=typed)
             if (said := await self.heard(reply)) is None:
-                break
+                return
             await self._remote.say(thread=posted.thread, text=said)
 
     # What is said back to the writer, or `None` for a thread that is no cast's.

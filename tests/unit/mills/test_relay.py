@@ -493,6 +493,17 @@ class TestHearing:
         assert desk.chat.said == [("t1", "'maybe' is not one of push, decline")]
 
     @staticmethod
+    async def test_what_was_written_before_a_later_question_answers_that_question(
+        desk: _Desk,
+    ):
+        await desk.told(_push())
+        desk.chat.unheard = ("decline",)
+
+        await desk.told(_push("r2"))
+
+        assert desk.answered() == [("r2", "decline")]
+
+    @staticmethod
     async def test_a_reply_answers_the_oldest_question_unless_it_replies_to_one(
         desk: _Desk,
     ):
