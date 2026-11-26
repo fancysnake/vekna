@@ -64,9 +64,11 @@ both.
 `max_steps` bounds the trampoline. A ritual that loops forever stops with
 `StepBudgetExceededError` rather than running until you notice.
 `@step(max_visits=N)` caps how often one cast enters one step, which ends a
-retry loop sooner than the whole budget would. `@step(timeout=600)` bounds one
-visit in seconds: an overrun cancels the step's work and fails it with
-`RiteTimeoutError`, which recovers like any other failure.
+retry loop sooner than the whole budget would. Pick either cap by
+[counting the steps](#show-the-arithmetic-behind-a-cap), not by guessing.
+`@step(timeout=600)` bounds one visit in seconds: an overrun cancels the step's
+work and fails it with `RiteTimeoutError`, which recovers like any other
+failure.
 
 `@step` returns a `Step`, importable from `vekna.lexicon` for annotations. It
 carries only `name`, the function's name. Two steps may share a name, so key
@@ -237,6 +239,114 @@ two runs of one broken suite never match character for character; with the
 digits gone, the failing test's name and the tool that named it remain. Ask
 before the first repair, never after one, so that a match means "this item
 arrived broken the same way" and not "the agent failed twice".
+
+## Remembering and bounding across runs
+
+A ritual cast every night meets the same pull requests again. It has to know
+what it already did for each one, and how often it may retry before it stops.
+Vekna keeps nothing between casts, so both answers live in the ritual. These
+three practices come from cabinet's `heal` rituals too.
+
+### A label remembers what the ritual did
+
+Some work leaves a fact the next cast can read for free. A merged branch has no
+conflict, and a repaired gate is green. That work needs no memory: the next
+cast looks, finds nothing to do, and moves on.
+
+Other work leaves nothing the listing shows. A posted review is a set of inline
+comments, and the call that lists the night's pull requests does not return
+them. Without a mark, the ritual reviews the same branch every night. A label
+is the mark, because the listing already returns it:
+
+```python
+_REVIEWED = "reviewed"
+
+listed = await shell("gh pr list --author @me --json number,labels", stream=False)
+owed = [
+    pull["number"]
+    for pull in json.loads(listed.stdout)
+    if _REVIEWED not in {label["name"] for label in pull["labels"]}
+]
+```
+
+Put the label on last, after the review is posted. A cast that dies halfway
+then leaves no label, and the next cast does the work again.
+
+A label is also a switch you can reach. Take it off by hand and the next cast
+reviews the branch again. Say so where the ritual is documented, because
+nothing else tells the reader how to ask twice.
+
+### One budget for each step, kept with the item
+
+An item often passes through more than one retry loop: resolve the conflicts,
+then repair the gate. One shared counter lets the first loop spend the attempts
+of the second. Keep a count for each step, keyed on the step's name, in the
+payload that carries the item:
+
+```python
+_ROUNDS = 3
+
+
+class Repair(BaseModel):
+    branch: str
+    said: str
+    spent: dict[str, int] = {}
+
+
+@step
+async def repair(work: Repair) -> Repair | Review | GaveUp:
+    await coding(_REPAIR + work.said, session=Session.CONTINUE, key=work.branch)
+    gate = await shell("mise run check")
+    if not gate.exit_code:
+        kept = {name: n for name, n in work.spent.items() if name != repair.name}
+        return Review(branch=work.branch, spent=kept)
+    spent = work.spent.get(repair.name, 0) + 1
+    if spent >= _ROUNDS:
+        return GaveUp(branch=work.branch, reason=gate.stdout)
+    return work.model_copy(
+        update={"said": gate.stdout, "spent": {**work.spent, repair.name: spent}}
+    )
+```
+
+`repair.name` is the `Step` that `@step` returned, read inside its own body.
+The key holds only while your step names are unique.
+
+The green exit removes the step's count. An item can reach the same step twice
+in one cast: a later merge turns the gate red again. The second visit is a new
+problem and starts with a full budget, not with what the first visit left.
+
+The counts die with the item. The next item starts from an empty `spent`, and
+no file or label carries a count into the next cast. A branch that used every
+round tonight gets every round tomorrow. That is deliberate: someone may have
+pushed a fix in between.
+
+### Show the arithmetic behind a cap
+
+`max_steps` and `max_visits` stop a ritual that will not settle. A cap set
+"well above anything plausible" is a guess, and it fails in both directions.
+Too low, and a legal bound trips it: the engine raises
+`StepBudgetExceededError` between steps, where no `Failure` step can take it,
+so the cast ends with no report. Too high, and nobody can say whether the
+number still means anything.
+
+Count the steps the worst cast takes, and write the sum next to the cap:
+
+```python
+# A round is two steps, `measure` then `write_tests`, and one more `measure`
+# reads the last round: 2 * bound + 1. 32 holds a bound of 15. A larger bound
+# trips the cap first, and the cast ends with no report.
+@ritual("cover_diff", max_steps=32)
+def cover_diff(components: CoverDiff) -> Uncovered:
+    return Uncovered(budget=components.bound)
+```
+
+Over many items the sum has the same shape: the steps one item can take at
+worst, times the items, plus the steps that run once. Limit the listing
+(`--limit 30`) so that the item count is a number you can put in the sum.
+
+A cap of ten thousand is safe when the sum beside it comes to ten thousand. A
+cap of thirty-two with no sum is not: the next author who raises a bound cannot
+tell that the cap must rise with it.
 
 ## Components become flags
 

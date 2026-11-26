@@ -1,3 +1,5 @@
+import pytest
+
 from rituals.cover_diff import (
     CoverDiff,
     CoverReport,
@@ -7,7 +9,7 @@ from rituals.cover_diff import (
     measure,
     write_tests,
 )
-from vekna.lexicon import Done
+from vekna.lexicon import Done, StepBudgetExceededError
 from vekna.trial import Trial
 
 _GATE = "mise run test:py:cov:diff -- --fail-under 100"
@@ -99,3 +101,21 @@ class TestCoverDiffWhole:
 
         assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
         assert trial.steps == ["measure", "write_tests", "measure"]
+
+    @staticmethod
+    def test_the_largest_bound_the_step_cap_holds_still_reports(trial: Trial) -> None:
+        trial.shell.replies(when=_GATE, exit_code=1, stdout=_UNCOVERED, always=True)
+        trial.coding.replies("tried", always=True)
+
+        result = trial.cast(cover_diff, CoverDiff(bound=15))
+
+        assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
+        assert len(trial.steps) == 2 * 15 + 1
+
+    @staticmethod
+    def test_a_bound_past_the_step_cap_trips_it(trial: Trial) -> None:
+        trial.shell.replies(when=_GATE, exit_code=1, stdout=_UNCOVERED, always=True)
+        trial.coding.replies("tried", always=True)
+
+        with pytest.raises(StepBudgetExceededError, match="exceeded max_steps=32"):
+            trial.cast(cover_diff, CoverDiff(bound=16))

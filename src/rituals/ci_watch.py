@@ -29,6 +29,8 @@ class Watched(BaseModel):
     detail: str = ""
 
 
+# One `watch` for each fix, one more to read the last fix, and `gave_up` if
+# that one raises: fixes + 2. 32 holds 30 fixes.
 @ritual("ci_watch", max_steps=32)
 def ci_watch(components: CiWatch) -> CiWatch:
     return components

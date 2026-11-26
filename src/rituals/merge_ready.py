@@ -89,8 +89,10 @@ def _complaint(failure: Red) -> str:
     return _suite_said(failure)
 
 
-# max_steps is the backstop, not the control — the bound is. It sits well above
-# a plausible bound, so tripping it means a ritual that will not settle.
+# max_steps is the backstop, not the control — the bound is. A round is two
+# steps, `quality_gates` then `repair`, and one more `quality_gates` reads the
+# last round: 2 * bound + 1. 32 holds a bound of 15. A larger bound trips the
+# cap first, and the cast ends with no report.
 @ritual("merge_ready", max_steps=32)
 def merge_ready(components: MergeReady) -> Attempt:
     return Attempt(budget=components.bound)

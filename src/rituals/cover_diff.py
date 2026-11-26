@@ -52,7 +52,10 @@ class CoverReport(BaseModel):
     report: str = ""
 
 
-@ritual("cover_diff")
+# A round is two steps, `measure` then `write_tests`, and one more `measure`
+# reads the last round: 2 * bound + 1. 32 holds a bound of 15. A larger bound
+# trips the cap first, and the cast ends with no report.
+@ritual("cover_diff", max_steps=32)
 def cover_diff(components: CoverDiff) -> Uncovered:
     # The entrypoint: map the CLI Components into the first step's payload.
     return Uncovered(budget=components.bound)
