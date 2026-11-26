@@ -15,6 +15,7 @@ from vekna.trial import Trial
 
 _GATE = "mise run test:py:cov:diff -- --fail-under 100"
 _UNCOVERED = "src/vekna/thing.py (80%): Missing lines 12,13"
+_LARGEST_BOUND = 15
 
 
 class TestMeasure:
@@ -108,10 +109,12 @@ class TestCoverDiffWhole:
         trial.shell.replies(when=_GATE, exit_code=1, stdout=_UNCOVERED, always=True)
         trial.coding.replies("tried", always=True)
 
-        result = trial.cast(cover_diff, CoverDiff(bound=15))
+        result = trial.cast(cover_diff, CoverDiff(bound=_LARGEST_BOUND))
 
         assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
-        assert len(trial.steps) == 2 * 15 + 1
+        assert len(trial.steps) == 2 * _LARGEST_BOUND + 1
+        assert trial.shell.commands == [_GATE] * (_LARGEST_BOUND + 1)
+        assert len(trial.coding.prompts) == _LARGEST_BOUND
 
     @staticmethod
     def test_a_bound_past_the_step_cap_is_refused() -> None:

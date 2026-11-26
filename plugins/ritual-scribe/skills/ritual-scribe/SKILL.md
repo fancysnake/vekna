@@ -590,15 +590,16 @@ because someone may have pushed a fix in between.
 conflict, a green gate) needs no memory. Work the listing cannot show does: a
 posted review is inline comments, which the call listing the pull requests does
 not return, so without a mark the ritual reviews the branch every night. The
-listing returns labels:
+listing can filter on a label. Filter in the query: `gh` stops at `--limit`, so
+a filter in Python never sees past the newest pull requests, labelled or not:
 
 ```python
-listed = await shell("gh pr list --author @me --json number,labels", stream=False)
-owed = [
-    pull["number"]
-    for pull in json.loads(listed.stdout)
-    if _REVIEWED not in {label["name"] for label in pull["labels"]}
-]
+listed = await shell(
+    f"gh pr list --author @me --search -label:{_REVIEWED}"
+    " --limit 30 --json number",
+    stream=False,
+)
+owed = [pull["number"] for pull in json.loads(listed.stdout)]
 ```
 
 Put the label on last, after the work is posted, so a cast that dies halfway

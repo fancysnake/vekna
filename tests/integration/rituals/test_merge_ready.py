@@ -18,6 +18,7 @@ from vekna.trial import Trial
 _LINT = "mise run lint:py"
 _SUITE = "mise run test:py"
 _SPEND = "*hand it to the agent?*"
+_LARGEST_BOUND = 15
 
 
 class TestQualityGates:
@@ -187,14 +188,19 @@ class TestMergeReadyWhole:
 
     @staticmethod
     def test_the_largest_bound_the_step_cap_holds_still_reports(trial: Trial) -> None:
-        trial.shell.replies(when="*", exit_code=1, stdout="red", always=True)
+        trial.shell.replies(when=_LINT, exit_code=1, stdout="red", always=True)
+        trial.shell.replies(when=_SUITE, exit_code=1, stdout="red", always=True)
         trial.decide.answers(answer=True, when=_SPEND, always=True)
         trial.coding.replies("tried", always=True)
 
-        result = trial.cast(merge_ready, MergeReady(bound=15))
+        result = trial.cast(merge_ready, MergeReady(bound=_LARGEST_BOUND))
 
         assert result == MergeReport(green=False, remaining=0)
-        assert len(trial.steps) == 2 * 15 + 1
+        assert len(trial.steps) == 2 * _LARGEST_BOUND + 1
+        gates = [_LINT, _SUITE] * (_LARGEST_BOUND + 1)
+        assert sorted(trial.shell.commands) == sorted(gates)
+        assert len(trial.decide.prompts) == _LARGEST_BOUND
+        assert len(trial.coding.prompts) == _LARGEST_BOUND
 
     @staticmethod
     def test_a_bound_past_the_step_cap_is_refused() -> None:

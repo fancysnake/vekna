@@ -256,18 +256,22 @@ cast looks, finds nothing to do, and moves on.
 Other work leaves nothing the listing shows. A posted review is a set of inline
 comments, and the call that lists the night's pull requests does not return
 them. Without a mark, the ritual reviews the same branch every night. A label
-is the mark, because the listing already returns it:
+is the mark, because the listing can filter on it:
 
 ```python
 _REVIEWED = "reviewed"
 
-listed = await shell("gh pr list --author @me --json number,labels", stream=False)
-owed = [
-    pull["number"]
-    for pull in json.loads(listed.stdout)
-    if _REVIEWED not in {label["name"] for label in pull["labels"]}
-]
+listed = await shell(
+    f"gh pr list --author @me --search -label:{_REVIEWED}"
+    " --limit 30 --json number",
+    stream=False,
+)
+owed = [pull["number"] for pull in json.loads(listed.stdout)]
 ```
+
+Filter in the query, not in Python. `gh` stops at `--limit`, so a later filter
+sees only the newest pull requests. Once all of those carry the label, the
+older ones are never reviewed.
 
 Put the label on last, after the review is posted. A cast that dies halfway
 then leaves no label, and the next cast does the work again.
