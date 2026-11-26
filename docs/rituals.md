@@ -280,8 +280,8 @@ nothing else tells the reader how to ask twice.
 
 An item often passes through more than one retry loop: resolve the conflicts,
 then repair the gate. One shared counter lets the first loop spend the attempts
-of the second. Keep a count for each step, keyed on the step's name, in the
-payload that carries the item:
+of the second. Give each loop its own named count, in the payload that carries
+the item:
 
 ```python
 _ROUNDS = 3
@@ -290,7 +290,8 @@ _ROUNDS = 3
 class Repair(BaseModel):
     branch: str
     said: str
-    spent: dict[str, int] = {}
+    resolves: int = 0
+    repairs: int = 0
 
 
 @step
@@ -298,25 +299,24 @@ async def repair(work: Repair) -> Repair | Review | GaveUp:
     await coding(_REPAIR + work.said, session=Session.CONTINUE, key=work.branch)
     gate = await shell("mise run check")
     if not gate.exit_code:
-        kept = {name: n for name, n in work.spent.items() if name != repair.name}
-        return Review(branch=work.branch, spent=kept)
-    spent = work.spent.get(repair.name, 0) + 1
-    if spent >= _ROUNDS:
+        return Review(branch=work.branch, resolves=work.resolves)
+    repairs = work.repairs + 1
+    if repairs >= _ROUNDS:
         return GaveUp(branch=work.branch, reason=gate.stdout)
-    return work.model_copy(
-        update={"said": gate.stdout, "spent": {**work.spent, repair.name: spent}}
+    return Repair(
+        branch=work.branch,
+        said=gate.stdout,
+        resolves=work.resolves,
+        repairs=repairs,
     )
 ```
 
-`repair.name` is the `Step` that `@step` returned, read inside its own body.
-The key holds only while your step names are unique.
-
-The green exit removes the step's count. An item can reach the same step twice
+The green exit leaves `repairs` behind. An item can reach the same step twice
 in one cast: a later merge turns the gate red again. The second visit is a new
 problem and starts with a full budget, not with what the first visit left.
 
-The counts die with the item. The next item starts from an empty `spent`, and
-no file or label carries a count into the next cast. A branch that used every
+The counts die with the item. The next item starts both counts at zero, and no
+file or label carries a count into the next cast. A branch that used every
 round tonight gets every round tomorrow. That is deliberate: someone may have
 pushed a fix in between.
 
@@ -329,12 +329,17 @@ Too low, and a legal bound trips it: the engine raises
 so the cast ends with no report. Too high, and nobody can say whether the
 number still means anything.
 
-Count the steps the worst cast takes, and write the sum next to the cap:
+Count the steps the worst cast takes. Then give the input field a maximum that
+the cap can hold, so that a larger value is refused before any step runs. The
+sum beside the cap shows where the two numbers come from:
 
 ```python
+class CoverDiff(BaseModel):
+    bound: Annotated[int, Field(ge=0, le=15)] = 3
+
+
 # A round is two steps, `measure` then `write_tests`, and one more `measure`
-# reads the last round: 2 * bound + 1. 32 holds a bound of 15. A larger bound
-# trips the cap first, and the cast ends with no report.
+# reads the last round: 2 * bound + 1. 32 holds the largest bound, 15.
 @ritual("cover_diff", max_steps=32)
 def cover_diff(components: CoverDiff) -> Uncovered:
     return Uncovered(budget=components.bound)
@@ -342,11 +347,12 @@ def cover_diff(components: CoverDiff) -> Uncovered:
 
 Over many items the sum has the same shape: the steps one item can take at
 worst, times the items, plus the steps that run once. Limit the listing
-(`--limit 30`) so that the item count is a number you can put in the sum.
+(`--limit 30`) so that the item count is a number you can put in the sum. If an
+input sets that limit, give the input a maximum too.
 
 A cap of ten thousand is safe when the sum beside it comes to ten thousand. A
-cap of thirty-two with no sum is not: the next author who raises a bound cannot
-tell that the cap must rise with it.
+cap of thirty-two with no sum is not: the next author who raises a maximum
+cannot tell that the cap must rise with it.
 
 ## Components become flags
 

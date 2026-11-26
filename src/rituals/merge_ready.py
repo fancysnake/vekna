@@ -1,8 +1,9 @@
 # merge_ready — run both gates at once, and babysit them to green.
 
 import asyncio
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from vekna.folio.coding import Session, coding
 from vekna.folio.flow import decide
@@ -28,7 +29,7 @@ question: one test file, one linter over one file.
 
 
 class MergeReady(BaseModel):
-    bound: Bound = 3
+    bound: Annotated[Bound, Field(le=15)] = 3
 
 
 class Attempt(BaseModel):
@@ -91,8 +92,7 @@ def _complaint(failure: Red) -> str:
 
 # max_steps is the backstop, not the control — the bound is. A round is two
 # steps, `quality_gates` then `repair`, and one more `quality_gates` reads the
-# last round: 2 * bound + 1. 32 holds a bound of 15. A larger bound trips the
-# cap first, and the cast ends with no report.
+# last round: 2 * bound + 1. 32 holds the largest bound, 15.
 @ritual("merge_ready", max_steps=32)
 def merge_ready(components: MergeReady) -> Attempt:
     return Attempt(budget=components.bound)

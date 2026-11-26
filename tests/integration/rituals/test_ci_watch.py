@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from rituals.ci_watch import CiWatch, Watched, ci_watch
 from rituals.pr_fix import CiFix, Fixed
 from vekna.trial import Trial
@@ -38,6 +41,11 @@ class TestCiWatch:
 
         assert result == Watched(pull_request=7, outcome="out of fixes")
         assert trial.queue.enqueued == []
+
+    @staticmethod
+    def test_more_fixes_than_the_step_cap_holds_are_refused() -> None:
+        with pytest.raises(ValidationError, match="less than or equal to 30"):
+            CiWatch(pull_request=7, fixes=31)
 
     @staticmethod
     def test_a_fix_not_pushed_ends_red_saying_why(trial: Trial) -> None:

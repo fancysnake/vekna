@@ -1,9 +1,9 @@
 # ci_watch — read one pull request's CI and, while it is red and fixes are
 # left, wait on a `pr_fix` and read it again.
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from vekna.folio.flow import await_cast, timeout
 from vekna.folio.shell import shell
@@ -19,7 +19,7 @@ _GREEN, _RED = 0, 1
 
 class CiWatch(BaseModel):
     pull_request: int
-    fixes: Bound = 2
+    fixes: Annotated[Bound, Field(le=30)] = 2
     patience: Seconds = 3600
 
 
@@ -30,7 +30,7 @@ class Watched(BaseModel):
 
 
 # One `watch` for each fix, one more to read the last fix, and `gave_up` if
-# that one raises: fixes + 2. 32 holds 30 fixes.
+# that one raises: fixes + 2. 32 holds the most fixes allowed, 30.
 @ritual("ci_watch", max_steps=32)
 def ci_watch(components: CiWatch) -> CiWatch:
     return components
