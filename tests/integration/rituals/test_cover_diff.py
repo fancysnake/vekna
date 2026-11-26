@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from rituals.cover_diff import (
     CoverDiff,
     CoverReport,
@@ -12,6 +15,7 @@ from vekna.trial import Trial
 
 _GATE = "mise run test:py:cov:diff -- --fail-under 100"
 _UNCOVERED = "src/vekna/thing.py (80%): Missing lines 12,13"
+_LARGEST_BOUND = 15
 
 
 class TestMeasure:
@@ -99,3 +103,20 @@ class TestCoverDiffWhole:
 
         assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
         assert trial.steps == ["measure", "write_tests", "measure"]
+
+    @staticmethod
+    def test_the_largest_bound_the_step_cap_holds_still_reports(trial: Trial) -> None:
+        trial.shell.replies(when=_GATE, exit_code=1, stdout=_UNCOVERED, always=True)
+        trial.coding.replies("tried", always=True)
+
+        result = trial.cast(cover_diff, CoverDiff(bound=_LARGEST_BOUND))
+
+        assert result == CoverReport(covered=False, remaining=0, report=_UNCOVERED)
+        assert len(trial.steps) == 2 * _LARGEST_BOUND + 1
+        assert trial.shell.commands == [_GATE] * (_LARGEST_BOUND + 1)
+        assert len(trial.coding.prompts) == _LARGEST_BOUND
+
+    @staticmethod
+    def test_a_bound_past_the_step_cap_is_refused() -> None:
+        with pytest.raises(ValidationError, match="less than or equal to 15"):
+            CoverDiff(bound=16)

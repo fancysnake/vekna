@@ -22,6 +22,17 @@ when.
   terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
   `emit_delta(text, quiet=True)` is how a medium writes it.
 
+### Changed
+
+- **Remembering and bounding across runs, written down**: `docs/rituals.md`
+  and the ritual-scribe skill now teach a label as the memory of work a
+  listing cannot show, a retry budget for each step kept with the item, and
+  the step count behind a `max_steps` or `max_visits` cap. `cover_diff`,
+  `merge_ready` and `ci_watch` carry that count beside their caps.
+  `cover_diff` now sets `max_steps=32`. The command line refuses a `--bound`
+  over 15 for `cover_diff` and `merge_ready`, and a `--fixes` over 30 for
+  `ci_watch`.
+
 ### Fixed
 
 - **`vekna log <cast>` and the plain view strip terminal control codes** from a
