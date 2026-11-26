@@ -295,9 +295,9 @@ def _reactions(request: DecideRequested) -> dict[str, str]:
     chosen = request.reactions or {}
     defaults = _YES_NO_REACTIONS if request.options is None else _NUMBER_REACTIONS
     emoji = {
-        answer: default
-        for answer, default in zip(answers, defaults, strict=False)
-        if default not in chosen.values()
+        answer: defaults[at]
+        for at, answer in enumerate(answers[: len(defaults)])
+        if defaults[at] not in chosen.values()
     } | chosen
     return {emoji[answer]: answer for answer in answers if answer in emoji}
 
@@ -317,7 +317,8 @@ def _thread(hello: CastHello, *, branch: str | None) -> str:
 
 # Whether the ritual gave an option the number emoji of another one's place.
 def _moved(options: list[str], chosen: dict[str, str]) -> bool:
-    placed = dict(zip(_NUMBER_REACTIONS, options, strict=False))
+    numbered = enumerate(options[: len(_NUMBER_REACTIONS)])
+    placed = {_NUMBER_REACTIONS[at]: option for at, option in numbered}
     return any(placed.get(emoji, answer) != answer for answer, emoji in chosen.items())
 
 
