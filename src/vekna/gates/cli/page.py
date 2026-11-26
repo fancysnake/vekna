@@ -15,6 +15,7 @@ from .cast_text import (
     counted,
     elapsed,
     ended,
+    given,
     labelled,
     live,
     printable,
@@ -158,7 +159,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         _look(view, _RITE_LOOK[view.rite_status(rite)]),
         " ",
         (rite.started.name, medium),
-        (_given(rite), "dim"),
+        (given(rite), "dim"),
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
@@ -171,23 +172,18 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
     return text
 
 
-def _given(rite: RiteView) -> str:
-    summary = rite.started.summary
-    return f"  {printable(summary)}" if summary else ""
-
-
 def _flags(hello: CastHello) -> str:
     return " ".join(f"--{name} {value}" for name, value in hello.components.items())
 
 
 # The right page's top for a cast taken over: which cast, how to leave it, and
-# the rite whose output is under it. The cast's rites are on the left page.
+# whether any output is under it. The cast's rites are on the left page.
 def taken_head(view: CastView) -> Text:
-    rite = _shown_rite(view)
+    wrote = any(rite.deltas for rite in view.rites.values())
     return Text.assemble(
         (f" ◆ taken over · {labelled(view.hello)} ", "bold reverse"),
         (f" {LEAVES}\n", "dim"),
-        ("no output yet" if rite is None else f"{rite.started.name} · live", "dim"),
+        ("output" if wrote else "no output yet", "dim"),
     )
 
 
@@ -308,7 +304,7 @@ def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
     for rite in wrote:
         # One rite's output needs no name over it: the line picked says it.
         if len(wrote) > 1:
-            said.append(f"── {rite.started.name}{_given(rite)}")
+            said.append(f"── {rite.started.name}{given(rite)}")
         said += rite.deltas
     if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
@@ -335,21 +331,5 @@ def taken_output(view: CastView, mine: set[str]) -> list[str]:
     ]
 
 
-# The chain of parents is what a peer said it was, so it is walked no further
-# than the cast has rites: a loop in it ends there.
 def _within(view: CastView, rite: RiteView, picked: RiteView) -> bool:
-    at: RiteView | None = rite
-    for _ in view.rites:
-        if at is None or at is picked:
-            break
-        at = view.rites.get(at.started.parent_id or "")
-    return at is picked
-
-
-def _shown_rite(view: CastView) -> RiteView | None:
-    rites = list(view.rites.values())
-    talking = [
-        rite for rite in rites if view.rite_status(rite) == "running" and rite.deltas
-    ]
-    said = talking or [rite for rite in rites if rite.deltas]
-    return said[-1] if said else None
+    return rite is picked or any(above is picked for above in view.ancestors(rite))

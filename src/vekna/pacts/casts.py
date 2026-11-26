@@ -1,4 +1,5 @@
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePath
@@ -58,9 +59,14 @@ DELTA_LINES = 200
 class RiteView:
     started: RiteStarted
     finished: RiteFinished | None = None
-    deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
-    # Line for line with `deltas`: whether the line was kept off the terminal.
-    quiet: deque[bool] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
+    # Each line of output, after whether it was kept off the terminal.
+    lines: deque[tuple[bool, str]] = field(
+        default_factory=lambda: deque(maxlen=DELTA_LINES)
+    )
+
+    @property
+    def deltas(self) -> list[str]:
+        return [line for _, line in self.lines]
 
     @property
     def error(self) -> str | None:
@@ -120,6 +126,17 @@ class CastView:
                 *([rite.finished_at] if rite.finished_at else []),
             ]
         return max(stamps)
+
+    # Every rite above this one, nearest first. The chain of parents is what a
+    # peer said it was and nothing checks it for loops, so it is walked no
+    # further than the cast has rites.
+    def ancestors(self, rite: RiteView) -> Iterator[RiteView]:
+        parent = rite.started.parent_id
+        for _ in self.rites:
+            if parent is None or (found := self.rites.get(parent)) is None:
+                return
+            yield found
+            parent = found.started.parent_id
 
     # A rite its cast ended inside, without saying how it did, was cancelled.
     def rite_status(self, rite: RiteView) -> RiteStatus:

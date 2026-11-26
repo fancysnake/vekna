@@ -1934,7 +1934,7 @@ class TestTakingOver:
             left = len(_contents(app))
         assert folded == 1
         assert rites == ["fetch", "fix"]
-        assert head == " ◆ taken over · pr_fix c1  esc leaves\nfix · live"
+        assert head == " ◆ taken over · pr_fix c1  esc leaves\noutput"
         assert said == [
             "editing",
             "? push?",

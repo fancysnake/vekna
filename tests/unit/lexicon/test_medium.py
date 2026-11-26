@@ -15,7 +15,6 @@ from vekna.lexicon import (
     attended,
     current_rite,
     emit_delta,
-    emit_quiet_delta,
     medium,
     record_result,
     ritual,
@@ -105,7 +104,7 @@ identifier = entry(name="identifier", payload=Whoami())
 @medium
 async def hoard() -> None:
     await asyncio.sleep(0)
-    emit_quiet_delta("bulk")
+    emit_delta("bulk", quiet=True)
 
 
 @step

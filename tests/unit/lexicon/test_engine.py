@@ -821,7 +821,7 @@ class TestGrimoire:
         grimoire = Grimoire(clock=_fixed_clock)
 
         rite_id = grimoire.rite_started(name="fix")
-        grimoire.rite_quiet_delta(rite_id, "bulk")
+        grimoire.rite_delta(rite_id, "bulk", quiet=True)
 
         assert grimoire.events[-1] == RiteStreamed(
             rite_id="r1", delta="bulk", quiet=True

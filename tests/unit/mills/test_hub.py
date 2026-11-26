@@ -499,7 +499,7 @@ class TestLateSurface:
             _hello(),
             GrimoireBegin(cast_id="c1"),
             _started(),
-            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo"),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo\n"),
             failed,
             GrimoireEnd(cast_id="c1"),
         ]
@@ -519,20 +519,27 @@ class TestLateSurface:
             _hello(),
             GrimoireBegin(cast_id="c1"),
             _started(),
-            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo", quiet=True),
-            RiteDelta(cast_id="c1", rite_id="r1", delta="loud"),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo\n", quiet=True),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="loud\n"),
             GrimoireEnd(cast_id="c1"),
         ]
 
     @staticmethod
-    def test_a_line_with_no_word_on_its_quiet_is_refused_not_cut():
+    def test_a_blank_line_ending_a_run_survives_the_replay():
         hub = Hub()
         hub.apply(_hello())
         hub.apply(_started())
-        hub.casts["c1"].rites["r1"].deltas.append("stray")
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="a", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="note"))
+        surface = _Surface()
+        hub.attach_surface(surface)
 
-        with pytest.raises(ValueError, match="longer than"):
-            hub.attach_surface(_Surface())
+        peer = Hub()
+        for message in surface.sent:
+            peer.apply(message)
+
+        assert list(peer.casts["c1"].rites["r1"].deltas) == ["a", "", "note"]
 
     @staticmethod
     def test_a_rite_that_has_said_nothing_replays_no_output():

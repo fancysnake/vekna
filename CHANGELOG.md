@@ -20,7 +20,12 @@ when.
   under it wrote, a cast what all its rites wrote, each under its rite's name.
 - **`shell(stream=False)` output shows in the window.** It still stays off the
   terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
-  `emit_quiet_delta` is how a medium writes it.
+  `emit_delta(text, quiet=True)` is how a medium writes it.
+
+### Fixed
+
+- **`vekna log <cast>` and the plain view strip terminal control codes** from a
+  rite's name, summary and error.
 
 ## [3.1.0] - 2026-11-25
 

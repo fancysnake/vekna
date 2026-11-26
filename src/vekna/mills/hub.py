@@ -1,4 +1,6 @@
 from collections.abc import Callable, Iterable, Iterator
+from itertools import groupby
+from operator import itemgetter
 from typing import assert_never
 
 from typing_extensions import override
@@ -494,21 +496,14 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
         return _NO_RITE
     if isinstance(message, RiteDelta):
         lines = message.delta.splitlines() or [""]
-        rite.deltas.extend(lines)
-        rite.quiet.extend([message.quiet] * len(lines))
+        rite.lines.extend((message.quiet, line) for line in lines)
     else:
         rite.finished = message
     return None
 
 
-# A rite's output as runs of lines said the same way: quiet or not, the lines.
-def _runs(rite: RiteView) -> list[tuple[bool, list[str]]]:
-    runs: list[tuple[bool, list[str]]] = []
-    for quiet, line in zip(rite.quiet, rite.deltas, strict=True):
-        if not runs or runs[-1][0] is not quiet:
-            runs.append((quiet, []))
-        runs[-1][1].append(line)
-    return runs
+# Named with its type, because `itemgetter` on its own answers `Any`.
+_said_quiet: Callable[[tuple[bool, str]], bool] = itemgetter(0)
 
 
 def _replay_rites(view: CastView) -> Iterator[WireMessage]:
@@ -516,11 +511,12 @@ def _replay_rites(view: CastView) -> Iterator[WireMessage]:
         yield rite.started
         # A run of lines said the same way is one delta, so a terminal that
         # follows the replay is spared what it was spared live.
-        for quiet, run in _runs(rite):
+        for quiet, run in groupby(rite.lines, key=_said_quiet):
             yield RiteDelta(
                 cast_id=view.hello.cast_id,
                 rite_id=rite.started.rite_id,
-                delta="\n".join(run),
+                # Every line ends, so a run's blank last line is not lost.
+                delta="".join(f"{line}\n" for _, line in run),
                 quiet=quiet,
             )
         if rite.finished is not None:

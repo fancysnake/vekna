@@ -10,8 +10,10 @@ from .cast_text import (
     clock,
     counted,
     elapsed,
+    given,
     innermost,
     live,
+    printable,
     top_prompt,
     word,
 )
@@ -84,7 +86,7 @@ def scoped(casts: Sequence[CastView], project: str | None) -> list[CastView]:
 # of them is cut to its width. Left whole, one long name pushes the columns of
 # its own row sideways and the listing stops being a table.
 def _fit(text: str, width: int) -> str:
-    return clipped(text, width).ljust(width)
+    return clipped(printable(text), width).ljust(width)
 
 
 def _steps_done(view: CastView) -> int:
@@ -153,29 +155,17 @@ def _listing(casts: Sequence[CastView], now: datetime) -> list[str]:
 # Depth by walking parents rather than by remembering one: a rite's place in the
 # tree is its parent chain, and the daemon is handed the rites in the order they
 # began, not in the shape they make.
-# The chain is what a peer said it was, and nothing on the way in checks it for
-# loops. Walked recursively, a rite that is its own ancestor painted until the
-# recursion limit and took the painting task with it; walked over the rites
-# themselves, the tree is its own bound — no chain through it is longer than the
-# number of rites in it.
 def _depth(rite: RiteView, view: CastView) -> int:
-    depth = 0
-    parent = rite.started.parent_id
-    for _ in view.rites:
-        if parent is None or (found := view.rites.get(parent)) is None:
-            break
-        depth += 1
-        parent = found.started.parent_id
-    return depth
+    return sum(1 for _ in view.ancestors(rite))
 
 
 def _rite_line(view: CastView, rite: RiteView, pad: str) -> str:
     status = view.rite_status(rite)
     medium = rite.started.category == "medium" and status in {"running", "ok"}
     mark = _MEDIUM if medium else _RITE_GLYPH[status]
-    said = "" if rite.error is None else f"  — {rite.error}"
-    given = f"  {rite.started.summary}" if rite.started.summary else ""
-    return f" {pad}{mark} {rite.started.name}{given}{said}"
+    said = "" if rite.error is None else f"  — {printable(rite.error)}"
+    name = printable(rite.started.name)
+    return f" {pad}{mark} {name}{given(rite)}{said}"
 
 
 def _rite_lines(view: CastView) -> list[str]:
@@ -269,7 +259,7 @@ def recorded(view: CastView) -> str:
     for rite in view.rites.values():
         if view.rite_status(rite) != "ok" and rite.deltas:
             lines += [
-                f"── {rite.started.name} ({view.rite_status(rite)}) ──",
+                f"── {printable(rite.started.name)} ({view.rite_status(rite)}) ──",
                 *rite.deltas,
                 "",
             ]

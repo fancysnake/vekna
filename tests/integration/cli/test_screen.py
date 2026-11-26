@@ -6,7 +6,7 @@ from typing import Literal
 
 import pytest
 
-from vekna.gates.cli.screen import listing, ordered, paint
+from vekna.gates.cli.screen import listing, ordered, paint, recorded
 from vekna.pacts.casts import CastView, DamagedRun, Prompt, RiteStatus, RiteView
 from vekna.wire import (
     AwaitRequested,
@@ -398,6 +398,33 @@ class TestTheList:
     @staticmethod
     def test_nothing_running_says_where_casts_come_from():
         assert "vekna cast <ritual>" in paint(listed=[], focus=None, project=None)
+
+
+class TestControlCodes:
+    @staticmethod
+    @pytest.mark.parametrize("focus", [None, "fix_demo"])
+    def test_none_a_ritual_wrote_in_a_rite_reaches_the_terminal(focus: str | None):
+        view = _running("fix_demo", ago=60)
+        _step(view, "ga\x1b[31mte", ago=30)
+
+        painted = paint(listed=[view], focus=focus, project=None, now=_WHEN)
+
+        assert "gate" in painted
+        assert "\x1b[31m" not in painted
+
+    @staticmethod
+    def test_none_reaches_the_terminal_from_the_journal():
+        view = _running("fix_demo", ago=60)
+        _step(view, "ga\x1b[31mte", ago=30, status="error", error="bo\x1b[31mom")
+        rite = view.rites["ga\x1b[31mte"]
+        rite.started.summary = "ru\x1b[31mff"
+        rite.lines.append((False, "said"))
+
+        read = recorded(view)
+
+        assert "gate  ruff  — boom" in read
+        assert "── gate (error) ──" in read
+        assert "\x1b" not in read
 
 
 class TestDrilledIn:
