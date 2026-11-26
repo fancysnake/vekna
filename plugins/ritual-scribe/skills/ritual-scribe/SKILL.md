@@ -27,7 +27,10 @@ Three organs, and only three.
 ### `@ritual` — the entrypoint
 
 ```python
-@ritual("cover_diff")
+# A round is two steps, `measure` then `write_tests`, and one more `measure`
+# reads the last round: 2 * bound + 1. 32 holds the largest bound, 15, which is
+# `le=15` on the `bound` field.
+@ritual("cover_diff", max_steps=32)
 def cover_diff(components: CoverDiff) -> Uncovered:
     return Uncovered(budget=components.bound)
 ```
@@ -38,9 +41,10 @@ def cover_diff(components: CoverDiff) -> Uncovered:
   signature is a lie the linter is right to call.
 - Returns the first step's payload, and its annotation says which. **Not a
   step** — no payload class names it.
-- `max_steps` is the trampoline's backstop, keyword-only, default **1000**. Set
-  it well above any business bound — tripping it means a ritual that will not
-  settle.
+- `max_steps` is the trampoline's backstop, keyword-only, default **1000**.
+  Count the steps the worst cast takes, give the input a maximum the cap holds
+  (`Field(le=15)`) and write the sum beside the cap, as above. Tripping it ends
+  the cast with no report: no `Failure` step takes `StepBudgetExceededError`.
 - `worktree=True` runs a cast the daemon spawns in a pooled worktree, leased
   before spawn. Set it on a ritual that checks out branches or edits files; a
   ritual that only reads a CI board or lists pull requests needs no tree.
@@ -530,6 +534,78 @@ if any(same_failure(gate.stdout, known) for known in red.seen):
     return GaveUp(branch=red.branch, reason="red as it already was", seen=red.seen)
 ```
 
+**Show the arithmetic behind a cap.** "Well above anything plausible" is a
+guess. Too low and a legal bound trips it, losing the report; too high and
+nobody knows what the number means. Sum the worst cast — steps one item can
+take, times the items, plus the steps that run once. Then put a maximum on the
+input field that the cap holds, so a larger value is refused before any step
+runs:
+
+```python
+class CoverDiff(BaseModel):
+    bound: Annotated[int, Field(ge=0, le=15)] = 3  # 2 * 15 + 1 fits 32 steps
+```
+
+Show the sum in a comment beside `max_steps` or `max_visits`. Limit the listing
+(`--limit 30`) so the item count is a number, and give an input that sets the
+limit a maximum too. A cap of ten thousand is safe with its sum shown;
+thirty-two without one is not, because whoever raises a maximum cannot see that
+the cap must rise with it.
+
+**One budget for each step, kept with the item.** Two retry loops on one item
+(resolve conflicts, repair the gate) must not spend each other's attempts. Give
+each loop its own named count, in the item's payload:
+
+```python
+class Repair(BaseModel):
+    branch: str
+    said: str
+    resolves: int = 0
+    repairs: int = 0
+
+
+@step
+async def repair(work: Repair) -> Repair | Review | GaveUp:
+    await coding(_REPAIR + work.said, session=Session.CONTINUE, key=work.branch)
+    gate = await shell("mise run check")
+    if not gate.exit_code:              # green hands the budget back
+        return Review(branch=work.branch, resolves=work.resolves)
+    repairs = work.repairs + 1
+    if repairs >= _ROUNDS:
+        return GaveUp(branch=work.branch, reason=gate.stdout)
+    return Repair(
+        branch=work.branch,
+        said=gate.stdout,
+        resolves=work.resolves,
+        repairs=repairs,
+    )
+```
+
+Drop the loop's count on green: a later merge can turn the gate red again, and
+that is a new problem with a full budget. The counts die with the item — the
+next item starts at zero, and nothing carries a count into the next cast,
+because someone may have pushed a fix in between.
+
+**A label remembers what the ritual did.** Work that leaves a readable fact (no
+conflict, a green gate) needs no memory. Work the listing cannot show does: a
+posted review is inline comments, which the call listing the pull requests does
+not return, so without a mark the ritual reviews the branch every night. The
+listing can filter on a label. Filter in the query: `gh` stops at `--limit`, so
+a filter in Python never sees past the newest pull requests, labelled or not:
+
+```python
+listed = await shell(
+    f"gh pr list --author @me --search -label:{_REVIEWED}"
+    " --limit 30 --json number",
+    stream=False,
+)
+owed = [pull["number"] for pull in json.loads(listed.stdout)]
+```
+
+Put the label on last, after the work is posted, so a cast that dies halfway
+repeats it. Taking the label off by hand asks for the work again — write that
+where the ritual is documented.
+
 **Bound time per call, not per step loop.** `await timeout(coding(...),
 seconds=600)` and `await race(a, b)` from `vekna.folio.flow`; `@step(timeout=600)`
 bounds a whole visit. An overrun cancels the work — shell process group killed,
@@ -772,7 +848,8 @@ on the page it asked about.
 - [ ] Every payload class belongs to exactly one step.
 - [ ] No step calls a step. Every hop is a returned payload.
 - [ ] Every loop has a business bound in its payload **and** a `max_steps` above
-      it.
+      it. An input that sets the bound has a maximum the cap holds
+      (`Field(le=N)`), and a comment beside the cap gives the sum behind N.
 - [ ] Every non-zero `exit_code` on a path you care about routes or raises
       `RitualError` naming what failed.
 - [ ] Every retry loop routes on something the ritual read back — an exit code,

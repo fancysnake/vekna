@@ -11,6 +11,17 @@ when.
 
 ## [Unreleased]
 
+### Changed
+
+- **Remembering and bounding across runs, written down**: `docs/rituals.md`
+  and the ritual-scribe skill now teach a label as the memory of work a
+  listing cannot show, a retry budget for each step kept with the item, and
+  the step count behind a `max_steps` or `max_visits` cap. `cover_diff`,
+  `merge_ready` and `ci_watch` carry that count beside their caps.
+  `cover_diff` now sets `max_steps=32`. The command line refuses a `--bound`
+  over 15 for `cover_diff` and `merge_ready`, and a `--fixes` over 30 for
+  `ci_watch`.
+
 ## [3.1.0] - 2026-11-25
 
 ### Added
