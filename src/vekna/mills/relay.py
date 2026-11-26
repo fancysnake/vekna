@@ -260,7 +260,9 @@ def _reactions(request: DecideRequested) -> dict[str, str]:
             chosen.get(answer, emoji): answer
             for emoji, answer in _YES_NO_REACTIONS.items()
         }
-    emoji = dict(zip(request.options, _NUMBER_REACTIONS, strict=False)) | chosen
+    numbered = request.options[: len(_NUMBER_REACTIONS)]
+    emoji = {option: _NUMBER_REACTIONS[at] for at, option in enumerate(numbered)}
+    emoji |= chosen
     return {emoji[option]: option for option in request.options if option in emoji}
 
 
