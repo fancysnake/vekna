@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
 
@@ -22,6 +22,7 @@ class Asked:
     prompt: str
     options: Sequence[str] | None = None
     free: bool = False
+    reactions: Mapping[str, str] | None = None
 
 
 # What a scripted agent does with its turn. `uses` are tools it reaches for —

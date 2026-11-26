@@ -85,6 +85,7 @@ class TestDiscriminator:
         assert isinstance(requested, DecideRequested)
         assert requested.options is None
         assert requested.free is False
+        assert requested.reactions is None
         assert isinstance(decided, DecideResolved)
         assert decided.answer == "yes"
 

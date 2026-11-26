@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from typing_extensions import override
@@ -150,10 +150,17 @@ class DecideDouble(Channel):
         return [asked.prompt for asked in self.asked]
 
     async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
     ) -> str:
         offered = None if options is None else tuple(options)
-        self.asked.append(Asked(prompt=prompt, options=offered, free=free))
+        self.asked.append(
+            Asked(prompt=prompt, options=offered, free=free, reactions=reactions)
+        )
         # `attended = False` stands in for `--unattended`, which refuses this.
         if not self.attended:
             msg = f"unattended cast refused to ask: {prompt}"

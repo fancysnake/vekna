@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -14,12 +14,14 @@ class Posted:
 
 
 # What somebody wrote in a thread. `reply_to` is the message it answers, when
-# the remote says which.
+# the remote says which. A reaction is heard as its emoji, on the message it
+# was put under.
 @dataclass(frozen=True, kw_only=True)
 class Heard:
     thread: str
     reply_to: str | None
     text: str
+    reaction: bool = False
 
 
 # What is said back to the author, or `None` for nothing.
@@ -36,7 +38,11 @@ class RemoteError(Exception):
 # after that.
 class Remote(Protocol):
     # A question that already stands last in its thread is not posted again.
-    async def ask(self, *, room: str, thread: str, text: str) -> Posted: ...
+    # `reactions` are the emoji put under a question newly posted, in order,
+    # for a tap on one to answer it.
+    async def ask(
+        self, *, room: str, thread: str, text: str, reactions: Sequence[str] = ()
+    ) -> Posted: ...
     async def say(self, *, thread: str, text: str) -> None: ...
 
     # Stays connected until cancelled, handing `hear` whatever is written in a

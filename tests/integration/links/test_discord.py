@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, call
 
@@ -27,7 +28,7 @@ def _named(name: str, **attributes: object) -> MagicMock:
 
 
 def _sent(message_id: int) -> MagicMock:
-    return MagicMock(id=message_id)
+    return MagicMock(id=message_id, add_reaction=AsyncMock())
 
 
 # A guild as the gateway's cache holds it once the client is ready.
@@ -101,6 +102,30 @@ def _gateway(monkeypatch: pytest.MonkeyPatch, *messages: MagicMock) -> list[str]
 
     monkeypatch.setattr(discord.Client, "start", start)
     return tokens
+
+
+def _tap(**attributes: object) -> MagicMock:
+    settings: dict[str, object] = {
+        "guild_id": _GUILD,
+        "user_id": _OPERATOR,
+        "member": MagicMock(bot=False),
+        "channel_id": _THREAD,
+        "message_id": 42,
+        "emoji": "👍",
+    }
+    return MagicMock(**(settings | attributes))
+
+
+# The gateway again, handing the client each reaction once it has started.
+def _tapping(monkeypatch: pytest.MonkeyPatch, *taps: MagicMock) -> MagicMock:
+    async def start(client: _Client, _: str) -> None:
+        for tap in taps:
+            await client.on_raw_reaction_add(tap)
+
+    thread = MagicMock(send=AsyncMock())
+    monkeypatch.setattr(discord.Client, "start", start)
+    monkeypatch.setattr(discord.Client, "get_partial_messageable", lambda _, __: thread)
+    return thread
 
 
 async def _connected_for_good(_: _Client, __: str) -> None:
@@ -188,6 +213,49 @@ class TestAsk:
         assert guild.thread.send.await_args_list == [
             call(f"{_MENTIONS}\n{first}"),
             call(second),
+        ]
+
+    @staticmethod
+    async def test_the_reactions_are_put_under_the_end_of_the_question_in_order(
+        guild: _Guild, monkeypatch: pytest.MonkeyPatch
+    ):
+        guild.settled()
+        first, last = _sent(1), _sent(2)
+        guild.thread.send = AsyncMock(side_effect=[first, last])
+
+        async with _connected(monkeypatch) as chat:
+            await chat.ask(
+                room="app",
+                thread="heal · c0ffee00",
+                text=f"{'x ' * 600}\n{'y' * 800}",
+                reactions=("👍", "❌"),
+            )
+
+        first.add_reaction.assert_not_awaited()
+        assert last.add_reaction.await_args_list == [call("👍"), call("❌")]
+
+    @staticmethod
+    async def test_a_reaction_discord_refuses_is_logged_and_the_question_stands(
+        guild: _Guild, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        guild.settled()
+        message = _sent(1)
+        message.add_reaction = AsyncMock(side_effect=discord.DiscordException("no"))
+        guild.thread.send = AsyncMock(return_value=message)
+
+        with caplog.at_level(logging.WARNING, logger="vekna.links.discord"):
+            async with _connected(monkeypatch) as chat:
+                posted = await chat.ask(
+                    room="app",
+                    thread="heal · c0ffee00",
+                    text="push?",
+                    reactions=("👍", "❌"),
+                )
+
+        assert posted == Posted(thread=str(_THREAD), message="1")
+        message.add_reaction.assert_awaited_once_with("👍")
+        assert [record.getMessage() for record in caplog.records] == [
+            "could not put reactions under a question: no"
         ]
 
     @staticmethod
@@ -352,6 +420,39 @@ class TestRun:
         await DiscordRemote(_SETUP).run(hear)
 
         hear.assert_not_awaited()
+
+    @staticmethod
+    async def test_a_reaction_is_heard_as_its_emoji_and_the_word_back_is_sent(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        thread = _tapping(monkeypatch, _tap(), _tap(emoji="🎉", member=None))
+        hear = AsyncMock(side_effect=[None, "🎉 is not one of 👍 ❌"])
+
+        await DiscordRemote(_SETUP).run(hear)
+
+        assert hear.await_args_list == [
+            call(Heard(thread="555", reply_to="42", text="👍", reaction=True)),
+            call(Heard(thread="555", reply_to="42", text="🎉", reaction=True)),
+        ]
+        thread.send.assert_awaited_once_with("🎉 is not one of 👍 ❌")
+
+    @staticmethod
+    async def test_a_reaction_of_a_bot_a_stranger_or_another_guild_is_not_heard(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        thread = _tapping(
+            monkeypatch,
+            _tap(member=MagicMock(bot=True)),
+            _tap(user_id=_STRANGER),
+            _tap(guild_id=404),
+            _tap(guild_id=None),
+        )
+        hear = AsyncMock()
+
+        await DiscordRemote(_SETUP).run(hear)
+
+        hear.assert_not_awaited()
+        thread.send.assert_not_awaited()
 
     @staticmethod
     async def test_a_token_discord_refuses_is_a_remote_error(

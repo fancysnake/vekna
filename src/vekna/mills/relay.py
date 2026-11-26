@@ -31,6 +31,27 @@ _CLOSED = "that question is closed: reply to an open one"
 _CLAIMED = "a window has taken this question over: answer it there"
 _EMPTY = "an empty reply answers nothing"
 _UNMATCHED = "more than one question is open: reply to the question itself"
+_WORDS_ONLY = "this question takes no reaction: reply in words"
+_YES_NO_REACTIONS = {"👍": "yes", "❌": "no"}
+# One for each of the first ten options: a menu longer than that is answered
+# past them by its numbers.
+_NUMBER_REACTIONS = (
+    "1️⃣",
+    "2️⃣",
+    "3️⃣",
+    "4️⃣",
+    "5️⃣",
+    "6️⃣",
+    "7️⃣",
+    "8️⃣",
+    "9️⃣",
+    "🔟",
+)
+# A remote may hand an emoji back without its variation selector, and a hand
+# that picked it from the keyboard may have a skin tone on it.
+_DECORATION = str.maketrans(
+    "", "", "\ufe0f\U0001f3fb\U0001f3fc\U0001f3fd\U0001f3fe\U0001f3ff"
+)
 
 
 # A question, where it was posted, and whether it was answered or withdrawn.
@@ -131,6 +152,7 @@ class Relay(Surface):
             room=named(view.hello.project),
             thread=name,
             text=_worded(view.hello, request),
+            reactions=tuple(_reactions(request)),
         )
         self._names[request.cast_id] = name
         self._asked[_question(request)] = _Asked(request=request, posted=posted)
@@ -152,7 +174,12 @@ class Relay(Surface):
             for asked in self._asked.values()
             if asked.posted.thread == reply.thread
         ]
-        if not here:
+        # A reaction answers the question it is on, and under any other
+        # message it is no answer at all.
+        if not here or (
+            reply.reaction
+            and all(asked.posted.message != reply.reply_to for asked in here)
+        ):
             return None
         asked = _addressed(here, reply)
         if isinstance(asked, str):
@@ -164,7 +191,17 @@ class Relay(Surface):
             return _NOTHING_OPEN
         if prompt.claim_id is not None:
             return _CLAIMED
+        if reply.reaction:
+            return self._reacted(request, emoji=reply.text)
         return self._answered(request, typed=reply.text.strip())
+
+    def _reacted(self, request: DecideRequested, *, emoji: str) -> str | None:
+        if not (offered := _reactions(request)):
+            return _WORDS_ONLY
+        meant = {_plain(known): answer for known, answer in offered.items()}
+        if (answer := meant.get(_plain(emoji))) is None:
+            return f"{emoji} is not one of {' '.join(offered)}"
+        return self._answered(request, typed=answer)
 
     # Checked by the rule the cast checks it by, so a typo is said in the
     # thread rather than ignored there.
@@ -211,6 +248,26 @@ def _read(typed: str, request: DecideRequested) -> str:
     )
 
 
+# The emoji that answer a question, each with the answer it gives, in the order
+# they are put under it: the one the ritual named for the answer, else the
+# thumb or the number. A question that takes only words has none.
+def _reactions(request: DecideRequested) -> dict[str, str]:
+    chosen = request.reactions or {}
+    if request.options is None:
+        if request.free:
+            return {}
+        return {
+            chosen.get(answer, emoji): answer
+            for emoji, answer in _YES_NO_REACTIONS.items()
+        }
+    emoji = dict(zip(request.options, _NUMBER_REACTIONS, strict=False)) | chosen
+    return {emoji[option]: option for option in request.options if option in emoji}
+
+
+def _plain(emoji: str) -> str:
+    return emoji.translate(_DECORATION)
+
+
 # Named after the ritual and the branch, so every cast of one ritual on one
 # branch asks in one thread and the thread is found again by its name. Named
 # once, at the cast's first question: a cast switches the branch under its own
@@ -223,10 +280,23 @@ def _thread(hello: CastHello, *, branch: str | None) -> str:
 def _worded(hello: CastHello, request: DecideRequested) -> str:
     asking = f"**{hello.ritual}** `{hello.cast_id[:SHORT_ID]}`"
     lines = [f"❓ {asking} asks", request.prompt]
+    chosen = request.reactions or {}
     if request.options:
-        lines += [f"{at}. {option}" for at, option in enumerate(request.options, 1)]
+        lines += [
+            (
+                f"{at}. {chosen[option]} {option}"
+                if option in chosen
+                else f"{at}. {option}"
+            )
+            for at, option in enumerate(request.options, 1)
+        ]
         how = "reply with a number"
         how += ", or in your own words" if request.free else ""
+    elif request.free:
+        how = "reply in your own words"
     else:
-        how = "reply in your own words" if request.free else "reply yes or no"
+        how = "reply yes or no"
+        if chosen:
+            said = (f"{emoji} {to}" for emoji, to in _reactions(request).items())
+            how += f": {', '.join(said)}"
     return "\n".join([*lines, f"💬 _{how}_"])

@@ -2,7 +2,14 @@ import asyncio
 import contextlib
 import itertools
 import sys
-from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Mapping,
+    Sequence,
+)
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -511,7 +518,12 @@ class TeeChannel(Channel):
         return list(self._open.values())
 
     async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
     ) -> str:
         request = DecideRequested(
             cast_id=self._cast_id,
@@ -520,6 +532,7 @@ class TeeChannel(Channel):
             prompt=prompt,
             options=None if options is None else list(options),
             free=free,
+            reactions=None if reactions is None else dict(reactions),
         )
         self._open[request.request_id] = request
         try:

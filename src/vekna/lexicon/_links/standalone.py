@@ -4,7 +4,7 @@ import shutil
 import socket
 import sys
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, TextIO
 
@@ -323,8 +323,15 @@ class StandaloneRenderer(Channel):
             self._ended(event)
 
     async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
     ) -> str:
+        # A terminal is answered in words.
+        del reactions
         async with self._asking:
             self.notify("decide", prompt)
             try:

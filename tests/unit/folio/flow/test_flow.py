@@ -1,5 +1,6 @@
 import asyncio
 import io
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 import pytest
@@ -10,7 +11,7 @@ from vekna.folio.flow import decide, race
 from vekna.lexicon import Done, MediumBoundaryError, RitualError, medium, step
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
-from vekna.lexicon._pacts import RiteBegan, RiteEnded, Ritual
+from vekna.lexicon._pacts import Channel, RiteBegan, RiteEnded, Ritual
 
 
 def _fixed_clock() -> datetime:
@@ -169,6 +170,102 @@ class TestResumedDecisions:
     def test_an_answer_that_is_not_text_is_refused():
         with pytest.raises(RitualError, match="answer 3 is not text"):
             _resumed(3, jotter)
+
+
+class Reacting(BaseModel):
+    options: list[str] | None = None
+    free: bool = False
+    reactions: dict[str, str]
+
+
+@step
+async def react(state: Reacting) -> Done[Note]:
+    if state.free:
+        answer = await decide("why?", free=True, reactions=state.reactions)
+    elif state.options is None:
+        answer = str(await decide("ok?", reactions=state.reactions))
+    else:
+        answer = await decide("pick", options=state.options, reactions=state.reactions)
+    return Done(Note(text=answer))
+
+
+class _Tapped(Channel):
+    def __init__(self) -> None:
+        self.reactions: list[Mapping[str, str] | None] = []
+
+    async def decide(
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
+    ) -> str:
+        del prompt, free
+        self.reactions.append(reactions)
+        return "yes" if options is None else options[0]
+
+
+def _reacted(payload: Reacting) -> tuple[object, _Tapped]:
+    ritual = entry(name="reactor", payload=payload)
+    channel = _Tapped()
+    result = asyncio.run(
+        run_cast(
+            ritual=ritual,
+            components=ritual.components(),
+            grimoire=Grimoire(clock=_fixed_clock),
+            channel=channel,
+        )
+    )
+    return result, channel
+
+
+class TestReactions:
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("payload", "answer"),
+        [
+            (Reacting(reactions={"yes": "🚀"}), "True"),
+            (Reacting(options=["fix", "file"], reactions={"fix": "🔧"}), "fix"),
+        ],
+    )
+    def test_the_emoji_named_for_an_answer_reach_the_channel(
+        payload: Reacting, answer: str
+    ):
+        result, channel = _reacted(payload)
+
+        assert result == Note(text=answer)
+        assert channel.reactions == [payload.reactions]
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("payload", "refusal"),
+        [
+            (
+                Reacting(free=True, reactions={"yes": "🚀"}),
+                "needs a question with a closed set of answers",
+            ),
+            (
+                Reacting(reactions={"maybe": "🤷", "yes": "🚀"}),
+                "names 'maybe', which is not one of: yes, no",
+            ),
+            (
+                Reacting(options=["fix", "file"], reactions={"yes": "🚀"}),
+                "names 'yes', which is not one of: fix, file",
+            ),
+            (
+                Reacting(
+                    options=["fix", "file"], reactions={"fix": "🔧", "file": "🔧"}
+                ),
+                "gives one emoji to more than one answer",
+            ),
+        ],
+    )
+    def test_reactions_the_question_cannot_take_are_refused_before_it_is_asked(
+        payload: Reacting, refusal: str
+    ):
+        with pytest.raises(MediumBoundaryError, match=refusal):
+            _reacted(payload)
 
 
 class TestEmptyOptions:

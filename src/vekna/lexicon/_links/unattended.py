@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from typing_extensions import override
 
@@ -13,8 +13,13 @@ class UnattendedChannel(Channel):
 
     @override
     async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
     ) -> str:
-        del options, free
+        del options, free, reactions
         msg = f"unattended cast refused to ask: {prompt}"
         raise UnattendedPromptError(msg)

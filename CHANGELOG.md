@@ -11,6 +11,15 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **Reactions answer a question on Discord**: the bot puts an emoji under each
+  question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
+  for options, and a tap on one is the answer. `decide(reactions={"fix":
+  "🔧"})` names a ritual's own emoji for an answer. A bot set up before this
+  needs the Add Reactions permission; without it questions are still posted
+  and answered in words.
+
 ## [3.1.0] - 2026-11-25
 
 ### Added

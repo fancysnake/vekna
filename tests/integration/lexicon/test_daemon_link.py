@@ -415,7 +415,9 @@ class TestPrompts:
             inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
 
-        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        asking = asyncio.create_task(
+            channel.decide(prompt="ok?", reactions={"yes": "🚀"})
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         waiting = _waiting(daemon)
         renderer.released.set()
@@ -425,6 +427,7 @@ class TestPrompts:
         assert renderer.asked == ["ok?"]
         assert answer == "yes"
         assert [message.prompt for message in waiting] == ["ok?"]
+        assert [message.reactions for message in waiting] == [{"yes": "🚀"}]
         assert not daemon.hub.casts[_CAST].waiting
         await daemon.stop()
 

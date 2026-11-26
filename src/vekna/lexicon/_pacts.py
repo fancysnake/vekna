@@ -1,5 +1,5 @@
 import hashlib
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -125,7 +125,12 @@ class Channel(Protocol):
     attended: bool = True
 
     async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
+        self,
+        *,
+        prompt: str,
+        options: Sequence[str] | None = None,
+        free: bool = False,
+        reactions: Mapping[str, str] | None = None,
     ) -> str: ...
 
 
