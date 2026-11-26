@@ -15,6 +15,7 @@ from vekna.lexicon import (
     attended,
     current_rite,
     emit_delta,
+    emit_quiet_delta,
     medium,
     record_result,
     ritual,
@@ -48,6 +49,10 @@ class Backwards(BaseModel):
 
 
 class Whoami(BaseModel):
+    pass
+
+
+class Hoard(BaseModel):
     pass
 
 
@@ -95,6 +100,21 @@ async def identify(_state: Whoami) -> Done[None]:
 
 
 identifier = entry(name="identifier", payload=Whoami())
+
+
+@medium
+async def hoard() -> None:
+    await asyncio.sleep(0)
+    emit_quiet_delta("bulk")
+
+
+@step
+async def stockpile(_state: Hoard) -> Done[None]:
+    await hoard()
+    return Done(None)
+
+
+hoarder = entry(name="hoarder", payload=Hoard())
 
 
 # `shell`'s shape again: the failure comes back as a value, and nothing raises.
@@ -316,6 +336,29 @@ class TestEmitDelta:
         medium_rite = next(e for e in started if e.name == "whoami")
         delta = next(e for e in grimoire.events if isinstance(e, RiteStreamed))
         assert (delta.rite_id, delta.delta) == (medium_rite.rite_id, "here")
+
+    @staticmethod
+    def test_a_quiet_one_hangs_off_the_running_rite_and_skips_the_terminal():
+        grimoire = Grimoire(clock=_fixed_clock)
+        out = io.StringIO()
+        renderer = StandaloneRenderer(out=Tail(out), inp=io.StringIO())
+
+        asyncio.run(
+            run_cast(
+                ritual=hoarder,
+                components=hoarder.components(),
+                grimoire=grimoire,
+                channel=renderer,
+            )
+        )
+
+        started = [e for e in grimoire.events if isinstance(e, RiteBegan)]
+        medium_rite = next(e for e in started if e.name == "hoard")
+        delta = next(e for e in grimoire.events if isinstance(e, RiteStreamed))
+        assert delta == RiteStreamed(
+            rite_id=medium_rite.rite_id, delta="bulk", quiet=True
+        )
+        assert "bulk" not in out.getvalue()
 
     @staticmethod
     def test_at_the_cast_root_it_raises():

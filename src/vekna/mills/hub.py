@@ -502,17 +502,13 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
 
 
 # A rite's output as runs of lines said the same way: quiet or not, the lines.
-def _runs(rite: RiteView) -> Iterator[tuple[bool, list[str]]]:
-    run: list[str] = []
-    was = False
+def _runs(rite: RiteView) -> list[tuple[bool, list[str]]]:
+    runs: list[tuple[bool, list[str]]] = []
     for quiet, line in zip(rite.quiet, rite.deltas, strict=True):
-        if run and quiet is not was:
-            yield was, run
-            run = []
-        was = quiet
-        run.append(line)
-    if run:
-        yield was, run
+        if not runs or runs[-1][0] is not quiet:
+            runs.append((quiet, []))
+        runs[-1][1].append(line)
+    return runs
 
 
 def _replay_rites(view: CastView) -> Iterator[WireMessage]:

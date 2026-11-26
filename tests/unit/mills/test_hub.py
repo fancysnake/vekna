@@ -525,6 +525,16 @@ class TestLateSurface:
         ]
 
     @staticmethod
+    def test_a_line_with_no_word_on_its_quiet_is_refused_not_cut():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.casts["c1"].rites["r1"].deltas.append("stray")
+
+        with pytest.raises(ValueError, match="longer than"):
+            hub.attach_surface(_Surface())
+
+    @staticmethod
     def test_a_rite_that_has_said_nothing_replays_no_output():
         hub = Hub()
         hub.apply(_hello())
