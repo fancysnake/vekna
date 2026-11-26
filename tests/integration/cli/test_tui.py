@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import math
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
@@ -1089,17 +1090,23 @@ class TestFitting:
         ]
 
     @staticmethod
-    async def test_the_tree_is_fitted_to_every_cast_the_daemon_replays():
+    async def test_the_tree_is_fitted_to_every_cast_the_daemon_replays(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # The replay lasts as long as the test says, however slow the machine.
+        monkeypatch.setattr("vekna.gates.cli.tui._SETTLE_SECONDS", math.inf)
+        monkeypatch.setattr("vekna.gates.cli.tui._FIT_WAIT_SECONDS", math.inf)
         hub = Hub()
         _running(hub)
         app = _fitting(hub)
 
         async with app.run_test(size=(100, 9)) as pilot:
-            await pilot.pause(_PAINTED / 2)
+            await pilot.pause(_PAINTED)
             early = _shape(app)
             _ended(hub)
             app.changed()
-            await pilot.pause(_SETTLED)
+            monkeypatch.setattr("vekna.gates.cli.tui._SETTLE_SECONDS", 0)
+            await _eventually(pilot, lambda: bool(_shape(app)))
 
             lines = _shape(app)
         assert early == []
@@ -2440,13 +2447,15 @@ class TestPages:
         hub.apply(_hello("c1", "nap"))
         app = _app(hub, [])
 
-        async with app.run_test() as pilot:
-            await pilot.pause(_PAINTED)
-            _to(app, "p:/proj/.git")
-            await pilot.pause(_PAINTED)
+        page = "proj\nmain · /proj\n1 running"
 
-            head = _text(app, "#head")
-        assert head == "proj\nmain · /proj\n1 running"
+        async with app.run_test() as pilot:
+            # First paint moves the cursor to the cast a refresh after drawing
+            # the tree, undoing an earlier move.
+            await _eventually(pilot, lambda: _cursor(app) == "c:c1")
+            _to(app, "p:/proj/.git")
+
+            await _eventually(pilot, lambda: _text(app, "#head") == page)
 
     @staticmethod
     async def test_with_no_casts_the_keys_say_there_is_nothing_here():

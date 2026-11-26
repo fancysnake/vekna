@@ -1,6 +1,8 @@
 # cover_diff — close the coverage gap on this branch.
 
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field
 
 from vekna.folio.coding import CodingOpts, coding
 from vekna.folio.shell import shell
@@ -34,7 +36,7 @@ The report:
 
 
 class CoverDiff(BaseModel):
-    bound: Bound = 3
+    bound: Annotated[Bound, Field(le=15)] = 3
 
 
 class Uncovered(BaseModel):
@@ -52,7 +54,9 @@ class CoverReport(BaseModel):
     report: str = ""
 
 
-@ritual("cover_diff")
+# A round is two steps, `measure` then `write_tests`, and one more `measure`
+# reads the last round: 2 * bound + 1. 32 holds the largest bound, 15.
+@ritual("cover_diff", max_steps=32)
 def cover_diff(components: CoverDiff) -> Uncovered:
     # The entrypoint: map the CLI Components into the first step's payload.
     return Uncovered(budget=components.bound)

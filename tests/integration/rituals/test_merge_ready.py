@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from rituals.merge_ready import (
     Attempt,
@@ -11,12 +12,13 @@ from rituals.merge_ready import (
     quality_gates,
     repair,
 )
-from vekna.lexicon import Done, StepBudgetExceededError
+from vekna.lexicon import Done
 from vekna.trial import Trial
 
 _LINT = "mise run lint:py"
 _SUITE = "mise run test:py"
 _SPEND = "*hand it to the agent?*"
+_LARGEST_BOUND = 15
 
 
 class TestQualityGates:
@@ -185,12 +187,22 @@ class TestMergeReadyWhole:
         assert trial.coding.calls[1].resume == "s1"
 
     @staticmethod
-    def test_a_ritual_that_will_not_settle_trips_max_steps(trial: Trial) -> None:
-        trial.shell.replies(when="*", exit_code=1, stdout="red", always=True)
+    def test_the_largest_bound_the_step_cap_holds_still_reports(trial: Trial) -> None:
+        trial.shell.replies(when=_LINT, exit_code=1, stdout="red", always=True)
+        trial.shell.replies(when=_SUITE, exit_code=1, stdout="red", always=True)
         trial.decide.answers(answer=True, when=_SPEND, always=True)
         trial.coding.replies("tried", always=True)
 
-        # 32 steps at a bound the budget never reaches: the backstop, not the
-        # control.
-        with pytest.raises(StepBudgetExceededError, match="exceeded max_steps=32"):
-            trial.cast(merge_ready, MergeReady(bound=64))
+        result = trial.cast(merge_ready, MergeReady(bound=_LARGEST_BOUND))
+
+        assert result == MergeReport(green=False, remaining=0)
+        assert len(trial.steps) == 2 * _LARGEST_BOUND + 1
+        gates = [_LINT, _SUITE] * (_LARGEST_BOUND + 1)
+        assert sorted(trial.shell.commands) == sorted(gates)
+        assert len(trial.decide.prompts) == _LARGEST_BOUND
+        assert len(trial.coding.prompts) == _LARGEST_BOUND
+
+    @staticmethod
+    def test_a_bound_past_the_step_cap_is_refused() -> None:
+        with pytest.raises(ValidationError, match="less than or equal to 15"):
+            MergeReady(bound=16)
