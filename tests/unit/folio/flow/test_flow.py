@@ -1,6 +1,5 @@
 import asyncio
 import io
-from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 import pytest
@@ -11,7 +10,7 @@ from vekna.folio.flow import decide, race
 from vekna.lexicon import Done, MediumBoundaryError, RitualError, medium, step
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._mills.engine import Grimoire, run_cast
-from vekna.lexicon._pacts import Channel, RiteBegan, RiteEnded, Ritual
+from vekna.lexicon._pacts import Channel, Question, RiteBegan, RiteEnded, Ritual
 
 
 def _fixed_clock() -> datetime:
@@ -191,19 +190,11 @@ async def react(state: Reacting) -> Done[Note]:
 
 class _Tapped(Channel):
     def __init__(self) -> None:
-        self.reactions: list[Mapping[str, str] | None] = []
+        self.reactions: list[object] = []
 
-    async def decide(
-        self,
-        *,
-        prompt: str,
-        options: Sequence[str] | None = None,
-        free: bool = False,
-        reactions: Mapping[str, str] | None = None,
-    ) -> str:
-        del prompt, free
-        self.reactions.append(reactions)
-        return "yes" if options is None else options[0]
+    async def decide(self, question: Question) -> str:
+        self.reactions.append(question.reactions)
+        return "yes" if question.options is None else question.options[0]
 
 
 def _reacted(payload: Reacting) -> tuple[object, _Tapped]:
@@ -243,7 +234,7 @@ class TestReactions:
         [
             (
                 Reacting(free=True, reactions={"yes": "🚀"}),
-                "needs a question with a closed set of answers",
+                "needs a question that offers answers to name",
             ),
             (
                 Reacting(reactions={"maybe": "🤷", "yes": "🚀"}),

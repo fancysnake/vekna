@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from typing_extensions import override
@@ -12,6 +12,7 @@ from vekna.lexicon._pacts import (
     CodingFocusProtocol,
     FocusReply,
     GateFn,
+    Question,
     ShellCall,
     ShellFocusProtocol,
     ShellReply,
@@ -19,14 +20,7 @@ from vekna.lexicon._pacts import (
 )
 from vekna.wire import allowed_answers
 
-from ._pacts import (
-    Answer,
-    Asked,
-    CodingAnswer,
-    Enqueued,
-    ScriptProtocol,
-    TrialScriptError,
-)
+from ._pacts import Answer, CodingAnswer, Enqueued, ScriptProtocol, TrialScriptError
 
 _YES = "yes"
 _NO = "no"
@@ -134,7 +128,7 @@ class ShellDouble(ShellFocusProtocol):
 class DecideDouble(Channel):
     def __init__(self, script: ScriptProtocol[str]) -> None:
         self._script = script
-        self.asked: list[Asked] = []
+        self.asked: list[Question] = []
 
     # Keyword-only, and `True` rather than `"yes"` because that is what the
     # medium hands the ritual back. A bare `answers(True)` would be a boolean
@@ -149,24 +143,16 @@ class DecideDouble(Channel):
     def prompts(self) -> list[str]:
         return [asked.prompt for asked in self.asked]
 
-    async def decide(
-        self,
-        *,
-        prompt: str,
-        options: Sequence[str] | None = None,
-        free: bool = False,
-        reactions: Mapping[str, str] | None = None,
-    ) -> str:
-        offered = None if options is None else tuple(options)
-        self.asked.append(
-            Asked(prompt=prompt, options=offered, free=free, reactions=reactions)
-        )
+    async def decide(self, question: Question) -> str:
+        self.asked.append(question)
         # `attended = False` stands in for `--unattended`, which refuses this.
         if not self.attended:
-            msg = f"unattended cast refused to ask: {prompt}"
+            msg = f"unattended cast refused to ask: {question.prompt}"
             raise UnattendedPromptError(msg)
-        answer = self._script.take(prompt)
-        return self._offered(answer=answer, options=offered, free=free)
+        answer = self._script.take(question.prompt)
+        return self._offered(
+            answer=answer, options=question.options, free=question.free
+        )
 
     # The real channel returns a member of what it offered or raises. A test
     # scripting "repair" for a step offering ["fix", "stop"] is testing a ritual

@@ -297,7 +297,8 @@ asked at all.
 
 On Discord the operator answers with a tap on a reaction: 👍 or ❌ for a bare
 `decide`, a number for each option. Name an emoji only where it says more than
-the number does; an answer left out keeps its default:
+the number does; an answer left out keeps its default, unless another answer
+was given that emoji, and then it is answered in words only:
 
 ```python
 took = await decide(headline, options=_TOOK, reactions={"fix": "🔧"})

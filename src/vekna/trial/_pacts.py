@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
 
@@ -13,16 +13,6 @@ class Enqueued:
     cast_id: str
     ritual: str
     components: BaseModel
-
-
-# What a `decide` call offered, as it was offered. The prompt is what a pattern
-# matches against; the options are what an answer is checked against.
-@dataclass(frozen=True, kw_only=True)
-class Asked:
-    prompt: str
-    options: Sequence[str] | None = None
-    free: bool = False
-    reactions: Mapping[str, str] | None = None
 
 
 # What a scripted agent does with its turn. `uses` are tools it reaches for —

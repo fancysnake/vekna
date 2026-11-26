@@ -20,6 +20,12 @@ when.
   needs the Add Reactions permission; without it questions are still posted
   and answered in words.
 
+### Changed
+
+- **`Channel.decide` takes one `Question`**: a channel of your own now reads
+  the prompt, options, free text and reactions off that value. `vekna.trial`'s
+  `Asked` is the same type.
+
 ## [3.1.0] - 2026-11-25
 
 ### Added

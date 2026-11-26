@@ -565,7 +565,12 @@ give:
 - 👍 for yes and ❌ for no.
 - 1️⃣ to 🔟 for the first ten options, in the order of the menu.
 - The emoji the ritual named for an answer, in place of the thumb or the
-  number. The question shows it beside that answer.
+  number. The question shows it beside that answer. If the ritual named the
+  default emoji of another answer, that other answer has no emoji: answer it in
+  words.
+- If the ritual gave an option the number emoji of another option's place, the
+  menu has no line numbers. Each line starts with the emoji to tap, or with `•`
+  when it has none.
 
 A reaction counts only on the question itself, and only one of the emoji under
 it. An agent's own question with no suggested answers has none: answer it in

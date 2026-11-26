@@ -7,10 +7,12 @@ from vekna.lexicon import (
     CAST_QUEUE,
     CastFailedError,
     MediumBoundaryError,
+    Question,
     RitualError,
     allowed_answers,
     current_rite,
     medium,
+    reaction_answers,
     record_result,
     replayed,
 )
@@ -45,13 +47,13 @@ def _recorded(prior: JsonValue, *, options: Sequence[str] | None, free: bool) ->
     return prior
 
 
-# A reaction is a tap that gives one of the allowed answers, so each emoji
-# stands for one answer and a question open to any text has none to name.
+# A reaction is a tap that gives one answer, so each emoji names one of the
+# answers `reaction_answers` gives, the rule the relay offers emoji by.
 def _checked_reactions(
     reactions: Mapping[str, str], *, options: Sequence[str] | None, free: bool
 ) -> None:
-    if (allowed := allowed_answers(options=options, free=free)) is None:
-        msg = "decide(reactions=...) needs a question with a closed set of answers"
+    if (allowed := reaction_answers(options=options, free=free)) is None:
+        msg = "decide(reactions=...) needs a question that offers answers to name"
         raise MediumBoundaryError(msg)
     if unknown := [repr(answer) for answer in reactions if answer not in allowed]:
         msg = (
@@ -104,7 +106,12 @@ async def decide(
         _recorded(prior, options=options, free=free)
         if prior is not None
         else await current_rite().channel.decide(
-            prompt=prompt, options=options, free=free, reactions=reactions
+            Question(
+                prompt=prompt,
+                options=None if options is None else tuple(options),
+                free=free,
+                reactions=None if reactions is None else dict(reactions),
+            )
         )
     )
     record_result(answer)

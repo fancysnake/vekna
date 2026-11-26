@@ -11,6 +11,7 @@ from vekna.lexicon import (
     CodingCall,
     FocusReply,
     GateFn,
+    Question,
     RiteContext,
     StringOutput,
     current_rite,
@@ -47,7 +48,7 @@ def _make_gate(channel: Channel, gate_tools: Sequence[str] | None) -> GateFn | N
     async def gate(tool: str) -> bool:
         if tool not in watched:
             return True
-        answer = await channel.decide(prompt=f"allow tool {tool!r}?")
+        answer = await channel.decide(Question(prompt=f"allow tool {tool!r}?"))
         return answer == "yes"
 
     return gate
@@ -58,7 +59,10 @@ def _make_ask(channel: Channel) -> AskFn:
     # agent's options are guesses at what the human will say, so they are always
     # offered as suggestions rather than as the only answers allowed.
     async def ask(question: str, options: Sequence[str] | None) -> str:
-        return await channel.decide(prompt=question, options=options, free=True)
+        offered = None if options is None else tuple(options)
+        return await channel.decide(
+            Question(prompt=question, options=offered, free=True)
+        )
 
     return ask
 

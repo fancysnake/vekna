@@ -2,14 +2,7 @@ import asyncio
 import contextlib
 import itertools
 import sys
-from collections.abc import (
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Coroutine,
-    Mapping,
-    Sequence,
-)
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +23,7 @@ from vekna.lexicon._pacts import (
     GateFn,
     MediumBoundaryError,
     NoDaemonError,
+    Question,
     RiteBegan,
     RiteEvent,
     RiteStreamed,
@@ -517,33 +511,22 @@ class TeeChannel(Channel):
     def open_prompts(self) -> list[WireMessage]:
         return list(self._open.values())
 
-    async def decide(
-        self,
-        *,
-        prompt: str,
-        options: Sequence[str] | None = None,
-        free: bool = False,
-        reactions: Mapping[str, str] | None = None,
-    ) -> str:
+    async def decide(self, question: Question) -> str:
+        options, reactions = question.options, question.reactions
         request = DecideRequested(
             cast_id=self._cast_id,
             rite_id=self._rite_id(),
             request_id=uuid4().hex,
-            prompt=prompt,
+            prompt=question.prompt,
             options=None if options is None else list(options),
-            free=free,
+            free=question.free,
             reactions=None if reactions is None else dict(reactions),
         )
         self._open[request.request_id] = request
         try:
             inner = self._inner
             answer = await self._link.answer(
-                request,
-                ask=(
-                    None
-                    if inner is None
-                    else lambda: inner.decide(prompt=prompt, options=options, free=free)
-                ),
+                request, ask=(None if inner is None else lambda: inner.decide(question))
             )
         except BaseException:
             self._link.send(

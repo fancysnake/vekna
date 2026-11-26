@@ -9,7 +9,7 @@ import pytest
 
 from vekna.mills.relay import Relay
 from vekna.pacts.casts import Casts, CastView, Prompt
-from vekna.pacts.remote import Hear, Heard, Posted, Remote, RemoteError
+from vekna.pacts.remote import Hear, Heard, Posted, Remote, RemoteError, Tapped
 from vekna.wire import (
     CastHello,
     DecideClaimed,
@@ -24,6 +24,8 @@ _NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c0ffee00" + "0" * 24
 _THREAD = "pr_fix fix/login"
 _LONGEST_NAME = 100
+# Two emoji told apart by skin tone alone.
+_TONES = {"light": "👍🏻", "dark": "👍🏿"}
 
 
 class _Board(Casts):
@@ -117,9 +119,7 @@ class _Desk:
         )
 
     async def taps(self, emoji: str, *, on: str = "m1") -> str | None:
-        return await self.relay.heard(
-            Heard(thread="t1", reply_to=on, text=emoji, reaction=True)
-        )
+        return await self.relay.heard(Tapped(thread="t1", message=on, emoji=emoji))
 
     def answered(self) -> list[tuple[str, str]]:
         assert all(surface is self.relay for surface, _ in self.answers)
@@ -383,6 +383,11 @@ class TestReactions:
                 _question(options=["fix", "file", "ignore"], reactions={"file": "📝"}),
                 ("1️⃣", "📝", "3️⃣"),
             ),
+            (_question(reactions={"yes": "❌"}), ("❌",)),
+            (
+                _question(options=["repair", "stop"], reactions={"repair": "2️⃣"}),
+                ("2️⃣",),
+            ),
             (
                 _question(
                     options=[str(at) for at in range(12)], reactions={"11": "🚀"}
@@ -422,6 +427,18 @@ class TestReactions:
                 _question(reactions={"yes": "🚀"}),
                 "which?\n💬 _reply yes or no: 🚀 yes, ❌ no_",
             ),
+            (
+                _question(options=["a", "b"], reactions={"a": "1️⃣"}),
+                "which?\n1. 1️⃣ a\n2. b\n💬 _reply with a number_",
+            ),
+            (
+                _question(options=["a", "b", "c"], reactions={"c": "2️⃣"}),
+                "which?\n1️⃣ a\n• b\n2️⃣ c\n💬 _reply with an option_",
+            ),
+            (
+                _question(options=["a", "b"], free=True, reactions={"b": "1️⃣"}),
+                "which?\n• a\n1️⃣ b\n💬 _reply with an option, or in your own words_",
+            ),
         ],
     )
     async def test_an_emoji_the_ritual_named_is_shown_beside_its_answer(
@@ -444,6 +461,15 @@ class TestReactions:
             (_question(options=["a", "b"], free=True), "1️⃣", "a"),
             (_question(options=["fix", "file"], reactions={"fix": "🔧"}), "🔧", "fix"),
             (_question(reactions={"yes": "🚀"}), "🚀", "yes"),
+            (_question(reactions={"yes": "❌"}), "❌", "yes"),
+            (_question(options=["2", "1"]), "1️⃣", "2"),
+            (_question(options=["a", "b"], reactions={"a": "2️⃣"}), "2️⃣", "a"),
+            (
+                _question(options=["a", "b"], free=True, reactions={"b": "🚀"}),
+                "🚀",
+                "b",
+            ),
+            (_question(options=["light", "dark"], reactions=_TONES), "👍🏻", "light"),
         ],
     )
     async def test_a_tap_on_a_question_gives_the_answer_of_its_emoji(
@@ -460,6 +486,13 @@ class TestReactions:
 
         assert await desk.taps("🎉") == "🎉 is not one of 🔧 2️⃣"
         assert await desk.taps("1️⃣") == "1️⃣ is not one of 🔧 2️⃣"
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_an_emoji_that_loosely_matches_two_answers_gives_neither(desk: _Desk):
+        await desk.told(_question(options=["light", "dark"], reactions=_TONES))
+
+        assert await desk.taps("👍") == "👍 is not one of 👍🏻 👍🏿"
         assert not desk.answered()
 
     @staticmethod

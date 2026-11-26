@@ -6,7 +6,15 @@ from collections.abc import Sequence
 import discord
 from typing_extensions import override
 
-from vekna.pacts.remote import DiscordSetup, Hear, Heard, Posted, Remote, RemoteError
+from vekna.pacts.remote import (
+    DiscordSetup,
+    Hear,
+    Heard,
+    Posted,
+    Remote,
+    RemoteError,
+    Tapped,
+)
 
 # Discord takes 2000 characters a message.
 _MESSAGE = 1900
@@ -29,22 +37,24 @@ class _Client(discord.Client):
         self._allow = allow
         self.hear: Hear | None = None
 
+    # Who is heard, written or tapped: `hear` for a person on the allow list in
+    # this guild, else `None`.
+    def _hearing(self, *, guild: int | None, user: int, bot: bool) -> Hear | None:
+        if bot or user not in self._allow or guild != self._guild:
+            return None
+        return self.hear
+
     # discord.py finds this by its name.
     async def on_message(self, message: discord.Message) -> None:
-        if (
-            self.hear is None
-            or message.author.bot
-            or message.author.id not in self._allow
-        ):
-            return
-        if (
-            message.guild is None
-            or message.guild.id != self._guild
-            or not isinstance(message.channel, discord.Thread)
-        ):
+        hear = self._hearing(
+            guild=None if message.guild is None else message.guild.id,
+            user=message.author.id,
+            bot=message.author.bot,
+        )
+        if hear is None or not isinstance(message.channel, discord.Thread):
             return
         replied = message.reference.message_id if message.reference else None
-        said = await self.hear(
+        said = await hear(
             Heard(
                 thread=str(message.channel.id),
                 reply_to=None if replied is None else str(replied),
@@ -60,19 +70,18 @@ class _Client(discord.Client):
     async def on_raw_reaction_add(
         self, payload: discord.RawReactionActionEvent
     ) -> None:
-        if (
-            self.hear is None
-            or payload.guild_id != self._guild
-            or payload.user_id not in self._allow
-            or (payload.member is not None and payload.member.bot)
-        ):
+        hear = self._hearing(
+            guild=payload.guild_id,
+            user=payload.user_id,
+            bot=payload.member is not None and payload.member.bot,
+        )
+        if hear is None:
             return
-        said = await self.hear(
-            Heard(
+        said = await hear(
+            Tapped(
                 thread=str(payload.channel_id),
-                reply_to=str(payload.message_id),
-                text=str(payload.emoji),
-                reaction=True,
+                message=str(payload.message_id),
+                emoji=str(payload.emoji),
             )
         )
         if said is not None:
@@ -178,14 +187,14 @@ async def _sent(target: discord.abc.Messageable, pieces: list[str]) -> discord.M
     return [await target.send(piece) for piece in pieces][-1]
 
 
-# The question stands once it is posted: a reaction Discord refuses costs the
-# tap, and a written reply still answers.
+# The question stands once it is posted: an emoji Discord refuses costs its
+# tap alone, and a written reply still answers.
 async def _offered(message: discord.Message, reactions: Sequence[str]) -> None:
-    try:
-        for emoji in reactions:
+    for emoji in reactions:
+        try:
             await message.add_reaction(emoji)
-    except discord.DiscordException as error:
-        _log.warning("could not put reactions under a question: %s", error)
+        except discord.DiscordException as error:
+            _log.warning("could not put %s under a question: %s", emoji, error)
 
 
 # A long text over several messages, cut at the last line break that fits,

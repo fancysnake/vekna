@@ -1,7 +1,7 @@
 import asyncio
 import io
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,7 +11,7 @@ from vekna.lexicon._links.follow import DAEMON_WENT, Follower
 from vekna.lexicon._links.standalone import Tail
 from vekna.lexicon._links.turns import Turns
 from vekna.lexicon._mills.follow import Lineage
-from vekna.lexicon._pacts import StandalonePromptError
+from vekna.lexicon._pacts import Question, StandalonePromptError
 from vekna.links.socket_server import serve
 from vekna.mills.hub import Hub
 from vekna.pacts.routing import Routed, Surface
@@ -80,11 +80,8 @@ class _Asker:
         self.cancelled = 0
         self.released = asyncio.Event()
 
-    async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
-    ) -> str:
-        del options, free
-        self.asked.append(prompt)
+    async def decide(self, question: Question) -> str:
+        self.asked.append(question.prompt)
         try:
             await self.released.wait()
         except asyncio.CancelledError:
@@ -95,10 +92,8 @@ class _Asker:
 
 class _Refuser:
     @staticmethod
-    async def decide(
-        *, prompt: str, options: Sequence[str] | None = None, free: bool = False
-    ) -> str:
-        del prompt, options, free
+    async def decide(question: Question) -> str:
+        del question
         msg = "no terminal to ask on"
         raise StandalonePromptError(msg)
 

@@ -8,6 +8,7 @@ from vekna.lexicon._pacts import (
     Display,
     EndStatus,
     LineageProtocol,
+    Question,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -252,8 +253,14 @@ class Follower:
     async def _asked(self, ask: Channel, request: DecideRequested) -> None:
         prompt = f"[{self._label(request.cast_id)}] {request.prompt}"
         try:
+            options = request.options
             answer = await ask.decide(
-                prompt=prompt, options=request.options, free=request.free
+                Question(
+                    prompt=prompt,
+                    options=None if options is None else tuple(options),
+                    free=request.free,
+                    reactions=request.reactions,
+                )
             )
         except StandalonePromptError as error:
             self._say(request, f"{error} — answer it in `vekna`")

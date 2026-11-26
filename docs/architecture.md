@@ -127,7 +127,7 @@ submodules cooperate.
 rituals.py       # the rituals this project casts on itself, named by
                  # .vekna.toml so `src` is the one measured directory
 lexicon/
-  _pacts.py      # Ritual, Step, Transition, Channel, rite events,
+  _pacts.py      # Ritual, Step, Transition, Channel, Question, rite events,
                  # component types (File, Directory, Text, Url, GitRef)
   _specs.py      # DEFAULT_MAX_STEPS, SUMMARY_WIDTH
   _mills/

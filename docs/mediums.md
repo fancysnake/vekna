@@ -60,7 +60,9 @@ a question.
 
 On [Discord](cli.md#discord) a tap on a reaction answers a question: 👍 or ❌
 for yes or no, and a number for each option. `reactions` names your own emoji
-for an answer, and an answer you leave out keeps its thumb or its number:
+for an answer, and an answer you leave out keeps its thumb or its number. If
+you give that thumb or number to another answer, the answer you left out has no
+emoji and is answered in words:
 
 ```python
 took = await decide(

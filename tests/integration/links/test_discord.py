@@ -8,7 +8,7 @@ import discord
 import pytest
 
 from vekna.links.discord import DiscordRemote, _Client, channel_name
-from vekna.pacts.remote import DiscordSetup, Heard, Posted, Remote, RemoteError
+from vekna.pacts.remote import DiscordSetup, Heard, Posted, Remote, RemoteError, Tapped
 
 _GUILD = 100
 _OPERATOR = 7
@@ -235,12 +235,14 @@ class TestAsk:
         assert last.add_reaction.await_args_list == [call("👍"), call("❌")]
 
     @staticmethod
-    async def test_a_reaction_discord_refuses_is_logged_and_the_question_stands(
+    async def test_a_reaction_discord_refuses_is_logged_and_the_next_is_still_put(
         guild: _Guild, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ):
         guild.settled()
         message = _sent(1)
-        message.add_reaction = AsyncMock(side_effect=discord.DiscordException("no"))
+        message.add_reaction = AsyncMock(
+            side_effect=[discord.DiscordException("no"), None]
+        )
         guild.thread.send = AsyncMock(return_value=message)
 
         with caplog.at_level(logging.WARNING, logger="vekna.links.discord"):
@@ -253,9 +255,9 @@ class TestAsk:
                 )
 
         assert posted == Posted(thread=str(_THREAD), message="1")
-        message.add_reaction.assert_awaited_once_with("👍")
+        assert message.add_reaction.await_args_list == [call("👍"), call("❌")]
         assert [record.getMessage() for record in caplog.records] == [
-            "could not put reactions under a question: no"
+            "could not put 👍 under a question: no"
         ]
 
     @staticmethod
@@ -431,8 +433,8 @@ class TestRun:
         await DiscordRemote(_SETUP).run(hear)
 
         assert hear.await_args_list == [
-            call(Heard(thread="555", reply_to="42", text="👍", reaction=True)),
-            call(Heard(thread="555", reply_to="42", text="🎉", reaction=True)),
+            call(Tapped(thread="555", message="42", emoji="👍")),
+            call(Tapped(thread="555", message="42", emoji="🎉")),
         ]
         thread.send.assert_awaited_once_with("🎉 is not one of 👍 ❌")
 

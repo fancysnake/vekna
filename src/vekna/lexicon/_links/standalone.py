@@ -4,12 +4,13 @@ import shutil
 import socket
 import sys
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, TextIO
 
 from vekna.lexicon._pacts import (
     Channel,
+    Question,
     RiteBegan,
     RiteEnded,
     RiteEvent,
@@ -322,34 +323,24 @@ class StandaloneRenderer(Channel):
         else:
             self._ended(event)
 
-    async def decide(
-        self,
-        *,
-        prompt: str,
-        options: Sequence[str] | None = None,
-        free: bool = False,
-        reactions: Mapping[str, str] | None = None,
-    ) -> str:
-        # A terminal is answered in words.
-        del reactions
+    # A terminal is answered in words, so a question's reactions go unused.
+    async def decide(self, question: Question) -> str:
         async with self._asking:
-            self.notify("decide", prompt)
+            self.notify("decide", question.prompt)
             try:
-                return await self._asked(prompt=prompt, options=options, free=free)
+                return await self._asked(question)
             except asyncio.CancelledError:
-                self.say(f"\nwithdrawn: {prompt}\n")
+                self.say(f"\nwithdrawn: {question.prompt}\n")
                 raise
 
-    async def _asked(
-        self, *, prompt: str, options: Sequence[str] | None, free: bool
-    ) -> str:
-        if options:
-            if free:
-                return await self._suggest(prompt, options)
-            return await self._choose(prompt, options)
-        if free:
-            return await self._free_text(prompt)
-        return await self._confirm(prompt)
+    async def _asked(self, question: Question) -> str:
+        if question.options:
+            if question.free:
+                return await self._suggest(question.prompt, question.options)
+            return await self._choose(question.prompt, question.options)
+        if question.free:
+            return await self._free_text(question.prompt)
+        return await self._confirm(question.prompt)
 
     async def _choose(self, prompt: str, options: Sequence[str]) -> str:
         self.say(_menu(prompt, options))

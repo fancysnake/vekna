@@ -14,18 +14,24 @@ class Posted:
 
 
 # What somebody wrote in a thread. `reply_to` is the message it answers, when
-# the remote says which. A reaction is heard as its emoji, on the message it
-# was put under.
+# the remote says which.
 @dataclass(frozen=True, kw_only=True)
 class Heard:
     thread: str
     reply_to: str | None
     text: str
-    reaction: bool = False
+
+
+# An emoji somebody put under a message in a thread.
+@dataclass(frozen=True, kw_only=True)
+class Tapped:
+    thread: str
+    message: str
+    emoji: str
 
 
 # What is said back to the author, or `None` for nothing.
-Hear = Callable[[Heard], Awaitable[str | None]]
+Hear = Callable[[Heard | Tapped], Awaitable[str | None]]
 
 
 # The remote refused, or could not be reached.
