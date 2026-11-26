@@ -388,6 +388,7 @@ class TestReactions:
                 _question(options=["repair", "stop"], reactions={"repair": "2️⃣"}),
                 ("2️⃣",),
             ),
+            (_question(options=["a", "b"], reactions={"a": "2\u20e3"}), ("2\u20e3",)),
             (
                 _question(
                     options=[str(at) for at in range(12)], reactions={"11": "🚀"}
@@ -434,6 +435,14 @@ class TestReactions:
             (
                 _question(options=["a", "b", "c"], reactions={"c": "2️⃣"}),
                 "which?\n1️⃣ a\n• b\n2️⃣ c\n💬 _reply with an option_",
+            ),
+            (
+                _question(options=["a", "b"], reactions={"a": "2\u20e3"}),
+                "which?\n2\u20e3 a\n• b\n💬 _reply with an option_",
+            ),
+            (
+                _question(options=["a", "b"], reactions={"a": "1\u20e3"}),
+                "which?\n1. 1\u20e3 a\n2. b\n💬 _reply with a number_",
             ),
             (
                 _question(options=["a", "b"], free=True, reactions={"b": "1️⃣"}),
