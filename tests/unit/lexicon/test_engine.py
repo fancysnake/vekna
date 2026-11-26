@@ -810,7 +810,7 @@ class TestGrimoire:
         grimoire = Grimoire(clock=_fixed_clock, on_event=seen.append)
 
         rite_id = grimoire.rite_started(name="fix")
-        grimoire.rite_delta(rite_id, "working...")
+        grimoire.rite_delta(rite_id=rite_id, delta="working...")
         grimoire.rite_finished(rite_id, result={"session_id": "s1"})
 
         assert [type(event) for event in seen] == [RiteBegan, RiteStreamed, RiteEnded]
@@ -821,7 +821,7 @@ class TestGrimoire:
         grimoire = Grimoire(clock=_fixed_clock)
 
         rite_id = grimoire.rite_started(name="fix")
-        grimoire.rite_delta(rite_id, "working...")
+        grimoire.rite_delta(rite_id=rite_id, delta="working...")
 
         assert grimoire.events[-1] == RiteStreamed(
             rite_id="r1", delta="working...", quiet=False
@@ -832,7 +832,7 @@ class TestGrimoire:
         grimoire = Grimoire(clock=_fixed_clock)
 
         rite_id = grimoire.rite_started(name="fix")
-        grimoire.rite_delta(rite_id, "bulk", quiet=True)
+        grimoire.rite_delta(rite_id=rite_id, delta="bulk", quiet=True)
 
         assert grimoire.events[-1] == RiteStreamed(
             rite_id="r1", delta="bulk", quiet=True

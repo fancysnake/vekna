@@ -25,7 +25,7 @@ when.
 ### Fixed
 
 - **`vekna log <cast>` and the plain view strip terminal control codes** from a
-  rite's name, summary and error.
+  rite's name, summary, error and output.
 
 ## [3.1.0] - 2026-11-25
 

@@ -86,7 +86,7 @@ class Grimoire:
         )
         return rite_id
 
-    def rite_delta(self, rite_id: str, delta: str, *, quiet: bool = False) -> None:
+    def rite_delta(self, *, rite_id: str, delta: str, quiet: bool = False) -> None:
         self._append(RiteStreamed(rite_id=rite_id, delta=delta, quiet=quiet))
 
     def rite_finished(
@@ -419,7 +419,7 @@ def _current_rite_id(rite: RiteContext) -> str:
 # which whoever watches the cast's own terminal did not ask to scroll.
 def emit_delta(text: str, *, quiet: bool = False) -> None:
     rite = current_rite()
-    rite.grimoire.rite_delta(_current_rite_id(rite), text, quiet=quiet)
+    rite.grimoire.rite_delta(rite_id=_current_rite_id(rite), delta=text, quiet=quiet)
 
 
 # What a rite leaves its opener: the id it was journaled under, and what its
@@ -457,7 +457,7 @@ async def _rite(
     # printed nothing look identical otherwise — and "did it really skip the
     # work?" is the question a resumed cast is watched for.
     if replay is not None:
-        parent.grimoire.rite_delta(rite_id, _REPLAYED)
+        parent.grimoire.rite_delta(rite_id=rite_id, delta=_REPLAYED)
     opened = OpenedRite(rite_id)
     status: RiteEndStatus = "error"
     try:

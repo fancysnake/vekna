@@ -406,6 +406,7 @@ class TestControlCodes:
     def test_none_a_ritual_wrote_in_a_rite_reaches_the_terminal(focus: str | None):
         view = _running("fix_demo", ago=60)
         _step(view, "ga\x1b[31mte", ago=30)
+        view.rites["ga\x1b[31mte"].lines.append((False, "sa\x1b[31mid"))
 
         painted = paint(listed=[view], focus=focus, project=None, now=_WHEN)
 
@@ -418,12 +419,12 @@ class TestControlCodes:
         _step(view, "ga\x1b[31mte", ago=30, status="error", error="bo\x1b[31mom")
         rite = view.rites["ga\x1b[31mte"]
         rite.started.summary = "ru\x1b[31mff"
-        rite.lines.append((False, "said"))
+        rite.lines.append((False, "sa\x1b[31mid"))
 
         read = recorded(view)
 
         assert "gate  ruff  — boom" in read
-        assert "── gate (error) ──" in read
+        assert "── gate (error) ──\nsaid\n" in read
         assert "\x1b" not in read
 
 

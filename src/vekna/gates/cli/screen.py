@@ -174,7 +174,8 @@ def _rite_lines(view: CastView) -> list[str]:
         pad = "  " * _depth(rite, view)
         lines.append(_rite_line(view, rite, pad))
         if view.rite_status(rite) == "running":
-            lines += [f" {pad}    {line}" for line in list(rite.deltas)[-_DELTA_TAIL:]]
+            tail = list(rite.deltas)[-_DELTA_TAIL:]
+            lines += [f" {pad}    {printable(line)}" for line in tail]
     return lines
 
 
@@ -260,7 +261,7 @@ def recorded(view: CastView) -> str:
         if view.rite_status(rite) != "ok" and rite.deltas:
             lines += [
                 f"── {printable(rite.started.name)} ({view.rite_status(rite)}) ──",
-                *rite.deltas,
+                *(printable(line) for line in rite.deltas),
                 "",
             ]
     return "\n".join(lines) + "\n"
