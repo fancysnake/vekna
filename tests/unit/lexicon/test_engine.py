@@ -817,6 +817,17 @@ class TestGrimoire:
         assert seen == grimoire.events
 
     @staticmethod
+    def test_a_delta_is_not_quiet_unless_told_otherwise():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_delta(rite_id, "working...")
+
+        assert grimoire.events[-1] == RiteStreamed(
+            rite_id="r1", delta="working...", quiet=False
+        )
+
+    @staticmethod
     def test_a_quiet_delta_is_journaled_as_quiet():
         grimoire = Grimoire(clock=_fixed_clock)
 

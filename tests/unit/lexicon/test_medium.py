@@ -334,7 +334,9 @@ class TestEmitDelta:
         started = [e for e in grimoire.events if isinstance(e, RiteBegan)]
         medium_rite = next(e for e in started if e.name == "whoami")
         delta = next(e for e in grimoire.events if isinstance(e, RiteStreamed))
-        assert (delta.rite_id, delta.delta) == (medium_rite.rite_id, "here")
+        assert delta == RiteStreamed(
+            rite_id=medium_rite.rite_id, delta="here", quiet=False
+        )
 
     @staticmethod
     def test_a_quiet_one_hangs_off_the_running_rite_and_skips_the_terminal():
