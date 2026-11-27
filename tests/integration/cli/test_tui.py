@@ -1572,7 +1572,7 @@ class TestWaiting:
             await pilot.pause(_PAINTED)
             pointer = _text(app, "#ask")
             await pilot.press("w")
-            await pilot.pause(_PAINTED)
+            await _eventually(pilot, lambda: _text(app, "#ask").startswith("⏸ pr_fix "))
 
             ask = _text(app, "#ask")
         assert pointer == "⏸ 1 cast waits on you · w goes to it"
