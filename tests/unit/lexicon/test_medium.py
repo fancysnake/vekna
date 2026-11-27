@@ -11,6 +11,7 @@ from vekna.lexicon import (
     Done,
     MediumBoundaryError,
     NoComponents,
+    Question,
     RitualError,
     attended,
     current_rite,
@@ -36,7 +37,9 @@ def _fixed_clock() -> datetime:
 
 @medium
 async def pick(*, prompt: str, options: list[str]) -> str:
-    return await current_rite().channel.decide(prompt=prompt, options=options)
+    return await current_rite().channel.decide(
+        Question(prompt=prompt, options=tuple(options))
+    )
 
 
 class Start(BaseModel):

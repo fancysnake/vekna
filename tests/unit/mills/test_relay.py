@@ -1,6 +1,7 @@
 import asyncio
 import itertools
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -8,7 +9,7 @@ import pytest
 
 from vekna.mills.relay import Relay
 from vekna.pacts.casts import Casts, CastView, Prompt
-from vekna.pacts.remote import Hear, Heard, Posted, Remote, RemoteError
+from vekna.pacts.remote import Hear, Heard, Posted, Remote, RemoteError, Tapped
 from vekna.wire import (
     CastHello,
     DecideClaimed,
@@ -23,6 +24,8 @@ _NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 _CAST = "c0ffee00" + "0" * 24
 _THREAD = "pr_fix fix/login"
 _LONGEST_NAME = 100
+# Two emoji told apart by skin tone alone.
+_TONES = {"light": "👍🏻", "dark": "👍🏿"}
 
 
 class _Board(Casts):
@@ -47,17 +50,21 @@ class _Board(Casts):
 class _Chat(Remote):
     def __init__(self) -> None:
         self.asked: list[tuple[str, str, str]] = []
+        self.offered: list[tuple[str, ...]] = []
         self.said: list[tuple[str, str]] = []
         self.threads: dict[str, str] = {}
         self.made = itertools.count(1)
         self.failing = False
         self.unheard: tuple[str, ...] = ()
 
-    async def ask(self, *, room: str, thread: str, text: str) -> Posted:
+    async def ask(
+        self, *, room: str, thread: str, text: str, reactions: Sequence[str] = ()
+    ) -> Posted:
         if self.failing:
             msg = "Discord is down"
             raise RemoteError(msg)
         self.asked.append((room, thread, text))
+        self.offered.append(tuple(reactions))
         if thread not in self.threads:
             self.threads[thread] = f"t{next(self.made)}"
         return Posted(
@@ -111,6 +118,9 @@ class _Desk:
             Heard(thread=thread, reply_to=reply_to, text=text)
         )
 
+    async def taps(self, emoji: str, *, on: str = "m1") -> str | None:
+        return await self.relay.heard(Tapped(thread="t1", message=on, emoji=emoji))
+
     def answered(self) -> list[tuple[str, str]]:
         assert all(surface is self.relay for surface, _ in self.answers)
         return [(resolved.request_id, resolved.answer) for _, resolved in self.answers]
@@ -146,10 +156,18 @@ def _push(request_id: str = "r1", *, cast_id: str = _CAST) -> DecideRequested:
 
 
 def _question(
-    *, options: list[str] | None = None, free: bool = False
+    *,
+    options: list[str] | None = None,
+    free: bool = False,
+    reactions: dict[str, str] | None = None,
 ) -> DecideRequested:
     return DecideRequested(
-        cast_id=_CAST, request_id="r1", prompt="which?", options=options, free=free
+        cast_id=_CAST,
+        request_id="r1",
+        prompt="which?",
+        options=options,
+        free=free,
+        reactions=reactions,
     )
 
 
@@ -348,6 +366,170 @@ class TestAsking:
                 " Discord is down"
             )
         ]
+
+
+@pytest.mark.asyncio
+class TestReactions:
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("request_", "offered"),
+        [
+            (_question(), ("👍", "❌")),
+            (_question(options=["a", "b", "c"]), ("1️⃣", "2️⃣", "3️⃣")),
+            (_question(options=["a", "b"], free=True), ("1️⃣", "2️⃣")),
+            (_question(free=True), ()),
+            (_question(reactions={"no": "🛑"}), ("👍", "🛑")),
+            (
+                _question(options=["fix", "file", "ignore"], reactions={"file": "📝"}),
+                ("1️⃣", "📝", "3️⃣"),
+            ),
+            (_question(reactions={"yes": "❌"}), ("❌",)),
+            (
+                _question(options=["repair", "stop"], reactions={"repair": "2️⃣"}),
+                ("2️⃣",),
+            ),
+            (_question(options=["a", "b"], reactions={"a": "2\u20e3"}), ("2\u20e3",)),
+            (
+                _question(
+                    options=[str(at) for at in range(12)], reactions={"11": "🚀"}
+                ),
+                (
+                    "1️⃣",
+                    "2️⃣",
+                    "3️⃣",
+                    "4️⃣",
+                    "5️⃣",
+                    "6️⃣",
+                    "7️⃣",
+                    "8️⃣",
+                    "9️⃣",
+                    "🔟",
+                    "🚀",
+                ),
+            ),
+        ],
+    )
+    async def test_a_question_is_posted_with_an_emoji_for_each_answer_it_can_give(
+        desk: _Desk, request_: DecideRequested, offered: tuple[str, ...]
+    ):
+        await desk.told(request_)
+
+        assert desk.chat.offered == [offered]
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("request_", "ending"),
+        [
+            (
+                _question(options=["fix", "file"], reactions={"fix": "🔧"}),
+                "which?\n1. 🔧 fix\n2. file\n💬 _reply with a number_",
+            ),
+            (
+                _question(reactions={"yes": "🚀"}),
+                "which?\n💬 _reply yes or no: 🚀 yes, ❌ no_",
+            ),
+            (
+                _question(options=["a", "b"], reactions={"a": "1️⃣"}),
+                "which?\n1. 1️⃣ a\n2. b\n💬 _reply with a number_",
+            ),
+            (
+                _question(options=["a", "b", "c"], reactions={"c": "2️⃣"}),
+                "which?\n1️⃣ a\n• b\n2️⃣ c\n💬 _reply with an option_",
+            ),
+            (
+                _question(options=["a", "b"], reactions={"a": "2\u20e3"}),
+                "which?\n2\u20e3 a\n• b\n💬 _reply with an option_",
+            ),
+            (
+                _question(options=["a", "b"], reactions={"a": "1\u20e3"}),
+                "which?\n1. 1\u20e3 a\n2. b\n💬 _reply with a number_",
+            ),
+            (
+                _question(options=["a", "b"], free=True, reactions={"b": "1️⃣"}),
+                "which?\n• a\n1️⃣ b\n💬 _reply with an option, or in your own words_",
+            ),
+        ],
+    )
+    async def test_an_emoji_the_ritual_named_is_shown_beside_its_answer(
+        desk: _Desk, request_: DecideRequested, ending: str
+    ):
+        await desk.told(request_)
+
+        [(_, _, text)] = desk.chat.asked
+        assert text == f"❓ **pr_fix** `c0ffee00` asks\n{ending}"
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("request_", "emoji", "answer"),
+        [
+            (_question(), "👍", "yes"),
+            (_question(), "❌", "no"),
+            (_question(), "👍🏽", "yes"),
+            (_question(options=["a", "b"]), "2️⃣", "b"),
+            (_question(options=["a", "b"]), "2\u20e3", "b"),
+            (_question(options=["a", "b"], free=True), "1️⃣", "a"),
+            (_question(options=["fix", "file"], reactions={"fix": "🔧"}), "🔧", "fix"),
+            (_question(reactions={"yes": "🚀"}), "🚀", "yes"),
+            (_question(reactions={"yes": "❌"}), "❌", "yes"),
+            (_question(options=["2", "1"]), "1️⃣", "2"),
+            (_question(options=["a", "b"], reactions={"a": "2️⃣"}), "2️⃣", "a"),
+            (
+                _question(options=["a", "b"], free=True, reactions={"b": "🚀"}),
+                "🚀",
+                "b",
+            ),
+            (_question(options=["light", "dark"], reactions=_TONES), "👍🏻", "light"),
+        ],
+    )
+    async def test_a_tap_on_a_question_gives_the_answer_of_its_emoji(
+        desk: _Desk, request_: DecideRequested, emoji: str, answer: str
+    ):
+        await desk.told(request_)
+
+        assert await desk.taps(emoji) is None
+        assert desk.answered() == [("r1", answer)]
+
+    @staticmethod
+    async def test_an_emoji_that_gives_no_answer_is_refused_by_name(desk: _Desk):
+        await desk.told(_question(options=["fix", "file"], reactions={"fix": "🔧"}))
+
+        assert await desk.taps("🎉") == "🎉 is not one of 🔧 2️⃣"
+        assert await desk.taps("1️⃣") == "1️⃣ is not one of 🔧 2️⃣"
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_an_emoji_that_loosely_matches_two_answers_gives_neither(desk: _Desk):
+        await desk.told(_question(options=["light", "dark"], reactions=_TONES))
+
+        assert await desk.taps("👍") == "👍 is not one of 👍🏻 👍🏿"
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_question_answered_in_words_takes_no_reaction(desk: _Desk):
+        await desk.told(_question(free=True))
+
+        said = await desk.taps("👍")
+
+        assert said == "this question takes no reaction: reply in words"
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_tap_under_another_message_answers_nothing(desk: _Desk):
+        await desk.told(_question())
+
+        assert await desk.taps("👍", on="m9") is None
+        assert not desk.answered()
+
+    @staticmethod
+    async def test_a_tap_on_a_closed_question_is_told_so(desk: _Desk):
+        await desk.told(
+            _question(), DecideResolved(cast_id=_CAST, request_id="r1", answer="no")
+        )
+
+        said = await desk.taps("👍")
+
+        assert said == "that question is closed: reply to an open one"
+        assert not desk.answered()
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal, TypeVar, overload
 
 from pydantic import BaseModel, JsonValue, ValidationError
@@ -7,10 +7,12 @@ from vekna.lexicon import (
     CAST_QUEUE,
     CastFailedError,
     MediumBoundaryError,
+    Question,
     RitualError,
     allowed_answers,
     current_rite,
     medium,
+    reaction_answers,
     record_result,
     replayed,
 )
@@ -45,17 +47,47 @@ def _recorded(prior: JsonValue, *, options: Sequence[str] | None, free: bool) ->
     return prior
 
 
+# A reaction is a tap that gives one answer, so each emoji names one of the
+# answers `reaction_answers` gives, the rule the relay offers emoji by.
+def _checked_reactions(
+    reactions: Mapping[str, str], *, options: Sequence[str] | None, free: bool
+) -> None:
+    if (allowed := reaction_answers(options=options, free=free)) is None:
+        msg = "decide(reactions=...) needs a question that offers answers to name"
+        raise MediumBoundaryError(msg)
+    if unknown := [repr(answer) for answer in reactions if answer not in allowed]:
+        msg = (
+            f"decide(reactions=...) names {', '.join(unknown)}, "
+            f"which is not one of: {', '.join(allowed)}"
+        )
+        raise MediumBoundaryError(msg)
+    if len(set(reactions.values())) < len(reactions):
+        msg = "decide(reactions=...) gives one emoji to more than one answer"
+        raise MediumBoundaryError(msg)
+
+
 @overload
-async def decide(prompt: str) -> bool: ...
+async def decide(
+    prompt: str, *, reactions: Mapping[str, str] | None = None
+) -> bool: ...
 @overload
-async def decide(prompt: str, *, options: Sequence[_OptionT]) -> _OptionT: ...
+async def decide(
+    prompt: str,
+    *,
+    options: Sequence[_OptionT],
+    reactions: Mapping[str, str] | None = None,
+) -> _OptionT: ...
 @overload
 async def decide(prompt: str, *, free: Literal[True]) -> str: ...
 
 
 @medium
 async def decide(
-    prompt: str, *, options: Sequence[str] | None = None, free: bool = False
+    prompt: str,
+    *,
+    options: Sequence[str] | None = None,
+    free: bool = False,
+    reactions: Mapping[str, str] | None = None,
 ) -> bool | str:
     # An empty `options` is a question with no answer in it: the live path would
     # quietly fall through to yes/no and the journal would then refuse what it
@@ -64,6 +96,8 @@ async def decide(
     if options is not None and not options:
         msg = "decide(options=...) needs at least one option"
         raise MediumBoundaryError(msg)
+    if reactions is not None:
+        _checked_reactions(reactions, options=options, free=free)
     # A question this cast already asked is not asked again: the operator
     # answered it before the interruption, and a resumed cast that re-asked
     # would be making them defend a decision they had already made.
@@ -72,7 +106,12 @@ async def decide(
         _recorded(prior, options=options, free=free)
         if prior is not None
         else await current_rite().channel.decide(
-            prompt=prompt, options=options, free=free
+            Question(
+                prompt=prompt,
+                options=None if options is None else tuple(options),
+                free=free,
+                reactions=None if reactions is None else dict(reactions),
+            )
         )
     )
     record_result(answer)

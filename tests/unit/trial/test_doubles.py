@@ -10,6 +10,7 @@ from vekna.lexicon._pacts import (
     CodingCall,
     FocusReply,
     GateFn,
+    Question,
     ShellCall,
     ShellReply,
 )
@@ -223,7 +224,9 @@ class TestDecideDouble:
         double = _decide()
         double.answers(answer=True, when="*hand it to the agent?*")
 
-        answer = asyncio.run(double.decide(prompt="red — hand it to the agent?"))
+        answer = asyncio.run(
+            double.decide(Question(prompt="red — hand it to the agent?"))
+        )
 
         assert answer == "yes"
 
@@ -233,7 +236,9 @@ class TestDecideDouble:
         double.answers(answer="file")
 
         answer = asyncio.run(
-            double.decide(prompt="what now?", options=["fix", "file", "ignore"])
+            double.decide(
+                Question(prompt="what now?", options=("fix", "file", "ignore"))
+            )
         )
 
         assert answer == "file"
@@ -244,7 +249,9 @@ class TestDecideDouble:
         double.answers(answer="repair")
 
         with pytest.raises(TrialScriptError, match="not one of the offered answers"):
-            asyncio.run(double.decide(prompt="what now?", options=["fix", "stop"]))
+            asyncio.run(
+                double.decide(Question(prompt="what now?", options=("fix", "stop")))
+            )
 
     @staticmethod
     def test_a_yes_no_prompt_refuses_an_answer_that_is_neither():
@@ -252,14 +259,14 @@ class TestDecideDouble:
         double.answers(answer="maybe")
 
         with pytest.raises(TrialScriptError, match="not one of the offered answers"):
-            asyncio.run(double.decide(prompt="spend the agent?"))
+            asyncio.run(double.decide(Question(prompt="spend the agent?")))
 
     @staticmethod
     def test_free_text_is_whatever_was_scripted():
         double = _decide()
         double.answers(answer="the port is 9000")
 
-        answer = asyncio.run(double.decide(prompt="which port?", free=True))
+        answer = asyncio.run(double.decide(Question(prompt="which port?", free=True)))
 
         assert answer == "the port is 9000"
 
@@ -269,7 +276,9 @@ class TestDecideDouble:
         double.answers(answer="rewrite the parser")
 
         answer = asyncio.run(
-            double.decide(prompt="what now?", options=["fix", "stop"], free=True)
+            double.decide(
+                Question(prompt="what now?", options=("fix", "stop"), free=True)
+            )
         )
 
         assert answer == "rewrite the parser"
@@ -279,21 +288,12 @@ class TestDecideDouble:
         double = _decide()
         double.answers(answer="fix")
 
-        asyncio.run(double.decide(prompt="what now?", options=["fix", "stop"]))
+        asyncio.run(
+            double.decide(Question(prompt="what now?", options=("fix", "stop")))
+        )
 
         assert double.asked[0].options == ("fix", "stop")
         assert double.prompts == ["what now?"]
-
-    @staticmethod
-    def test_the_caller_s_own_list_is_no_longer_theirs_to_change():
-        double = _decide()
-        double.answers(answer="fix")
-        options = ["fix", "stop"]
-
-        asyncio.run(double.decide(prompt="what now?", options=options))
-        options.append("burn it down")
-
-        assert double.asked[0].options == ("fix", "stop")
 
 
 def _queue() -> QueueDouble:

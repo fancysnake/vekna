@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -22,8 +22,16 @@ class Heard:
     text: str
 
 
+# An emoji somebody put under a message in a thread.
+@dataclass(frozen=True, kw_only=True)
+class Tapped:
+    thread: str
+    message: str
+    emoji: str
+
+
 # What is said back to the author, or `None` for nothing.
-Hear = Callable[[Heard], Awaitable[str | None]]
+Hear = Callable[[Heard | Tapped], Awaitable[str | None]]
 
 
 # The remote refused, or could not be reached.
@@ -36,7 +44,11 @@ class RemoteError(Exception):
 # after that.
 class Remote(Protocol):
     # A question that already stands last in its thread is not posted again.
-    async def ask(self, *, room: str, thread: str, text: str) -> Posted: ...
+    # `reactions` are the emoji put under a question newly posted, in order,
+    # for a tap on one to answer it.
+    async def ask(
+        self, *, room: str, thread: str, text: str, reactions: Sequence[str] = ()
+    ) -> Posted: ...
     async def say(self, *, thread: str, text: str) -> None: ...
 
     # Stays connected until cancelled, handing `hear` whatever is written in a

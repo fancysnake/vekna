@@ -269,6 +269,34 @@ class TestAttended:
         assert trial.decide.prompts == ["red — hand it to the agent?"]
 
 
+class Reused(BaseModel):
+    pass
+
+
+@step
+async def reused(_: Reused) -> Done[None]:
+    options = ["yes", "no"]
+    chosen = {"yes": "🚀"}
+    await decide("ship?", options=options, reactions=chosen)
+    options.append("later")
+    chosen["yes"] = "🛑"
+    await decide("stop?", options=options, reactions=chosen)
+    return Done(None)
+
+
+class TestAsked:
+    @staticmethod
+    def test_a_question_is_kept_as_it_was_asked(trial: Trial) -> None:
+        trial.decide.answers(answer=True, always=True)
+
+        trial.walk(reused, Reused())
+
+        assert [(asked.options, asked.reactions) for asked in trial.decide.asked] == [
+            (("yes", "no"), {"yes": "🚀"}),
+            (("yes", "no", "later"), {"yes": "🛑"}),
+        ]
+
+
 class TestScriptedOutput:
     @staticmethod
     def test_a_scripted_model_comes_back_validated_by_the_medium(trial: Trial) -> None:

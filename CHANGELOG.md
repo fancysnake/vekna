@@ -21,9 +21,18 @@ when.
 - **`shell(stream=False)` output shows in the window.** It still stays off the
   terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
   `emit_delta(text, quiet=True)` is how a medium writes it.
+- **Reactions answer a question on Discord**: the bot puts an emoji under each
+  question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
+  for options, and a tap on one is the answer. `decide(reactions={"fix":
+  "🔧"})` names a ritual's own emoji for an answer. A bot set up before this
+  needs the Add Reactions permission; without it questions are still posted
+  and answered in words.
 
 ### Changed
 
+- **`Channel.decide` takes one `Question`**: a channel of your own now reads
+  the prompt, options, free text and reactions off that value. `vekna.trial`'s
+  `Asked` is the same type.
 - **Remembering and bounding across runs, written down**: `docs/rituals.md`
   and the ritual-scribe skill now teach a label as the memory of work a
   listing cannot show, a retry budget for each step kept with the item, and

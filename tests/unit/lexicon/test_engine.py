@@ -13,6 +13,7 @@ from vekna.lexicon import (
     Failure,
     FocusMissingError,
     NoComponents,
+    Question,
     RitualBoundaryError,
     RitualDefinitionError,
     RitualError,
@@ -427,7 +428,7 @@ class Ask(BaseModel):
 
 @step
 async def ask(_: Ask) -> Done[None]:
-    await current_rite().channel.decide(prompt="merge #74 now?")
+    await current_rite().channel.decide(Question(prompt="merge #74 now?"))
     return Done(None)
 
 
@@ -583,7 +584,7 @@ class TestFailureRouting:
     @staticmethod
     def test_the_unattended_channel_names_the_prompt_it_refused():
         with pytest.raises(UnattendedPromptError, match="merge #74 now\\?"):
-            asyncio.run(UnattendedChannel().decide(prompt="merge #74 now?"))
+            asyncio.run(UnattendedChannel().decide(Question(prompt="merge #74 now?")))
 
     @staticmethod
     def test_max_visits_below_one_is_refused():
