@@ -116,7 +116,7 @@ def line_text(
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
         if entry.kind == "finished":
             text.stylize("dim")
-        if entry.kind == "project" and entry.views[0].hello.project == here:
+        if entry.kind == "project" and entry.project == here:
             text.append(f" {_HERE}")
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":

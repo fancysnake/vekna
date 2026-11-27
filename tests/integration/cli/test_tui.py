@@ -1895,7 +1895,7 @@ class TestTakingOver:
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
-        app = _app(hub, sent, quiet=timedelta(seconds=1))
+        app = _app(hub, sent, quiet=timedelta(seconds=3))
 
         async with app.run_test() as pilot:
             tree: Tree[str] = app.query_one("#contents", Tree)
@@ -2586,7 +2586,8 @@ class TestScope:
             await pilot.pause(_PAINTED)
             await pilot.press("g")
             await pilot.pause(_PAINTED)
-            hint = _text(app, "#note")
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
             _to(app, "p:/other/.git")
             await pilot.press("enter")
             await pilot.pause(_PAINTED)
@@ -2599,7 +2600,8 @@ class TestScope:
             await pilot.pause(_PAINTED)
 
             home = (_text(app, "#scope"), _text(app, "#note"))
-        assert hint == "enter on a project shows it alone"
+        assert "g/p scope · enter show alone · q quit" in hint
+        assert not note
         assert alone == (
             "1 running  (other)",
             ["other (1 running)"],
@@ -2645,7 +2647,9 @@ class TestScope:
             await pilot.pause(_PAINTED)
 
             home = (_text(app, "#scope"), _text(app, "#note"))
-        assert home == ("1 running  (proj)", "on proj · c casts in /proj")
+            hint = _text(app, "#hint")
+        assert home == ("1 running  (proj)", "")
+        assert "enter show alone" not in hint
 
     @staticmethod
     async def test_enter_on_a_line_that_is_no_project_changes_no_scope():

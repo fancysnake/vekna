@@ -58,16 +58,15 @@ _NOTHING_TO_MARK = "only a failed cast can be marked seen"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
-_OPENS = "enter on a project shows it alone"
 _QUESTION_CHANGED = "the question changed — your answer was not sent"
 
 
 # `old` is how many ended casts the history view holds.
-def _hint(old: int = 0) -> str:
+def _hint(old: int = 0, *, every: bool = False) -> str:
     return (
         f"space open/fold · f fold all · H history{f' ({old})' if old else ''}"
         " · w next asking · t take over · x cancel · s seen · : command"
-        " · g/p scope · q quit"
+        f" · g/p scope{' · enter show alone' if every else ''} · q quit"
     )
 
 
@@ -134,12 +133,16 @@ class Opened:
 @dataclass
 class _Scope:
     opened: Opened
-    project: str
+    project: str = field(init=False)
     every: bool = False
-    to_fit: bool = False
+    to_fit: bool = field(init=False)
     seen: tuple[int, int] = (0, 0)
     seen_at: float = field(default_factory=monotonic)
     fit_asked_at: float = field(default_factory=monotonic)
+
+    def __post_init__(self) -> None:
+        self.project = self.opened.project
+        self.to_fit = self.opened.fit
 
     # The window's own project runs a ritual where the window was opened, which
     # may be a worktree or a directory inside the checkout.
@@ -319,7 +322,7 @@ class VeknaApp(App[None]):
     ) -> None:
         super().__init__()
         self._casts = casts
-        self._scope = _Scope(opened=opened, project=opened.project, to_fit=opened.fit)
+        self._scope = _Scope(opened=opened)
         self._daemon = _ToDaemon(send=send, mark=mark)
         self._branch_of = branch_of
         self._view = _View(reading=Reading(history_after=opened.history_after))
@@ -389,7 +392,6 @@ class VeknaApp(App[None]):
         if self._locked():
             return
         self._scope.show(every=True)
-        self.say(_OPENS)
         self.changed()
 
     def action_home(self) -> None:
@@ -397,18 +399,19 @@ class VeknaApp(App[None]):
             return
         self._turn_to(self._scope.opened.project)
 
-    # Among every project, the one under the cursor alone: the window is on
-    # it as if it had opened there. On any other line enter does nothing.
+    # On a project line, the window is on that project as if it had opened
+    # there. On any other line enter does nothing.
     def action_open(self) -> None:
         entry = self._entry()
-        if self._locked() or not self._scope.every or entry is None:
+        if self._locked() or entry is None or entry.project is None:
             return
-        if entry.kind == "project":
-            self._turn_to(entry.views[0].hello.project)
+        self._turn_to(entry.project)
 
     def _turn_to(self, project: str) -> None:
+        moved = project != self._scope.project
         self._scope.turn_to(project)
-        self.say(f"on {named(project)} · c casts in {self._scope.root}")
+        if moved:
+            self.say(f"on {named(project)} · c casts in {self._scope.root}")
         self.changed()
 
     def action_history(self) -> None:
@@ -742,7 +745,9 @@ class VeknaApp(App[None]):
             self._scope.to_fit = False
             reading.toggled = fitted(casts=listed, reading=reading, now=now, rows=rows)
         old = sum(historic(view, reading, now) for view in listed)
-        self._w.foot.hint.update(_hint(old) if taken is None else _taken_hint(taken))
+        self._w.foot.hint.update(
+            _hint(old, every=self._scope.every) if taken is None else _taken_hint(taken)
+        )
         self._paint_contents(listed, now)
         self._paint_ask(listed, self._focused())
         if taken is not None:
