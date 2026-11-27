@@ -19,6 +19,9 @@ when.
   "🔧"})` names a ritual's own emoji for an answer. A bot set up before this
   needs the Add Reactions permission; without it questions are still posted
   and answered in words.
+- **`decide` takes `options` beside `free=True`**: the options are suggestions.
+  A number or a reaction picks one, any other text is the answer, and the
+  answer is a `str`.
 
 ### Changed
 

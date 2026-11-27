@@ -179,7 +179,11 @@ class Reacting(BaseModel):
 
 @step
 async def react(state: Reacting) -> Done[Note]:
-    if state.free:
+    if state.free and state.options is not None:
+        answer = await decide(
+            "pick", options=state.options, free=True, reactions=state.reactions
+        )
+    elif state.free:
         answer = await decide("why?", free=True, reactions=state.reactions)
     elif state.options is None:
         answer = str(await decide("ok?", reactions=state.reactions))
@@ -218,6 +222,7 @@ class TestReactions:
         [
             (Reacting(reactions={"yes": "🚀"}), "True"),
             (Reacting(options=["fix", "file"], reactions={"fix": "🔧"}), "fix"),
+            (Reacting(options=["ok", "fix"], free=True, reactions={"ok": "👍"}), "ok"),
         ],
     )
     def test_the_emoji_named_for_an_answer_reach_the_channel(

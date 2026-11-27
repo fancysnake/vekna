@@ -21,9 +21,9 @@ from vekna.lexicon import (
 # or raises, never a string of its own — so a ritual offering
 # `Literal["fix", "file", "ignore"]` gets that back rather than a bare `str` it
 # would have to re-validate. Offering a plain `list[str]` still answers `str`.
-# There is deliberately no `options` + `free` overload: suggestion-mode is the
-# agent's path through `Channel.decide`, and opening it here would let a ritual
-# offer `Literal["fix", "stop"]` and be handed something else.
+# `options` beside `free=True` are suggestions the operator may answer past, so
+# that shape answers `str` whatever the options were typed as: a ritual
+# offering `Literal["fix", "stop"]` there is never promised one of them back.
 _OptionT = TypeVar("_OptionT", bound=str)
 
 
@@ -77,6 +77,14 @@ async def decide(
     options: Sequence[_OptionT],
     reactions: Mapping[str, str] | None = None,
 ) -> _OptionT: ...
+@overload
+async def decide(
+    prompt: str,
+    *,
+    options: Sequence[str],
+    free: Literal[True],
+    reactions: Mapping[str, str] | None = None,
+) -> str: ...
 @overload
 async def decide(prompt: str, *, free: Literal[True]) -> str: ...
 
