@@ -5,7 +5,7 @@ reaches for, and nothing else. The CLI lives in the root project; the cast
 runtime is reached through `vekna.lexicon._inits`.
 """
 
-from vekna.wire import allowed_answers
+from vekna.wire import allowed_answers, reaction_answers
 
 from ._links.loader import ConfigTable, config_table
 from ._mills.bounds import race, timeout
@@ -43,6 +43,7 @@ from ._pacts import (
     MediumBoundaryError,
     NoComponents,
     NoDaemonError,
+    Question,
     RiteRef,
     RiteTimeoutError,
     RitualBoundaryError,
@@ -88,6 +89,7 @@ __all__ = [
     "MediumBoundaryError",
     "NoComponents",
     "NoDaemonError",
+    "Question",
     "RiteContext",
     "RiteRef",
     "RiteTimeoutError",
@@ -114,6 +116,7 @@ __all__ = [
     "medium",
     "offer_prompt",
     "race",
+    "reaction_answers",
     "record_result",
     "replayed",
     "ritual",

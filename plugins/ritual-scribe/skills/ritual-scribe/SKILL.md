@@ -299,6 +299,20 @@ question is asked, so build the list before you decide whether to ask.
 Keep the prompt to one line. A prompt with one possible answer should not be
 asked at all.
 
+On Discord the operator answers with a tap on a reaction: 👍 or ❌ for a bare
+`decide`, a number for each option. Name an emoji only where it says more than
+the number does; an answer left out keeps its default, unless another answer
+was given that emoji, and then it is answered in words only:
+
+```python
+took = await decide(headline, options=_TOOK, reactions={"fix": "🔧"})
+```
+
+`reactions` maps an answer to its emoji. A key that is no offered answer, one
+emoji for two answers, or `reactions` beside `free=True` raises
+`MediumBoundaryError`. The terminal ignores it. Under `trial`,
+`trial.decide.asked` records it.
+
 An agent's `ask_human` is the other direction: its options are suggestions, the
 operator may answer past them, and what comes back is an unconstrained `str`.
 `decide(options=...)` is the closed one — that is why a ritual branching on a

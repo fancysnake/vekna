@@ -1,5 +1,5 @@
 import hashlib
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -119,14 +119,22 @@ class Resumption:
     events: list[WireMessage]
 
 
+# A question as `decide` asks it. `reactions` maps an answer to the emoji the
+# ritual named for it.
+@dataclass(frozen=True, kw_only=True)
+class Question:
+    prompt: str
+    options: tuple[str, ...] | None = None
+    free: bool = False
+    reactions: Mapping[str, str] | None = None
+
+
 class Channel(Protocol):
     # Whether somebody is there to answer. False only where every question is
     # refused, which is what a step asks `attended()` before it asks one.
     attended: bool = True
 
-    async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
-    ) -> str: ...
+    async def decide(self, question: Question) -> str: ...
 
 
 GateFn = Callable[[str], Awaitable[bool]]

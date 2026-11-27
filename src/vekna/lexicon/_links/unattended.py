@@ -1,8 +1,6 @@
-from collections.abc import Sequence
-
 from typing_extensions import override
 
-from vekna.lexicon._pacts import Channel, UnattendedPromptError
+from vekna.lexicon._pacts import Channel, Question, UnattendedPromptError
 
 
 # What stands in for the terminal when nobody is at it: every question is
@@ -12,9 +10,6 @@ class UnattendedChannel(Channel):
     attended = False
 
     @override
-    async def decide(
-        self, *, prompt: str, options: Sequence[str] | None = None, free: bool = False
-    ) -> str:
-        del options, free
-        msg = f"unattended cast refused to ask: {prompt}"
+    async def decide(self, question: Question) -> str:
+        msg = f"unattended cast refused to ask: {question.prompt}"
         raise UnattendedPromptError(msg)

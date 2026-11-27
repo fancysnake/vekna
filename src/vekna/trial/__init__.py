@@ -13,9 +13,11 @@ validation and exit-code handling are exercised rather than skipped.
 Under pytest the `trial` fixture is the same object, already installed.
 """
 
+from vekna.lexicon import Question as Asked
+
 from ._inits import Trial
 from ._links import CodingDouble, DecideDouble, QueueDouble, ShellDouble
-from ._pacts import Asked, Enqueued, TrialError, TrialScriptError
+from ._pacts import Enqueued, TrialError, TrialScriptError
 
 __all__ = [
     "Asked",

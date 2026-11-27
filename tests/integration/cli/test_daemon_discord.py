@@ -3,7 +3,7 @@ import contextlib
 import logging
 import sys
 import textwrap
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Sequence
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -133,6 +133,7 @@ class _Chat(Remote):
         self.ends = ends
         self.setups: list[DiscordSetup] = []
         self.asked: list[tuple[str, str, str]] = []
+        self.offered: list[tuple[str, ...]] = []
         self.said: list[tuple[str, str]] = []
         self.hear: Hear | None = None
         self.closed = False
@@ -142,8 +143,11 @@ class _Chat(Remote):
         return self
 
     @override
-    async def ask(self, *, room: str, thread: str, text: str) -> Posted:
+    async def ask(
+        self, *, room: str, thread: str, text: str, reactions: Sequence[str] = ()
+    ) -> Posted:
         self.asked.append((room, thread, text))
+        self.offered.append(tuple(reactions))
         return Posted(thread="t1", message="m1")
 
     @override
@@ -234,6 +238,7 @@ class TestDiscord:
                 ),
             )
         ]
+        assert chat.offered == [("👍", "❌")]
         assert (refused, taken) == ("'maybe' is not one of yes, no", None)
         assert chat.said == [("t1", "✅ ACK")]
         assert chat.closed

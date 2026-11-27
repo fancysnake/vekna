@@ -58,6 +58,23 @@ that literal, so a step can branch on the answer without re-validating a `str`.
 `MediumBoundaryError`: a list that computed to nothing is a bug in the step, not
 a question.
 
+On [Discord](cli.md#discord) a tap on a reaction answers a question: 👍 or ❌
+for yes or no, and a number for each option. `reactions` names your own emoji
+for an answer, and an answer you leave out keeps its thumb or its number. If
+you give that thumb or number to another answer, the answer you left out has no
+emoji and is answered in words:
+
+```python
+took = await decide(
+    "what now?", options=_TOOK, reactions={"fix": "🔧", "ignore": "🙈"}
+)
+if await decide("Ship it?", reactions={"yes": "🚀"}): ...
+```
+
+A terminal and the window ignore `reactions`. An emoji for an answer the
+question does not offer, one emoji for two answers, or `reactions` with
+`free=True` raises `MediumBoundaryError`.
+
 There is no default and no timeout: a `decide` is a choice the ritual author
 declared was yours, and guessing it is worse than waiting. A cast whose stdin
 has ended stops with `input ended before the question was answered` rather than

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from tests.conftest import Tty
-from vekna.lexicon import StandalonePromptError
+from vekna.lexicon import Question, StandalonePromptError
 from vekna.lexicon._links.standalone import StandaloneRenderer, Tail
 from vekna.lexicon._pacts import RiteBegan, RiteEnded, RiteStreamed
 
@@ -401,7 +401,9 @@ class TestDecide:
     def test_chooses_by_number():
         renderer, _ = _renderer("2\n")
 
-        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+        choice = asyncio.run(
+            renderer.decide(Question(prompt="pick", options=("a", "b")))
+        )
 
         assert choice == "b"
 
@@ -409,7 +411,9 @@ class TestDecide:
     def test_chooses_by_name():
         renderer, _ = _renderer("a\n")
 
-        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+        choice = asyncio.run(
+            renderer.decide(Question(prompt="pick", options=("a", "b")))
+        )
 
         assert choice == "a"
 
@@ -418,7 +422,7 @@ class TestDecide:
         renderer, _ = _renderer("x\nx\nx\n")
 
         with pytest.raises(StandalonePromptError):
-            asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+            asyncio.run(renderer.decide(Question(prompt="pick", options=("a", "b"))))
 
     # "²" is a digit to `str.isdigit` and not a number to `int`, which used to
     # raise where this prompt has an answer for anything else typed at it.
@@ -426,7 +430,9 @@ class TestDecide:
     def test_a_digit_that_is_not_a_number_is_an_invalid_choice():
         renderer, out = _renderer("²\na\n")
 
-        choice = asyncio.run(renderer.decide(prompt="pick", options=["a", "b"]))
+        choice = asyncio.run(
+            renderer.decide(Question(prompt="pick", options=("a", "b")))
+        )
 
         assert (choice, "invalid choice" in out.getvalue()) == ("a", True)
 
@@ -437,7 +443,7 @@ class TestDecideSuggested:
         renderer, _ = _renderer("neither, do c\n")
 
         answer = asyncio.run(
-            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+            renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
         )
 
         assert answer == "neither, do c"
@@ -447,7 +453,7 @@ class TestDecideSuggested:
         renderer, _ = _renderer("2\n")
 
         answer = asyncio.run(
-            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+            renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
         )
 
         assert answer == "b"
@@ -456,7 +462,9 @@ class TestDecideSuggested:
     def test_says_the_options_are_suggestions():
         renderer, out = _renderer("2\n")
 
-        asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+        asyncio.run(
+            renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
+        )
 
         assert "or answer in your own words" in out.getvalue()
 
@@ -465,7 +473,7 @@ class TestDecideSuggested:
         renderer, _ = _renderer("²\n")
 
         answer = asyncio.run(
-            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+            renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
         )
 
         assert answer == "²"
@@ -477,7 +485,7 @@ class TestDecideSuggested:
         renderer, _ = _renderer("\n")
 
         answer = asyncio.run(
-            renderer.decide(prompt="pick", options=["a", "b"], free=True)
+            renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
         )
 
         assert not answer
@@ -491,14 +499,16 @@ class TestPromptEndOfInput:
         renderer, _ = _renderer("")
 
         with pytest.raises(StandalonePromptError, match="input ended"):
-            asyncio.run(renderer.decide(prompt="pick", options=["a", "b"], free=True))
+            asyncio.run(
+                renderer.decide(Question(prompt="pick", options=("a", "b"), free=True))
+            )
 
     @staticmethod
     def test_a_free_text_prompt_says_the_input_ended():
         renderer, _ = _renderer("")
 
         with pytest.raises(StandalonePromptError, match="input ended"):
-            asyncio.run(renderer.decide(prompt="name?", free=True))
+            asyncio.run(renderer.decide(Question(prompt="name?", free=True)))
 
     # The reading thread hands its failure to the question rather than dying
     # with it and leaving the question waiting forever.
@@ -509,7 +519,9 @@ class TestPromptEndOfInput:
         renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
 
         with pytest.raises(ValueError, match="closed file"):
-            asyncio.run(asyncio.wait_for(renderer.decide(prompt="ok?"), timeout=5))
+            asyncio.run(
+                asyncio.wait_for(renderer.decide(Question(prompt="ok?")), timeout=5)
+            )
 
 
 class TestDecideConfirm:
@@ -517,20 +529,20 @@ class TestDecideConfirm:
     def test_yes_answer():
         renderer, _ = _renderer("yes\n")
 
-        assert asyncio.run(renderer.decide(prompt="ok?")) == "yes"
+        assert asyncio.run(renderer.decide(Question(prompt="ok?"))) == "yes"
 
     @staticmethod
     def test_no_answer():
         renderer, _ = _renderer("n\n")
 
-        assert asyncio.run(renderer.decide(prompt="ok?")) == "no"
+        assert asyncio.run(renderer.decide(Question(prompt="ok?"))) == "no"
 
     @staticmethod
     def test_raises_after_repeated_invalid_input():
         renderer, _ = _renderer("maybe\nmaybe\nmaybe\n")
 
         with pytest.raises(StandalonePromptError):
-            asyncio.run(renderer.decide(prompt="ok?"))
+            asyncio.run(renderer.decide(Question(prompt="ok?")))
 
 
 class TestDecideFree:
@@ -538,7 +550,7 @@ class TestDecideFree:
     def test_returns_free_text():
         renderer, _ = _renderer("a branch name\n")
 
-        answer = asyncio.run(renderer.decide(prompt="name?", free=True))
+        answer = asyncio.run(renderer.decide(Question(prompt="name?", free=True)))
 
         assert answer == "a branch name"
 
@@ -548,7 +560,7 @@ class TestNotify:
     def test_a_question_raises_a_desktop_notification():
         renderer, out = _renderer("y\n", tty=True)
 
-        asyncio.run(renderer.decide(prompt="deploy?"))
+        asyncio.run(renderer.decide(Question(prompt="deploy?")))
 
         assert "\x1b]777;notify;vekna needs you;deploy?\x07" in out.getvalue()
 
@@ -568,7 +580,7 @@ class TestNotify:
     def test_a_stream_that_is_not_a_terminal_gets_no_escape_codes():
         renderer, out = _renderer("y\n")
 
-        asyncio.run(renderer.decide(prompt="deploy?"))
+        asyncio.run(renderer.decide(Question(prompt="deploy?")))
 
         assert "\x1b" not in out.getvalue()
 
@@ -576,7 +588,7 @@ class TestNotify:
     def test_the_body_cannot_end_the_sequence_early():
         renderer, out = _renderer("y\n", tty=True)
 
-        asyncio.run(renderer.decide(prompt="one\ntwo\x07three\x1b[2J"))
+        asyncio.run(renderer.decide(Question(prompt="one\ntwo\x07three\x1b[2J")))
 
         assert "\x1b]777;notify;vekna needs you;onetwothree[2J\x07" in out.getvalue()
 
@@ -601,13 +613,15 @@ class TestWithdrawnPrompt:
         async def ask_twice() -> str:
             with os.fdopen(read_fd, encoding="utf-8") as inp:
                 renderer = StandaloneRenderer(out=Tail(out), inp=inp)
-                first = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+                first = asyncio.create_task(
+                    renderer.decide(Question(prompt="first?", free=True))
+                )
                 await asyncio.sleep(0.05)
                 first.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     await first
                 second = asyncio.create_task(
-                    renderer.decide(prompt="second?", free=True)
+                    renderer.decide(Question(prompt="second?", free=True))
                 )
                 await asyncio.sleep(0.05)
                 os.write(write_fd, b"answer\n")
@@ -624,7 +638,9 @@ class TestWithdrawnPrompt:
 
         async def ask_and_withdraw() -> None:
             renderer = StandaloneRenderer(out=Tail(io.StringIO()), inp=inp)
-            asked = asyncio.create_task(renderer.decide(prompt="first?", free=True))
+            asked = asyncio.create_task(
+                renderer.decide(Question(prompt="first?", free=True))
+            )
             await asyncio.sleep(0.05)
             asked.cancel()
             with pytest.raises(asyncio.CancelledError):

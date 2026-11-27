@@ -27,6 +27,7 @@ from vekna.lexicon._pacts import (
     MediumBoundaryError,
     NoComponents,
     NoDaemonError,
+    Question,
     RiteBegan,
     RiteEnded,
     RiteStreamed,
@@ -148,11 +149,8 @@ class _Renderer:
         self.released = asyncio.Event()
         self.cancelled = 0
 
-    async def decide(
-        self, *, prompt: str, options: object = None, free: bool = False
-    ) -> str:
-        del options, free
-        self.asked.append(prompt)
+    async def decide(self, question: Question) -> str:
+        self.asked.append(question.prompt)
         try:
             await self.released.wait()
         except asyncio.CancelledError:
@@ -163,22 +161,16 @@ class _Renderer:
 
 # A terminal that gives up on the prompt, as one does after too many bad tries.
 class _Refusing(_Renderer):
-    async def decide(
-        self, *, prompt: str, options: object = None, free: bool = False
-    ) -> str:
-        del options, free
-        self.asked.append(prompt)
+    async def decide(self, question: Question) -> str:
+        self.asked.append(question.prompt)
         msg = "no valid choice provided"
         raise StandalonePromptError(msg)
 
 
 # A terminal that answers on its way out of a cancelled ask.
 class _Stubborn(_Renderer):
-    async def decide(
-        self, *, prompt: str, options: object = None, free: bool = False
-    ) -> str:
-        del options, free
-        self.asked.append(prompt)
+    async def decide(self, question: Question) -> str:
+        self.asked.append(question.prompt)
         try:
             await self.released.wait()
         except asyncio.CancelledError:
@@ -415,7 +407,9 @@ class TestPrompts:
             inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
 
-        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        asking = asyncio.create_task(
+            channel.decide(Question(prompt="ok?", reactions={"yes": "🚀"}))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         waiting = _waiting(daemon)
         renderer.released.set()
@@ -425,6 +419,7 @@ class TestPrompts:
         assert renderer.asked == ["ok?"]
         assert answer == "yes"
         assert [message.prompt for message in waiting] == ["ok?"]
+        assert [message.reactions for message in waiting] == [{"yes": "🚀"}]
         assert not daemon.hub.casts[_CAST].waiting
         await daemon.stop()
 
@@ -438,7 +433,7 @@ class TestPrompts:
             inner=_Renderer(), link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
 
-        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        asking = asyncio.create_task(channel.decide(Question(prompt="ok?")))
         await _eventually(lambda: bool(_waiting(daemon)))
         asking.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -457,7 +452,7 @@ class TestPrompts:
         channel = TeeChannel(
             inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
-        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        asking = asyncio.create_task(channel.decide(Question(prompt="ok?")))
         await _eventually(lambda: bool(renderer.asked))
 
         daemon = _Daemon()
@@ -481,7 +476,7 @@ class TestPrompts:
         channel = TeeChannel(
             inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: "r1"
         )
-        asking = asyncio.create_task(channel.decide(prompt="ok?"))
+        asking = asyncio.create_task(channel.decide(Question(prompt="ok?")))
         await _eventually(lambda: bool(renderer.asked))
 
         attaching = asyncio.create_task(link.attach(backlog=channel.open_prompts))
@@ -504,7 +499,7 @@ class TestPrompts:
         )
         renderer.released.set()
 
-        answer = await channel.decide(prompt="ok?", options=["yes", "no"])
+        answer = await channel.decide(Question(prompt="ok?", options=("yes", "no")))
 
         assert answer == "no"
         assert not channel.open_prompts()
@@ -582,7 +577,9 @@ class TestAnsweredOverTheWire:
         link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("go", "stop")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
 
         daemon.hub.answer(
@@ -604,7 +601,9 @@ class TestAnsweredOverTheWire:
         link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("go", "stop")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         request_id = _asked_id(daemon)
 
@@ -629,7 +628,9 @@ class TestAnsweredOverTheWire:
         link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("go", "stop")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
 
         daemon.hub.tell(
@@ -657,7 +658,9 @@ class TestAnsweredOverTheWire:
         link = DaemonLink(socket_path=socket_path, hello=_hello(wired=True))
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["go", "stop"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("go", "stop")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         request_id = _asked_id(daemon)
 
@@ -1260,7 +1263,9 @@ class TestClaimed:
         await link.attach()
         renderer = _Renderer()
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("yes", "no")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         request_id = _asked_id(daemon)
         window = _Window()
@@ -1288,7 +1293,9 @@ class TestClaimed:
         await link.attach()
         renderer = _Renderer(answer="yes")
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("yes", "no")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         window = _Window()
         daemon.hub.claim(
@@ -1314,7 +1321,9 @@ class TestClaimed:
         await link.attach()
         renderer = _Renderer(answer="no")
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
-        asking = asyncio.create_task(tee.decide(prompt="go?", options=["yes", "no"]))
+        asking = asyncio.create_task(
+            tee.decide(Question(prompt="go?", options=("yes", "no")))
+        )
         await _eventually(lambda: bool(_waiting(daemon)))
         daemon.hub.claim(
             _Window(),
@@ -1341,7 +1350,7 @@ class TestClaimed:
 
         with pytest.raises(StandalonePromptError, match="no valid choice"):
             await asyncio.wait_for(
-                tee.decide(prompt="go?", options=["yes", "no"]), timeout=2
+                tee.decide(Question(prompt="go?", options=("yes", "no"))), timeout=2
             )
 
         await link.close(status="ok")
@@ -1363,7 +1372,7 @@ class TestClaimed:
         renderer = _Renderer()
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
 
-        asking = tee.decide(prompt="go?", options=["yes", "no"])
+        asking = tee.decide(Question(prompt="go?", options=("yes", "no")))
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         assert renderer.asked == ["go?"]
@@ -1385,7 +1394,7 @@ class TestClaimed:
         await link.attach()
         tee = TeeChannel(inner=None, link=link, cast_id=_CAST, rite_id=lambda: None)
 
-        asking = tee.decide(prompt="go?", options=["yes", "no"])
+        asking = tee.decide(Question(prompt="go?", options=("yes", "no")))
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         assert "taken over" not in capsys.readouterr().err
@@ -1407,7 +1416,7 @@ class TestClaimed:
         renderer = _Stubborn(answer="yes")
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
 
-        asking = tee.decide(prompt="go?", options=["yes", "no"])
+        asking = tee.decide(Question(prompt="go?", options=("yes", "no")))
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         assert renderer.asked == ["go?"]
@@ -1429,7 +1438,7 @@ class TestClaimed:
         renderer = _Renderer()
         tee = TeeChannel(inner=renderer, link=link, cast_id=_CAST, rite_id=lambda: None)
 
-        asking = tee.decide(prompt="go?", options=["yes", "no"])
+        asking = tee.decide(Question(prompt="go?", options=("yes", "no")))
 
         assert await asyncio.wait_for(asking, timeout=2) == "no"
         assert renderer.asked == ["go?"]
