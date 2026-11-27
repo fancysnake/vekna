@@ -14,7 +14,7 @@ from textual.widgets import Input, Static, Tree
 from textual.widgets.tree import TreeNode
 from typing_extensions import override
 
-from vekna.pacts.casts import Casts, CastView, named
+from vekna.pacts.casts import Casts, CastView, checkout, named
 from vekna.wire import (
     CastCancelRequested,
     CastSeen,
@@ -58,6 +58,7 @@ _NOTHING_TO_MARK = "only a failed cast can be marked seen"
 _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
+_OPENS = "enter on a project shows it alone"
 _QUESTION_CHANGED = "the question changed — your answer was not sent"
 
 
@@ -90,6 +91,7 @@ class Contents(Tree[str]):
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("space", "app.fold", "fold", show=False),
+        Binding("enter", "app.open", "show alone", show=False),
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
         Binding("h", "cursor_parent", show=False),
@@ -105,11 +107,12 @@ class _ToDaemon:
 
 
 # What a window is opened with: its project, the directory a ritual started
-# from it runs in, how long after it ended a cast moves to the history view,
-# the title it shows: the versions of this vekna and of its daemon, and how
-# long a cast taken over may ask nothing after an answer before it is left,
-# and whether a tree is folded to fit the window's height: the first it draws,
-# and the one it draws when it turns to every project or back to its own.
+# from it runs in while it is on that project, how long after it ended a cast
+# moves to the history view, the title it shows: the versions of this vekna and
+# of its daemon, and how long a cast taken over may ask nothing after an answer
+# before it is left, and whether a tree is folded to fit the window's height:
+# the first it draws, and the one it draws when it turns to every project or
+# back to one.
 @dataclass(frozen=True)
 class Opened:
     project: str
@@ -120,21 +123,35 @@ class Opened:
     fit: bool = False
 
 
-# What the window opened with, whether it shows every project instead of the
-# project it opened in, and whether the next tree it draws is to be folded to
-# fit its height. A tree is fitted to casts that have stopped arriving: `seen`
-# is how many there are and how many of them run, and `seen_at` when that last
-# changed. Until then the contents are not drawn, so a daemon replaying its
-# casts does not show each of them come and end. It waits at most
-# `_FIT_WAIT_SECONDS` from when the fit was asked for.
+# What the window opened with, the project it is on and the directory a ritual
+# started from it runs in, whether it shows every project instead of that one,
+# and whether the next tree it draws is to be folded to fit its height. A tree
+# is fitted to casts that have stopped arriving: `seen` is how many there are
+# and how many of them run, and `seen_at` when that last changed. Until then
+# the contents are not drawn, so a daemon replaying its casts does not show
+# each of them come and end. It waits at most `_FIT_WAIT_SECONDS` from when the
+# fit was asked for.
 @dataclass
 class _Scope:
     opened: Opened
+    project: str
     every: bool = False
     to_fit: bool = False
     seen: tuple[int, int] = (0, 0)
     seen_at: float = field(default_factory=monotonic)
     fit_asked_at: float = field(default_factory=monotonic)
+
+    # The window's own project runs a ritual where the window was opened, which
+    # may be a worktree or a directory inside the checkout.
+    @property
+    def root(self) -> str:
+        if self.project == self.opened.project:
+            return self.opened.root
+        return checkout(self.project)
+
+    def turn_to(self, project: str) -> None:
+        self.project = project
+        self.show(every=False)
 
     def show(self, *, every: bool) -> None:
         self.every = every
@@ -248,7 +265,9 @@ class _Widgets:
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
 # only while it is being typed into. `s` marks a failed cast seen, which takes
-# the red off its line and the cast out of every count of fails. `t` takes a
+# the red off its line and the cast out of every count of fails. `g` shows every
+# project and enter on one of them shows it alone: a ritual started from the
+# window then runs in that project's checkout. `t` takes a
 # cast over: the left page opens its rite tree, the right page is its output,
 # every prompt it asks is claimed and shown at the end of that output, and the
 # line under the output answers it. The contents take no keys until Esc hands
@@ -300,7 +319,7 @@ class VeknaApp(App[None]):
     ) -> None:
         super().__init__()
         self._casts = casts
-        self._scope = _Scope(opened=opened, to_fit=opened.fit)
+        self._scope = _Scope(opened=opened, project=opened.project, to_fit=opened.fit)
         self._daemon = _ToDaemon(send=send, mark=mark)
         self._branch_of = branch_of
         self._view = _View(reading=Reading(history_after=opened.history_after))
@@ -370,12 +389,26 @@ class VeknaApp(App[None]):
         if self._locked():
             return
         self._scope.show(every=True)
+        self.say(_OPENS)
         self.changed()
 
     def action_home(self) -> None:
         if self._locked():
             return
-        self._scope.show(every=False)
+        self._turn_to(self._scope.opened.project)
+
+    # Among every project, the one under the cursor alone: the window is on
+    # it as if it had opened there. On any other line enter does nothing.
+    def action_open(self) -> None:
+        entry = self._entry()
+        if self._locked() or not self._scope.every or entry is None:
+            return
+        if entry.kind == "project":
+            self._turn_to(entry.views[0].hello.project)
+
+    def _turn_to(self, project: str) -> None:
+        self._scope.turn_to(project)
+        self.say(f"on {named(project)} · c casts in {self._scope.root}")
         self.changed()
 
     def action_history(self) -> None:
@@ -517,16 +550,16 @@ class VeknaApp(App[None]):
         self.action_close_command()
         if typed.lower() in {"q", "quit"}:
             self.exit()
-        elif typed.lower() in {"g", "p"}:
-            self._scope.show(every=typed.lower() == "g")
+        elif typed.lower() == "g":
+            self.action_every()
+        elif typed.lower() == "p":
+            self.action_home()
         elif typed.lower() == "t":
             self.action_take()
         elif typed.lower().startswith("c "):
             self.say(
                 request_cast(
-                    typed=typed[2:],
-                    root=self._scope.opened.root,
-                    send=self._daemon.send,
+                    typed=typed[2:], root=self._scope.root, send=self._daemon.send
                 )
             )
         elif typed.lower().startswith("a "):
@@ -671,7 +704,7 @@ class VeknaApp(App[None]):
     # --- painting ---
 
     def _listed(self) -> list[CastView]:
-        project = None if self._scope.every else self._scope.opened.project
+        project = None if self._scope.every else self._scope.project
         return ordered(scoped(list(self._casts.casts.values()), project))
 
     async def _look_up_branches(self) -> None:
@@ -702,9 +735,7 @@ class VeknaApp(App[None]):
         taken = self._taken()
         listed = self._listed()
         now = datetime.now(UTC)
-        where = (
-            "all projects" if self._scope.every else named(self._scope.opened.project)
-        )
+        where = "all projects" if self._scope.every else named(self._scope.project)
         self._w.foot.scope.update(f"{counted(listed) or 'no casts'}  ({where})")
         reading = self._view.reading
         if self._scope.to_fit and listed and (rows := self._w.contents.size.height):
@@ -732,20 +763,21 @@ class VeknaApp(App[None]):
     def _paint_contents(self, listed: list[CastView], now: datetime) -> None:
         drawn, reading = self._view.drawn, self._view.reading
         history = reading.history
+        here = self._scope.project if self._scope.every else None
         lines = walked(contents(listed, reading, now))
         entries = {entry.key: entry for entry, _ in lines}
         shape = tuple((entry.key, parent, bool(entry.shown)) for entry, parent in lines)
         if shape == drawn.shape:
             drawn.entries = entries
             for key, node in drawn.nodes.items():
-                node.set_label(line_text(entries[key], now, history=history))
+                node.set_label(line_text(entries[key], now, history=history, here=here))
             return
         tree = self._w.contents
         tree.clear()
         nodes: dict[str, TreeNode[str]] = {}
         for entry, parent in lines:
             under = nodes[parent] if parent is not None else tree.root
-            text = line_text(entry, now, history=history)
+            text = line_text(entry, now, history=history, here=here)
             nodes[entry.key] = (
                 under.add(text, data=entry.key, expand=True)
                 if entry.shown

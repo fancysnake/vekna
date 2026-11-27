@@ -11,6 +11,13 @@ when.
 
 ## [Unreleased]
 
+### Added
+
+- **Enter on a project in the window** shows that project alone, from the
+  every-project view of `g`. `c` then casts in the main checkout of that
+  project. `◆` marks the project the window is on among every project, and
+  `p` goes back to the one it opened in.
+
 ### Changed
 
 - **Remembering and bounding across runs, written down**: `docs/rituals.md`

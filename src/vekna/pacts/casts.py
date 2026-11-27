@@ -140,6 +140,14 @@ def named(project: str) -> str:
     return where.parent.name if where.name == ".git" else where.name
 
 
+# The directory a cast started for a project runs in: the main checkout, never
+# the tree some cast of it ran in, which may be a pooled worktree. A bare
+# repository and a directory outside git have only themselves.
+def checkout(project: str) -> str:
+    where = PurePath(project)
+    return str(where.parent if where.name == ".git" else where)
+
+
 # What a surface reads the daemon for. Ordered, because the number an operator
 # types is a position in what they are looking at.
 class Casts(Protocol):
