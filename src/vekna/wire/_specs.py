@@ -35,6 +35,17 @@ def allowed_answers(
     return _BOOLEAN if options is None else tuple(options)
 
 
+# The answers a reaction can give: one emoji names one answer, so a question
+# takes reactions when it offers options, suggested or not, or asks yes or no.
+# `None` is a question open to any text with nothing offered to name.
+def reaction_answers(
+    *, options: Sequence[str] | None, free: bool
+) -> tuple[str, ...] | None:
+    if options is not None:
+        return tuple(options)
+    return None if free else _BOOLEAN
+
+
 # The option a typed answer names: itself, or its number in the menu an
 # operator was shown. `isdigit` is wider than `int` accepts — "²" is a digit and
 # `int` raises on it, as it does on a digit string past CPython's conversion

@@ -15,15 +15,6 @@ class Enqueued:
     components: BaseModel
 
 
-# What a `decide` call offered, as it was offered. The prompt is what a pattern
-# matches against; the options are what an answer is checked against.
-@dataclass(frozen=True, kw_only=True)
-class Asked:
-    prompt: str
-    options: Sequence[str] | None = None
-    free: bool = False
-
-
 # What a scripted agent does with its turn. `uses` are tools it reaches for —
 # each one meets the gate the call declared, or no gate at all — and `asks` are
 # questions it puts to the human mid-rite. Both are how a ritual's `gate_tools`

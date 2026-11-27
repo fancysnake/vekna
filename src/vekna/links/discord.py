@@ -1,10 +1,20 @@
 import asyncio
+import logging
 import re
+from collections.abc import Sequence
 
 import discord
 from typing_extensions import override
 
-from vekna.pacts.remote import DiscordSetup, Hear, Heard, Posted, Remote, RemoteError
+from vekna.pacts.remote import (
+    DiscordSetup,
+    Hear,
+    Heard,
+    Posted,
+    Remote,
+    RemoteError,
+    Tapped,
+)
 
 # Discord takes 2000 characters a message.
 _MESSAGE = 1900
@@ -12,34 +22,39 @@ _MESSAGE = 1900
 _LOOK_BACK = 50
 _NOT_A_CHANNEL_NAME = re.compile(r"[^a-z0-9_-]+")
 
+_log = logging.getLogger(__name__)
+
 
 class _Client(discord.Client):
     def __init__(self, *, guild: int, allow: frozenset[int]) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         intents.guild_messages = True
+        intents.guild_reactions = True
         intents.message_content = True
         super().__init__(intents=intents)
         self._guild = guild
         self._allow = allow
         self.hear: Hear | None = None
 
+    # Who is heard, written or tapped: `hear` for a person on the allow list in
+    # this guild, else `None`.
+    def _hearing(self, *, guild: int | None, user: int, bot: bool) -> Hear | None:
+        if bot or user not in self._allow or guild != self._guild:
+            return None
+        return self.hear
+
     # discord.py finds this by its name.
     async def on_message(self, message: discord.Message) -> None:
-        if (
-            self.hear is None
-            or message.author.bot
-            or message.author.id not in self._allow
-        ):
-            return
-        if (
-            message.guild is None
-            or message.guild.id != self._guild
-            or not isinstance(message.channel, discord.Thread)
-        ):
+        hear = self._hearing(
+            guild=None if message.guild is None else message.guild.id,
+            user=message.author.id,
+            bot=message.author.bot,
+        )
+        if hear is None or not isinstance(message.channel, discord.Thread):
             return
         replied = message.reference.message_id if message.reference else None
-        said = await self.hear(
+        said = await hear(
             Heard(
                 thread=str(message.channel.id),
                 reply_to=None if replied is None else str(replied),
@@ -48,6 +63,29 @@ class _Client(discord.Client):
         )
         if said is not None:
             await message.reply(said)
+
+    # discord.py finds this by its name. The raw event, because a question
+    # posted before the daemon restarted is not in the client's cache. Which
+    # thread and which message it is on is for `hear` to judge.
+    async def on_raw_reaction_add(
+        self, payload: discord.RawReactionActionEvent
+    ) -> None:
+        hear = self._hearing(
+            guild=payload.guild_id,
+            user=payload.user_id,
+            bot=payload.member is not None and payload.member.bot,
+        )
+        if hear is None:
+            return
+        said = await hear(
+            Tapped(
+                thread=str(payload.channel_id),
+                message=str(payload.message_id),
+                emoji=str(payload.emoji),
+            )
+        )
+        if said is not None:
+            await self.get_partial_messageable(payload.channel_id).send(said)
 
 
 # One bot in one guild, dialling out over Discord's gateway. A room is a text
@@ -74,7 +112,9 @@ class DiscordRemote(Remote):
             raise RemoteError(str(error)) from error
 
     @override
-    async def ask(self, *, room: str, thread: str, text: str) -> Posted:
+    async def ask(
+        self, *, room: str, thread: str, text: str, reactions: Sequence[str] = ()
+    ) -> Posted:
         await self._entered.wait()
         await self._client.wait_until_ready()
         if (guild := self._client.get_guild(self._setup.guild)) is None:
@@ -88,6 +128,7 @@ class DiscordRemote(Remote):
             message = await _sent(found, pieces)
         except discord.DiscordException as error:
             raise RemoteError(str(error)) from error
+        await _offered(message, reactions)
         return Posted(thread=str(found.id), message=str(message.id))
 
     @override
@@ -101,6 +142,9 @@ class DiscordRemote(Remote):
     # The question as the last thing the bot said in the thread, with what the
     # allowed users wrote under it: a daemon that restarted finds the question
     # it posted before, and the answers written while it was away.
+    # shortcut: a reaction put on the question while the daemon was away is
+    # not read, so that question waits for a second tap or a written reply;
+    # reading the found message's reactions is the upgrade.
     async def _waiting(self, thread: discord.Thread, ending: str) -> Posted | None:
         unheard: list[str] = []
         async for message in thread.history(limit=_LOOK_BACK):
@@ -141,6 +185,16 @@ class DiscordRemote(Remote):
 # text is split over.
 async def _sent(target: discord.abc.Messageable, pieces: list[str]) -> discord.Message:
     return [await target.send(piece) for piece in pieces][-1]
+
+
+# The question stands once it is posted: an emoji Discord refuses costs its
+# tap alone, and a written reply still answers.
+async def _offered(message: discord.Message, reactions: Sequence[str]) -> None:
+    for emoji in reactions:
+        try:
+            await message.add_reaction(emoji)
+        except discord.DiscordException as error:
+            _log.warning("could not put %s under a question: %s", emoji, error)
 
 
 # A long text over several messages, cut at the last line break that fits,

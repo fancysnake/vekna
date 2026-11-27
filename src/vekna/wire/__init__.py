@@ -105,6 +105,7 @@ from ._specs import (
     flag_of,
     parse_flags,
     picked_option,
+    reaction_answers,
 )
 from ._toml import TomlValue, read_toml
 
@@ -202,6 +203,7 @@ __all__ = [
     "project_checkouts",
     "project_config_path",
     "project_of",
+    "reaction_answers",
     "read_events",
     "read_frames",
     "read_layers",

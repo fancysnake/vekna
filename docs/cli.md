@@ -533,8 +533,8 @@ One bot serves every project. Set it up once:
    `chmod 600 ~/.config/vekna/discord-token`.
 5. On the **OAuth2** page, under **URL Generator**, tick the scope `bot` and
    these permissions: View Channels, Manage Channels, Send Messages, Create
-   Public Threads, Send Messages in Threads, Read Message History. Open the
-   URL it generates and add the bot to your server.
+   Public Threads, Send Messages in Threads, Read Message History, Add
+   Reactions. Open the URL it generates and add the bot to your server.
 6. In Discord's own settings, under **Advanced**, switch **Developer Mode** on.
    Right-click the server and choose **Copy Server ID** for `guild`;
    right-click yourself and choose **Copy User ID** for `allow`.
@@ -560,6 +560,24 @@ Write your answer in the thread:
 - An agent's own question takes any text. When it suggests answers, a number
   picks one.
 
+Or tap a reaction. The bot puts one under the question for each answer it can
+give:
+
+- 👍 for yes and ❌ for no.
+- 1️⃣ to 🔟 for the first ten options, in the order of the menu.
+- The emoji the ritual named for an answer, in place of the thumb or the
+  number. The question shows it beside that answer. If the ritual named the
+  default emoji of another answer, that other answer has no emoji: answer it in
+  words.
+- If the ritual gave an option the number emoji of another option's place, the
+  menu has no line numbers. Each line starts with the emoji to tap, or with `•`
+  when it has none.
+
+A reaction counts only on the question itself, and only one of the emoji under
+it. An agent's own question with no suggested answers has none: answer it in
+words. A bot without the Add Reactions permission still posts the question;
+`daemon.log` says that the reactions are missing.
+
 Capital letters do not matter for an option. A reply that is no option gets
 one back that names the options, and the question stays open. With several
 questions open in one thread, a plain message answers the oldest; use
@@ -574,7 +592,7 @@ there only, and a reply in the thread is told so.
 
 A message from anyone outside `allow` is ignored without a reply.
 
-Four limits to know:
+Five limits to know:
 
 - The questions of a cast typed as `vekna cast` are not posted: its terminal
   asks them. The questions of the casts it queued are posted, and its terminal
@@ -586,6 +604,8 @@ Four limits to know:
   message in its thread is not posted again, and the first reply written under
   it while the daemon was away answers it. An open question with a later
   message of the bot under it is posted a second time.
+- A reaction put on a question while the daemon was away is not read. Tap
+  another emoji, or reply in words.
 - When Discord has archived a thread, the next question opens a second thread
   of the same name.
 

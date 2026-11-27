@@ -17,9 +17,18 @@ when.
   every-project view of `g`. `c` then casts in the main checkout of that
   project. `◆` marks the project the window is on among every project, and
   `p` goes back to the one it opened in.
+- **Reactions answer a question on Discord**: the bot puts an emoji under each
+  question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
+  for options, and a tap on one is the answer. `decide(reactions={"fix":
+  "🔧"})` names a ritual's own emoji for an answer. A bot set up before this
+  needs the Add Reactions permission; without it questions are still posted
+  and answered in words.
 
 ### Changed
 
+- **`Channel.decide` takes one `Question`**: a channel of your own now reads
+  the prompt, options, free text and reactions off that value. `vekna.trial`'s
+  `Asked` is the same type.
 - **Remembering and bounding across runs, written down**: `docs/rituals.md`
   and the ritual-scribe skill now teach a label as the memory of work a
   listing cannot show, a retry budget for each step kept with the item, and
