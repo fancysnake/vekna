@@ -8,6 +8,7 @@ from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello, allowed_answers
 
 from .cast_text import (
+    Word,
     ago,
     carried,
     clipped,
@@ -30,7 +31,7 @@ from .contents import Counts, Entry, rite_tree, walked
 _ERROR = 32
 # The glyph and its colour carry the status; a waiting cast is the loudest
 # thing on screen because it is the one that cannot go on without the operator.
-_CAST_LOOK = {
+_CAST_LOOK: dict[Word, Text] = {
     "queued": Text("…", "dim"),
     "running": Text("▶", "cyan"),
     "waiting": Text("⏸", "bold yellow"),
@@ -49,9 +50,6 @@ _RITE_LOOK: dict[RiteStatus, Text] = {
 }
 _HERE = "◆"
 _ASKS = "bold yellow"
-_FAILS = "bold red"
-_RUNNING = "green"
-_LOUD = {"waiting": _ASKS, "failed": _FAILS, "aborted": _FAILS}
 NO_CAST = "no cast here — c starts one"
 LEAVES = "esc leaves"
 
@@ -82,8 +80,8 @@ def holder(view: CastView, prompt: Prompt, mine: set[str]) -> str:
 
 
 # What still happens under a fold, in the words and the order of the bottom
-# line. A cast that waits or failed is what the operator acts on, so it is bold;
-# the rest only says something is going on.
+# line, each count in the colour of its glyph. A cast that waits or failed is
+# what the operator acts on, so it is bold.
 def tally(counts: Counts) -> Text:
     if not (shown := tallied(counts)):
         return Text()
@@ -91,7 +89,10 @@ def tally(counts: Counts) -> Text:
     for index, (count, said) in enumerate(shown):
         if index:
             text.append(", ", "dim")
-        text.append(f"{count} {said}", _LOUD.get(said, _RUNNING))
+        style = str(_CAST_LOOK[said].style)
+        if said in {"failed", "aborted"}:
+            style = f"bold {style}"
+        text.append(f"{count} {said}", style)
     text.append(")", "dim")
     return text
 
@@ -149,6 +150,7 @@ def _cast_label(view: CastView, said: str) -> Text:
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
     )
     if view.waiting:
+        # The glyph says the status; `asks` marks a line with the question.
         text.append("  asks", _ASKS)
     return text
 

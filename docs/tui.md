@@ -129,7 +129,7 @@ close and open again shows it too.
 ## Fold what you do not watch
 
 ![Two rituals and the finished line folded to one line each; the ci_watch
-line says 1 running, the finished line says 1 fail, and the right page lists
+line says 1 running, the finished line says 1 failed, and the right page lists
 the running ci_watch cast](assets/tui-fold.svg)
 
 `space` on a project, a ritual or the `finished` line folds it. The folded

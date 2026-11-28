@@ -53,7 +53,8 @@ when.
   folded line says the states in the words and the order of the bottom line:
   `(2 running, 1 queued)`, not `(3 running)`; `waiting` and `failed`, not
   `asks` and `fail`. A cast that ended with a prompt still open counts as
-  `waiting` on both.
+  `waiting` on both. Each count on a project or folded line takes the colour of
+  its glyph.
 - **`vekna log <cast>` and the plain view strip terminal control codes** from a
   rite's name, summary, error and output.
 

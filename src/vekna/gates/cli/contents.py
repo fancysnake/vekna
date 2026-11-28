@@ -7,7 +7,7 @@ from typing import Literal
 
 from vekna.pacts.casts import CastView, RiteView, named
 
-from .cast_text import LIVE, ended, innermost, live, word
+from .cast_text import LIVE, Word, ended, innermost, live, word
 from .streaks import Kids, kids_of, said_args, streaks, with_kids
 
 Kind = Literal["project", "ritual", "cast", "more", "rite", "day", "finished"]
@@ -18,7 +18,7 @@ _HOLDS_CASTS: frozenset[Kind] = frozenset({"project", "ritual", "finished", "day
 # What happens under a node: a fold hides the node's children, and these are
 # what it says instead, each cast under the word its own line says. A cast that
 # ended is counted only when it failed and is not marked seen.
-Counts = Counter[str]
+Counts = Counter[Word]
 
 
 def _alive(counts: Counts) -> bool:
