@@ -13,6 +13,14 @@ when.
 
 ### Added
 
+- **A rite's line in the window says what its call was given**: the command a
+  `shell` ran, the prompt an agent got, cut to one line. `RiteStarted` carries
+  it as the optional `summary`.
+- **The window shows the output of every rite**: a step shows what the rites
+  under it wrote, a cast what all its rites wrote, each under its rite's name.
+- **`shell(stream=False)` output shows in the window.** It still stays off the
+  terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
+  `emit_delta(text, quiet=True)` is how a medium writes it.
 - **Enter on a project in the window** shows that project alone, from the
   every-project view of `g`. `c` then casts in the main checkout of that
   project, or in the directory the window was opened in when it is the project
@@ -38,6 +46,11 @@ when.
   `cover_diff` now sets `max_steps=32`. The command line refuses a `--bound`
   over 15 for `cover_diff` and `merge_ready`, and a `--fixes` over 30 for
   `ci_watch`.
+
+### Fixed
+
+- **`vekna log <cast>` and the plain view strip terminal control codes** from a
+  rite's name, summary, error and output.
 
 ## [3.1.0] - 2026-11-25
 
