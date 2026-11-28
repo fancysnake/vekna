@@ -573,6 +573,8 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     components = _recorded_components(
         cast_id=cast_id, ritual=the_ritual, recorded=hello.components
     )
+    if hello.said is not None:
+        said_only(components, hello.said)
     # Not an error: a cast killed before its first rite landed has nothing to
     # replay. But every step it redoes is one the operator may have expected
     # off the record.
@@ -644,6 +646,7 @@ async def _hello(*, cast_id: str, plan: _Plan) -> CastHello:
         project=await project_of(Path.cwd()),
         ritual=plan.ritual.name,
         components=_COMPONENTS.validate_json(plan.components.model_dump_json()),
+        said=sorted(plan.components.model_fields_set),
         started_at=datetime.now(tz=UTC),
         resumed_from=plan.resumed_from,
         wired=plan.wired,

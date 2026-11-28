@@ -30,6 +30,10 @@ class CastHello(BaseModel):
     project: str = Field(validation_alias=AliasChoices("project", "project_root"))
     ritual: str
     components: dict[str, JsonValue]
+    # The components the caster named. A started cast records every component,
+    # its defaults too, so this is what tells a flag from a default. `None` from
+    # a cast that does not say: every key of `components` then counts as named.
+    said: list[str] | None = None
     started_at: datetime
     resumed_from: str | None = None
     # Spawned by the daemon, so its prompts are answered over the wire. A cast

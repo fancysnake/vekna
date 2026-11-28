@@ -13,6 +13,10 @@ when.
 
 ### Added
 
+- **A cast's hello names the flags it was given**, in `said`. A started cast
+  records every component, its defaults too, and until now nothing told the
+  two apart. A cast carried on with `--resume` keeps the names. A hello from
+  an older vekna has no `said`, and every component it holds counts as given.
 - **Enter on a project in the window** shows that project alone, from the
   every-project view of `g`. `c` then casts in the main checkout of that
   project, or in the directory the window was opened in when it is the project
