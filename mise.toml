@@ -12,7 +12,7 @@ jq = "1.8.2"
 markdownlint-cli2 = "0.24.2"
 node = "26"
 pipx = "1.18.19"
-"pipx:poetry" = "2.5.1"
+"pipx:poetry" = "2.5.2"
 pkl = "0.33.1"
 python = "3.11"
 # actionlint hands every `run:` script to shellcheck.
@@ -35,10 +35,11 @@ SRC_PATHS = "src scripts"
 TEST_PATHS = "tests"
 SCRIPT_PATHS = ""
 TOML_PATHS = ".taplo.toml .vekna.toml pyproject.toml mise.toml tingle.toml"
+TEST_ENV_FILE = ".env.test"
 
 [task_config]
 includes = [
-    "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=20e8c1f42f6e2904cef3fa60ba9c64283e2d7ae8",
+    "git::https://github.com/fancysnake/shared-configs.git//python.toml?ref=71c2c45d7d8e1536acbe357ee7c4c821b306d786",
 ]
 
 # The shared dep:upgrade:py, with lint:trivy in place of its `pip-audit .`; an
