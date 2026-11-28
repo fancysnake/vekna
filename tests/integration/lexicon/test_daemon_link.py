@@ -91,6 +91,7 @@ def _began(rite_id: str = "r1") -> RiteBegan:
         name="run_tests",
         category="step",
         started_at=_WHEN,
+        summary="mise run test",
     )
 
 
@@ -212,6 +213,7 @@ class TestAttaching:
         view = daemon.hub.casts[_CAST]
         assert view.hello.ritual == "fix_demo"
         assert view.rites["r1"].started.name == "run_tests"
+        assert view.rites["r1"].started.summary == "mise run test"
         assert view.status == "ok"
         await daemon.stop()
 

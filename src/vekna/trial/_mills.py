@@ -67,4 +67,8 @@ class Recorder:
 
     @property
     def deltas(self) -> list[str]:
-        return [event.delta for event in self.events if isinstance(event, RiteStreamed)]
+        return [
+            event.delta
+            for event in self.events
+            if isinstance(event, RiteStreamed) and not event.quiet
+        ]
