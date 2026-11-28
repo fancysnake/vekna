@@ -249,6 +249,10 @@ class TestShell:
         assert result.stderr.strip() == "oops"
         assert result.exit_code == _FAILURE_EXIT
 
+    @staticmethod
+    def test_a_partial_last_line_is_captured_with_no_one_listening():
+        assert asyncio.run(run_bash("printf partial")) == ("partial", "", 0)
+
 
 class TestShellStreaming:
     @staticmethod

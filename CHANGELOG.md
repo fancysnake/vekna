@@ -21,6 +21,11 @@ when.
 - **`shell(stream=False)` output shows in the window.** It still stays off the
   terminal that follows the cast: `RiteDelta` carries it marked `quiet`, and
   `emit_delta(text, quiet=True)` is how a medium writes it.
+- **Enter on a project in the window** shows that project alone, from the
+  every-project view of `g`. `c` then casts in the main checkout of that
+  project, or in the directory the window was opened in when it is the project
+  the window opened in. `◆` marks the project the window is on among every
+  project, and `p` goes back to the one it opened in.
 - **Reactions answer a question on Discord**: the bot puts an emoji under each
   question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
   for options, and a tap on one is the answer. `decide(reactions={"fix":

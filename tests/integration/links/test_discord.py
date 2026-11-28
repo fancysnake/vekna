@@ -256,9 +256,11 @@ class TestAsk:
 
         assert posted == Posted(thread=str(_THREAD), message="1")
         assert message.add_reaction.await_args_list == [call("👍"), call("❌")]
-        assert [record.getMessage() for record in caplog.records] == [
-            "could not put 👍 under a question: no"
-        ]
+        assert [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "vekna.links.discord"
+        ] == ["could not put 👍 under a question: no"]
 
     @staticmethod
     async def test_a_question_still_waiting_in_its_thread_is_not_posted_again(

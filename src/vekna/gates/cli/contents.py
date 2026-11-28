@@ -50,6 +50,7 @@ class Entry:  # pylint: disable=too-many-instance-attributes
     view: CastView | None = None
     rite: RiteView | None = None
     views: tuple[CastView, ...] = ()
+    project: str | None = None
     streak: tuple[CastView, ...] = ()
     children: tuple["Entry", ...] = ()
     nested: bool = False
@@ -231,11 +232,13 @@ def _project(key: str, views: list[CastView], tree: _Tree) -> Entry:
         *going,
         *([_finished(key=finished_key(key), rituals=past, tree=tree)] if past else []),
     ]
+    project = views[0].hello.project
     return _fold(
         Entry(
             key=key,
             kind="project",
-            name=named(views[0].hello.project),
+            name=named(project),
+            project=project,
             counts=sum((entry.counts for entry in lines), Counts()),
             views=tuple(sorted(views, key=_started, reverse=True)),
             children=tuple(lines),

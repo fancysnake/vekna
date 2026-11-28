@@ -152,11 +152,18 @@ class CastView:
         return None if self.rite_status(rite) == "running" else self.last_seen
 
 
+# The directory a cast started for a project runs in: the main checkout, never
+# the tree some cast of it ran in, which may be a pooled worktree. A bare
+# repository and a directory outside git have only themselves.
+def checkout(project: str) -> str:
+    where = PurePath(project)
+    return str(where.parent if where.name == ".git" else where)
+
+
 # A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
 # repository's name is what an operator calls it either way.
 def named(project: str) -> str:
-    where = PurePath(project)
-    return where.parent.name if where.name == ".git" else where.name
+    return PurePath(checkout(project)).name
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator
