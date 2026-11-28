@@ -2,9 +2,10 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Literal
 
 from vekna.pacts.casts import CastView, Prompt, RiteView
-from vekna.wire import SHORT_ID, CastHello
+from vekna.wire import SHORT_ID, CastHello, CastStatus
 
 _RESUMED = "↳"
 _MINUTE = 60
@@ -14,23 +15,26 @@ _SLOTS = (1, 3, 6, 12)
 # The word, not the glyph: the list is read across a row of casts, and "aborted"
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
-_WORD = {
+Word = Literal[
+    "queued",
+    "running",
+    "waiting",
+    "on child",
+    "recovering",
+    "done",
+    "failed",
+    "aborted",
+]
+_WORD: dict[CastStatus, Word] = {
     "queued": "queued",
     "running": "running",
     "ok": "done",
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = (
-    "running",
-    "waiting",
-    "on child",
-    "recovering",
-    "queued",
-    "done",
-    "failed",
-    "aborted",
-)
+# What `word` says of a live cast. An ended one with a prompt open is "waiting" too.
+LIVE: tuple[Word, ...] = ("running", "waiting", "on child", "recovering", "queued")
+_TALLY: tuple[Word, ...] = (*LIVE, "done", "failed", "aborted")
 
 
 def live(view: CastView) -> bool:
@@ -93,10 +97,11 @@ def clipped(text: str, width: int) -> str:
     return f"{line[: width - 1]}…" if len(line) > width else line
 
 
-def word(view: CastView) -> str:
+# A cast that ended with a prompt still open waits all the same.
+def word(view: CastView) -> Word:
+    if view.waiting:
+        return "waiting"
     if view.status == "running":
-        if view.waiting:
-            return "waiting"
         if view.on_children:
             return "on child"
         if _recovering(view):
@@ -159,9 +164,14 @@ def elapsed(view: CastView, now: datetime) -> str:
     return clock((until - view.hello.started_at).total_seconds())
 
 
+# How many casts are in each state, in the one order every line says them in.
+def tallied(states: Counter[Word]) -> list[tuple[int, Word]]:
+    return [(states[said], said) for said in _TALLY if states[said]]
+
+
 def counted(casts: Sequence[CastView]) -> str:
-    tally = Counter(word(view) for view in casts)
-    return " · ".join(f"{tally[word]} {word}" for word in _TALLY if tally[word])
+    states = Counter(word(view) for view in casts)
+    return " · ".join(f"{count} {said}" for count, said in tallied(states))
 
 
 def labelled(hello: CastHello) -> str:
