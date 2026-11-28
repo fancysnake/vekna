@@ -13,6 +13,10 @@ when.
 
 ### Added
 
+- **A cast's hello names the flags it was given**, in `said`. A started cast
+  records every component, its defaults too, and until now nothing told the
+  two apart. A cast carried on with `--resume` keeps the names. A hello from
+  an older vekna has no `said`, and every component it holds counts as given.
 - **A rite's line in the window says what its call was given**: the command a
   `shell` ran, the prompt an agent got, cut to one line. `RiteStarted` carries
   it as the optional `summary`.
