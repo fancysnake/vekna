@@ -2,9 +2,10 @@ import logging
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import override
 
-from vekna.pacts.remote import DiscordSetup
-from vekna.wire import default_config_path, read_user_layers
+from vekna.pacts.remote import DiscordBook, DiscordSetup
+from vekna.wire import ProblemLog, default_config_path, read_user_layers
 
 _log = logging.getLogger(__name__)
 _TABLE = "discord"
@@ -30,11 +31,15 @@ class _File(BaseModel):
 # say where its casts' questions go, or who may answer them. The token is in a
 # file because the daemon is started by whichever `vekna` runs first, with
 # that shell's environment.
-def discord_setup() -> DiscordSetup | None:
-    setup, problems = _read()
-    for problem in problems:
-        _log.warning("%s", problem)
-    return setup
+class ConfigDiscord(DiscordBook):
+    def __init__(self) -> None:
+        self._problems = ProblemLog(_log)
+
+    @override
+    def setup(self) -> DiscordSetup | None:
+        setup, problems = _read()
+        self._problems.warn(problems)
+        return setup
 
 
 # Every key is the machine's: only the user's top-level `[discord]` is read.

@@ -169,6 +169,7 @@ class _Chat(Remote):
 @pytest.fixture(name="discord_config")
 def _discord_config(rituals: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr("vekna.inits.daemon._VIGIL_SECONDS", _TICK)
+    monkeypatch.setattr("vekna.inits.daemon._DISCORD_SECONDS", _TICK)
     (rituals / "config" / "vekna").mkdir(parents=True)
     config = rituals / "config" / "vekna" / "config.toml"
     config.write_text(
@@ -187,6 +188,11 @@ def _surfaces(log: Path) -> list[str]:
         for line in log.read_text(encoding="utf-8").splitlines()
         if " - surface_hello " in line
     ]
+
+
+def _edit(config: Path, *, old: str, new: str) -> None:
+    listed = config.read_text(encoding="utf-8")
+    config.write_text(listed.replace(old, new), encoding="utf-8")
 
 
 def _keep_asking(config: Path) -> None:
@@ -250,6 +256,94 @@ class TestDiscord:
         assert not _said(caplog, logging.ERROR)
 
     @staticmethod
+    async def test_an_edited_discord_table_moves_the_relay_to_the_new_setup(
+        socket_path: Path,
+        discord_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        chat = _Chat()
+        monkeypatch.setattr("vekna.links.discord.DiscordRemote", chat.remote)
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log):
+            await _eventually(lambda: bool(chat.setups))
+            _edit(discord_config, old=f"guild = {_GUILD}", new="guild = 200")
+            # The new relay attaches only once its task first runs, after the
+            # remote is made.
+            await _eventually(lambda: log.exists() and bool(_surfaces(log)[2:]))
+            plugged = _surfaces(log)
+
+        assert [setup.guild for setup in chat.setups] == [_GUILD, 200]
+        assert plugged == ["attached", "detached", "attached"]
+        assert [
+            line
+            for line in _said(caplog, logging.INFO).splitlines()
+            if "on Discord" in line
+        ] == [
+            f"answering casts on Discord, in the guild {_GUILD}",
+            "no longer answering casts on Discord: its config changed",
+            "answering casts on Discord, in the guild 200",
+        ]
+        assert not _said(caplog, logging.WARNING)
+        assert not _said(caplog, logging.ERROR)
+
+    @staticmethod
+    async def test_a_relay_that_ended_is_started_again_by_an_edit(
+        socket_path: Path,
+        discord_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        chat = _Chat(ends=True)
+        monkeypatch.setattr("vekna.links.discord.DiscordRemote", chat.remote)
+        async with _served(socket_path):
+            await _eventually(lambda: bool(_said(caplog, logging.ERROR)))
+            _edit(discord_config, old=f"guild = {_GUILD}", new="guild = 200")
+            await _eventually(lambda: bool(chat.setups[1:]))
+
+        assert [setup.guild for setup in chat.setups] == [_GUILD, 200]
+        assert [
+            line
+            for line in _said(caplog, logging.INFO).splitlines()
+            if "on Discord" in line
+        ] == [
+            f"answering casts on Discord, in the guild {_GUILD}",
+            "answering casts on Discord, in the guild 200",
+        ]
+
+    @staticmethod
+    async def test_a_discord_table_taken_away_unplugs_the_relay(
+        socket_path: Path,
+        discord_config: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        chat = _Chat()
+        monkeypatch.setattr("vekna.links.discord.DiscordRemote", chat.remote)
+        log = socket_path.parent / "debug.log"
+        async with _served(socket_path, debug=log):
+            await _eventually(lambda: bool(chat.setups))
+            _edit(
+                discord_config,
+                old=f"[discord]\nguild = {_GUILD}\nallow = [{_OPERATOR}]\n",
+                new="",
+            )
+            await _eventually(lambda: log.exists() and "detached" in _surfaces(log))
+            assert await alive(socket_path)
+
+        assert _surfaces(log) == ["attached", "detached"]
+        assert len(chat.setups) == 1
+        assert (
+            "no longer answering casts on Discord: its config changed" in _said(
+                caplog, logging.INFO
+            ).splitlines()
+        )
+        assert not _said(caplog, logging.ERROR)
+
+    @staticmethod
     @pytest.mark.usefixtures("discord_config")
     async def test_without_the_install_it_is_said_once_and_the_daemon_serves(
         socket_path: Path,
@@ -259,6 +353,7 @@ class TestDiscord:
         monkeypatch.delitem(sys.modules, "vekna.links.discord", raising=False)
         monkeypatch.setitem(sys.modules, "discord", None)
         async with _served(socket_path):
+            await _eventually(lambda: bool(_said(caplog, logging.WARNING)))
             assert await alive(socket_path)
 
         assert _said(caplog, logging.WARNING).splitlines() == [
@@ -283,7 +378,7 @@ class TestDiscord:
         assert chat.closed
         assert _said(caplog, logging.ERROR).splitlines() == [
             (
-                "Discord is off until the daemon restarts:"
+                "Discord is off until its config changes or the daemon restarts:"
                 " RemoteError('the connection ended')"
             )
         ]
@@ -309,7 +404,7 @@ class TestDiscord:
         start.assert_awaited_once_with("s3cret")
         assert _said(caplog, logging.ERROR).splitlines() == [
             (
-                "Discord is off until the daemon restarts:"
+                "Discord is off until its config changes or the daemon restarts:"
                 " RemoteError('Improper token has been passed.')"
             )
         ]
