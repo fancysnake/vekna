@@ -335,7 +335,8 @@ A value that does not read is named in the window's note line and passed over.
 | `x` | cancel the cast under the cursor; twice, to be sure |
 | `s` | mark the failed cast under the cursor seen, or take the mark back |
 | `:` | the command line, empty |
-| `g` / `p` | every project / this one |
+| `g` / `p` | every project / the one the window opened in |
+| `enter` | among every project, show the project under the cursor alone; `c` then casts in it |
 | `q` | close the window; the daemon keeps running |
 
 `--no-tui`, or no terminal on stdin and stdout, gives the line view described
