@@ -45,6 +45,8 @@ from vekna.wire import (
     RiteStarted,
     TreeBlocked,
     TreeFreed,
+    VigilsRequested,
+    VigilsState,
     WireMessage,
 )
 
@@ -184,6 +186,12 @@ class Hub(CastBoard, Routes):
     async def queue(self, request: CastRequested) -> CastQueued | CastRefused:
         del request
         return CastRefused(reason=_STARTS_NOTHING)
+
+    # A window's hub keeps no vigils.
+    @override
+    def vigils(self, request: VigilsRequested) -> VigilsState:
+        del request
+        return VigilsState(paused=False)
 
     # Forwarded, not applied: the cast's own `DecideResolved` is what closes the
     # prompt, so the journal and every surface hear one answer, from the cast

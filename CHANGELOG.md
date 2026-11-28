@@ -13,6 +13,10 @@ when.
 
 ### Added
 
+- **`v` in the window pauses the vigils**: no vigil starts a cast, the casts
+  that run carry on, and every window says `vigils paused` until `v` lets
+  them cast again. Pause, wait for the running casts to end, then `vekna
+  stop`. A new daemon starts with its vigils casting.
 - **Reactions answer a question on Discord**: the bot puts an emoji under each
   question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
   for options, and a tap on one is the answer. `decide(reactions={"fix":

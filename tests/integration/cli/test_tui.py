@@ -11,7 +11,7 @@ from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, VeknaApp
+from vekna.gates.cli.tui import Opened, ToDaemon, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -28,6 +28,7 @@ from vekna.wire import (
     RiteFinished,
     RiteStarted,
     TreeBlocked,
+    VigilsRequested,
     WireMessage,
 )
 
@@ -75,6 +76,37 @@ def _asking(hub: Hub) -> None:
     )
 
 
+# The daemon's part in pausing the vigils: it keeps the pause and says it back.
+# `said` false is a daemon that does not answer the question.
+class _Vigils:
+    def __init__(self, *, paused: bool = False, said: bool = True) -> None:
+        self.paused = paused
+        self.said = said
+        self.asked: list[bool | None] = []
+
+    async def __call__(self, asked: VigilsRequested) -> bool | None:
+        await asyncio.sleep(0)
+        self.asked.append(asked.pause)
+        if not self.said:
+            return None
+        if asked.pause is not None:
+            self.paused = asked.pause
+        return self.paused
+
+
+# A window on no casts, over a daemon that keeps `vigils`.
+def _vigil_app(vigils: _Vigils) -> VeknaApp:
+    async def unasked(_: object) -> None:
+        await asyncio.sleep(0)
+
+    return VeknaApp(
+        casts=Hub(),
+        opened=Opened(project="/proj/.git", root="/proj", history_after=timedelta.max),
+        daemon=ToDaemon(send=lambda _: None, mark=unasked, vigils=vigils),
+        branch_of=unasked,
+    )
+
+
 # The app over `hub`, keeping what it sends; branches are answered by root.
 # Every cast here began at `_WHEN`, long ago, so by default none is history.
 def _app(
@@ -106,8 +138,7 @@ def _app(
             title=title,
             quiet=quiet,
         ),
-        send=sent.append,
-        mark=mark,
+        daemon=ToDaemon(send=sent.append, mark=mark, vigils=_Vigils()),
         branch_of=branch_of,
     )
 
@@ -1039,8 +1070,7 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         opened=Opened(
             project="/proj/.git", root="/proj", history_after=timedelta.max, fit=True
         ),
-        send=lambda _: None,
-        mark=mark,
+        daemon=ToDaemon(send=lambda _: None, mark=mark, vigils=_Vigils()),
         branch_of=branch_of,
     )
 
@@ -2564,3 +2594,79 @@ class TestSeen:
 
         assert note == "only a failed cast can be marked seen"
         assert not hub.casts["c1"].seen
+
+
+@pytest.mark.asyncio
+class TestVigils:
+    @staticmethod
+    async def test_v_pauses_the_vigils_and_v_again_lets_them_cast():
+        vigils = _Vigils()
+        app = _vigil_app(vigils)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            before = _text(app, "#scope")
+            await pilot.press("v")
+            await pilot.pause(_PAINTED)
+            paused, said = _text(app, "#scope"), _text(app, "#note")
+            await pilot.press("v")
+            await pilot.pause(_PAINTED)
+            after, said_after = _text(app, "#scope"), _text(app, "#note")
+
+        assert before == "no casts  (proj)"
+        assert paused == "vigils paused · no casts  (proj)"
+        assert said == (
+            "vigils paused — what runs carries on, and v lets them cast again"
+        )
+        assert after == "no casts  (proj)"
+        assert said_after == "vigils cast again"
+        assert vigils.asked == [None, True, False]
+
+    @staticmethod
+    async def test_a_window_opened_on_paused_vigils_says_so_and_v_lets_them_cast():
+        vigils = _Vigils(paused=True)
+        app = _vigil_app(vigils)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            opened = _text(app, "#scope")
+            await pilot.press("v")
+            await pilot.pause(_PAINTED)
+            after = _text(app, "#scope")
+
+        assert opened == "vigils paused · no casts  (proj)"
+        assert after == "no casts  (proj)"
+        assert vigils.asked == [None, False]
+
+    @staticmethod
+    async def test_a_pause_another_window_made_shows_at_the_next_look():
+        vigils = _Vigils()
+        with patch("vekna.gates.cli.tui._VIGILS_SECONDS", 0.05):
+            app = _vigil_app(vigils)
+
+            async with app.run_test() as pilot:
+                await pilot.pause(_PAINTED)
+                vigils.paused = True
+                await pilot.pause(_PAINTED)
+                scope = _text(app, "#scope")
+
+        assert scope == "vigils paused · no casts  (proj)"
+        assert set(vigils.asked) == {None}
+
+    @staticmethod
+    async def test_a_daemon_that_does_not_say_leaves_the_vigils_as_they_were():
+        vigils = _Vigils(said=False)
+        app = _vigil_app(vigils)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("v")
+            await pilot.pause(_PAINTED)
+            scope, said = _text(app, "#scope"), _text(app, "#note")
+
+        assert scope == "no casts  (proj)"
+        assert said == (
+            "the daemon did not say whether its vigils are paused: it is gone,"
+            " or it predates pausing them"
+        )
+        assert vigils.asked == [None, True]

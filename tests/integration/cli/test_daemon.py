@@ -61,12 +61,14 @@ from vekna.wire import (
     SurfaceHello,
     TreeBlocked,
     TreeFreed,
+    VigilsRequested,
     WireMessage,
     default_state_root,
     encode_frame,
     mark_seen,
     project_of,
     read_frames,
+    vigils_paused,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2117,6 +2119,23 @@ class TestVigils:
                 caplog, logging.INFO
             ).splitlines()
         )
+
+    @staticmethod
+    async def test_a_paused_daemon_casts_no_vigil_until_it_is_let_to(
+        socket_path: Path, vigil_config: Path
+    ):
+        runs = socket_path.parent / "runs"
+        async with _served(socket_path):
+            paused = await vigils_paused(socket_path, VigilsRequested(pause=True))
+            _keep_tally(vigil_config)
+            await asyncio.sleep(_TICK * 20)
+            held = _runs(runs)
+            resumed = await vigils_paused(socket_path, VigilsRequested(pause=False))
+            await _spawned(lambda: _finished(runs, "count"))
+
+        assert (paused, resumed) == (True, False)
+        assert held == []
+        assert _run_of(runs, "count").hello.vigil == "tally"
 
     # The keeper never ends by itself, so its looks are counted here: one that
     # ends without an error is not said to be lost.

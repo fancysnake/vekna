@@ -339,3 +339,42 @@ class TestRoom:
         board.seen(_hello("c2", ritual="tidy", vigil="tidy"), "ok")
 
         assert _tick(_vigils(board, _Limits(vigils=1)), _vigil()) == ["prwatch /app"]
+
+
+class TestPaused:
+    @staticmethod
+    def test_a_due_vigil_is_not_cast_while_paused_and_is_cast_after(
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        board = _Board()
+        vigils = _vigils(board)
+
+        paused = vigils.hold(pause=True)
+        held = _tick(vigils, _vigil())
+        resumed = vigils.hold(pause=False)
+        cast = _tick(vigils, _vigil())
+
+        assert (paused, resumed) == (True, False)
+        assert held == []
+        assert cast == ["prwatch /app"]
+        assert board.asked == [("/app", "/app/.git")]
+        assert [record.getMessage() for record in caplog.records][:2] == [
+            "vigils paused",
+            "vigils cast again",
+        ]
+
+    @staticmethod
+    def test_asking_changes_nothing_and_a_pause_asked_twice_is_logged_once(
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
+        vigils = _vigils(_Board())
+
+        before = vigils.hold(pause=None)
+        vigils.hold(pause=True)
+        again = vigils.hold(pause=True)
+        after = vigils.hold(pause=None)
+
+        assert (before, again, after) == (False, True, True)
+        assert [record.getMessage() for record in caplog.records] == ["vigils paused"]
