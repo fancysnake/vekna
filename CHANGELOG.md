@@ -46,6 +46,10 @@ when.
   `cover_diff` now sets `max_steps=32`. The command line refuses a `--bound`
   over 15 for `cover_diff` and `merge_ready`, and a `--fixes` over 30 for
   `ci_watch`.
+- **A ritual that outgrows its file, written down**: `docs/examples.md` now
+  shows the split by role, with cabinet's `heal` as the example, and what one
+  payload model carried by every step costs: a class for each step and a
+  rebuild at each hop.
 
 ### Fixed
 
