@@ -33,6 +33,7 @@ from ._links import (
     read_record,
     refused,
     run_file,
+    set_vigils_paused,
     vigils_paused,
 )
 from ._pacts import (
@@ -218,6 +219,7 @@ __all__ = [
     "refusals",
     "refused",
     "run_file",
+    "set_vigils_paused",
     "settled",
     "user_layers",
     "vigils_paused",

@@ -350,9 +350,11 @@ class TestPaused:
         board = _Board()
         vigils = _vigils(board)
 
-        paused = vigils.hold(pause=True)
+        vigils.hold(pause=True)
+        paused = vigils.paused
         held = _tick(vigils, _vigil())
-        resumed = vigils.hold(pause=False)
+        vigils.hold(pause=False)
+        resumed = vigils.paused
         cast = _tick(vigils, _vigil())
 
         assert (paused, resumed) == (True, False)
@@ -365,16 +367,13 @@ class TestPaused:
         ]
 
     @staticmethod
-    def test_asking_changes_nothing_and_a_pause_asked_twice_is_logged_once(
-        caplog: pytest.LogCaptureFixture,
-    ):
+    def test_a_pause_asked_twice_is_logged_once(caplog: pytest.LogCaptureFixture):
         caplog.set_level(logging.INFO)
         vigils = _vigils(_Board())
 
-        before = vigils.hold(pause=None)
+        before = vigils.paused
         vigils.hold(pause=True)
-        again = vigils.hold(pause=True)
-        after = vigils.hold(pause=None)
+        vigils.hold(pause=True)
 
-        assert (before, again, after) == (False, True, True)
+        assert (before, vigils.paused) == (False, True)
         assert [record.getMessage() for record in caplog.records] == ["vigils paused"]

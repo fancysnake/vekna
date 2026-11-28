@@ -61,6 +61,7 @@ from vekna.wire import (
     project_of,
     read_frames,
     refused,
+    set_vigils_paused,
     vigils_paused,
 )
 
@@ -429,7 +430,8 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
         daemon=ToDaemon(
             send=line.send,
             mark=partial(mark_seen, default_socket_path()),
-            vigils=partial(vigils_paused, default_socket_path()),
+            vigils_paused=partial(vigils_paused, default_socket_path()),
+            set_vigils_paused=partial(set_vigils_paused, default_socket_path()),
         ),
         branch_of=branch_of,
     )

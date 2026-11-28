@@ -40,6 +40,7 @@ from vekna.wire import (
     encode_frame,
     mark_seen,
     read_frames,
+    set_vigils_paused,
     vigils_paused,
 )
 
@@ -728,8 +729,8 @@ class TestVigilsPaused:
         daemon = _Daemon()
         server = await daemon.start(socket_path)
 
-        paused = await vigils_paused(socket_path, VigilsRequested(pause=True))
-        asked = await vigils_paused(socket_path, VigilsRequested())
+        paused = await set_vigils_paused(socket_path, paused=True)
+        asked = await vigils_paused(socket_path)
 
         assert (paused, asked) == (True, False)
         assert daemon.requests == [VigilsRequested(pause=True), VigilsRequested()]
@@ -748,7 +749,7 @@ class TestVigilsPaused:
 
         server = await asyncio.start_unix_server(hang_up, path=str(socket_path))
 
-        paused = await vigils_paused(socket_path, VigilsRequested(pause=True))
+        paused = await set_vigils_paused(socket_path, paused=True)
 
         assert paused is None
         server.close()
@@ -756,4 +757,4 @@ class TestVigilsPaused:
 
     @staticmethod
     async def test_no_daemon_listening_does_not_say(socket_path: Path):
-        assert await vigils_paused(socket_path, VigilsRequested(pause=True)) is None
+        assert await vigils_paused(socket_path) is None

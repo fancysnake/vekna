@@ -15,8 +15,8 @@ when.
 
 - **`v` in the window pauses the vigils**: no vigil starts a cast, the casts
   that run carry on, and every window says `vigils paused` until `v` lets
-  them cast again. Pause, wait for the running casts to end, then `vekna
-  stop`. A new daemon starts with its vigils casting.
+  them cast again. Pause, wait until no cast runs or waits queued, then
+  `vekna stop`. A new daemon starts with its vigils casting.
 - **Enter on a project in the window** shows that project alone, from the
   every-project view of `g`. `c` then casts in the main checkout of that
   project, or in the directory the window was opened in when it is the project

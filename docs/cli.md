@@ -481,8 +481,8 @@ cast names the vigil that started it in the drilled view: `vigil prwatch`.
 
 `v` in the window pauses every vigil: none starts a cast, and the casts that
 run carry on, with the casts they queue. The bottom row of every window says
-`vigils paused` until `v` lets them cast again. Pause before `vekna stop` and
-wait for the running casts to end, and the daemon stops with nothing in
+`vigils paused` until `v` lets them cast again. Pause, wait until no cast runs
+or waits queued, then `vekna stop`, and the daemon stops with nothing in
 flight. The daemon keeps the pause in memory, so a new daemon starts with its
 vigils casting. A vigil that came due during the pause casts once after it.
 

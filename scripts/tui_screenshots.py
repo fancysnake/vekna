@@ -228,9 +228,13 @@ def _window() -> VeknaApp:
         reply = hub.mark(request)
         return reply.reason if isinstance(reply, CastRefused) else None
 
-    async def vigils(asked: VigilsRequested) -> bool | None:
+    async def vigils_paused() -> bool | None:
         await asyncio.sleep(0)
-        return hub.vigils(asked).paused
+        return hub.vigils(VigilsRequested()).paused
+
+    async def set_vigils_paused(*, paused: bool) -> bool | None:
+        await asyncio.sleep(0)
+        return hub.vigils(VigilsRequested(pause=paused)).paused
 
     async def branch_of(root: str) -> str | None:
         await asyncio.sleep(0)
@@ -245,7 +249,12 @@ def _window() -> VeknaApp:
             title=f"vekna {VERSION}",
             fit=True,
         ),
-        daemon=ToDaemon(send=sent.append, mark=mark, vigils=vigils),
+        daemon=ToDaemon(
+            send=sent.append,
+            mark=mark,
+            vigils_paused=vigils_paused,
+            set_vigils_paused=set_vigils_paused,
+        ),
         branch_of=branch_of,
     )
 

@@ -61,14 +61,13 @@ from vekna.wire import (
     SurfaceHello,
     TreeBlocked,
     TreeFreed,
-    VigilsRequested,
     WireMessage,
     default_state_root,
     encode_frame,
     mark_seen,
     project_of,
     read_frames,
-    vigils_paused,
+    set_vigils_paused,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2087,12 +2086,13 @@ def _vigil_config(queue_rituals: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return config
 
 
-def _keep_tally(config: Path) -> None:
+def _append(config: Path, table: str) -> None:
     listed = config.read_text(encoding="utf-8")
-    config.write_text(
-        listed + '[vigil.tally]\nevery = 3600\nritual = "count"\nargs = { n = 7 }\n',
-        encoding="utf-8",
-    )
+    config.write_text(listed + table, encoding="utf-8")
+
+
+def _keep_tally(config: Path) -> None:
+    _append(config, '[vigil.tally]\nevery = 3600\nritual = "count"\nargs = { n = 7 }\n')
 
 
 @pytest.mark.asyncio
@@ -2126,16 +2126,32 @@ class TestVigils:
     ):
         runs = socket_path.parent / "runs"
         async with _served(socket_path):
-            paused = await vigils_paused(socket_path, VigilsRequested(pause=True))
+            paused = await set_vigils_paused(socket_path, paused=True)
             _keep_tally(vigil_config)
             await asyncio.sleep(_TICK * 20)
             held = _runs(runs)
-            resumed = await vigils_paused(socket_path, VigilsRequested(pause=False))
+            resumed = await set_vigils_paused(socket_path, paused=False)
             await _spawned(lambda: _finished(runs, "count"))
 
         assert (paused, resumed) == (True, False)
         assert held == []
         assert _run_of(runs, "count").hello.vigil == "tally"
+
+    # A look says what is wrong with a vigil's table, so silence is no look.
+    @staticmethod
+    async def test_a_paused_daemon_does_not_read_the_vigils(
+        socket_path: Path, vigil_config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        async with _served(socket_path):
+            await set_vigils_paused(socket_path, paused=True)
+            await asyncio.sleep(_TICK * 10)
+            _append(vigil_config, '[vigil.broken]\nritual = "count"\n')
+            await asyncio.sleep(_TICK * 20)
+            held = _said(caplog, logging.WARNING)
+            await set_vigils_paused(socket_path, paused=False)
+            await _eventually(lambda: "broken" in _said(caplog, logging.WARNING))
+
+        assert "broken" not in held
 
     # The keeper never ends by itself, so its looks are counted here: one that
     # ends without an error is not said to be lost.

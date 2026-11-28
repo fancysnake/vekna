@@ -279,7 +279,7 @@ async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> 
 # configured, every record in the journal; remembering each ritual's last
 # start is the upgrade if a large journal makes this show up in a profile.
 async def _look(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
-    if not (found := await asyncio.to_thread(book.vigils)):
+    if vigils.paused or not (found := await asyncio.to_thread(book.vigils)):
         return
     projects = {
         root: await project_of(Path(root))
@@ -456,7 +456,9 @@ class _Daemon(Routes):
         return self._hub.mark(request)
 
     def vigils(self, request: VigilsRequested) -> VigilsState:
-        return VigilsState(paused=self._vigils.hold(pause=request.pause))
+        if request.pause is not None:
+            self._vigils.hold(pause=request.pause)
+        return VigilsState(paused=self._vigils.paused)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)

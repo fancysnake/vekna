@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import math
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -28,7 +28,6 @@ from vekna.wire import (
     RiteFinished,
     RiteStarted,
     TreeBlocked,
-    VigilsRequested,
     WireMessage,
 )
 
@@ -77,21 +76,47 @@ def _asking(hub: Hub) -> None:
 
 
 # The daemon's part in pausing the vigils: it keeps the pause and says it back.
-# `said` false is a daemon that does not answer the question.
+# `said` false is a daemon that does not answer the question. A `gate` holds the
+# reply to a look, as it stood when asked, until the gate is set.
 class _Vigils:
     def __init__(self, *, paused: bool = False, said: bool = True) -> None:
         self.paused = paused
         self.said = said
         self.asked: list[bool | None] = []
+        self.gate: asyncio.Event | None = None
+        self.held = asyncio.Event()
 
-    async def __call__(self, asked: VigilsRequested) -> bool | None:
+    async def look(self) -> bool | None:
         await asyncio.sleep(0)
-        self.asked.append(asked.pause)
+        self.asked.append(None)
+        reply = self.paused if self.said else None
+        if self.gate is not None:
+            self.held.set()
+            await self.gate.wait()
+        return reply
+
+    async def hold(self, *, paused: bool) -> bool | None:
+        await asyncio.sleep(0)
+        self.asked.append(paused)
         if not self.said:
             return None
-        if asked.pause is not None:
-            self.paused = asked.pause
-        return self.paused
+        self.paused = paused
+        return paused
+
+    def to_daemon(
+        self,
+        *,
+        send: Callable[[WireMessage], None],
+        mark: Callable[[CastSeen], Awaitable[str | None]],
+    ) -> ToDaemon:
+        return ToDaemon(
+            send=send, mark=mark, vigils_paused=self.look, set_vigils_paused=self.hold
+        )
+
+
+# The bottom row's pause label as it shows, or `None` while it is hidden.
+def _pause_label(app: VeknaApp) -> str | None:
+    return _text(app, "#paused") if app.query_one("#paused").display else None
 
 
 # A window on no casts, over a daemon that keeps `vigils`.
@@ -102,7 +127,7 @@ def _vigil_app(vigils: _Vigils) -> VeknaApp:
     return VeknaApp(
         casts=Hub(),
         opened=Opened(project="/proj/.git", root="/proj", history_after=timedelta.max),
-        daemon=ToDaemon(send=lambda _: None, mark=unasked, vigils=vigils),
+        daemon=vigils.to_daemon(send=lambda _: None, mark=unasked),
         branch_of=unasked,
     )
 
@@ -138,7 +163,7 @@ def _app(
             title=title,
             quiet=quiet,
         ),
-        daemon=ToDaemon(send=sent.append, mark=mark, vigils=_Vigils()),
+        daemon=_Vigils().to_daemon(send=sent.append, mark=mark),
         branch_of=branch_of,
     )
 
@@ -1070,7 +1095,7 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         opened=Opened(
             project="/proj/.git", root="/proj", history_after=timedelta.max, fit=True
         ),
-        daemon=ToDaemon(send=lambda _: None, mark=mark, vigils=_Vigils()),
+        daemon=_Vigils().to_daemon(send=lambda _: None, mark=mark),
         branch_of=branch_of,
     )
 
@@ -2615,20 +2640,22 @@ class TestVigils:
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            before = _text(app, "#scope")
+            before = _pause_label(app)
             await pilot.press("v")
             await pilot.pause(_PAINTED)
-            paused, said = _text(app, "#scope"), _text(app, "#note")
+            paused, said = _pause_label(app), _text(app, "#note")
+            scope = _text(app, "#scope")
             await pilot.press("v")
             await pilot.pause(_PAINTED)
-            after, said_after = _text(app, "#scope"), _text(app, "#note")
+            after, said_after = _pause_label(app), _text(app, "#note")
 
-        assert before == "no casts  (proj)"
-        assert paused == "vigils paused · no casts  (proj)"
+        assert before is None
+        assert paused == "vigils paused"
+        assert scope == "no casts  (proj)"
         assert said == (
             "vigils paused — what runs carries on, and v lets them cast again"
         )
-        assert after == "no casts  (proj)"
+        assert after is None
         assert said_after == "vigils cast again"
         assert vigils.asked == [None, True, False]
 
@@ -2639,13 +2666,13 @@ class TestVigils:
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
-            opened = _text(app, "#scope")
+            opened = _pause_label(app)
             await pilot.press("v")
             await pilot.pause(_PAINTED)
-            after = _text(app, "#scope")
+            after = _pause_label(app)
 
-        assert opened == "vigils paused · no casts  (proj)"
-        assert after == "no casts  (proj)"
+        assert opened == "vigils paused"
+        assert after is None
         assert vigils.asked == [None, False]
 
     @staticmethod
@@ -2658,10 +2685,30 @@ class TestVigils:
                 await pilot.pause(_PAINTED)
                 vigils.paused = True
                 await pilot.pause(_PAINTED)
-                scope = _text(app, "#scope")
+                label = _pause_label(app)
 
-        assert scope == "vigils paused · no casts  (proj)"
+        assert label == "vigils paused"
         assert set(vigils.asked) == {None}
+
+    @staticmethod
+    async def test_a_look_answered_after_v_does_not_undo_what_v_was_told():
+        vigils = _Vigils()
+        with patch("vekna.gates.cli.tui._VIGILS_SECONDS", 0.05):
+            app = _vigil_app(vigils)
+
+            async with app.run_test() as pilot:
+                await pilot.pause(_PAINTED)
+                stale = vigils.gate = asyncio.Event()
+                await vigils.held.wait()
+                await pilot.press("v")
+                await pilot.pause(_PAINTED)
+                # Later looks stay held, so none can repair the footer.
+                vigils.gate = asyncio.Event()
+                stale.set()
+                await pilot.pause(_PAINTED)
+                label = _pause_label(app)
+
+        assert label == "vigils paused"
 
     @staticmethod
     async def test_a_daemon_that_does_not_say_leaves_the_vigils_as_they_were():
@@ -2672,9 +2719,9 @@ class TestVigils:
             await pilot.pause(_PAINTED)
             await pilot.press("v")
             await pilot.pause(_PAINTED)
-            scope, said = _text(app, "#scope"), _text(app, "#note")
+            label, said = _pause_label(app), _text(app, "#note")
 
-        assert scope == "no casts  (proj)"
+        assert label is None
         assert said == (
             "the daemon did not say whether its vigils are paused: it is gone,"
             " or it predates pausing them"

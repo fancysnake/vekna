@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from time import monotonic
-from typing import ClassVar
+from typing import ClassVar, Protocol
 from uuid import uuid4
 
 from textual import on
@@ -21,7 +21,6 @@ from vekna.wire import (
     DecideClaimed,
     DecideReleased,
     DecideRequested,
-    VigilsRequested,
     WireMessage,
 )
 
@@ -105,15 +104,21 @@ class Contents(Tree[str]):
     ]
 
 
+class _SetVigilsPaused(Protocol):
+    async def __call__(self, *, paused: bool) -> bool | None: ...
+
+
 # What the window says to the daemon: frames down its own connection, and a
-# mark or a pause of the vigils on a connection of its own. `mark` answers why
-# the daemon refused it. `vigils` answers whether they are paused, or `None`
-# when the daemon did not say.
+# mark or the vigils' pause on a connection of its own. `mark` answers why the
+# daemon refused it. `vigils_paused` asks whether the vigils are paused and
+# `set_vigils_paused` pauses them or lets them cast again; both answer whether
+# they are paused, or `None` when the daemon did not say.
 @dataclass(frozen=True)
 class ToDaemon:
     send: Callable[[WireMessage], None]
     mark: Callable[[CastSeen], Awaitable[str | None]]
-    vigils: Callable[[VigilsRequested], Awaitable[bool | None]]
+    vigils_paused: Callable[[], Awaitable[bool | None]]
+    set_vigils_paused: _SetVigilsPaused
 
 
 # What a window is opened with: its project, the directory a ritual started
@@ -219,19 +224,26 @@ def _kept(
     return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
+# Whether the daemon last said its vigils are paused, and how many times it has
+# answered v.
+@dataclass
+class _Pause:
+    paused: bool = False
+    answers: int = 0
+
+
 # What the window is showing and what it has done: the folds of the contents,
 # whether it needs repainting, the cast one more x cancels, the branch each tree
-# was last seen on, its claims, the contents drawn, and whether the daemon
-# last said its vigils are paused.
+# was last seen on, its claims, the contents drawn, and the vigils' pause.
 @dataclass
 class _View:
     reading: Reading
     dirty: bool = True
     arming: str | None = None
-    vigils_paused: bool = False
     branches: dict[str, str | None] = field(default_factory=dict)
     claims: _Claims = field(default_factory=_Claims)
     drawn: _Drawn = field(default_factory=_Drawn)
+    vigils: _Pause = field(default_factory=_Pause)
 
 
 # Where a waiting question shows: loud on top for the cast in view, and during
@@ -250,11 +262,15 @@ class _Asks:
     )
 
 
-# The bottom row's two lines of text: the keys, and which casts are listed.
+# The bottom row's lines of text that change: the keys, which casts are listed,
+# and that the vigils are paused, shown only while they are.
 @dataclass
 class _Foot:
     hint: Static = field(default_factory=lambda: Static(_hint(0), id="hint"))
     scope: Static = field(default_factory=lambda: Static(id="scope", markup=False))
+    paused: Static = field(
+        default_factory=lambda: Static("vigils paused", id="paused", markup=False)
+    )
 
 
 # Held rather than queried, so each widget is reached typed and without a
@@ -309,6 +325,7 @@ class VeknaApp(App[None]):
     #foot { height: auto; }
     #hint { width: 1fr; padding: 0 1; color: $text-muted; }
     #scope, #version { width: auto; padding: 0 1; color: $text-muted; }
+    #paused { display: none; width: auto; padding: 0 1; color: $warning; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "quit"),
@@ -359,6 +376,7 @@ class VeknaApp(App[None]):
         with Horizontal(id="foot"):
             yield self._w.foot.hint
             yield self._w.foot.scope
+            yield self._w.foot.paused
             yield Static(self._scope.opened.title, id="version", markup=False)
 
     def on_mount(self) -> None:
@@ -527,15 +545,15 @@ class VeknaApp(App[None]):
         self.changed()
 
     async def action_vigils(self) -> None:
-        paused = await self._daemon.vigils(
-            VigilsRequested(pause=not self._view.vigils_paused)
+        paused = await self._daemon.set_vigils_paused(
+            paused=not self._view.vigils.paused
         )
         if paused is None:
             self.say(_VIGILS_UNSAID)
             return
-        self._view.vigils_paused = paused
+        self._view.vigils.answers += 1
+        self._hear_pause(paused=paused)
         self.say(_VIGILS_PAUSED if paused else _VIGILS_CAST)
-        self.changed()
 
     # The cast under the cursor, or the first one that asks under a fold. The
     # line its answers are typed on opens at once, and stays open.
@@ -751,10 +769,15 @@ class VeknaApp(App[None]):
     # Asked again and again: another window may have paused the vigils, and
     # the daemon tells no window when it does.
     async def _look_up_vigils(self) -> None:
-        paused = await self._daemon.vigils(VigilsRequested())
-        if paused is not None and paused != self._view.vigils_paused:
-            self._view.vigils_paused = paused
-            self.changed()
+        answers = self._view.vigils.answers
+        paused = await self._daemon.vigils_paused()
+        # v answered while this look was out: the look may carry the older state.
+        if paused is not None and answers == self._view.vigils.answers:
+            self._hear_pause(paused=paused)
+
+    def _hear_pause(self, *, paused: bool) -> None:
+        self._view.vigils.paused = paused
+        self._w.foot.paused.display = paused
 
     def _paced(self) -> None:
         self._hold()
@@ -775,8 +798,7 @@ class VeknaApp(App[None]):
         listed = self._listed()
         now = datetime.now(UTC)
         where = "all projects" if self._scope.every else named(self._scope.project)
-        held = "vigils paused · " if self._view.vigils_paused else ""
-        self._w.foot.scope.update(f"{held}{counted(listed) or 'no casts'}  ({where})")
+        self._w.foot.scope.update(f"{counted(listed) or 'no casts'}  ({where})")
         reading = self._view.reading
         if self._scope.to_fit and listed and (rows := self._w.contents.size.height):
             self._scope.to_fit = False

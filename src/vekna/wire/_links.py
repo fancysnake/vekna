@@ -195,11 +195,21 @@ async def mark_seen(path: Path, mark: CastSeen) -> str | None:
     return None if isinstance(reply, CastGoodbye) else _PREDATES_SEEN
 
 
-# Whether the daemon on `path` has its vigils paused, after pausing them or
-# letting them cast again when `asked` says which. `None` when the daemon did
-# not say: nobody listening, or a daemon that hangs up on a question it
-# predates. Asked on a connection of its own for the reason `mark_seen` is.
-async def vigils_paused(path: Path, asked: VigilsRequested) -> bool | None:
+# Whether the daemon on `path` has its vigils paused. `None` when the daemon
+# did not say: nobody listening, or a daemon that hangs up on a question it
+# predates.
+async def vigils_paused(path: Path) -> bool | None:
+    return await _vigils_state(path, VigilsRequested())
+
+
+# Pauses the vigils of the daemon on `path`, or lets them cast again, and
+# answers as `vigils_paused` does.
+async def set_vigils_paused(path: Path, *, paused: bool) -> bool | None:
+    return await _vigils_state(path, VigilsRequested(pause=paused))
+
+
+# Asked on a connection of its own for the reason `mark_seen` is.
+async def _vigils_state(path: Path, asked: VigilsRequested) -> bool | None:
     try:
         reply = await _asked(path, asked)
     except OSError:

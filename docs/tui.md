@@ -198,8 +198,8 @@ it will cancel. The second `x` cancels it.
 The casts that run carry on, and so do the casts they queue. The bottom row
 says `vigils paused` in every window.
 
-Press `g` to see the casts of every project, and wait until none runs. Then
-`vekna stop` ends a daemon with nothing in flight.
+Press `g` to see the casts of every project, and wait until none runs or waits
+queued. Then `vekna stop` ends a daemon with nothing in flight.
 
 `v` again lets the vigils cast. A daemon that starts has its vigils casting.
 
