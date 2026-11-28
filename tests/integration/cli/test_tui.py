@@ -11,7 +11,7 @@ from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, ToDaemon, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, ToDaemon, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -124,25 +124,31 @@ def _vigil_app(vigils: _Vigils) -> VeknaApp:
     async def unasked(_: object) -> None:
         await asyncio.sleep(0)
 
+    async def history_after() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return timedelta.max, ""
+
     return VeknaApp(
         casts=Hub(),
         opened=Opened(project="/proj/.git", root="/proj", history_after=timedelta.max),
         daemon=vigils.to_daemon(send=lambda _: None, mark=unasked),
-        branch_of=unasked,
+        outside=Outside(branch_of=unasked, history_after=history_after),
     )
 
 
 # The app over `hub`, keeping what it sends; branches are answered by root.
 # Every cast here began at `_WHEN`, long ago, so by default none is history.
+# `history_after` may be a list: the config then reads as its last entry.
 def _app(
     hub: Hub,
     sent: list[WireMessage],
-    history_after: timedelta = timedelta.max,
+    history_after: timedelta | list[tuple[timedelta, str]] = timedelta.max,
     *,
     title: str = "vekna",
     quiet: timedelta = timedelta(seconds=5),
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
+    said = history_after if isinstance(history_after, list) else [(history_after, "")]
 
     # The daemon's part: it keeps the mark and says it back to the window.
     async def mark(request: CastSeen) -> str | None:
@@ -154,18 +160,27 @@ def _app(
         await asyncio.sleep(0)
         return branches.get(root)
 
+    async def read() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return said[-1]
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
             project="/proj/.git",
             root="/proj",
-            history_after=history_after,
+            history_after=said[0][0],
             title=title,
             quiet=quiet,
         ),
         daemon=_Vigils().to_daemon(send=sent.append, mark=mark),
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=read),
     )
+
+
+# The app over `_past()`, reading its config as `said` last has it.
+def _reading(said: list[tuple[timedelta, str]]) -> VeknaApp:
+    return _app(_past(), [], said)
 
 
 def _text(app: VeknaApp, selector: str) -> str:
@@ -1152,13 +1167,17 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         await asyncio.sleep(0)
         return None
 
+    async def history_after() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return timedelta.max, ""
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
             project="/proj/.git", root="/proj", history_after=timedelta.max, fit=True
         ),
         daemon=_Vigils().to_daemon(send=lambda _: None, mark=mark),
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=history_after),
     )
 
 
@@ -1332,6 +1351,49 @@ class TestHistory:
             hint = _text(app, "#hint")
         assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
         assert "H history (2)" in hint
+
+    @staticmethod
+    async def test_an_edited_history_after_counts_in_the_open_window(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            unread = (_text(app, "#hint"), _text(app, "#note"))
+            said.append((timedelta(0), ""))
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
+        assert "H history (" not in unread[0]
+        assert not unread[1]
+        assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
+        assert "H history (2)" in hint
+        assert note == "a cast now moves to history 0s after it ends"
+
+    @staticmethod
+    async def test_a_config_that_stops_reading_is_said_once(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            said.append((timedelta.max, "config.toml: [window] ignored"))
+            await pilot.pause(_PAINTED)
+            note = _text(app, "#note")
+            app.say("")
+            await pilot.pause(_PAINTED)
+
+            later = _text(app, "#note")
+        assert note == "config.toml: [window] ignored"
+        assert not later
 
     @staticmethod
     async def test_h_shows_the_ended_casts_by_day_newest_first_and_goes_back():

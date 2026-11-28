@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import fcntl
 import functools
-import itertools
 import logging
 import sys
 from collections.abc import Callable, Coroutine
@@ -15,7 +14,7 @@ import click
 
 from vekna.links.circle_config import ConfigLimits
 from vekna.links.debug_log import DebugLog
-from vekna.links.discord_config import discord_setup
+from vekna.links.discord_config import ConfigDiscord
 from vekna.links.journal import Journal
 from vekna.links.socket_server import alive, attach, serve
 from vekna.links.spawner import Spawner, pid_alive, signal_pid
@@ -28,7 +27,7 @@ from vekna.mills.hub import Hub
 from vekna.mills.relay import Relay
 from vekna.mills.vigils import Vigils
 from vekna.pacts.circle import TreeError, VigilBook
-from vekna.pacts.remote import Remote, RemoteError
+from vekna.pacts.remote import DiscordBook, DiscordSetup, Remote, RemoteError
 from vekna.pacts.routing import Routed, Routes, Surface
 from vekna.wire import (
     AdmissionRequested,
@@ -88,7 +87,11 @@ _POLLS = 100
 # more closely than this.
 _VIGIL_SECONDS = 5.0
 _VIGILS_LOST = "the vigils are no longer kept"
-_DISCORD_LOST = "Discord is off until the daemon restarts"
+# How often the daemon reads `[discord]` again, so an edit counts within this.
+_DISCORD_SECONDS = 5.0
+_DISCORD_LOST = "Discord is off until its config changes or the daemon restarts"
+_DISCORD_UNREAD = "`[discord]` is no longer read"
+_DISCORD_LEFT = "no longer answering casts on Discord: its config changed"
 
 
 def _nothing(_: Routed) -> None:
@@ -200,16 +203,17 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
         _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
     )
     keeping.add_done_callback(functools.partial(_ended, _VIGILS_LOST))
-    relaying: asyncio.Task[None] | None = None
+    relaying = asyncio.create_task(
+        _keep_relay(hub=hub, routes=routes, book=ConfigDiscord())
+    )
+    relaying.add_done_callback(functools.partial(_ended, _DISCORD_UNREAD))
     try:
-        relaying = await _relaying(hub=hub, routes=routes)
         await server.stopped()
     finally:
         keeping.cancel()
-        if relaying is not None:
-            relaying.cancel()
-            # Awaited so the gateway connection closes before the loop does.
-            await asyncio.gather(relaying, return_exceptions=True)
+        relaying.cancel()
+        # Awaited so the gateway connection closes before the event loop does.
+        await asyncio.gather(relaying, return_exceptions=True)
         await server.close()
     _log.info("stopped")
     return 0
@@ -222,11 +226,39 @@ def _ended(lost: str, done: asyncio.Task[None]) -> None:
         _log.error("%s: %r", lost, error, exc_info=error)
 
 
+# Keeps the relay on what `[discord]` and its token say, read again every few
+# seconds: a changed setup ends the old relay and starts a new one. A relay that
+# ended by itself is left until the setup changes, so a token Discord refuses is
+# tried once.
+async def _keep_relay(*, hub: Hub, routes: Routes, book: DiscordBook) -> None:
+    on: DiscordSetup | None = None
+    relaying: asyncio.Task[None] | None = None
+    try:
+        while True:  # pylint: disable=while-used
+            if (setup := await asyncio.to_thread(book.setup)) != on:
+                if relaying is not None and not relaying.done():
+                    _log.info(_DISCORD_LEFT)
+                await _closed(relaying)
+                relaying = _relaying(hub=hub, routes=routes, setup=setup)
+                on = setup
+            await asyncio.sleep(_DISCORD_SECONDS)
+    finally:
+        await _closed(relaying)
+
+
+async def _closed(relaying: asyncio.Task[None] | None) -> None:
+    if relaying is not None:
+        relaying.cancel()
+        await asyncio.gather(relaying, return_exceptions=True)
+
+
 # The task that carries questions to Discord and answers back, or none: no
 # `[discord]` is said by nothing, and one without the install by one line. A
 # token Discord refuses ends the task, and the daemon carries on without it.
-async def _relaying(*, hub: Hub, routes: Routes) -> asyncio.Task[None] | None:
-    if (setup := await asyncio.to_thread(discord_setup)) is None:
+def _relaying(
+    *, hub: Hub, routes: Routes, setup: DiscordSetup | None
+) -> asyncio.Task[None] | None:
+    if setup is None:
         return None
     try:
         # discord.py is an optional install, and heavy to import.
@@ -267,7 +299,7 @@ async def _relayed(*, routes: Routes, relay: Relay, remote: Remote) -> None:
 # A look that fails is logged and the next one is tried: a config half written
 # or a journal the disk will not read must not end the vigils for good.
 async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
-    for _ in itertools.count():
+    while True:  # pylint: disable=while-used
         try:
             await _look(vigils=vigils, book=book, journal=journal)
         except OSError:

@@ -46,6 +46,8 @@ _COALESCE_SECONDS = 0.1
 _GUIDE_DEPTH = 2
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
+# How often the window reads its config again, so an edit counts within this.
+_CONFIG_SECONDS = 5.0
 # shortcut: a replay is taken as over when no cast came or ended for this
 # long, since the wire has no message that ends one; add one when it does.
 _SETTLE_SECONDS = 0.3
@@ -121,9 +123,19 @@ class ToDaemon:
     set_vigils_paused: _SetVigilsPaused
 
 
+# What the window reads that the daemon does not send it: the branch a tree is
+# on, and its own config as it reads now, which is how long after it ended a
+# cast moves to the history view and what would not read.
+@dataclass(frozen=True)
+class Outside:
+    branch_of: Callable[[str], Awaitable[str | None]]
+    history_after: Callable[[], Awaitable[tuple[timedelta, str]]]
+
+
 # What a window is opened with: its project, the directory a ritual started
 # from it runs in while it is on that project, how long after it ended a cast
-# moves to the history view, the title it shows: the versions of this vekna and
+# moves to the history view, what its config said that would not read, the
+# title it shows: the versions of this vekna and
 # of its daemon, and how long a cast taken over may ask nothing after an answer
 # before it is left, and whether a tree is folded to fit the window's height:
 # the first it draws, and the one it draws when it turns to every project or
@@ -133,6 +145,7 @@ class Opened:
     project: str
     root: str
     history_after: timedelta
+    ignored: str = ""
     title: str = "vekna"
     quiet: timedelta = timedelta(seconds=5)
     fit: bool = False
@@ -232,15 +245,23 @@ class _Pause:
     answers: int = 0
 
 
+# What the window last read outside the daemon: the branch each tree was on,
+# and what its config said that would not read.
+@dataclass
+class _Read:
+    ignored: str = ""
+    branches: dict[str, str | None] = field(default_factory=dict)
+
+
 # What the window is showing and what it has done: the folds of the contents,
-# whether it needs repainting, the cast one more x cancels, the branch each tree
-# was last seen on, its claims, the contents drawn, and the vigils' pause.
+# whether it needs repainting, the cast one more x cancels, what it last read
+# outside the daemon, its claims, the contents drawn, and the vigils' pause.
 @dataclass
 class _View:
     reading: Reading
+    read: _Read
     dirty: bool = True
     arming: str | None = None
-    branches: dict[str, str | None] = field(default_factory=dict)
     claims: _Claims = field(default_factory=_Claims)
     drawn: _Drawn = field(default_factory=_Drawn)
     vigils: _Pause = field(default_factory=_Pause)
@@ -345,19 +366,17 @@ class VeknaApp(App[None]):
     ]
 
     def __init__(
-        self,
-        *,
-        casts: Casts,
-        opened: Opened,
-        daemon: ToDaemon,
-        branch_of: Callable[[str], Awaitable[str | None]],
+        self, *, casts: Casts, opened: Opened, daemon: ToDaemon, outside: Outside
     ) -> None:
         super().__init__()
         self._casts = casts
         self._scope = _Scope(opened=opened)
         self._daemon = daemon
-        self._branch_of = branch_of
-        self._view = _View(reading=Reading(history_after=opened.history_after))
+        self._outside = outside
+        self._view = _View(
+            reading=Reading(history_after=opened.history_after),
+            read=_Read(ignored=opened.ignored),
+        )
         self._w = _Widgets()
 
     @override
@@ -388,6 +407,7 @@ class VeknaApp(App[None]):
         self.set_interval(_COALESCE_SECONDS, self._paced)
         self.set_interval(_TICK_SECONDS, self.changed)
         self.set_interval(_BRANCH_SECONDS, self._look_up_branches)
+        self.set_interval(_CONFIG_SECONDS, self._read_config)
         self.call_later(self._look_up_branches)
         self.set_interval(_VIGILS_SECONDS, self._look_up_vigils)
         self.call_later(self._look_up_vigils)
@@ -760,10 +780,10 @@ class VeknaApp(App[None]):
         roots = {
             view.hello.project_root
             for view in self._listed()
-            if live(view) or view.hello.project_root not in self._view.branches
+            if live(view) or view.hello.project_root not in self._view.read.branches
         }
-        found = await asyncio.gather(*(self._branch_of(root) for root in roots))
-        self._view.branches.update(zip(roots, found, strict=True))
+        found = await asyncio.gather(*(self._outside.branch_of(root) for root in roots))
+        self._view.read.branches.update(zip(roots, found, strict=True))
         self.changed()
 
     # Asked again and again: another window may have paused the vigils, and
@@ -778,6 +798,20 @@ class VeknaApp(App[None]):
     def _hear_pause(self, *, paused: bool) -> None:
         self._view.vigils.paused = paused
         self._w.foot.paused.display = paused
+
+    # What `[window]` says now, so an edit counts in a window that is open. A
+    # config that stops reading is said when it does, not on every look.
+    async def _read_config(self) -> None:
+        after, ignored = await self._outside.history_after()
+        notes = [ignored] if ignored and ignored != self._view.read.ignored else []
+        self._view.read.ignored = ignored
+        if after != self._view.reading.history_after:
+            self._view.reading.history_after = after
+            moved = clock(after.total_seconds())
+            notes.append(f"a cast now moves to history {moved} after it ends")
+            self.changed()
+        if notes:
+            self.say(" · ".join(notes))
 
     def _paced(self) -> None:
         self._hold()
@@ -817,7 +851,7 @@ class VeknaApp(App[None]):
             )
             return
         entry = self._entry()
-        self._w.head.update(head(entry, branches=self._view.branches, now=now))
+        self._w.head.update(head(entry, branches=self._view.read.branches, now=now))
         self._w.log.show(page=None if entry is None else entry.key, said=output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the

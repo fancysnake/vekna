@@ -17,6 +17,11 @@ when.
   that run carry on, and every window says `vigils paused` until `v` lets
   them cast again. Pause, wait until no cast runs or waits queued, then
   `vekna stop`. A new daemon starts with its vigils casting.
+- **Config edits count while vekna runs**: the daemon reads `[discord]` and
+  its token file again every few seconds and reconnects when they change, so
+  `vekna stop` after an edit is no longer needed. An open window reads
+  `[window] history_after` the same way. `[circle]` and `[vigil]` already were
+  read on each use.
 - **A cast's hello names the flags it was given**, in `said`. A started cast
   records every component, its defaults too, and until now nothing told the
   two apart. A cast carried on with `--resume` keeps the names. A hello from
