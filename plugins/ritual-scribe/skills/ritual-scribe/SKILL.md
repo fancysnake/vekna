@@ -281,9 +281,14 @@ if not await decide("hand it to the agent?"):           # -> bool
 
 took = await decide(headline, options=_TOOK)            # -> the literal member
 note = await decide("why?", free=True)                  # -> str
+said = await decide("ok?", options=_TOOK, free=True)    # -> str
 ```
 
-Three shapes, three return types. With `options` typed as a
+Four shapes, three return types. `options` beside `free=True` are suggestions:
+the operator picks one by number or by a tap, or answers past them, and what
+comes back is an unconstrained `str`. An agent's `ask_human` asks the same way.
+`decide(options=...)` without `free` is the closed one — that is why a ritual
+branching on a `Literal` uses it. With `options` typed as a
 `tuple[Literal[...], ...]`, the answer comes back **as that literal** — carry it
 into your result model rather than re-validating a `str`:
 
@@ -314,16 +319,11 @@ emoji for two answers, or `reactions` beside `free=True` with no `options`
 raises `MediumBoundaryError`. The terminal ignores it. Under `trial`,
 `trial.decide.asked` records it.
 
-`options` beside `free=True` are suggestions: the operator picks one by number
-or by a tap, or answers past them, and what comes back is an unconstrained
-`str`. An agent's `ask_human` asks the same way.
+With `options` beside `free=True`, a tap picks a suggestion:
 
 ```python
 said = await decide(card, options=("ok", "reject"), free=True, reactions={"ok": "👍"})
 ```
-
-`decide(options=...)` without `free` is the closed one — that is why a ritual
-branching on a `Literal` uses it.
 
 ### `enqueue` / `await_cast` — start another cast
 

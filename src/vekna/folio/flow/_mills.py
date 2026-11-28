@@ -21,9 +21,6 @@ from vekna.lexicon import (
 # or raises, never a string of its own — so a ritual offering
 # `Literal["fix", "file", "ignore"]` gets that back rather than a bare `str` it
 # would have to re-validate. Offering a plain `list[str]` still answers `str`.
-# `options` beside `free=True` are suggestions the operator may answer past, so
-# that shape answers `str` whatever the options were typed as: a ritual
-# offering `Literal["fix", "stop"]` there is never promised one of them back.
 _OptionT = TypeVar("_OptionT", bound=str)
 
 
@@ -78,6 +75,9 @@ async def decide(
     reactions: Mapping[str, str] | None = None,
 ) -> _OptionT: ...
 @overload
+# `options` beside `free=True` are suggestions the operator may answer past, so
+# that shape answers `str` whatever the options were typed as: a ritual
+# offering `Literal["fix", "stop"]` there is never promised one of them back.
 async def decide(
     prompt: str,
     *,

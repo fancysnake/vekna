@@ -57,6 +57,23 @@ class TestDecideMedium:
 
         assert result == Survey(choice="y", approved=True, note="hello")
 
+    @staticmethod
+    def test_an_answer_past_the_suggestions_comes_back_as_typed():
+        renderer = StandaloneRenderer(
+            out=Tail(io.StringIO()), inp=io.StringIO("later\n")
+        )
+
+        result = asyncio.run(
+            run_cast(
+                ritual=suggester,
+                components=suggester.components(),
+                grimoire=Grimoire(clock=_fixed_clock),
+                channel=renderer,
+            )
+        )
+
+        assert result == Note(text="later")
+
 
 class Choice(BaseModel):
     picked: str
@@ -119,6 +136,18 @@ async def jot(_state: Jotting) -> Done[Note]:
 jotter = entry(name="jotter", payload=Jotting())
 
 
+class Suggesting(BaseModel):
+    pass
+
+
+@step
+async def suggest(_state: Suggesting) -> Done[Note]:
+    return Done(Note(text=await decide("pick", options=["fix", "file"], free=True)))
+
+
+suggester = entry(name="suggester", payload=Suggesting())
+
+
 def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
     grimoire = Grimoire(clock=_fixed_clock)
     return asyncio.run(
@@ -164,6 +193,10 @@ class TestResumedDecisions:
     @staticmethod
     def test_free_text_is_taken_as_it_was_recorded():
         assert _resumed("maybe", jotter) == Note(text="maybe")
+
+    @staticmethod
+    def test_an_answer_past_the_suggestions_is_taken_as_it_was_recorded():
+        assert _resumed("later", suggester) == Note(text="later")
 
     @staticmethod
     def test_an_answer_that_is_not_text_is_refused():

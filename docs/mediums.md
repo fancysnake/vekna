@@ -44,14 +44,15 @@ Hands a choice back to you mid-cast. The cast blocks until you answer.
 ```python
 from vekna.folio.flow import decide
 
-if not await decide("Push to main?"):               # -> bool
+if not await decide("Push to main?"):                  # -> bool
     return Done(Verdict(outcome="stopped"))
 
-took = await decide("what now?", options=_TOOK)     # -> the option offered
-note = await decide("why?", free=True)              # -> str
+took = await decide("what now?", options=_TOOK)        # -> the option offered
+note = await decide("why?", free=True)                 # -> str
+said = await decide("ok?", options=_TOOK, free=True)   # -> str
 ```
 
-Three shapes, three return types. A bare prompt is yes or no. `options` answers
+Four shapes, three return types. A bare prompt is yes or no. `options` answers
 with one of them, and options typed as a `tuple[Literal[...], ...]` come back as
 that literal, so a step can branch on the answer without re-validating a `str`.
 `free=True` takes whatever you type. `options` beside `free=True` are
