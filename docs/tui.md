@@ -37,7 +37,7 @@ A cast is one line. The glyph says its state:
 | --- | --- |
 | `▶` | runs |
 | `⏸` | waits on your answer |
-| `◷` | waits on a cast it queued |
+| `◷` | waits on a cast it queued, or finished while one still goes |
 | `↻` | recovers from a step that raised |
 | `…` | is queued and not started yet |
 | `✓` | finished |
@@ -45,7 +45,8 @@ A cast is one line. The glyph says its state:
 | `⚠` | lost its connection; `vekna cast --continue` carries it on |
 
 A running cast shows `…` and the rite it is on now. A cast shows `@now` while
-it lives. Once it ended, it shows the slot it began in: `@<1h`, `@<3h`, `@<6h`,
+it lives, and while a cast it queued still goes after it finished. Once it
+ended, it shows the slot it began in: `@<1h`, `@<3h`, `@<6h`,
 `@<12h`, `@<1d`, then `@2d ago`.
 
 A ritual line holds the casts that still run or ask. A cast that ended moves

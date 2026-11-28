@@ -940,11 +940,49 @@ class TestStreaks:
         assert lines == [
             "proj (1 running)",
             "  sweep",
-            "    ✓ @now  c2",
+            "    ◷ @now  c2",
             "      ▶ pr_fix  c3",
             "  finished",
             "    sweep",
             "      ✓ @now  c1",
+        ]
+
+    @staticmethod
+    async def test_a_cast_that_ended_stays_now_while_a_cast_it_queued_runs():
+        hub = Hub()
+        _ran(hub, "c1", 120)
+        hub.apply(_hello("c2", "pr_fix").model_copy(update={"enqueued_by": "c1"}))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj (1 running)",
+            "  sweep",
+            "    ◷ @now  c1",
+            "      ▶ pr_fix  c2",
+        ]
+
+    @staticmethod
+    async def test_a_cast_that_failed_says_so_while_a_cast_it_queued_runs():
+        hub = Hub()
+        began = datetime.now(UTC) - timedelta(seconds=120)
+        hub.apply(_hello("c1", "sweep").model_copy(update={"started_at": began}))
+        hub.apply(CastGoodbye(cast_id="c1", status="error", detail="boom"))
+        hub.apply(_hello("c2", "pr_fix").model_copy(update={"enqueued_by": "c1"}))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+        assert lines == [
+            "proj (1 running, 1 failed)",
+            "  sweep",
+            "    ✗ @<1h  c1",
+            "      ▶ pr_fix  c2",
         ]
 
     @staticmethod

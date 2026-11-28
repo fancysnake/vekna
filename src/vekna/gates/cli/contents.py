@@ -74,6 +74,14 @@ class Entry:  # pylint: disable=too-many-instance-attributes
         kids = (child.total for child in self.children if child.kind == "cast")
         return sum(kids, self.counts)
 
+    # A cast that ended well is not over while a cast it queued still goes.
+    @property
+    def on_queued(self) -> bool:
+        if self.view is None or word(self.view) != "done":
+            return False
+        kids = (child.total for child in self.children if child.kind == "cast")
+        return _alive(sum(kids, Counts()))
+
 
 def project_key(view: CastView) -> str:
     return f"p:{view.hello.project}"

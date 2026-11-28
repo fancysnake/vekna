@@ -8,6 +8,7 @@ from vekna.pacts.casts import CastView, Prompt, RiteStatus, RiteView
 from vekna.wire import SHORT_ID, CastHello, allowed_answers
 
 from .cast_text import (
+    NOW,
     Word,
     ago,
     carried,
@@ -109,7 +110,7 @@ def line_text(
     elif entry.kind == "more":
         text = Text("…", "dim")
     elif view is not None:
-        text = _cast_label(view, _cast_said(entry, view, now, history=history))
+        text = _cast_label(entry, view, now=now, history=history)
         if len(entry.streak) > 1:
             text.append(f"  x{len(entry.streak)}", "dim")
     else:
@@ -129,24 +130,25 @@ def line_text(
 
 
 # A cast under the cast that queued it says its ritual, which no line above it
-# does; any other says when it began.
+# does; any other says when it began, and now while a cast it queued still goes.
 def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) -> str:
     if history:
         return _ended_said(view)
     if entry.nested:
         return view.hello.ritual
-    return ago(view, now)
+    return NOW if entry.on_queued else ago(view, now)
 
 
 def _ended_said(view: CastView) -> str:
     return f"{ended(view).astimezone():%H:%M}  {view.hello.ritual}"
 
 
-def _cast_label(view: CastView, said: str) -> Text:
+def _cast_label(entry: Entry, view: CastView, *, now: datetime, history: bool) -> Text:
+    waits = entry.on_queued and not history
     text = Text.assemble(
-        _cast_glyph(view),
+        _look(view, _CAST_LOOK["on child"]) if waits else _cast_glyph(view),
         " ",
-        (said, _ASKS if view.waiting else ""),
+        (_cast_said(entry, view, now, history=history), _ASKS if view.waiting else ""),
         (f"  {view.hello.cast_id[:SHORT_ID]}", "dim"),
     )
     if view.waiting:

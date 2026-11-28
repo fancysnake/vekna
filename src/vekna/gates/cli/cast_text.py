@@ -33,6 +33,7 @@ _WORD: dict[CastStatus, Word] = {
     "disconnected": "aborted",
 }
 # What `word` says of a live cast. An ended one with a prompt open is "waiting" too.
+NOW = "@now"
 LIVE: tuple[Word, ...] = ("running", "waiting", "on child", "recovering", "queued")
 _TALLY: tuple[Word, ...] = (*LIVE, "done", "failed", "aborted")
 
@@ -127,7 +128,7 @@ def _recovering(view: CastView) -> bool:
 def ago(view: CastView, now: datetime) -> str:
     seconds = (now - view.hello.started_at).total_seconds()
     if live(view) or seconds < _MINUTE:
-        return "@now"
+        return NOW
     for hours in _SLOTS:
         if seconds < hours * _HOUR:
             return f"@<{hours}h"

@@ -62,6 +62,9 @@ when.
   shows the split by role, with cabinet's `heal` as the example, and what one
   payload model carried by every step costs: a class for each step and a
   rebuild at each hop.
+- **A finished cast stays live in the window while a cast it queued still
+  goes**: its line shows `◷` and `@now` in place of `✓` and the slot it began
+  in. A cast that failed keeps `✗` and its slot.
 
 ### Fixed
 
