@@ -15,6 +15,7 @@ from .cast_text import (
     counted,
     elapsed,
     ended,
+    given,
     labelled,
     live,
     printable,
@@ -45,6 +46,7 @@ _RITE_LOOK: dict[RiteStatus, Text] = {
     "error": Text("✗", "red"),
     "cancelled": Text("⊘", "dim"),
 }
+_HERE = "◆"
 _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
@@ -97,7 +99,11 @@ def tally(counts: Counts) -> Text:
 
 
 # A cast line says how long ago it began, in the history view when it ended.
-def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
+# `here` is the project a ritual started from the window runs in, marked among
+# every project; none while the window shows that project alone.
+def line_text(
+    entry: Entry, now: datetime, *, history: bool = False, here: str | None = None
+) -> Text:
     view, rite = entry.view, entry.rite
     if rite is not None and view is not None:
         text = _rite_label(view, rite, now)
@@ -111,6 +117,8 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
         if entry.kind == "finished":
             text.stylize("dim")
+        if entry.kind == "project" and entry.project == here:
+            text.append(f" {_HERE}")
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))
@@ -158,6 +166,7 @@ def _rite_label(view: CastView, rite: RiteView, now: datetime) -> Text:
         _look(view, _RITE_LOOK[view.rite_status(rite)]),
         " ",
         (rite.started.name, medium),
+        (given(rite), "dim"),
         (f"  {_took(view, rite, now)}", "dim"),
     )
     if rite.error is not None:
@@ -175,13 +184,13 @@ def _flags(hello: CastHello) -> str:
 
 
 # The right page's top for a cast taken over: which cast, how to leave it, and
-# the rite whose output is under it. The cast's rites are on the left page.
+# whether any output is under it. The cast's rites are on the left page.
 def taken_head(view: CastView) -> Text:
-    rite = _shown_rite(view)
+    wrote = any(rite.deltas for rite in view.rites.values())
     return Text.assemble(
         (f" ◆ taken over · {labelled(view.hello)} ", "bold reverse"),
         (f" {LEAVES}\n", "dim"),
-        ("no output yet" if rite is None else f"{rite.started.name} · live", "dim"),
+        ("output" if wrote else "no output yet", "dim"),
     )
 
 
@@ -277,14 +286,16 @@ def _rite_head(view: CastView, rite: RiteView, now: datetime) -> Text:
         (rite.started.name, "bold"),
         f"  {view.rite_status(rite)}  {_took(view, rite, now)}",
     )
+    if rite.started.summary:
+        text.append(f"\n{printable(rite.started.summary)}")
     if rite.error is not None:
         text.append(f"\n{printable(rite.error)}", "red")
     return text
 
 
-# The right page's output: the rite under the cursor, or for a cast the latest
-# rite still talking, else the last one that said anything. Why a cast ended
-# follows it.
+# The right page's output: what the rite under the cursor and every rite under
+# it wrote, or for a cast what all its rites wrote, in the order they began.
+# Why a cast ended follows it.
 def output(entry: Entry | None) -> list[str]:
     if entry is None or entry.view is None:
         return []
@@ -293,8 +304,15 @@ def output(entry: Entry | None) -> list[str]:
 
 # The same for a cast on its own: `picked` is the rite chosen under it, if any.
 def cast_output(view: CastView, picked: RiteView | None = None) -> list[str]:
-    rite = picked or _shown_rite(view)
-    said = [] if rite is None else list(rite.deltas)
+    wrote = [rite for rite in view.rites.values() if rite.deltas]
+    if picked is not None:
+        wrote = [rite for rite in wrote if _within(view, rite, picked)]
+    said: list[str] = []
+    for rite in wrote:
+        # One rite's output needs no name over it: the line picked says it.
+        if len(wrote) > 1:
+            said.append(f"── {rite.started.name}{given(rite)}")
+        said += rite.deltas
     if picked is None and view.detail and not live(view):
         said += ["", *view.detail.splitlines()]
     return [printable(line) for line in said]
@@ -320,10 +338,5 @@ def taken_output(view: CastView, mine: set[str]) -> list[str]:
     ]
 
 
-def _shown_rite(view: CastView) -> RiteView | None:
-    rites = list(view.rites.values())
-    talking = [
-        rite for rite in rites if view.rite_status(rite) == "running" and rite.deltas
-    ]
-    said = talking or [rite for rite in rites if rite.deltas]
-    return said[-1] if said else None
+def _within(view: CastView, rite: RiteView, picked: RiteView) -> bool:
+    return rite is picked or any(above is picked for above in view.ancestors(rite))

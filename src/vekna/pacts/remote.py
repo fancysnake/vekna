@@ -63,3 +63,8 @@ class DiscordSetup:
     guild: int
     category: str
     allow: frozenset[int]
+
+
+# Read each time it is asked, so an edited config counts from the next look.
+class DiscordBook(Protocol):
+    def setup(self) -> DiscordSetup | None: ...

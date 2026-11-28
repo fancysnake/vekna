@@ -321,6 +321,8 @@ history_after = "P1D"   # the default; "PT12H", "PT30M", "PT0S" for at once
 ```
 
 A value that does not read is named in the window's note line and passed over.
+An open window reads `history_after` again every few seconds, and its note line
+says when the value changed.
 
 | Key | Does |
 | --- | --- |
@@ -335,7 +337,8 @@ A value that does not read is named in the window's note line and passed over.
 | `x` | cancel the cast under the cursor; twice, to be sure |
 | `s` | mark the failed cast under the cursor seen, or take the mark back |
 | `:` | the command line, empty |
-| `g` / `p` | every project / this one |
+| `g` / `p` | every project / the one the window opened in |
+| `enter` | among every project, show the project under the cursor alone; `c` then casts in it |
 | `q` | close the window; the daemon keeps running |
 
 `--no-tui`, or no terminal on stdin and stdout, gives the line view described
@@ -514,7 +517,9 @@ the user config unless you say otherwise.
 
 Discord needs the optional install, `pip install 'vekna[discord]'`. Without it
 the daemon notes once in `daemon.log` that Discord is off, and runs as before.
-The daemon reads `[discord]` when it starts, so run `vekna stop` after an edit.
+The daemon reads `[discord]` and the token file again every few seconds. After
+an edit it leaves Discord and connects with what the config now says. Open
+questions are posted again by the rule for a restarted daemon, below.
 
 #### Setting up the bot
 
@@ -610,7 +615,8 @@ Five limits to know:
 
 If Discord cannot be reached when a question is asked, `daemon.log` names the
 cast and the question waits for a window. If Discord refuses the token, the
-log says `Discord is off until the daemon restarts`.
+log says `Discord is off until its config changes or the daemon restarts`: put
+the right token in the file and the daemon connects again.
 
 ### Worktrees
 

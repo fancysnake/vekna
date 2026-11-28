@@ -27,6 +27,7 @@ _RITUALS = textwrap.dedent("""
 
     class Countdown(BaseModel):
         start: int
+        pace: int = 1
 
 
     @step
@@ -138,8 +139,22 @@ class TestAttachedCast:
         daemon.wait_for(lambda: daemon.only_cast().status == "ok")
         view = daemon.only_cast()
         assert view.hello.ritual == "countdown"
-        assert view.hello.components == {"start": 1}
+        assert view.hello.components == {"start": 1, "pace": 1}
         assert [rite.started.name for rite in view.rites.values()] == ["tick", "tick"]
+
+    # Every component is on the hello, so the flags are named apart: what casts
+    # the ritual again as it was cast is those, not the defaults of that day.
+    @staticmethod
+    def test_a_cast_names_the_flags_it_was_given(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, daemon: _DaemonThread
+    ):
+        (tmp_path / "rituals.py").write_text(_RITUALS)
+        monkeypatch.chdir(tmp_path)
+
+        assert main(["countdown", "--start", "1"]) == 0
+
+        daemon.wait_for(lambda: bool(daemon.hub.casts))
+        assert daemon.only_cast().hello.said == ["start"]
 
     @staticmethod
     def test_a_cast_that_fails_says_so_on_its_way_out(

@@ -11,7 +11,7 @@ from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -77,15 +77,17 @@ def _asking(hub: Hub) -> None:
 
 # The app over `hub`, keeping what it sends; branches are answered by root.
 # Every cast here began at `_WHEN`, long ago, so by default none is history.
+# `history_after` may be a list: the config then reads as its last entry.
 def _app(
     hub: Hub,
     sent: list[WireMessage],
-    history_after: timedelta = timedelta.max,
+    history_after: timedelta | list[tuple[timedelta, str]] = timedelta.max,
     *,
     title: str = "vekna",
     quiet: timedelta = timedelta(seconds=5),
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
+    said = history_after if isinstance(history_after, list) else [(history_after, "")]
 
     # The daemon's part: it keeps the mark and says it back to the window.
     async def mark(request: CastSeen) -> str | None:
@@ -97,19 +99,28 @@ def _app(
         await asyncio.sleep(0)
         return branches.get(root)
 
+    async def read() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return said[-1]
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
             project="/proj/.git",
             root="/proj",
-            history_after=history_after,
+            history_after=said[0][0],
             title=title,
             quiet=quiet,
         ),
         send=sent.append,
         mark=mark,
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=read),
     )
+
+
+# The app over `_past()`, reading its config as `said` last has it.
+def _reading(said: list[tuple[timedelta, str]]) -> VeknaApp:
+    return _app(_past(), [], said)
 
 
 def _text(app: VeknaApp, selector: str) -> str:
@@ -198,7 +209,9 @@ async def _wrapping_output() -> AsyncGenerator[tuple[Hub, VeknaApp, Pilot[None],
         yield hub, app, pilot, log
 
 
-def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
+def _rite(
+    rite_id: str, name: str, *, parent: str | None = None, summary: str | None = None
+) -> RiteStarted:
     return RiteStarted(
         cast_id="c1",
         rite_id=rite_id,
@@ -206,6 +219,7 @@ def _rite(rite_id: str, name: str, *, parent: str | None = None) -> RiteStarted:
         name=name,
         category="step" if parent is None else "medium",
         started_at=_WHEN,
+        summary=summary,
     )
 
 
@@ -428,6 +442,65 @@ class TestContents:
         assert output == ["said", " ", "boom", "trace"]
 
     @staticmethod
+    async def test_a_rite_says_what_its_call_was_given():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(_rite("r2", "shell", parent="r1", summary="gh pr checks 7"))
+        app = _app(hub, [])
+
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r2")
+            await pilot.pause(_PAINTED)
+
+            line = next(line for line in _contents(app) if "shell" in line)
+            head = _text(app, "#head")
+        assert "shell  gh pr checks 7  " in line
+        assert head.endswith("\ngh pr checks 7")
+
+    @staticmethod
+    async def test_a_step_shows_the_output_of_every_rite_under_it():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "check"))
+        hub.apply(_rite("r2", "shell", parent="r1", summary="ls"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="one"))
+        hub.apply(_rite("r3", "shell", parent="r1"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r3", delta="two"))
+        hub.apply(_rite("r4", "other"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r4", delta="elsewhere"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("space")
+            await pilot.pause(_PAINTED)
+            _to(app, "t:c1:r1")
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["── shell  ls", "one", "── shell", "two"]
+
+    @staticmethod
+    async def test_a_cast_shows_the_output_of_every_rite():
+        hub = Hub()
+        hub.apply(_hello("c1", "ci_watch"))
+        hub.apply(_rite("r1", "first"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one"))
+        hub.apply(_rite("r2", "second"))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r2", delta="two"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "c:c1")
+            await pilot.pause(_PAINTED)
+
+            output = list(app.query_one("#log", Log).lines)
+        assert output == ["── first", "one", "── second", "two"]
+
+    @staticmethod
     async def test_an_empty_delta_shows_as_a_blank_line():
         hub = Hub()
         hub.apply(_hello("c1", "ci_watch"))
@@ -578,7 +651,7 @@ class TestContents:
             home = (_text(app, "#scope"), _contents(app)[::3])
         assert every == (
             "2 running  (all projects)",
-            ["other (1 running)", "proj (1 running)"],
+            ["other (1 running)", "proj ◆ (1 running)"],
         )
         assert home == ("1 running  (proj)", ["proj (1 running)"])
 
@@ -1034,6 +1107,10 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         await asyncio.sleep(0)
         return None
 
+    async def history_after() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return timedelta.max, ""
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
@@ -1041,7 +1118,7 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         ),
         send=lambda _: None,
         mark=mark,
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=history_after),
     )
 
 
@@ -1120,8 +1197,10 @@ class TestFitting:
         ]
 
     @staticmethod
-    @pytest.mark.parametrize("key", ["g", "p"])
-    async def test_a_change_of_scope_fits_the_tree_again(key: str):
+    @pytest.mark.parametrize(
+        ("key", "project"), [("g", "proj ◆ (1 running)"), ("p", "proj (1 running)")]
+    )
+    async def test_a_change_of_scope_fits_the_tree_again(key: str, project: str):
         app = _fitting()
 
         async with app.run_test(size=(100, 9)) as pilot:
@@ -1135,7 +1214,7 @@ class TestFitting:
             lines = _shape(app)
         assert folded == ["▸ proj (1 running)"]
         assert lines == [
-            "proj (1 running)",
+            project,
             "ci_watch",
             "▶ @now",
             "✓ watch",
@@ -1154,7 +1233,7 @@ class TestFitting:
 
             lines = _shape(app)
         assert lines == [
-            "proj (1 running)",
+            "proj ◆ (1 running)",
             "ci_watch",
             "▶ @now",
             "✓ watch",
@@ -1215,6 +1294,49 @@ class TestHistory:
         assert "H history (2)" in hint
 
     @staticmethod
+    async def test_an_edited_history_after_counts_in_the_open_window(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            unread = (_text(app, "#hint"), _text(app, "#note"))
+            said.append((timedelta(0), ""))
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
+        assert "H history (" not in unread[0]
+        assert not unread[1]
+        assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
+        assert "H history (2)" in hint
+        assert note == "a cast now moves to history 0s after it ends"
+
+    @staticmethod
+    async def test_a_config_that_stops_reading_is_said_once(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            said.append((timedelta.max, "config.toml: [window] ignored"))
+            await pilot.pause(_PAINTED)
+            note = _text(app, "#note")
+            app.say("")
+            await pilot.pause(_PAINTED)
+
+            later = _text(app, "#note")
+        assert note == "config.toml: [window] ignored"
+        assert not later
+
+    @staticmethod
     async def test_h_shows_the_ended_casts_by_day_newest_first_and_goes_back():
         app = _app(_past(), [], history_after=timedelta(0))
 
@@ -1243,9 +1365,9 @@ class TestHistory:
         app = _app(_past(), [], history_after=timedelta(hours=1000000))
 
         async with app.run_test() as pilot:
+            await pilot.press("g")
             await pilot.pause(_PAINTED)
             tree = _contents(app)
-            await pilot.press("g")
             await pilot.press("H")
             await pilot.pause(_PAINTED)
 
@@ -1510,7 +1632,7 @@ class TestWaiting:
             await pilot.pause(_PAINTED)
             pointer = _text(app, "#ask")
             await pilot.press("w")
-            await pilot.pause(_PAINTED)
+            await _eventually(pilot, lambda: _text(app, "#ask").startswith("⏸ pr_fix "))
 
             ask = _text(app, "#ask")
         assert pointer == "⏸ 1 cast waits on you · w goes to it"
@@ -1879,7 +2001,7 @@ class TestTakingOver:
             left = len(_contents(app))
         assert folded == 1
         assert rites == ["fetch", "fix"]
-        assert head == " ◆ taken over · pr_fix c1  esc leaves\nfix · live"
+        assert head == " ◆ taken over · pr_fix c1  esc leaves\noutput"
         assert said == [
             "editing",
             "? push?",
@@ -1893,7 +2015,7 @@ class TestTakingOver:
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
-        app = _app(hub, sent, quiet=timedelta(seconds=1))
+        app = _app(hub, sent, quiet=timedelta(seconds=3))
 
         async with app.run_test() as pilot:
             tree: Tree[str] = app.query_one("#contents", Tree)
@@ -2564,3 +2686,109 @@ class TestSeen:
 
         assert note == "only a failed cast can be marked seen"
         assert not hub.casts["c1"].seen
+
+
+@pytest.mark.asyncio
+class TestScope:
+    @staticmethod
+    async def test_enter_on_a_project_shows_it_alone_and_casts_in_its_checkout():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        hub.apply(
+            _hello("c2", "ci_watch", root="/trees/1").model_copy(
+                update={"project": "/other/.git"}
+            )
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
+            _to(app, "p:/other/.git")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            alone = (_text(app, "#scope"), _contents(app)[::3], _text(app, "#note"))
+            await pilot.press("c", *"nap", "enter")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            every = _contents(app)[::3]
+            await pilot.press("p")
+            await pilot.pause(_PAINTED)
+
+            home = (_text(app, "#scope"), _text(app, "#note"))
+        assert "g/p scope · enter show alone · q quit" in hint
+        assert not note
+        assert alone == (
+            "1 running  (other)",
+            ["other (1 running)"],
+            "on other · c casts in /other",
+        )
+        assert sent == [
+            CastRequested(project_root="/other", ritual="nap", components={})
+        ]
+        assert every == ["other ◆ (1 running)", "proj (1 running)"]
+        assert home == ("1 running  (proj)", "on proj · c casts in /proj")
+
+    @staticmethod
+    async def test_a_project_outside_git_casts_in_its_own_directory():
+        hub = Hub()
+        hub.apply(
+            _hello("c1", "nap", root="/notes").model_copy(update={"project": "/notes"})
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/notes")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            await pilot.press("c", *"nap", "enter")
+
+        assert sent == [
+            CastRequested(project_root="/notes", ritual="nap", components={})
+        ]
+
+    @staticmethod
+    async def test_the_this_project_command_goes_back_home():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g", ":", "p", "enter")
+            await pilot.pause(_PAINTED)
+
+            home = (_text(app, "#scope"), _text(app, "#note"))
+            hint = _text(app, "#hint")
+        assert home == ("1 running  (proj)", "")
+        assert "enter show alone" not in hint
+
+    @staticmethod
+    async def test_enter_on_a_line_that_is_no_project_changes_no_scope():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/proj/.git")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            own = _text(app, "#scope")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            _to(app, "c:c1")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+
+            on_a_cast = _text(app, "#scope")
+        assert own == "1 running  (proj)"
+        assert on_a_cast == "1 running  (all projects)"

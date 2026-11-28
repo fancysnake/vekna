@@ -1,4 +1,5 @@
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePath
@@ -58,7 +59,14 @@ DELTA_LINES = 200
 class RiteView:
     started: RiteStarted
     finished: RiteFinished | None = None
-    deltas: deque[str] = field(default_factory=lambda: deque(maxlen=DELTA_LINES))
+    # Each line of output, after whether it was kept off the terminal.
+    lines: deque[tuple[bool, str]] = field(
+        default_factory=lambda: deque(maxlen=DELTA_LINES)
+    )
+
+    @property
+    def deltas(self) -> list[str]:
+        return [line for _, line in self.lines]
 
     @property
     def error(self) -> str | None:
@@ -119,6 +127,17 @@ class CastView:
             ]
         return max(stamps)
 
+    # Every rite above this one, nearest first. The chain of parents is what a
+    # peer said it was and nothing checks it for loops, so it is walked no
+    # further than the cast has rites.
+    def ancestors(self, rite: RiteView) -> Iterator[RiteView]:
+        parent = rite.started.parent_id
+        for _ in self.rites:
+            if parent is None or (found := self.rites.get(parent)) is None:
+                return
+            yield found
+            parent = found.started.parent_id
+
     # A rite its cast ended inside, without saying how it did, was cancelled.
     def rite_status(self, rite: RiteView) -> RiteStatus:
         if rite.finished is not None:
@@ -133,11 +152,18 @@ class CastView:
         return None if self.rite_status(rite) == "running" else self.last_seen
 
 
+# The directory a cast started for a project runs in: the main checkout, never
+# the tree some cast of it ran in, which may be a pooled worktree. A bare
+# repository and a directory outside git have only themselves.
+def checkout(project: str) -> str:
+    where = PurePath(project)
+    return str(where.parent if where.name == ".git" else where)
+
+
 # A git common dir is `<repo>/.git` for a checkout and `<repo>.git` bare; the
 # repository's name is what an operator calls it either way.
 def named(project: str) -> str:
-    where = PurePath(project)
-    return where.parent.name if where.name == ".git" else where.name
+    return PurePath(checkout(project)).name
 
 
 # What a surface reads the daemon for. Ordered, because the number an operator

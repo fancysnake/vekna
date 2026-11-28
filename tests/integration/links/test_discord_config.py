@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from vekna.links.discord_config import DISCORD_KEYS, discord_problems, discord_setup
+from vekna.links.discord_config import DISCORD_KEYS, ConfigDiscord, discord_problems
 from vekna.pacts.remote import DiscordSetup
 
 _GUILD = 100
@@ -30,7 +30,7 @@ class TestDiscordSetup:
     ):
         config.write_text("[circle]\nprocesses = 2\n", encoding="utf-8")
 
-        assert discord_setup() is None
+        assert ConfigDiscord().setup() is None
         assert discord_problems() == []
         assert not caplog.records
 
@@ -41,7 +41,7 @@ class TestDiscordSetup:
         config.write_text(_TABLE, encoding="utf-8")
         config.with_name("discord-token").write_text("s3cret\n", encoding="utf-8")
 
-        assert discord_setup() == DiscordSetup(
+        assert ConfigDiscord().setup() == DiscordSetup(
             token="s3cret", guild=_GUILD, category="vekna", allow=frozenset({_OPERATOR})
         )
         assert discord_problems() == []
@@ -57,7 +57,7 @@ class TestDiscordSetup:
             _TABLE + 'category = "casts"\ntoken_file = "~/bot"\n', encoding="utf-8"
         )
 
-        assert discord_setup() == DiscordSetup(
+        assert ConfigDiscord().setup() == DiscordSetup(
             token="t0ken", guild=_GUILD, category="casts", allow=frozenset({_OPERATOR})
         )
 
@@ -72,7 +72,7 @@ class TestDiscordSetup:
         for content in (None, b"\xff\xfe", b"\n"):
             if content is not None:
                 token.write_bytes(content)
-            assert discord_setup() is None
+            assert ConfigDiscord().setup() is None
             audited += discord_problems()
 
         assert (
@@ -106,12 +106,33 @@ class TestDiscordSetup:
         config.write_text(table, encoding="utf-8")
         config.with_name("discord-token").write_text("s3cret", encoding="utf-8")
 
-        assert discord_setup() is None
+        assert ConfigDiscord().setup() is None
         [said] = discord_problems()
         assert said.startswith(f"{config}: ")
         assert problem in said
         assert said.endswith("— [discord] ignored")
         assert _warned(caplog) == [said]
+
+    @staticmethod
+    def test_a_problem_is_said_when_it_appears_not_on_every_look(
+        config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        config.write_text(_TABLE, encoding="utf-8")
+        token = config.with_name("discord-token")
+        book = ConfigDiscord()
+
+        assert book.setup() is None
+        assert book.setup() is None
+        token.write_text("s3cret", encoding="utf-8")
+        assert book.setup() is not None
+        token.unlink()
+        assert book.setup() is None
+
+        missing = (
+            "Discord is off: its token could not be read:"
+            f" [Errno 2] No such file or directory: '{token}'"
+        )
+        assert _warned(caplog) == [missing, missing]
 
     @staticmethod
     def test_a_projects_own_table_is_not_read(
@@ -121,7 +142,7 @@ class TestDiscordSetup:
         (tmp_path / ".vekna.toml").write_text(_TABLE, encoding="utf-8")
         monkeypatch.chdir(tmp_path)
 
-        assert discord_setup() is None
+        assert ConfigDiscord().setup() is None
         assert discord_problems() == []
 
     @staticmethod

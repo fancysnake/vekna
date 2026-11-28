@@ -79,6 +79,9 @@ class RiteBegan:
 class RiteStreamed:
     rite_id: str
     delta: str
+    # Kept for a surface that shows a rite's output on request, and off the
+    # terminal the cast prints to: what `shell(stream=False)` wrote.
+    quiet: bool = False
 
 
 # `result` is JSON-shaped because the daemon persists the grimoire to a durable
@@ -183,8 +186,8 @@ class CodingFocusProtocol(Protocol):
 # The shell medium's boundary, written the same way coding's is and for the same
 # reason: the lexicon may not import a folio, so a Focus that stands where bash
 # stands needs its call and its reply spelled here. `stream` is not on the call —
-# whether output is echoed is the medium's business, and it says so by passing
-# `on_line` or not.
+# whether output reaches the terminal is the medium's business, and it says so
+# by what it passes as `on_line`.
 @dataclass(frozen=True, kw_only=True)
 class ShellCall:
     command: str

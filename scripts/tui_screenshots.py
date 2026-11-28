@@ -15,7 +15,7 @@ from textual.pilot import Pilot
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     VERSION,
@@ -231,6 +231,10 @@ def _window() -> VeknaApp:
         await asyncio.sleep(0)
         return _BRANCHES.get(root)
 
+    async def history_after() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return timedelta(days=1), ""
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
@@ -242,7 +246,7 @@ def _window() -> VeknaApp:
         ),
         send=sent.append,
         mark=mark,
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=history_after),
     )
 
 

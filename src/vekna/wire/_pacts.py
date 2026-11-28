@@ -30,6 +30,10 @@ class CastHello(BaseModel):
     project: str = Field(validation_alias=AliasChoices("project", "project_root"))
     ritual: str
     components: dict[str, JsonValue]
+    # The components the caster named. A started cast records every component,
+    # its defaults too, so this is what tells a flag from a default. `None` from
+    # a cast that does not say: every key of `components` then counts as named.
+    said: list[str] | None = None
     started_at: datetime
     resumed_from: str | None = None
     # Spawned by the daemon, so its prompts are answered over the wire. A cast
@@ -320,6 +324,9 @@ class RiteStarted(BaseModel):
     name: str
     category: Literal["step", "medium"]
     started_at: datetime
+    # What the call was given, cut to one line: a shell's command, an agent's
+    # prompt. None from a step, and from a cast older than the field.
+    summary: str | None = None
 
 
 class RiteDelta(BaseModel):
@@ -327,6 +334,8 @@ class RiteDelta(BaseModel):
     cast_id: str
     rite_id: str
     delta: str
+    # Output for a window, not for the terminal that follows the cast.
+    quiet: bool = False
 
 
 # "error" raised; "reported" came back and said it had failed, a shell exiting
