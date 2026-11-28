@@ -128,6 +128,21 @@ def _queued_greeting(
     journal.record(CastQueued(cast_id="q1"))
 
 
+# As a started cast records it: every component, and the ones it was given.
+def _started_greeting(project: Path, runs: Path, *, said: list[str] | None) -> None:
+    Journal(runs).record(
+        CastHello(
+            cast_id="c7",
+            project_root=str(project),
+            project=str(project),
+            ritual="named",
+            components={"name": "q", "word": "hello"},
+            said=said,
+            started_at=_WHEN,
+        )
+    )
+
+
 def _rite(
     cast_id: str, *, rite_id: str, name: str, category: Literal["step", "medium"]
 ) -> RiteStarted:
@@ -322,6 +337,26 @@ class TestResume:
 
     # Carried on without the flag, an unattended cast is unattended still:
     # what its steps skipped the first time they skip again.
+    # A started cast records every component, defaults too, and names the ones
+    # it was given: carried on, it still knows a default from a flag.
+    @staticmethod
+    def test_a_resumed_cast_keeps_the_flags_it_was_given(project: Path, tmp_path: Path):
+        _started_greeting(project, tmp_path / "runs", said=["name"])
+
+        assert main(["--resume", "c7"]) == 0
+
+        assert (project / "named.log").read_text() == "name"
+
+    @staticmethod
+    def test_a_cast_recorded_before_flags_were_named_resumes_with_every_key_set(
+        project: Path, tmp_path: Path
+    ):
+        _started_greeting(project, tmp_path / "runs", said=None)
+
+        assert main(["--resume", "c7"]) == 0
+
+        assert (project / "named.log").read_text() == "name,word"
+
     @staticmethod
     @pytest.mark.parametrize(
         ("recorded", "typed", "said"),

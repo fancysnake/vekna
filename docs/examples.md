@@ -85,9 +85,10 @@ pull request from a fork.
 ## Writing your own
 
 Start from [Rituals](rituals.md), and keep one file until it earns a package.
-When it does, split by ritual before splitting by kind — `triage.py` and
-`review.py`, not `models.py` and `prompts.py` — because a ritual is the unit
-anyone reads.
+When it does, split by ritual — `triage.py` and `review.py` — because a ritual
+is the unit anyone reads. Once a ritual outgrows its own file, or rituals share
+prompts, commands or state,
+[split by role](#when-one-ritual-outgrows-its-file).
 
 Then [test it](testing.md). A ritual with no test is a program whose only
 check is running it against a live agent.
@@ -105,3 +106,75 @@ It carries the shipped surface — every decorator, every medium argument, and
 the things that are planned but not yet bound, quarantined so the agent does
 not write against them. An agent guessing at this API writes something that
 reads correctly and does not run.
+
+### When one ritual outgrows its file
+
+Split the package by role, and let its rituals share the role modules.
+cabinet's
+[`heal`](https://github.com/fancysnake/cabinet/blob/v7.3.0/src/cabinet/rituals/heal_mine.py)
+rituals are the worked case:
+
+| role | what it holds |
+| --- | --- |
+| entry | the `@ritual` functions, one file per ritual |
+| steps | the `@step` bodies, one module per task: `merge`, `ci`, `answer`, `review` |
+| prompts | every prompt a step sends, for these rituals and the others |
+| commands | every git command a step runs |
+| state | the components and payload models |
+
+A step module then reads as routing: which payload comes in, what the step
+checks, where it goes next. The wording of a prompt and the flags of a command
+change without the graph changing, so they change in a file of their own.
+Split the steps again by task once they outgrow one module; the graph still
+reads top to bottom inside each.
+
+### What a payload shared by every step costs
+
+Prefer one payload model per shape: a field two steps need travels in each
+step's own model. Sometimes every step needs the same state. `heal` owes its
+report however the cast ends, so every step carries the run. One model threaded
+through every step has two costs, and both are code you write by hand.
+
+**A class per step.** A payload class belongs to one step, so the shared model
+gets one empty subclass per step.
+
+**A rebuild per hop.** Each hop builds the next step's class from the fields of
+the last. Pass them as keyword arguments:
+
+```python
+class Run(BaseModel):
+    queue: list[int] = []
+    stopped: str = ""
+
+
+class Survey(Run):
+    pass
+
+
+class Report(Run):
+    pass
+
+
+@step
+async def survey(state: Survey) -> Report:
+    return Report(queue=state.queue, stopped="the forge refused the token")
+```
+
+A type checker rejects a misspelled keyword. The price is that every hop lists
+every field it carries, and a field you leave out silently takes its default.
+
+For a model with many fields, list them once instead, in a copy method on the
+shared model: one optional keyword argument per field a step may change, passed
+on to `model_copy`. Do not call `model_copy(update=...)` from a step: it takes
+an untyped mapping, so a misspelled field passes the type checker and pydantic
+alike. The copy keeps its class, so a second method re-tags it as the next
+step's with `kind.model_validate_json(self.model_dump_json())`. The trip through
+JSON returns exactly `kind`, and avoids the `dict[str, Any]` of `model_dump()`,
+which mypy's `disallow_any_expr` rejects.
+
+Each field appears three times in such a copy method, and cabinet's two shared
+models cost about forty such lines between them. vekna ships no helper for this:
+no generic copy method on a base class gets a typed signature per field.
+Whether a step could instead be routed to by name, with no class of its own, is
+undecided: see [#221](https://github.com/fancysnake/vekna/issues/221). Pay
+these costs only when the state really is shared.
