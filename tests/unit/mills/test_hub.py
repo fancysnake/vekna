@@ -501,10 +501,47 @@ class TestLateSurface:
             _hello(),
             GrimoireBegin(cast_id="c1"),
             _started(),
-            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo"),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo\n"),
             failed,
             GrimoireEnd(cast_id="c1"),
         ]
+
+    @staticmethod
+    def test_quiet_output_replays_quiet():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="loud"))
+        surface = _Surface()
+
+        hub.attach_surface(surface)
+
+        assert surface.sent == [
+            _hello(),
+            GrimoireBegin(cast_id="c1"),
+            _started(),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="one\ntwo\n", quiet=True),
+            RiteDelta(cast_id="c1", rite_id="r1", delta="loud\n"),
+            GrimoireEnd(cast_id="c1"),
+        ]
+
+    @staticmethod
+    def test_a_blank_line_ending_a_run_survives_the_replay():
+        hub = Hub()
+        hub.apply(_hello())
+        hub.apply(_started())
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="a", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="", quiet=True))
+        hub.apply(RiteDelta(cast_id="c1", rite_id="r1", delta="note"))
+        surface = _Surface()
+        hub.attach_surface(surface)
+
+        peer = Hub()
+        for message in surface.sent:
+            peer.apply(message)
+
+        assert list(peer.casts["c1"].rites["r1"].deltas) == ["a", "", "note"]
 
     @staticmethod
     def test_a_rite_that_has_said_nothing_replays_no_output():
