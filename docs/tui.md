@@ -45,8 +45,8 @@ A cast is one line. The glyph says its state:
 | `⚠` | lost its connection; `vekna cast --continue` carries it on |
 
 A running cast shows `…` and the rite it is on now. A cast shows `@now` while
-it lives. Once it ended, it shows the slot it began in: `@<1h`, `@<3h`, `@<6h`,
-`@<12h`, `@<1d`, then `@2d ago`.
+it lives. Once it ended, it shows the time it began: `14:32`, or `Nov 27 14:32`
+when that is a day ago or more.
 
 A ritual line holds the casts that still run or ask. A cast that ended moves
 under the `finished` line of its project, which lists every ended cast by
@@ -54,7 +54,8 @@ ritual. A cast that another cast queued hangs under that cast and says its
 ritual. A cast line says no argument: the right page has them.
 
 A cast that ended like the cast before it is not drawn. It has the same ritual
-and arguments, it began in the same slot, and its status is the same, as are
+and arguments, it began in the same slot of hours (under 1, 3, 6, 12 or 24, or
+the same count of days), and its status is the same, as are
 the statuses of the casts it queued. The newest cast of the streak stands for
 it and says how long it is: `x8`. A slot is one line unless a cast in it
 failed.

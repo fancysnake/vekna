@@ -53,9 +53,9 @@ def _outcome(view: CastView, kids: Kids) -> tuple[str, frozenset[str]] | None:
 
 
 # The casts of one ritual with one set of arguments, cut where a cast ended
-# differently from the one before it, and where it began in another slot of `ago`, so
-# the line of a streak says when every cast of it began: newest streak first,
-# and in a streak the newest cast first. A cast still running is a streak of
+# differently from the one before it, and where it began in another slot of `ago`:
+# newest streak first, and in a streak the newest cast first, whose time the
+# line of the streak says. A cast still running is a streak of
 # its own.
 def streaks(
     views: Sequence[CastView], kids: Kids, *, now: datetime

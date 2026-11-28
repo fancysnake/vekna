@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from vekna.gates.cli.cast_text import ago, printable
+from vekna.gates.cli.cast_text import ago, began, printable
 from vekna.pacts.casts import CastView
 from vekna.wire import CastHello, CastStatus
 
@@ -42,6 +42,26 @@ class TestAgo:
     @staticmethod
     def test_a_live_cast_is_now_however_long_it_has_run():
         assert ago(_view("running"), _WHEN + timedelta(days=3)) == "@now"
+
+
+class TestBegan:
+    @staticmethod
+    @pytest.mark.parametrize(
+        ("since", "pattern"),
+        [
+            (timedelta(seconds=30), "@now"),
+            (timedelta(minutes=5), "%H:%M"),
+            (timedelta(hours=23, minutes=59), "%H:%M"),
+            (timedelta(days=1), "%b %d %H:%M"),
+            (timedelta(days=40), "%b %d %H:%M"),
+        ],
+    )
+    def test_an_ended_cast_says_the_clock_time_it_began(since: timedelta, pattern: str):
+        assert began(_view("ok"), _WHEN + since) == _WHEN.astimezone().strftime(pattern)
+
+    @staticmethod
+    def test_a_live_cast_is_now_however_long_it_has_run():
+        assert began(_view("running"), _WHEN + timedelta(days=3)) == "@now"
 
 
 class TestPrintable:

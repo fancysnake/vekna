@@ -121,9 +121,19 @@ def _recovering(view: CastView) -> bool:
     return bool(finished) and view.rite_status(finished[-1]) == "error"
 
 
-# Which cast of a ritual this is, by when it began: a live one is happening now
-# whenever it began, and one that ended is placed in the slot it began in, the
-# hours it is younger than, since a list of casts is read by slot, not minute.
+# When a cast began, as its line says it: a live one is happening now whenever
+# it began, and one that ended says the clock time, which under a day names one
+# moment and past it needs the date.
+def began(view: CastView, now: datetime) -> str:
+    seconds = (now - view.hello.started_at).total_seconds()
+    if live(view) or seconds < _MINUTE:
+        return "@now"
+    at = view.hello.started_at.astimezone()
+    return f"{at:%H:%M}" if seconds < _DAY else f"{at:%b %d %H:%M}"
+
+
+# The slot a cast began in, the hours it is younger than: where a streak of
+# casts is cut, so one line never stands for casts hours apart.
 def ago(view: CastView, now: datetime) -> str:
     seconds = (now - view.hello.started_at).total_seconds()
     if live(view) or seconds < _MINUTE:
