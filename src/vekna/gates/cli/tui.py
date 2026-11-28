@@ -46,6 +46,8 @@ _COALESCE_SECONDS = 0.1
 _GUIDE_DEPTH = 2
 _TICK_SECONDS = 1.0
 _BRANCH_SECONDS = 3.0
+# How often the window reads its config again, so an edit counts within this.
+_CONFIG_SECONDS = 5.0
 # shortcut: a replay is taken as over when no cast came or ended for this
 # long, since the wire has no message that ends one; add one when it does.
 _SETTLE_SECONDS = 0.3
@@ -105,9 +107,19 @@ class _ToDaemon:
     mark: Callable[[CastSeen], Awaitable[str | None]]
 
 
+# What the window reads that the daemon does not send it: the branch a tree is
+# on, and its own config as it reads now, which is how long after it ended a
+# cast moves to the history view and what would not read.
+@dataclass(frozen=True)
+class Outside:
+    branch_of: Callable[[str], Awaitable[str | None]]
+    history_after: Callable[[], Awaitable[tuple[timedelta, str]]]
+
+
 # What a window is opened with: its project, the directory a ritual started
 # from it runs in while it is on that project, how long after it ended a cast
-# moves to the history view, the title it shows: the versions of this vekna and
+# moves to the history view, what its config said that would not read, the
+# title it shows: the versions of this vekna and
 # of its daemon, and how long a cast taken over may ask nothing after an answer
 # before it is left, and whether a tree is folded to fit the window's height:
 # the first it draws, and the one it draws when it turns to every project or
@@ -117,6 +129,7 @@ class Opened:
     project: str
     root: str
     history_after: timedelta
+    ignored: str = ""
     title: str = "vekna"
     quiet: timedelta = timedelta(seconds=5)
     fit: bool = False
@@ -214,6 +227,7 @@ def _kept(
 @dataclass
 class _View:
     reading: Reading
+    ignored: str = ""
     dirty: bool = True
     arming: str | None = None
     branches: dict[str, str | None] = field(default_factory=dict)
@@ -318,14 +332,16 @@ class VeknaApp(App[None]):
         opened: Opened,
         send: Callable[[WireMessage], None],
         mark: Callable[[CastSeen], Awaitable[str | None]],
-        branch_of: Callable[[str], Awaitable[str | None]],
+        outside: Outside,
     ) -> None:
         super().__init__()
         self._casts = casts
         self._scope = _Scope(opened=opened)
         self._daemon = _ToDaemon(send=send, mark=mark)
-        self._branch_of = branch_of
-        self._view = _View(reading=Reading(history_after=opened.history_after))
+        self._outside = outside
+        self._view = _View(
+            reading=Reading(history_after=opened.history_after), ignored=opened.ignored
+        )
         self._w = _Widgets()
 
     @override
@@ -355,6 +371,7 @@ class VeknaApp(App[None]):
         self.set_interval(_COALESCE_SECONDS, self._paced)
         self.set_interval(_TICK_SECONDS, self.changed)
         self.set_interval(_BRANCH_SECONDS, self._look_up_branches)
+        self.set_interval(_CONFIG_SECONDS, self._read_config)
         self.call_later(self._look_up_branches)
 
     # The keys that move the contents do nothing during a takeover.
@@ -716,9 +733,23 @@ class VeknaApp(App[None]):
             for view in self._listed()
             if live(view) or view.hello.project_root not in self._view.branches
         }
-        found = await asyncio.gather(*(self._branch_of(root) for root in roots))
+        found = await asyncio.gather(*(self._outside.branch_of(root) for root in roots))
         self._view.branches.update(zip(roots, found, strict=True))
         self.changed()
+
+    # What `[window]` says now, so an edit counts in a window that is open. A
+    # config that stops reading is said when it does, not on every look.
+    async def _read_config(self) -> None:
+        after, ignored = await self._outside.history_after()
+        notes = [ignored] if ignored and ignored != self._view.ignored else []
+        self._view.ignored = ignored
+        if after != self._view.reading.history_after:
+            self._view.reading.history_after = after
+            moved = clock(after.total_seconds())
+            notes.append(f"a cast now moves to history {moved} after it ends")
+            self.changed()
+        if notes:
+            self.say(" · ".join(notes))
 
     def _paced(self) -> None:
         self._hold()

@@ -11,7 +11,7 @@ from textual.pilot import Pilot
 from textual.widgets import Input, Log, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     CastCancelRequested,
@@ -97,6 +97,10 @@ def _app(
         await asyncio.sleep(0)
         return branches.get(root)
 
+    async def read() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return history_after, ""
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
@@ -108,7 +112,30 @@ def _app(
         ),
         send=sent.append,
         mark=mark,
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=read),
+    )
+
+
+# The app over `_past()`, reading its config as `said` last has it.
+def _reading(said: list[tuple[timedelta, str]]) -> VeknaApp:
+    async def mark(_: CastSeen) -> str | None:
+        await asyncio.sleep(0)
+        return None
+
+    async def branch_of(_: str) -> str | None:
+        await asyncio.sleep(0)
+        return "main"
+
+    async def read() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return said[-1]
+
+    return VeknaApp(
+        casts=_past(),
+        opened=Opened(project="/proj/.git", root="/proj", history_after=said[0][0]),
+        send=lambda _: None,
+        mark=mark,
+        outside=Outside(branch_of=branch_of, history_after=read),
     )
 
 
@@ -1034,6 +1061,10 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         await asyncio.sleep(0)
         return None
 
+    async def history_after() -> tuple[timedelta, str]:
+        await asyncio.sleep(0)
+        return timedelta.max, ""
+
     return VeknaApp(
         casts=hub,
         opened=Opened(
@@ -1041,7 +1072,7 @@ def _fitting(hub: Hub | None = None) -> VeknaApp:
         ),
         send=lambda _: None,
         mark=mark,
-        branch_of=branch_of,
+        outside=Outside(branch_of=branch_of, history_after=history_after),
     )
 
 
@@ -1215,6 +1246,49 @@ class TestHistory:
             hint = _text(app, "#hint")
         assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
         assert "H history (2)" in hint
+
+    @staticmethod
+    async def test_an_edited_history_after_counts_in_the_open_window(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            unread = (_text(app, "#hint"), _text(app, "#note"))
+            said.append((timedelta(0), ""))
+            await pilot.pause(_PAINTED)
+
+            lines = _contents(app)
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
+        assert "H history (" not in unread[0]
+        assert not unread[1]
+        assert lines == ["proj (1 running)", "  ci_watch", "    ▶ @now  c3"]
+        assert "H history (2)" in hint
+        assert note == "a cast now moves to history 0s after it ends"
+
+    @staticmethod
+    async def test_a_config_that_stops_reading_is_said_once(
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("vekna.gates.cli.tui._CONFIG_SECONDS", 0.01)
+        said = [(timedelta.max, "")]
+        app = _reading(said)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            said.append((timedelta.max, "config.toml: [window] ignored"))
+            await pilot.pause(_PAINTED)
+            note = _text(app, "#note")
+            app.say("")
+            await pilot.pause(_PAINTED)
+
+            later = _text(app, "#note")
+        assert note == "config.toml: [window] ignored"
+        assert not later
 
     @staticmethod
     async def test_h_shows_the_ended_casts_by_day_newest_first_and_goes_back():

@@ -13,6 +13,11 @@ when.
 
 ### Added
 
+- **Config edits count while vekna runs**: the daemon reads `[discord]` and
+  its token file again every few seconds and reconnects when they change, so
+  `vekna stop` after an edit is no longer needed. An open window reads
+  `[window] history_after` the same way. `[circle]` and `[vigil]` already were
+  read on each use.
 - **Enter on a project in the window** shows that project alone, from the
   every-project view of `g`. `c` then casts in the main checkout of that
   project, or in the directory the window was opened in when it is the project

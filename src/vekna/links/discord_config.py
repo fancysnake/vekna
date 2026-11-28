@@ -30,11 +30,18 @@ class _File(BaseModel):
 # say where its casts' questions go, or who may answer them. The token is in a
 # file because the daemon is started by whichever `vekna` runs first, with
 # that shell's environment.
-def discord_setup() -> DiscordSetup | None:
-    setup, problems = _read()
-    for problem in problems:
-        _log.warning("%s", problem)
-    return setup
+class ConfigDiscord:
+    def __init__(self) -> None:
+        # The daemon asks every few seconds: a problem is logged when it
+        # appears, not on every look.
+        self._said: frozenset[str] = frozenset()
+
+    def setup(self) -> DiscordSetup | None:
+        setup, problems = _read()
+        for problem in sorted(frozenset(problems) - self._said):
+            _log.warning("%s", problem)
+        self._said = frozenset(problems)
+        return setup
 
 
 # Every key is the machine's: only the user's top-level `[discord]` is read.
