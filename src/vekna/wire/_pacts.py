@@ -31,8 +31,8 @@ class CastHello(BaseModel):
     ritual: str
     components: dict[str, JsonValue]
     # The components the caster named. A started cast records every component,
-    # its defaults too, so this is what tells a flag from a default. `None` from
-    # a cast that does not say: every key of `components` then counts as named.
+    # its defaults too, so this is what tells a flag from a default. Read it
+    # through `given`.
     said: list[str] | None = None
     started_at: datetime
     resumed_from: str | None = None
@@ -54,6 +54,11 @@ class CastHello(BaseModel):
     # The process saying it, which is what the daemon signals when a cancel
     # asked over the wire is not acted on.
     pid: int | None = None
+
+    # A cast that does not say `said` named every key of `components`.
+    @property
+    def given(self) -> list[str]:
+        return list(self.components) if self.said is None else self.said
 
 
 # `disconnected` is the daemon's own word for a cast whose socket closed without

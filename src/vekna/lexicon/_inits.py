@@ -519,6 +519,7 @@ def _recorded_components(
     cast_id: str,
     ritual: Ritual,
     recorded: Mapping[str, JsonValue],
+    given: Iterable[str],
     defaults: Mapping[str, Default] | None = None,
 ) -> BaseModel:
     unfit = f"cast {cast_id!r}: its recorded components do not fit {ritual.name}"
@@ -529,7 +530,7 @@ def _recorded_components(
     values = {key: default.value for key, default in (defaults or {}).items()}
     try:
         return said_only(
-            ritual.components.model_validate(values | dict(recorded)), recorded
+            ritual.components.model_validate(values | dict(recorded)), given
         )
     except ValidationError as error:
         msg = f"{unfit} — {explained(error)}"
@@ -558,6 +559,7 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
                 cast_id=cast_id,
                 ritual=the_ritual,
                 recorded=hello.components,
+                given=hello.given,
                 defaults=library.defaults.of(the_ritual),
             ),
             refusing,
@@ -571,10 +573,8 @@ def _resume(cast_id: str, *, unattended: bool) -> _Plan:
     # so they are validated again against the same model rather than
     # re-derived into flags and parsed back out.
     components = _recorded_components(
-        cast_id=cast_id, ritual=the_ritual, recorded=hello.components
+        cast_id=cast_id, ritual=the_ritual, recorded=hello.components, given=hello.given
     )
-    if hello.said is not None:
-        said_only(components, hello.said)
     # Not an error: a cast killed before its first rite landed has nothing to
     # replay. But every step it redoes is one the operator may have expected
     # off the record.

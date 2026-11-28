@@ -335,8 +335,6 @@ class TestResume:
 
         assert (project / "ran.log").read_text() == "ran-1\nran-0\n"
 
-    # Carried on without the flag, an unattended cast is unattended still:
-    # what its steps skipped the first time they skip again.
     # A started cast records every component, defaults too, and names the ones
     # it was given: carried on, it still knows a default from a flag.
     @staticmethod
@@ -357,6 +355,8 @@ class TestResume:
 
         assert (project / "named.log").read_text() == "name,word"
 
+    # Carried on without the flag, an unattended cast is unattended still:
+    # what its steps skipped the first time they skip again.
     @staticmethod
     @pytest.mark.parametrize(
         ("recorded", "typed", "said"),
