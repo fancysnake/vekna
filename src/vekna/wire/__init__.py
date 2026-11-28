@@ -34,6 +34,8 @@ from ._links import (
     read_record,
     refused,
     run_file,
+    set_vigils_paused,
+    vigils_paused,
 )
 from ._pacts import (
     NEEDS_TREE,
@@ -93,6 +95,8 @@ from ._pacts import (
     TreeBlocked,
     TreeFreed,
     VersionRequested,
+    VigilsRequested,
+    VigilsState,
     WireMessage,
     decode_frame,
     encode_frame,
@@ -178,6 +182,8 @@ __all__ = [
     "TreeBlocked",
     "TreeFreed",
     "VersionRequested",
+    "VigilsRequested",
+    "VigilsState",
     "WireMessage",
     "admission_refusal",
     "allowed_answers",
@@ -215,6 +221,8 @@ __all__ = [
     "refusals",
     "refused",
     "run_file",
+    "set_vigils_paused",
     "settled",
     "user_layers",
+    "vigils_paused",
 ]

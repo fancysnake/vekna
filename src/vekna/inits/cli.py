@@ -16,7 +16,7 @@ from click import Group
 from vekna.gates.cli.commands import tended
 from vekna.gates.cli.dashboard import Dashboard
 from vekna.gates.cli.screen import listing, recorded
-from vekna.gates.cli.tui import Opened, Outside, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, ToDaemon, VeknaApp
 from vekna.inits.daemon import CLI_MODULE, serve_daemon, stop_daemon, summon
 from vekna.links.circle_config import MACHINE_KEYS, circle_problems
 from vekna.links.discord_config import DISCORD_KEYS, discord_problems
@@ -61,6 +61,8 @@ from vekna.wire import (
     project_of,
     read_frames,
     refused,
+    set_vigils_paused,
+    vigils_paused,
 )
 
 # Docker's rule: what comes before the positional belongs to the outer command,
@@ -426,8 +428,12 @@ async def tui_window(*, debug: bool = False, headless: bool = False) -> int:
             title=_versions(line.daemon),
             fit=True,
         ),
-        send=line.send,
-        mark=partial(mark_seen, default_socket_path()),
+        daemon=ToDaemon(
+            send=line.send,
+            mark=partial(mark_seen, default_socket_path()),
+            vigils_paused=partial(vigils_paused, default_socket_path()),
+            set_vigils_paused=partial(set_vigils_paused, default_socket_path()),
+        ),
         outside=Outside(
             branch_of=branch_of,
             history_after=partial(asyncio.to_thread, history_after, Path.cwd()),

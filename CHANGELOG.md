@@ -13,6 +13,10 @@ when.
 
 ### Added
 
+- **`v` in the window pauses the vigils**: no vigil starts a cast, the casts
+  that run carry on, and every window says `vigils paused` until `v` lets
+  them cast again. Pause, wait until no cast runs or waits queued, then
+  `vekna stop`. A new daemon starts with its vigils casting.
 - **Config edits count while vekna runs**: the daemon reads `[discord]` and
   its token file again every few seconds and reconnects when they change, so
   `vekna stop` after an edit is no longer needed. An open window reads

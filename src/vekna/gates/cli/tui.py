@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from time import monotonic
-from typing import ClassVar
+from typing import ClassVar, Protocol
 from uuid import uuid4
 
 from textual import on
@@ -61,6 +61,13 @@ _NOTHING_TO_TAKE = "only a running cast can be taken over"
 _ANSWER_HERE = "answer here"
 _TYPE_FIRST = "type an answer first"
 _QUESTION_CHANGED = "the question changed — your answer was not sent"
+_VIGILS_SECONDS = 3.0
+_VIGILS_PAUSED = "vigils paused — what runs carries on, and v lets them cast again"
+_VIGILS_CAST = "vigils cast again"
+_VIGILS_UNSAID = (
+    "the daemon did not say whether its vigils are paused: it is gone, or it"
+    " predates pausing them"
+)
 
 
 # `old` is how many ended casts the history view holds.
@@ -99,12 +106,21 @@ class Contents(Tree[str]):
     ]
 
 
+class _SetVigilsPaused(Protocol):
+    async def __call__(self, *, paused: bool) -> bool | None: ...
+
+
 # What the window says to the daemon: frames down its own connection, and a
-# mark on a connection of its own. `mark` answers why the daemon refused it.
+# mark or the vigils' pause on a connection of its own. `mark` answers why the
+# daemon refused it. `vigils_paused` asks whether the vigils are paused and
+# `set_vigils_paused` pauses them or lets them cast again; both answer whether
+# they are paused, or `None` when the daemon did not say.
 @dataclass(frozen=True)
-class _ToDaemon:
+class ToDaemon:
     send: Callable[[WireMessage], None]
     mark: Callable[[CastSeen], Awaitable[str | None]]
+    vigils_paused: Callable[[], Awaitable[bool | None]]
+    set_vigils_paused: _SetVigilsPaused
 
 
 # What the window reads that the daemon does not send it: the branch a tree is
@@ -221,18 +237,34 @@ def _kept(
     return _kept(key=parents.get(key), parents=parents, nodes=nodes)
 
 
+# Whether the daemon last said its vigils are paused, and how many times it has
+# answered v.
+@dataclass
+class _Pause:
+    paused: bool = False
+    answers: int = 0
+
+
+# What the window last read outside the daemon: the branch each tree was on,
+# and what its config said that would not read.
+@dataclass
+class _Read:
+    ignored: str = ""
+    branches: dict[str, str | None] = field(default_factory=dict)
+
+
 # What the window is showing and what it has done: the folds of the contents,
-# whether it needs repainting, the cast one more x cancels, the branch each tree
-# was last seen on, its claims, and the contents drawn.
+# whether it needs repainting, the cast one more x cancels, what it last read
+# outside the daemon, its claims, the contents drawn, and the vigils' pause.
 @dataclass
 class _View:
     reading: Reading
-    ignored: str = ""
+    read: _Read
     dirty: bool = True
     arming: str | None = None
-    branches: dict[str, str | None] = field(default_factory=dict)
     claims: _Claims = field(default_factory=_Claims)
     drawn: _Drawn = field(default_factory=_Drawn)
+    vigils: _Pause = field(default_factory=_Pause)
 
 
 # Where a waiting question shows: loud on top for the cast in view, and during
@@ -251,11 +283,15 @@ class _Asks:
     )
 
 
-# The bottom row's two lines of text: the keys, and which casts are listed.
+# The bottom row's lines of text that change: the keys, which casts are listed,
+# and that the vigils are paused, shown only while they are.
 @dataclass
 class _Foot:
     hint: Static = field(default_factory=lambda: Static(_hint(0), id="hint"))
     scope: Static = field(default_factory=lambda: Static(id="scope", markup=False))
+    paused: Static = field(
+        default_factory=lambda: Static("vigils paused", id="paused", markup=False)
+    )
 
 
 # Held rather than queried, so each widget is reached typed and without a
@@ -282,9 +318,11 @@ class _Widgets:
 # right page is the line under the cursor in full, and the output it is making.
 # A question waiting anywhere is the loud line on top. The command line shows
 # only while it is being typed into. `s` marks a failed cast seen, which takes
-# the red off its line and the cast out of every count of fails. `g` shows every
-# project and enter on one of them shows it alone: a ritual started from the
-# window then runs in that project's checkout. `t` takes a
+# the red off its line and the cast out of every count of fails. `v` pauses the
+# daemon's vigils, so that what runs can end before `vekna stop`, and the
+# bottom row says so in every window until `v` lets them cast again. `g` shows
+# every project and enter on one of them shows it alone: a ritual started from
+# the window then runs in that project's checkout. `t` takes a
 # cast over: the left page opens its rite tree, the right page is its output,
 # every prompt it asks is claimed and shown at the end of that output, and the
 # line under the output answers it. The contents take no keys until Esc hands
@@ -308,6 +346,7 @@ class VeknaApp(App[None]):
     #foot { height: auto; }
     #hint { width: 1fr; padding: 0 1; color: $text-muted; }
     #scope, #version { width: auto; padding: 0 1; color: $text-muted; }
+    #paused { display: none; width: auto; padding: 0 1; color: $warning; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "quit"),
@@ -318,6 +357,7 @@ class VeknaApp(App[None]):
         Binding("x", "cancel", "cancel"),
         Binding("f", "fold_all", "fold all"),
         Binding("s", "seen", "seen"),
+        Binding("v", "vigils", "pause vigils"),
         Binding("H", "history", "history"),
         Binding("g", "every", "every project"),
         Binding("p", "home", "this project"),
@@ -326,21 +366,16 @@ class VeknaApp(App[None]):
     ]
 
     def __init__(
-        self,
-        *,
-        casts: Casts,
-        opened: Opened,
-        send: Callable[[WireMessage], None],
-        mark: Callable[[CastSeen], Awaitable[str | None]],
-        outside: Outside,
+        self, *, casts: Casts, opened: Opened, daemon: ToDaemon, outside: Outside
     ) -> None:
         super().__init__()
         self._casts = casts
         self._scope = _Scope(opened=opened)
-        self._daemon = _ToDaemon(send=send, mark=mark)
+        self._daemon = daemon
         self._outside = outside
         self._view = _View(
-            reading=Reading(history_after=opened.history_after), ignored=opened.ignored
+            reading=Reading(history_after=opened.history_after),
+            read=_Read(ignored=opened.ignored),
         )
         self._w = _Widgets()
 
@@ -360,6 +395,7 @@ class VeknaApp(App[None]):
         with Horizontal(id="foot"):
             yield self._w.foot.hint
             yield self._w.foot.scope
+            yield self._w.foot.paused
             yield Static(self._scope.opened.title, id="version", markup=False)
 
     def on_mount(self) -> None:
@@ -373,6 +409,8 @@ class VeknaApp(App[None]):
         self.set_interval(_BRANCH_SECONDS, self._look_up_branches)
         self.set_interval(_CONFIG_SECONDS, self._read_config)
         self.call_later(self._look_up_branches)
+        self.set_interval(_VIGILS_SECONDS, self._look_up_vigils)
+        self.call_later(self._look_up_vigils)
 
     # The keys that move the contents do nothing during a takeover.
     def _locked(self) -> bool:
@@ -525,6 +563,17 @@ class VeknaApp(App[None]):
         marked = f"marked {named_cast} seen" if seen else f"unmarked {named_cast}"
         self.say(refused or marked)
         self.changed()
+
+    async def action_vigils(self) -> None:
+        paused = await self._daemon.set_vigils_paused(
+            paused=not self._view.vigils.paused
+        )
+        if paused is None:
+            self.say(_VIGILS_UNSAID)
+            return
+        self._view.vigils.answers += 1
+        self._hear_pause(paused=paused)
+        self.say(_VIGILS_PAUSED if paused else _VIGILS_CAST)
 
     # The cast under the cursor, or the first one that asks under a fold. The
     # line its answers are typed on opens at once, and stays open.
@@ -731,18 +780,31 @@ class VeknaApp(App[None]):
         roots = {
             view.hello.project_root
             for view in self._listed()
-            if live(view) or view.hello.project_root not in self._view.branches
+            if live(view) or view.hello.project_root not in self._view.read.branches
         }
         found = await asyncio.gather(*(self._outside.branch_of(root) for root in roots))
-        self._view.branches.update(zip(roots, found, strict=True))
+        self._view.read.branches.update(zip(roots, found, strict=True))
         self.changed()
+
+    # Asked again and again: another window may have paused the vigils, and
+    # the daemon tells no window when it does.
+    async def _look_up_vigils(self) -> None:
+        answers = self._view.vigils.answers
+        paused = await self._daemon.vigils_paused()
+        # v answered while this look was out: the look may carry the older state.
+        if paused is not None and answers == self._view.vigils.answers:
+            self._hear_pause(paused=paused)
+
+    def _hear_pause(self, *, paused: bool) -> None:
+        self._view.vigils.paused = paused
+        self._w.foot.paused.display = paused
 
     # What `[window]` says now, so an edit counts in a window that is open. A
     # config that stops reading is said when it does, not on every look.
     async def _read_config(self) -> None:
         after, ignored = await self._outside.history_after()
-        notes = [ignored] if ignored and ignored != self._view.ignored else []
-        self._view.ignored = ignored
+        notes = [ignored] if ignored and ignored != self._view.read.ignored else []
+        self._view.read.ignored = ignored
         if after != self._view.reading.history_after:
             self._view.reading.history_after = after
             moved = clock(after.total_seconds())
@@ -789,7 +851,7 @@ class VeknaApp(App[None]):
             )
             return
         entry = self._entry()
-        self._w.head.update(head(entry, branches=self._view.branches, now=now))
+        self._w.head.update(head(entry, branches=self._view.read.branches, now=now))
         self._w.log.show(page=None if entry is None else entry.key, said=output(entry))
 
     # Rebuilt only when a line comes or goes, relabelled otherwise, so the

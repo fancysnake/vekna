@@ -33,11 +33,15 @@ from vekna.wire import (
     StopRequested,
     SurfaceHello,
     VersionRequested,
+    VigilsRequested,
+    VigilsState,
     WireMessage,
     admission_refusal,
     encode_frame,
     mark_seen,
     read_frames,
+    set_vigils_paused,
+    vigils_paused,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -70,7 +74,11 @@ class _Daemon(Routes):
         self.attached: list[Surface] = []
         self.detached: list[Surface] = []
         self.requests: list[
-            CastRequested | AltarRequested | AdmissionRequested | CastSeen
+            CastRequested
+            | AltarRequested
+            | AdmissionRequested
+            | CastSeen
+            | VigilsRequested
         ] = []
         # What surfaces said about prompts and casts, and which surface said it.
         self.prompted: list[
@@ -110,6 +118,10 @@ class _Daemon(Routes):
     def mark(self, request: CastSeen) -> CastGoodbye | CastRefused:
         self.requests.append(request)
         return CastGoodbye(cast_id=request.cast_id, status="error", seen=request.seen)
+
+    def vigils(self, request: VigilsRequested) -> VigilsState:
+        self.requests.append(request)
+        return VigilsState(paused=bool(request.pause))
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self.peers[cast_id] = peer
@@ -708,3 +720,41 @@ class TestMarkSeen:
 
         assert refusal is not None
         assert refusal.startswith("the daemon did not take the mark: ")
+
+
+@pytest.mark.asyncio
+class TestVigilsPaused:
+    @staticmethod
+    async def test_a_pause_is_answered_down_its_connection(socket_path: Path):
+        daemon = _Daemon()
+        server = await daemon.start(socket_path)
+
+        paused = await set_vigils_paused(socket_path, paused=True)
+        asked = await vigils_paused(socket_path)
+
+        assert (paused, asked) == (True, False)
+        assert daemon.requests == [VigilsRequested(pause=True), VigilsRequested()]
+        assert not daemon.attached
+        await server.close()
+
+    @staticmethod
+    async def test_a_daemon_that_hangs_up_on_the_question_does_not_say(
+        socket_path: Path,
+    ):
+        async def hang_up(
+            _: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_unix_server(hang_up, path=str(socket_path))
+
+        paused = await set_vigils_paused(socket_path, paused=True)
+
+        assert paused is None
+        server.close()
+        await server.wait_closed()
+
+    @staticmethod
+    async def test_no_daemon_listening_does_not_say(socket_path: Path):
+        assert await vigils_paused(socket_path) is None

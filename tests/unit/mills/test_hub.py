@@ -36,6 +36,8 @@ from vekna.wire import (
     RiteStarted,
     TreeBlocked,
     TreeFreed,
+    VigilsRequested,
+    VigilsState,
     WireMessage,
 )
 
@@ -1318,3 +1320,9 @@ class TestSeen:
             action="dropped",
             reason="no such failed cast",
         )
+
+
+class TestVigils:
+    @staticmethod
+    def test_a_window_s_hub_keeps_no_vigils_to_pause():
+        assert Hub().vigils(VigilsRequested(pause=True)) == VigilsState(paused=False)

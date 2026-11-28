@@ -336,6 +336,7 @@ says when the value changed.
 | `a` | answer it in one line: `a <answer>` |
 | `x` | cancel the cast under the cursor; twice, to be sure |
 | `s` | mark the failed cast under the cursor seen, or take the mark back |
+| `v` | pause the vigils, or let them cast again |
 | `:` | the command line, empty |
 | `g` / `p` | every project / the one the window opened in |
 | `enter` | among every project, show the project under the cursor alone; `c` then casts in it |
@@ -479,6 +480,13 @@ while the daemon was down, a vigil casts once.
 `vigil_processes` defaults to one less than `total_processes`, and to 1 at
 least. A cast that a vigil's cast queues or awaits does not count toward it. A
 cast names the vigil that started it in the drilled view: `vigil prwatch`.
+
+`v` in the window pauses every vigil: none starts a cast, and the casts that
+run carry on, with the casts they queue. The bottom row of every window says
+`vigils paused` until `v` lets them cast again. Pause, wait until no cast runs
+or waits queued, then `vekna stop`, and the daemon stops with nothing in
+flight. The daemon keeps the pause in memory, so a new daemon starts with its
+vigils casting. A vigil that came due during the pause casts once after it.
 
 The daemon reads the config again on every look, so an edit counts without a
 restart. A `[vigil]` that does not validate is noted in `daemon.log` and left
