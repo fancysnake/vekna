@@ -1,6 +1,7 @@
 from ._config import (
     ConfigLayer,
     ConfigRead,
+    ProblemLog,
     Said,
     TableRead,
     config_home,
@@ -160,6 +161,7 @@ __all__ = [
     "LockReleased",
     "Opening",
     "ParkedTree",
+    "ProblemLog",
     "Refusal",
     "RemovedTree",
     "RiteDelta",

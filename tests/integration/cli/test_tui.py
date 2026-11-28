@@ -77,15 +77,17 @@ def _asking(hub: Hub) -> None:
 
 # The app over `hub`, keeping what it sends; branches are answered by root.
 # Every cast here began at `_WHEN`, long ago, so by default none is history.
+# `history_after` may be a list: the config then reads as its last entry.
 def _app(
     hub: Hub,
     sent: list[WireMessage],
-    history_after: timedelta = timedelta.max,
+    history_after: timedelta | list[tuple[timedelta, str]] = timedelta.max,
     *,
     title: str = "vekna",
     quiet: timedelta = timedelta(seconds=5),
 ) -> VeknaApp:
     branches = {"/proj": "main", "/trees/1": "fix-ci"}
+    said = history_after if isinstance(history_after, list) else [(history_after, "")]
 
     # The daemon's part: it keeps the mark and says it back to the window.
     async def mark(request: CastSeen) -> str | None:
@@ -99,14 +101,14 @@ def _app(
 
     async def read() -> tuple[timedelta, str]:
         await asyncio.sleep(0)
-        return history_after, ""
+        return said[-1]
 
     return VeknaApp(
         casts=hub,
         opened=Opened(
             project="/proj/.git",
             root="/proj",
-            history_after=history_after,
+            history_after=said[0][0],
             title=title,
             quiet=quiet,
         ),
@@ -118,25 +120,7 @@ def _app(
 
 # The app over `_past()`, reading its config as `said` last has it.
 def _reading(said: list[tuple[timedelta, str]]) -> VeknaApp:
-    async def mark(_: CastSeen) -> str | None:
-        await asyncio.sleep(0)
-        return None
-
-    async def branch_of(_: str) -> str | None:
-        await asyncio.sleep(0)
-        return "main"
-
-    async def read() -> tuple[timedelta, str]:
-        await asyncio.sleep(0)
-        return said[-1]
-
-    return VeknaApp(
-        casts=_past(),
-        opened=Opened(project="/proj/.git", root="/proj", history_after=said[0][0]),
-        send=lambda _: None,
-        mark=mark,
-        outside=Outside(branch_of=branch_of, history_after=read),
-    )
+    return _app(_past(), [], said)
 
 
 def _text(app: VeknaApp, selector: str) -> str:

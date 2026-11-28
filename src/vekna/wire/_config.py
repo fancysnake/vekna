@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from collections.abc import Iterator, Sequence
@@ -98,6 +99,19 @@ class ConfigRead(NamedTuple):
 class TableRead(NamedTuple, Generic[_File]):
     found: list[_File]
     problems: list[str]
+
+
+# For a reader asked every few seconds: a problem is logged when it appears,
+# not on every look.
+class ProblemLog:
+    def __init__(self, log: logging.Logger) -> None:
+        self._log = log
+        self._said: frozenset[str] = frozenset()
+
+    def warn(self, problems: Sequence[str]) -> None:
+        for problem in sorted(frozenset(problems) - self._said):
+            self._log.warning("%s", problem)
+        self._said = frozenset(problems)
 
 
 def _tables(path: Path, problems: list[str]) -> dict[str, TomlValue] | None:

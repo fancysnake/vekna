@@ -5,7 +5,6 @@ import sys
 import textwrap
 from collections.abc import AsyncGenerator, Callable, Sequence
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import discord
@@ -359,30 +358,6 @@ class TestDiscord:
         assert _said(caplog, logging.WARNING).splitlines() == [
             "Discord is off: install vekna[discord] to answer casts there"
         ]
-
-    # The keeper never ends by itself, so its looks are counted here: one that
-    # ends without an error leaves its relay on, and is not said to be lost.
-    @staticmethod
-    @pytest.mark.usefixtures("discord_config")
-    async def test_a_keeper_that_ends_without_an_error_is_not_said_lost(
-        socket_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        monkeypatch.setattr(
-            "vekna.inits.daemon.itertools", SimpleNamespace(count=lambda: range(1))
-        )
-        chat = _Chat()
-        monkeypatch.setattr("vekna.links.discord.DiscordRemote", chat.remote)
-        log = socket_path.parent / "debug.log"
-        async with _served(socket_path, debug=log):
-            await _eventually(lambda: log.exists() and bool(_surfaces(log)))
-            await asyncio.sleep(_TICK * 10)
-            plugged = _surfaces(log)
-
-        assert plugged == ["attached"]
-        assert chat.closed
-        assert not _said(caplog, logging.ERROR)
 
     @staticmethod
     @pytest.mark.usefixtures("discord_config")

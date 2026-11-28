@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from typing_extensions import override
 
 from vekna.pacts.circle import Vigil, VigilBook
-from vekna.wire import project_checkouts, read_layers
+from vekna.wire import ProblemLog, project_checkouts, read_layers
 
 _log = logging.getLogger(__name__)
 _TABLE = "vigil"
@@ -31,9 +31,7 @@ class _File(BaseModel):
 # own `.vekna.toml` is not read.
 class ConfigVigils(VigilBook):
     def __init__(self) -> None:
-        # The daemon asks every few seconds: a problem is logged when it
-        # appears, not on every look.
-        self._said: frozenset[str] = frozenset()
+        self._problems = ProblemLog(_log)
 
     @override
     def vigils(self) -> list[Vigil]:
@@ -44,9 +42,7 @@ class ConfigVigils(VigilBook):
                 read = read_layers(directory=checkout, table=_TABLE, model=_File)
                 problems += read.problems
                 found += _settled(checkout, read.found)
-        for problem in sorted(frozenset(problems) - self._said):
-            _log.warning("%s", problem)
-        self._said = frozenset(problems)
+        self._problems.warn(problems)
         return found
 
 
