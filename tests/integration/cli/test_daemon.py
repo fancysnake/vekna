@@ -67,6 +67,7 @@ from vekna.wire import (
     project_of,
     read_frames,
     set_vigils_paused,
+    vigils_paused,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2135,6 +2136,18 @@ class TestVigils:
         assert (paused, resumed) == (True, False)
         assert held == []
         assert _run_of(runs, "count").hello.vigil == "tally"
+
+    @staticmethod
+    async def test_asking_whether_the_vigils_are_paused_leaves_the_pause_as_it_is(
+        socket_path: Path,
+    ):
+        async with _served(socket_path):
+            before = await vigils_paused(socket_path)
+            await set_vigils_paused(socket_path, paused=True)
+            asked = await vigils_paused(socket_path)
+            again = await vigils_paused(socket_path)
+
+        assert (before, asked, again) == (False, True, True)
 
     # A look says what is wrong with a vigil's table, so silence is no look.
     @staticmethod
