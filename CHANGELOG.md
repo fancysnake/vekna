@@ -48,8 +48,8 @@ when.
 ### Changed
 
 - **An ended cast in the window's tree says the time it began**, `14:32`, or
-  `Nov 27 14:32` from a day on, where it said a slot (`@<1h`). Two casts of
-  one hour now read apart. The slot still cuts a streak.
+  `Nov 27 14:32` when it did not begin today, where it said a slot (`@<1h`).
+  Two casts of one hour now read apart. The slot still cuts a streak.
 - **`Channel.decide` takes one `Question`**: a channel of your own now reads
   the prompt, options, free text and reactions off that value. `vekna.trial`'s
   `Asked` is the same type.

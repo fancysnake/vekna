@@ -1,12 +1,18 @@
 import json
+from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from vekna.pacts.casts import CastView
 
-from .cast_text import ago, live
+from .cast_text import live
 
 Kids = Mapping[str, Sequence[CastView]]
+
+_HOUR = 3600
+_DAY = 86400
+# The ages in seconds that end a slot under a day; past it each day is a slot.
+_SLOT_ENDS = (60, _HOUR, 3 * _HOUR, 6 * _HOUR, 12 * _HOUR, _DAY)
 
 
 def _started(view: CastView) -> tuple[datetime, str]:
@@ -52,8 +58,16 @@ def _outcome(view: CastView, kids: Kids) -> tuple[str, frozenset[str]] | None:
     return view.status, frozenset(under - {view.status})
 
 
+# Which slot of age a cast began in: where a streak is cut, so one line never
+# stands for casts far apart.
+def _slot(view: CastView, now: datetime) -> int:
+    if (seconds := (now - view.hello.started_at).total_seconds()) < _DAY:
+        return bisect_right(_SLOT_ENDS, seconds)
+    return len(_SLOT_ENDS) + int(seconds // _DAY)
+
+
 # The casts of one ritual with one set of arguments, cut where a cast ended
-# differently from the one before it, and where it began in another slot of `ago`:
+# differently from the one before it, and where it began in another slot:
 # newest streak first, and in a streak the newest cast first, whose time the
 # line of the streak says. A cast still running is a streak of
 # its own.
@@ -61,10 +75,10 @@ def streaks(
     views: Sequence[CastView], kids: Kids, *, now: datetime
 ) -> list[tuple[CastView, ...]]:
     found: list[list[CastView]] = []
-    last: tuple[tuple[str, frozenset[str]], str] | None = None
+    last: tuple[tuple[str, frozenset[str]], int] | None = None
     for view in sorted(views, key=_started):
         outcome = _outcome(view, kids)
-        ended = None if outcome is None else (outcome, ago(view, now))
+        ended = None if outcome is None else (outcome, _slot(view, now))
         if found and ended is not None and ended == last:
             found[-1].append(view)
         else:

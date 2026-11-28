@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import math
+import re
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
@@ -40,6 +41,12 @@ _PATIENCE = 1000
 _NARROWEST_GUIDES = 2
 # A line above the end of a long output, for scrolling up to.
 _UP = 10
+# What an ended cast that began at `_WHEN` says of when, in Tokyo.
+_LONG_AGO = "Jan 01 09:00"
+# A time of day, dated when the day turned since.
+_TIME = re.compile(r"(?:[A-Z][a-z]{2} \d\d )?\d\d:\d\d")
+
+pytestmark = pytest.mark.usefixtures("_tokyo")
 
 
 def _hello(cast_id: str, ritual: str, *, root: str = "/proj") -> CastHello:
@@ -60,16 +67,6 @@ def _asking_as(hub: Hub, cast_id: str) -> None:
             cast_id=cast_id, request_id="q1", prompt="push?", options=["yes", "no"]
         )
     )
-
-
-# What an ended cast that began at `_WHEN`, days ago, says of when.
-def _long_ago() -> str:
-    return f"{_WHEN.astimezone():%b %d %H:%M}"
-
-
-# What an ended cast that began at `began`, under a day ago, says of when.
-def _clock(began: datetime) -> str:
-    return f"{began.astimezone():%H:%M}"
 
 
 def _asking(hub: Hub) -> None:
@@ -355,7 +352,7 @@ class TestContents:
             "    ▶ @now  c1",
             "  finished",
             "    sweep",
-            f"      ✓ {_long_ago()}  c2",
+            f"      ✓ {_LONG_AGO}  c2",
         ]
 
     @staticmethod
@@ -714,11 +711,15 @@ class TestVersion:
 
 
 # A cast of `sweep` that began `age` seconds ago and has ended.
-def _ran(hub: Hub, cast_id: str, age: int, **said: object) -> datetime:
+def _ran(hub: Hub, cast_id: str, age: int, **said: object) -> None:
     began = datetime.now(UTC) - timedelta(seconds=age)
     hub.apply(_hello(cast_id, "sweep").model_copy(update={"started_at": began, **said}))
     hub.apply(CastGoodbye(cast_id=cast_id, status="ok", result={"found": []}))
-    return began
+
+
+# For casts that began a moment before the test ran, whose time no literal says.
+def _untimed(lines: list[str]) -> list[str]:
+    return [_TIME.sub("<time>", line) for line in lines]
 
 
 @pytest.mark.asyncio
@@ -737,13 +738,13 @@ class TestStreaks:
 
             lines = _contents(app)
             head = _text(app, "#head").splitlines()
-        assert lines == [
+        assert _untimed(lines[:-1]) == [
             "proj (1 failed)",
             "  finished",
             "    sweep",
-            "      ✓ @now  c3  x3",
-            f"      ✗ {_long_ago()}  c0",
+            "      ✓ <time>  c3  x3",
         ]
+        assert lines[-1] == f"      ✗ {_LONG_AGO}  c0"
         assert head[-1].startswith("x3 — every cast since ")
 
     @staticmethod
@@ -759,11 +760,11 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj (3 failed)",
             "  finished",
             "    sweep",
-            "      ✗ @now  c3  x3",
+            "      ✗ <time>  c3  x3",
         ]
 
     @staticmethod
@@ -823,21 +824,20 @@ class TestStreaks:
     async def test_a_line_stands_for_the_casts_of_one_slot_only():
         hub = Hub()
         minutes = {"c1": 150, "c2": 120, "c3": 30}
-        began = {
-            cast_id: _ran(hub, cast_id, age * 60) for cast_id, age in minutes.items()
-        }
+        for cast_id, age in minutes.items():
+            _ran(hub, cast_id, age * 60)
         app = _app(hub, [])
 
         async with app.run_test() as pilot:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj",
             "  finished",
             "    sweep",
-            f"      ✓ {_clock(began['c3'])}  c3",
-            f"      ✓ {_clock(began['c2'])}  c2  x2",
+            "      ✓ <time>  c3",
+            "      ✓ <time>  c2  x2",
         ]
 
     @staticmethod
@@ -857,11 +857,11 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj",
             "  finished",
             "    sweep",
-            f"      ✓ {_clock(began)}  c2  x2",
+            "      ✓ <time>  c2  x2",
             "        ✓ look  k1",
         ]
 
@@ -876,13 +876,13 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj (1 running)",
             "  sweep",
             "    ▶ @now  c2",
             "  finished",
             "    sweep",
-            "      ✓ @now  c1",
+            "      ✓ <time>  c1",
         ]
 
     @staticmethod
@@ -896,12 +896,12 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj",
             "  finished",
             "    sweep",
-            "      ✓ @now  c2",
-            "      ✓ @now  c1",
+            "      ✓ <time>  c2",
+            "      ✓ <time>  c1",
         ]
 
     @staticmethod
@@ -942,14 +942,14 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj (1 running)",
             "  sweep",
-            "    ✓ @now  c2",
+            "    ✓ <time>  c2",
             "      ▶ pr_fix  c3",
             "  finished",
             "    sweep",
-            "      ✓ @now  c1",
+            "      ✓ <time>  c1",
         ]
 
     @staticmethod
@@ -965,11 +965,11 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj",
             "  finished",
             "    sweep",
-            "      ✓ @now  c2  x2",
+            "      ✓ <time>  c2  x2",
             "        ✓ pr_fix  k2",
         ]
 
@@ -994,12 +994,12 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj",
             "  finished",
             "    sweep",
-            "      ✓ @now  c2",
-            "      ✓ @now  c1",
+            "      ✓ <time>  c2",
+            "      ✓ <time>  c1",
         ]
 
     @staticmethod
@@ -1027,14 +1027,14 @@ class TestStreaks:
             "proj",
             "  finished",
             "    sweep",
-            f"      ▸ ✓ {_long_ago()}  c1",
+            f"      ▸ ✓ {_LONG_AGO}  c1",
             "        ✓ pr_fix  k1",
         ]
         assert opened == [
             "proj",
             "  finished",
             "    sweep",
-            f"      ✓ {_long_ago()}  c1",
+            f"      ✓ {_LONG_AGO}  c1",
             "        ✓ look  0s",
             "        ✓ pr_fix  k1",
         ]
@@ -1152,7 +1152,7 @@ class TestFitting:
             "▶ report",
             "finished",
             "sweep",
-            f"✓ {_long_ago()}",
+            f"✓ {_LONG_AGO}",
         ]
 
     @staticmethod
@@ -1417,11 +1417,11 @@ class TestHistory:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == [
+        assert _untimed(lines) == [
             "proj (1 failed)",
             "  finished",
             "    sweep",
-            "      ✗ @now  c1",
+            "      ✗ <time>  c1",
         ]
 
 
@@ -2589,7 +2589,7 @@ class TestPages:
         assert head[1].startswith("▶ @now         c1abcdef  running")
         assert head[1].endswith("  --pr 208")
         assert finished[0] == "pr_fix"
-        assert finished[1].startswith(f"✓ {_long_ago()} c2abcdef  done")
+        assert finished[1].startswith(f"✓ {_LONG_AGO} c2abcdef  done")
 
     @staticmethod
     async def test_a_project_page_says_where_it_is_and_what_it_holds():

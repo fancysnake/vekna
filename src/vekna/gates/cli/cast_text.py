@@ -10,8 +10,6 @@ from vekna.wire import SHORT_ID, CastHello, CastStatus
 _RESUMED = "↳"
 _MINUTE = 60
 _HOUR = 3600
-_DAY = 86400
-_SLOTS = (1, 3, 6, 12)
 # The word, not the glyph: the list is read across a row of casts, and "aborted"
 # says in one column what ⚠ needs a legend for. Glyphs stay in the rite tree,
 # where the tree shape carries the rest of the meaning.
@@ -122,28 +120,13 @@ def _recovering(view: CastView) -> bool:
 
 
 # When a cast began, as its line says it: a live one is happening now whenever
-# it began, and one that ended says the clock time, which under a day names one
-# moment and past it needs the date.
+# it began, and one that ended says the clock time, dated unless that was today.
 def began(view: CastView, now: datetime) -> str:
-    seconds = (now - view.hello.started_at).total_seconds()
-    if live(view) or seconds < _MINUTE:
+    if live(view):
         return "@now"
     at = view.hello.started_at.astimezone()
-    return f"{at:%H:%M}" if seconds < _DAY else f"{at:%b %d %H:%M}"
-
-
-# The slot a cast began in, the hours it is younger than: where a streak of
-# casts is cut, so one line never stands for casts hours apart.
-def ago(view: CastView, now: datetime) -> str:
-    seconds = (now - view.hello.started_at).total_seconds()
-    if live(view) or seconds < _MINUTE:
-        return "@now"
-    for hours in _SLOTS:
-        if seconds < hours * _HOUR:
-            return f"@<{hours}h"
-    if seconds < _DAY:
-        return "@<1d"
-    return f"@{int(seconds // _DAY)}d ago"
+    today = at.date() == now.astimezone().date()
+    return f"{at:%H:%M}" if today else f"{at:%b %d %H:%M}"
 
 
 def clock(seconds: float) -> str:
