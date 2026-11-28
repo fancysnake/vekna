@@ -17,6 +17,11 @@ when.
   that run carry on, and every window says `vigils paused` until `v` lets
   them cast again. Pause, wait for the running casts to end, then `vekna
   stop`. A new daemon starts with its vigils casting.
+- **Enter on a project in the window** shows that project alone, from the
+  every-project view of `g`. `c` then casts in the main checkout of that
+  project, or in the directory the window was opened in when it is the project
+  the window opened in. `◆` marks the project the window is on among every
+  project, and `p` goes back to the one it opened in.
 - **Reactions answer a question on Discord**: the bot puts an emoji under each
   question for every answer it can give, 👍 and ❌ for yes and no and 1️⃣ to 🔟
   for options, and a tap on one is the answer. `decide(reactions={"fix":

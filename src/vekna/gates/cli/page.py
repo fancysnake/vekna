@@ -45,6 +45,7 @@ _RITE_LOOK: dict[RiteStatus, Text] = {
     "error": Text("✗", "red"),
     "cancelled": Text("⊘", "dim"),
 }
+_HERE = "◆"
 _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
@@ -97,7 +98,11 @@ def tally(counts: Counts) -> Text:
 
 
 # A cast line says how long ago it began, in the history view when it ended.
-def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
+# `here` is the project a ritual started from the window runs in, marked among
+# every project; none while the window shows that project alone.
+def line_text(
+    entry: Entry, now: datetime, *, history: bool = False, here: str | None = None
+) -> Text:
     view, rite = entry.view, entry.rite
     if rite is not None and view is not None:
         text = _rite_label(view, rite, now)
@@ -111,6 +116,8 @@ def line_text(entry: Entry, now: datetime, *, history: bool = False) -> Text:
         text = Text(entry.name, "bold" if entry.kind in {"project", "day"} else "")
         if entry.kind == "finished":
             text.stylize("dim")
+        if entry.kind == "project" and entry.project == here:
+            text.append(f" {_HERE}")
     # A cast's own glyph already says what its fold would.
     if (entry.folded and entry.kind != "cast") or entry.kind == "project":
         text.append_text(tally(entry.counts))

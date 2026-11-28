@@ -213,5 +213,12 @@ the window in. A project is a repository: every worktree of one repository
 groups under the same project line. A directory in no repository is its own
 project.
 
-A cast you start with `c` still runs in the directory of this window, whatever
-the scope shows.
+Enter on a project line shows that project alone. The window is then on that
+project: the bottom line names it, and it lists only the casts of that project.
+`g` shows every project again, and `◆` marks the project the window is on.
+
+A cast you start with `c` runs in the project the window is on, whatever the
+scope shows. In the project you opened the window in, that is the directory you
+opened it in. In another project it is the main checkout of that repository,
+and never one of its worktrees. A new window starts on the project you open it
+in.

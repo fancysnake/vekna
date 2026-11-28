@@ -609,7 +609,7 @@ class TestContents:
             home = (_text(app, "#scope"), _contents(app)[::3])
         assert every == (
             "2 running  (all projects)",
-            ["other (1 running)", "proj (1 running)"],
+            ["other (1 running)", "proj ◆ (1 running)"],
         )
         assert home == ("1 running  (proj)", ["proj (1 running)"])
 
@@ -1150,8 +1150,10 @@ class TestFitting:
         ]
 
     @staticmethod
-    @pytest.mark.parametrize("key", ["g", "p"])
-    async def test_a_change_of_scope_fits_the_tree_again(key: str):
+    @pytest.mark.parametrize(
+        ("key", "project"), [("g", "proj ◆ (1 running)"), ("p", "proj (1 running)")]
+    )
+    async def test_a_change_of_scope_fits_the_tree_again(key: str, project: str):
         app = _fitting()
 
         async with app.run_test(size=(100, 9)) as pilot:
@@ -1165,7 +1167,7 @@ class TestFitting:
             lines = _shape(app)
         assert folded == ["▸ proj (1 running)"]
         assert lines == [
-            "proj (1 running)",
+            project,
             "ci_watch",
             "▶ @now",
             "✓ watch",
@@ -1184,7 +1186,7 @@ class TestFitting:
 
             lines = _shape(app)
         assert lines == [
-            "proj (1 running)",
+            "proj ◆ (1 running)",
             "ci_watch",
             "▶ @now",
             "✓ watch",
@@ -1273,9 +1275,9 @@ class TestHistory:
         app = _app(_past(), [], history_after=timedelta(hours=1000000))
 
         async with app.run_test() as pilot:
+            await pilot.press("g")
             await pilot.pause(_PAINTED)
             tree = _contents(app)
-            await pilot.press("g")
             await pilot.press("H")
             await pilot.pause(_PAINTED)
 
@@ -1923,7 +1925,7 @@ class TestTakingOver:
         hub = Hub()
         _asking(hub)
         sent: list[WireMessage] = []
-        app = _app(hub, sent, quiet=timedelta(seconds=1))
+        app = _app(hub, sent, quiet=timedelta(seconds=3))
 
         async with app.run_test() as pilot:
             tree: Tree[str] = app.query_one("#contents", Tree)
@@ -2598,6 +2600,14 @@ class TestSeen:
 
 @pytest.mark.asyncio
 class TestVigils:
+    # A loaded machine can run a test past the window's next look, which then
+    # shows up in `asked`. Only a test that shortens the wait looks again.
+    @pytest.fixture(autouse=True)
+    @staticmethod
+    def _one_look():
+        with patch("vekna.gates.cli.tui._VIGILS_SECONDS", 3600):
+            yield
+
     @staticmethod
     async def test_v_pauses_the_vigils_and_v_again_lets_them_cast():
         vigils = _Vigils()
@@ -2670,3 +2680,109 @@ class TestVigils:
             " or it predates pausing them"
         )
         assert vigils.asked == [None, True]
+
+
+@pytest.mark.asyncio
+class TestScope:
+    @staticmethod
+    async def test_enter_on_a_project_shows_it_alone_and_casts_in_its_checkout():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        hub.apply(
+            _hello("c2", "ci_watch", root="/trees/1").model_copy(
+                update={"project": "/other/.git"}
+            )
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            hint = _text(app, "#hint")
+            note = _text(app, "#note")
+            _to(app, "p:/other/.git")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            alone = (_text(app, "#scope"), _contents(app)[::3], _text(app, "#note"))
+            await pilot.press("c", *"nap", "enter")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            every = _contents(app)[::3]
+            await pilot.press("p")
+            await pilot.pause(_PAINTED)
+
+            home = (_text(app, "#scope"), _text(app, "#note"))
+        assert "g/p scope · enter show alone · q quit" in hint
+        assert not note
+        assert alone == (
+            "1 running  (other)",
+            ["other (1 running)"],
+            "on other · c casts in /other",
+        )
+        assert sent == [
+            CastRequested(project_root="/other", ritual="nap", components={})
+        ]
+        assert every == ["other ◆ (1 running)", "proj (1 running)"]
+        assert home == ("1 running  (proj)", "on proj · c casts in /proj")
+
+    @staticmethod
+    async def test_a_project_outside_git_casts_in_its_own_directory():
+        hub = Hub()
+        hub.apply(
+            _hello("c1", "nap", root="/notes").model_copy(update={"project": "/notes"})
+        )
+        sent: list[WireMessage] = []
+        app = _app(hub, sent)
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/notes")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            await pilot.press("c", *"nap", "enter")
+
+        assert sent == [
+            CastRequested(project_root="/notes", ritual="nap", components={})
+        ]
+
+    @staticmethod
+    async def test_the_this_project_command_goes_back_home():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            await pilot.press("g", ":", "p", "enter")
+            await pilot.pause(_PAINTED)
+
+            home = (_text(app, "#scope"), _text(app, "#note"))
+            hint = _text(app, "#hint")
+        assert home == ("1 running  (proj)", "")
+        assert "enter show alone" not in hint
+
+    @staticmethod
+    async def test_enter_on_a_line_that_is_no_project_changes_no_scope():
+        hub = Hub()
+        hub.apply(_hello("c1", "nap"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+            _to(app, "p:/proj/.git")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+            own = _text(app, "#scope")
+            await pilot.press("g")
+            await pilot.pause(_PAINTED)
+            _to(app, "c:c1")
+            await pilot.press("enter")
+            await pilot.pause(_PAINTED)
+
+            on_a_cast = _text(app, "#scope")
+        assert own == "1 running  (proj)"
+        assert on_a_cast == "1 running  (all projects)"
