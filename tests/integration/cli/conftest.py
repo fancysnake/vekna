@@ -1,4 +1,6 @@
 import sys
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -31,3 +33,13 @@ def _fresh_imports():
         if _from_a_test(name):
             del sys.modules[name]
     sys.path[:] = path
+
+
+# Off UTC, so a time left unconverted reads differently from the reader's own.
+@pytest.fixture(name="_tokyo")
+def _in_tokyo(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()

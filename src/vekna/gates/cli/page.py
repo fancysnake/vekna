@@ -9,7 +9,7 @@ from vekna.wire import SHORT_ID, CastHello, allowed_answers
 
 from .cast_text import (
     Word,
-    ago,
+    began,
     carried,
     clipped,
     clock,
@@ -97,7 +97,7 @@ def tally(counts: Counts) -> Text:
     return text
 
 
-# A cast line says how long ago it began, in the history view when it ended.
+# A cast line says when it began, in the history view when it ended.
 # `here` is the project a ritual started from the window runs in, marked among
 # every project; none while the window shows that project alone.
 def line_text(
@@ -135,7 +135,7 @@ def _cast_said(entry: Entry, view: CastView, now: datetime, *, history: bool) ->
         return _ended_said(view)
     if entry.nested:
         return view.hello.ritual
-    return ago(view, now)
+    return began(view, now)
 
 
 def _ended_said(view: CastView) -> str:
@@ -242,7 +242,7 @@ def _ritual_head(entry: Entry, now: datetime) -> Text:
     for view in entry.views:
         text.append("\n")
         text.append_text(_cast_glyph(view))
-        text.append(f" {ago(view, now):<9} {view.hello.cast_id[:SHORT_ID]}  ")
+        text.append(f" {began(view, now):<12} {view.hello.cast_id[:SHORT_ID]}  ")
         text.append(f"{word(view):<10} {elapsed(view, now):>7}  ", "dim")
         text.append(_flags(view.hello))
     return text

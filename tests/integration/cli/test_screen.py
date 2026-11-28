@@ -1,6 +1,4 @@
 import re
-import time
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -121,15 +119,6 @@ def _rows(painted: str) -> list[str]:
 
 def _row(painted: str, ritual: str) -> str:
     return next(line for line in _rows(painted) if ritual in line)
-
-
-@pytest.fixture(name="_tokyo")
-def _in_tokyo(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("TZ", "Asia/Tokyo")
-    time.tzset()
-    yield
-    monkeypatch.undo()
-    time.tzset()
 
 
 class TestListing:

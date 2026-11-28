@@ -4,6 +4,15 @@
 
 ## Friction
 
+- `mise exec -- pytest` in a fresh `git worktree` ran the main checkout's
+  pytest against the main checkout's `src`: mise made the worktree an empty
+  `.venv` and fell through to the other one, so new code looked missing.
+  `mise exec -- poetry install` in the worktree fixed it.
+- `test_every_mise_task_named_exists` failed in a worktree under
+  `.claude/worktrees/`: mise read the main checkout's `.mise.local.toml` from
+  the parent directory, and the test trusts only its own root.
+  `MISE_CEILING_PATHS=<main checkout>/.claude/worktrees` on the run got it
+  green.
 - `mise exec -- pytest` in the main checkout imported `vekna` from a cast's
   pooled worktree: that cast's `prepare` ran `poetry install` there and
   re-pointed the editable install in the `.venv` both share. An absolute
