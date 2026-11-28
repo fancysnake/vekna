@@ -57,6 +57,23 @@ class TestDecideMedium:
 
         assert result == Survey(choice="y", approved=True, note="hello")
 
+    @staticmethod
+    def test_an_answer_past_the_suggestions_comes_back_as_typed():
+        renderer = StandaloneRenderer(
+            out=Tail(io.StringIO()), inp=io.StringIO("later\n")
+        )
+
+        result = asyncio.run(
+            run_cast(
+                ritual=suggester,
+                components=suggester.components(),
+                grimoire=Grimoire(clock=_fixed_clock),
+                channel=renderer,
+            )
+        )
+
+        assert result == Note(text="later")
+
 
 class Choice(BaseModel):
     picked: str
@@ -119,6 +136,18 @@ async def jot(_state: Jotting) -> Done[Note]:
 jotter = entry(name="jotter", payload=Jotting())
 
 
+class Suggesting(BaseModel):
+    pass
+
+
+@step
+async def suggest(_state: Suggesting) -> Done[Note]:
+    return Done(Note(text=await decide("pick", options=["fix", "file"], free=True)))
+
+
+suggester = entry(name="suggester", payload=Suggesting())
+
+
 def _resumed(recorded: JsonValue, ritual: Ritual = picker) -> object:
     grimoire = Grimoire(clock=_fixed_clock)
     return asyncio.run(
@@ -166,6 +195,10 @@ class TestResumedDecisions:
         assert _resumed("maybe", jotter) == Note(text="maybe")
 
     @staticmethod
+    def test_an_answer_past_the_suggestions_is_taken_as_it_was_recorded():
+        assert _resumed("later", suggester) == Note(text="later")
+
+    @staticmethod
     def test_an_answer_that_is_not_text_is_refused():
         with pytest.raises(RitualError, match="answer 3 is not text"):
             _resumed(3, jotter)
@@ -179,7 +212,11 @@ class Reacting(BaseModel):
 
 @step
 async def react(state: Reacting) -> Done[Note]:
-    if state.free:
+    if state.free and state.options is not None:
+        answer = await decide(
+            "pick", options=state.options, free=True, reactions=state.reactions
+        )
+    elif state.free:
         answer = await decide("why?", free=True, reactions=state.reactions)
     elif state.options is None:
         answer = str(await decide("ok?", reactions=state.reactions))
@@ -218,6 +255,7 @@ class TestReactions:
         [
             (Reacting(reactions={"yes": "🚀"}), "True"),
             (Reacting(options=["fix", "file"], reactions={"fix": "🔧"}), "fix"),
+            (Reacting(options=["ok", "fix"], free=True, reactions={"ok": "👍"}), "ok"),
         ],
     )
     def test_the_emoji_named_for_an_answer_reach_the_channel(

@@ -44,17 +44,20 @@ Hands a choice back to you mid-cast. The cast blocks until you answer.
 ```python
 from vekna.folio.flow import decide
 
-if not await decide("Push to main?"):               # -> bool
+if not await decide("Push to main?"):                  # -> bool
     return Done(Verdict(outcome="stopped"))
 
-took = await decide("what now?", options=_TOOK)     # -> the option offered
-note = await decide("why?", free=True)              # -> str
+took = await decide("what now?", options=_TOOK)        # -> the option offered
+note = await decide("why?", free=True)                 # -> str
+said = await decide("ok?", options=_TOOK, free=True)   # -> str
 ```
 
-Three shapes, three return types. A bare prompt is yes or no. `options` answers
+Four shapes, three return types. A bare prompt is yes or no. `options` answers
 with one of them, and options typed as a `tuple[Literal[...], ...]` come back as
 that literal, so a step can branch on the answer without re-validating a `str`.
-`free=True` takes whatever you type. Empty `options` raises
+`free=True` takes whatever you type. `options` beside `free=True` are
+suggestions: a number or a tap picks one, any other text is the answer, and it
+comes back as a `str`. Empty `options` raises
 `MediumBoundaryError`: a list that computed to nothing is a bug in the step, not
 a question.
 
@@ -73,7 +76,7 @@ if await decide("Ship it?", reactions={"yes": "🚀"}): ...
 
 A terminal and the window ignore `reactions`. An emoji for an answer the
 question does not offer, one emoji for two answers, or `reactions` with
-`free=True` raises `MediumBoundaryError`.
+`free=True` and no `options` raises `MediumBoundaryError`.
 
 There is no default and no timeout: a `decide` is a choice the ritual author
 declared was yours, and guessing it is worse than waiting. A cast whose stdin

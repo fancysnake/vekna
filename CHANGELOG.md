@@ -45,6 +45,9 @@ when.
   "🔧"})` names a ritual's own emoji for an answer. A bot set up before this
   needs the Add Reactions permission; without it questions are still posted
   and answered in words.
+- **`decide` takes `options` beside `free=True`**: the options are suggestions.
+  A number or a reaction picks one, any other text is the answer, and the
+  answer is a `str`.
 
 ### Changed
 
@@ -66,6 +69,12 @@ when.
 
 ### Fixed
 
+- **The window counts casts the same way on every line.** A project, ritual or
+  folded line says the states in the words and the order of the bottom line:
+  `(2 running, 1 queued)`, not `(3 running)`; `waiting` and `failed`, not
+  `asks` and `fail`. A cast that ended with a prompt still open counts as
+  `waiting` on both. Each count on a project or folded line takes the colour of
+  its glyph.
 - **`vekna log <cast>` and the plain view strip terminal control codes** from a
   rite's name, summary, error and output.
 
