@@ -194,6 +194,17 @@ it will cancel. The second `x` cancels it.
 
 `:` opens the command line empty. Esc closes it.
 
+## Pause the vigils before you stop the daemon
+
+`v` pauses every [vigil](cli.md#vigils) of the daemon. No vigil starts a cast.
+The casts that run carry on, and so do the casts they queue. The bottom row
+says `vigils paused` in every window.
+
+Press `g` to see the casts of every project, and wait until none runs or waits
+queued. Then `vekna stop` ends a daemon with nothing in flight.
+
+`v` again lets the vigils cast. A daemon that starts has its vigils casting.
+
 ## See every project
 
 ![Two projects, blog and shop, in one tree; the cursor is on a write_tests

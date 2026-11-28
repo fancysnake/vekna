@@ -143,6 +143,21 @@ class CastSeen(BaseModel):
     seen: bool = True
 
 
+# A window opens a connection with this and nothing else. `pause` true stops
+# the vigils casting and false lets them cast again; `None` only asks. Answered
+# `VigilsState`. The daemon keeps the pause in memory, so a restart ends it. A
+# daemon that predates the question hangs up.
+class VigilsRequested(BaseModel):
+    kind: Literal["vigils_requested"] = "vigils_requested"
+    pause: bool | None = None
+
+
+# Said back down the connection that asked, which then closes.
+class VigilsState(BaseModel):
+    kind: Literal["vigils_state"] = "vigils_state"
+    paused: bool
+
+
 # A cast the daemon has a record of and no process for yet: it waits for a
 # process slot, and the hello before it was written by the daemon, not the cast.
 class CastQueued(BaseModel):
@@ -516,16 +531,29 @@ Opening = (
     | VersionRequested
     | AdmissionRequested
     | CastSeen
+    | VigilsRequested
 )
 
 # A request the daemon answers on a connection of its own, with one frame. Not in
 # `Opening`: a surface sends `CastRequested` later in its connection too.
 Asked = (
-    AltarRequested | VersionRequested | CastRequested | AdmissionRequested | CastSeen
+    AltarRequested
+    | VersionRequested
+    | CastRequested
+    | AdmissionRequested
+    | CastSeen
+    | VigilsRequested
 )
 
 # Between a surface and the daemon, and never about a cast that exists yet.
-Request = CastRequested | CastRefused | AltarTended | DaemonVersion | CastAdmitted
+Request = (
+    CastRequested
+    | CastRefused
+    | AltarTended
+    | DaemonVersion
+    | CastAdmitted
+    | VigilsState
+)
 
 
 # A surface asking for a running cast to end, passed on by the daemon down the

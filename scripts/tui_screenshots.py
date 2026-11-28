@@ -15,7 +15,7 @@ from textual.pilot import Pilot
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
-from vekna.gates.cli.tui import Opened, Outside, VeknaApp
+from vekna.gates.cli.tui import Opened, Outside, ToDaemon, VeknaApp
 from vekna.mills.hub import Hub
 from vekna.wire import (
     VERSION,
@@ -27,6 +27,7 @@ from vekna.wire import (
     RiteDelta,
     RiteFinished,
     RiteStarted,
+    VigilsRequested,
     WireMessage,
 )
 
@@ -227,6 +228,14 @@ def _window() -> VeknaApp:
         reply = hub.mark(request)
         return reply.reason if isinstance(reply, CastRefused) else None
 
+    async def vigils_paused() -> bool | None:
+        await asyncio.sleep(0)
+        return hub.vigils(VigilsRequested()).paused
+
+    async def set_vigils_paused(*, paused: bool) -> bool | None:
+        await asyncio.sleep(0)
+        return hub.vigils(VigilsRequested(pause=paused)).paused
+
     async def branch_of(root: str) -> str | None:
         await asyncio.sleep(0)
         return _BRANCHES.get(root)
@@ -244,8 +253,12 @@ def _window() -> VeknaApp:
             title=f"vekna {VERSION}",
             fit=True,
         ),
-        send=sent.append,
-        mark=mark,
+        daemon=ToDaemon(
+            send=sent.append,
+            mark=mark,
+            vigils_paused=vigils_paused,
+            set_vigils_paused=set_vigils_paused,
+        ),
         outside=Outside(branch_of=branch_of, history_after=history_after),
     )
 

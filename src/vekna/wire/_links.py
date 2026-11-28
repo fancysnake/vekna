@@ -17,6 +17,8 @@ from ._pacts import (
     DaemonVersion,
     RunRecord,
     VersionRequested,
+    VigilsRequested,
+    VigilsState,
     WireMessage,
     decode_frame,
     encode_frame,
@@ -191,6 +193,28 @@ async def mark_seen(path: Path, mark: CastSeen) -> str | None:
     if isinstance(reply, CastRefused):
         return reply.reason
     return None if isinstance(reply, CastGoodbye) else _PREDATES_SEEN
+
+
+# Whether the daemon on `path` has its vigils paused. `None` when the daemon
+# did not say: nobody listening, or a daemon that hangs up on a question it
+# predates.
+async def vigils_paused(path: Path) -> bool | None:
+    return await _vigils_state(path, VigilsRequested())
+
+
+# Pauses the vigils of the daemon on `path`, or lets them cast again, and
+# answers as `vigils_paused` does.
+async def set_vigils_paused(path: Path, *, paused: bool) -> bool | None:
+    return await _vigils_state(path, VigilsRequested(pause=paused))
+
+
+# Asked on a connection of its own for the reason `mark_seen` is.
+async def _vigils_state(path: Path, asked: VigilsRequested) -> bool | None:
+    try:
+        reply = await _asked(path, asked)
+    except OSError:
+        return None
+    return reply.paused if isinstance(reply, VigilsState) else None
 
 
 # What a cast groups under and what a surface filters by, so both ends resolve

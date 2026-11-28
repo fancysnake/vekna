@@ -66,6 +66,8 @@ from vekna.wire import (
     mark_seen,
     project_of,
     read_frames,
+    set_vigils_paused,
+    vigils_paused,
 )
 
 _WHEN = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -2084,12 +2086,13 @@ def _vigil_config(queue_rituals: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return config
 
 
-def _keep_tally(config: Path) -> None:
+def _append(config: Path, table: str) -> None:
     listed = config.read_text(encoding="utf-8")
-    config.write_text(
-        listed + '[vigil.tally]\nevery = 3600\nritual = "count"\nargs = { n = 7 }\n',
-        encoding="utf-8",
-    )
+    config.write_text(listed + table, encoding="utf-8")
+
+
+def _keep_tally(config: Path) -> None:
+    _append(config, '[vigil.tally]\nevery = 3600\nritual = "count"\nargs = { n = 7 }\n')
 
 
 @pytest.mark.asyncio
@@ -2116,6 +2119,51 @@ class TestVigils:
                 caplog, logging.INFO
             ).splitlines()
         )
+
+    @staticmethod
+    async def test_a_paused_daemon_casts_no_vigil_until_it_is_let_to(
+        socket_path: Path, vigil_config: Path
+    ):
+        runs = socket_path.parent / "runs"
+        async with _served(socket_path):
+            paused = await set_vigils_paused(socket_path, paused=True)
+            _keep_tally(vigil_config)
+            await asyncio.sleep(_TICK * 20)
+            held = _runs(runs)
+            resumed = await set_vigils_paused(socket_path, paused=False)
+            await _spawned(lambda: _finished(runs, "count"))
+
+        assert (paused, resumed) == (True, False)
+        assert held == []
+        assert _run_of(runs, "count").hello.vigil == "tally"
+
+    @staticmethod
+    async def test_asking_whether_the_vigils_are_paused_leaves_the_pause_as_it_is(
+        socket_path: Path,
+    ):
+        async with _served(socket_path):
+            before = await vigils_paused(socket_path)
+            await set_vigils_paused(socket_path, paused=True)
+            asked = await vigils_paused(socket_path)
+            again = await vigils_paused(socket_path)
+
+        assert (before, asked, again) == (False, True, True)
+
+    # A look says what is wrong with a vigil's table, so silence is no look.
+    @staticmethod
+    async def test_a_paused_daemon_does_not_read_the_vigils(
+        socket_path: Path, vigil_config: Path, caplog: pytest.LogCaptureFixture
+    ):
+        async with _served(socket_path):
+            await set_vigils_paused(socket_path, paused=True)
+            await asyncio.sleep(_TICK * 10)
+            _append(vigil_config, '[vigil.broken]\nritual = "count"\n')
+            await asyncio.sleep(_TICK * 20)
+            held = _said(caplog, logging.WARNING)
+            await set_vigils_paused(socket_path, paused=False)
+            await _eventually(lambda: "broken" in _said(caplog, logging.WARNING))
+
+        assert "broken" not in held
 
     # A journal that cannot be listed is the look failing. The vigil is written
     # into the config of a daemon already up, and is cast once the disk reads.

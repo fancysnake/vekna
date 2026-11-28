@@ -34,6 +34,18 @@ class Vigils:
         self._queue = queue
         self._limits = limits
         self._alive = alive
+        self._paused = False
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    # A paused vigil stays due, so it casts at the first tick after the pause
+    # ends. What already runs is not touched.
+    def hold(self, *, pause: bool) -> None:
+        if pause != self._paused:
+            self._paused = pause
+            _log.info("vigils paused" if pause else "vigils cast again")
 
     # `projects` names the repository of each vigil's root, as a hello says it.
     # `records` is the journal: the casts this daemon has not seen, and when
@@ -46,6 +58,8 @@ class Vigils:
         projects: Mapping[str, str],
         records: Sequence[RunRecord],
     ) -> list[CastHello]:
+        if self._paused:
+            return []
         whens = [
             self._due_at(vigil, project=projects[vigil.project_root], records=records)
             for vigil in vigils

@@ -53,6 +53,8 @@ from vekna.wire import (
     EnqueueRefused,
     EnqueueRequested,
     StopRequested,
+    VigilsRequested,
+    VigilsState,
     default_runs_root,
     default_socket_path,
     default_state_root,
@@ -193,15 +195,12 @@ async def _serving(*, path: Path, debug: Path | None) -> int:
             circle.enqueue(record.hello)
     pool = CodingPool(tell=hub.tell, limits=limits)
     cutter = Cutter(casts=hub, alive=pid_alive, kill=signal_pid)
-    routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter)
+    vigils = Vigils(hub=hub, queue=circle, limits=limits, alive=pid_alive)
+    routes = _Daemon(hub=hub, circle=circle, pool=pool, cutter=cutter, vigils=vigils)
     server = await serve(path=path, routes=routes)
     _log.info("listening on %s", path)
     keeping = asyncio.create_task(
-        _keep_vigils(
-            vigils=Vigils(hub=hub, queue=circle, limits=limits, alive=pid_alive),
-            book=ConfigVigils(),
-            journal=journal,
-        )
+        _keep_vigils(vigils=vigils, book=ConfigVigils(), journal=journal)
     )
     keeping.add_done_callback(functools.partial(_ended, _VIGILS_LOST))
     relaying = asyncio.create_task(
@@ -312,7 +311,7 @@ async def _keep_vigils(*, vigils: Vigils, book: VigilBook, journal: Journal) -> 
 # configured, every record in the journal; remembering each ritual's last
 # start is the upgrade if a large journal makes this show up in a profile.
 async def _look(*, vigils: Vigils, book: VigilBook, journal: Journal) -> None:
-    if not (found := await asyncio.to_thread(book.vigils)):
+    if vigils.paused or not (found := await asyncio.to_thread(book.vigils)):
         return
     projects = {
         root: await project_of(Path(root))
@@ -388,10 +387,18 @@ async def stop_daemon() -> str:
 # The hub, the circle and the coding pool behind one socket: the hub holds what
 # every cast is doing, the circle what may run next, the pool who is talking to
 # an agent. Slot traffic is the pool's alone, and an ending is everyone's.
+# The vigils are here only to be paused.
 class _Daemon(Routes):
     def __init__(
-        self, *, hub: Hub, circle: Circle, pool: CodingPool, cutter: Cutter
+        self,
+        *,
+        hub: Hub,
+        circle: Circle,
+        pool: CodingPool,
+        cutter: Cutter,
+        vigils: Vigils,
     ) -> None:
+        self._vigils = vigils
         self._hub = hub
         self._circle = circle
         self._pool = pool
@@ -479,6 +486,11 @@ class _Daemon(Routes):
 
     def mark(self, request: CastSeen) -> CastGoodbye | CastRefused:
         return self._hub.mark(request)
+
+    def vigils(self, request: VigilsRequested) -> VigilsState:
+        if request.pause is not None:
+            self._vigils.hold(pause=request.pause)
+        return VigilsState(paused=self._vigils.paused)
 
     def open_cast(self, cast_id: str, peer: Surface) -> None:
         self._hub.open_cast(cast_id, peer)
