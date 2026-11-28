@@ -251,7 +251,8 @@ async def shell(
     else:
         focus = SHELL_FOCUS.resolve(default=_BASH)
         reply = await focus.run(
-            ShellCall(command=command, cwd=cwd), on_line=emit_delta if stream else None
+            ShellCall(command=command, cwd=cwd),
+            on_line=lambda line: emit_delta(line, quiet=not stream),
         )
         result = ShellResult(
             stdout=reply.stdout, stderr=reply.stderr, exit_code=reply.exit_code

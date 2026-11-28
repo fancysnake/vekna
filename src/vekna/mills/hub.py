@@ -1,4 +1,6 @@
 from collections.abc import Callable, Iterable, Iterator
+from itertools import groupby
+from operator import itemgetter
 from typing import assert_never
 
 from typing_extensions import override
@@ -493,20 +495,29 @@ def _update_rite(view: CastView, message: RiteDelta | RiteFinished) -> str | Non
     if (rite := view.rites.get(message.rite_id)) is None:
         return _NO_RITE
     if isinstance(message, RiteDelta):
-        rite.deltas.extend(message.delta.splitlines() or [""])
+        lines = message.delta.splitlines() or [""]
+        rite.lines.extend((message.quiet, line) for line in lines)
     else:
         rite.finished = message
     return None
 
 
+# Named with its type, because `itemgetter` on its own answers `Any`.
+_said_quiet: Callable[[tuple[bool, str]], bool] = itemgetter(0)
+
+
 def _replay_rites(view: CastView) -> Iterator[WireMessage]:
     for rite in view.rites.values():
         yield rite.started
-        if rite.deltas:
+        # A run of lines said the same way is one delta, so a terminal that
+        # follows the replay is spared what it was spared live.
+        for quiet, run in groupby(rite.lines, key=_said_quiet):
             yield RiteDelta(
                 cast_id=view.hello.cast_id,
                 rite_id=rite.started.rite_id,
-                delta="\n".join(rite.deltas),
+                # Every line ends, so a run's blank last line is not lost.
+                delta="".join(f"{line}\n" for _, line in run),
+                quiet=quiet,
             )
         if rite.finished is not None:
             yield rite.finished

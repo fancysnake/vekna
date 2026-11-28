@@ -78,9 +78,12 @@ def to_wire(event: RiteEvent, *, cast_id: str) -> WireMessage:
             name=event.name,
             category=event.category,
             started_at=event.started_at,
+            summary=event.summary,
         )
     if isinstance(event, RiteStreamed):
-        return RiteDelta(cast_id=cast_id, rite_id=event.rite_id, delta=event.delta)
+        return RiteDelta(
+            cast_id=cast_id, rite_id=event.rite_id, delta=event.delta, quiet=event.quiet
+        )
     return RiteFinished(
         cast_id=cast_id,
         rite_id=event.rite_id,

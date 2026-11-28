@@ -353,6 +353,7 @@ class TestDiscord:
         monkeypatch.delitem(sys.modules, "vekna.links.discord", raising=False)
         monkeypatch.setitem(sys.modules, "discord", None)
         async with _served(socket_path):
+            await _eventually(lambda: bool(_said(caplog, logging.WARNING)))
             assert await alive(socket_path)
 
         assert _said(caplog, logging.WARNING).splitlines() == [

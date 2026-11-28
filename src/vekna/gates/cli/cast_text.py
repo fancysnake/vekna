@@ -81,6 +81,12 @@ def printable(text: str) -> str:
     )
 
 
+# What a rite's call was given, as it follows the rite's name on a line.
+def given(rite: RiteView) -> str:
+    summary = rite.started.summary
+    return f"  {printable(summary)}" if summary else ""
+
+
 # Text a ritual wrote, to its first line, cut with `…` where it runs past `width`.
 def clipped(text: str, width: int) -> str:
     line = next(iter(text.splitlines()), "")

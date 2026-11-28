@@ -811,11 +811,33 @@ class TestGrimoire:
         grimoire = Grimoire(clock=_fixed_clock, on_event=seen.append)
 
         rite_id = grimoire.rite_started(name="fix")
-        grimoire.rite_delta(rite_id, "working...")
+        grimoire.rite_delta(rite_id=rite_id, delta="working...")
         grimoire.rite_finished(rite_id, result={"session_id": "s1"})
 
         assert [type(event) for event in seen] == [RiteBegan, RiteStreamed, RiteEnded]
         assert seen == grimoire.events
+
+    @staticmethod
+    def test_a_delta_is_not_quiet_unless_told_otherwise():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_delta(rite_id=rite_id, delta="working...")
+
+        assert grimoire.events[-1] == RiteStreamed(
+            rite_id="r1", delta="working...", quiet=False
+        )
+
+    @staticmethod
+    def test_a_quiet_delta_is_journaled_as_quiet():
+        grimoire = Grimoire(clock=_fixed_clock)
+
+        rite_id = grimoire.rite_started(name="fix")
+        grimoire.rite_delta(rite_id=rite_id, delta="bulk", quiet=True)
+
+        assert grimoire.events[-1] == RiteStreamed(
+            rite_id="r1", delta="bulk", quiet=True
+        )
 
     @staticmethod
     def test_rite_finished_carries_result():
