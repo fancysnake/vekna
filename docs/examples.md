@@ -170,7 +170,9 @@ an untyped mapping, so a misspelled field passes the type checker and pydantic
 alike. The copy keeps its class, so a second method re-tags it as the next
 step's with `kind.model_validate_json(self.model_dump_json())`. The trip through
 JSON returns exactly `kind`, and avoids the `dict[str, Any]` of `model_dump()`,
-which mypy's `disallow_any_expr` rejects.
+which mypy's `disallow_any_expr` rejects. It keeps only what survives JSON: a
+`SecretStr` comes back as asterisks with no error, and a field declared with
+`exclude=True` comes back as its default, or fails validation if it has none.
 
 Each field appears three times in such a copy method, and cabinet's two shared
 models cost about forty such lines between them. vekna ships no helper for this:
