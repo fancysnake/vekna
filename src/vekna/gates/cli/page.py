@@ -19,6 +19,7 @@ from .cast_text import (
     labelled,
     live,
     printable,
+    tallied,
     top_prompt,
     word,
 )
@@ -50,6 +51,7 @@ _HERE = "◆"
 _ASKS = "bold yellow"
 _FAILS = "bold red"
 _RUNNING = "green"
+_LOUD = {"waiting": _ASKS, "failed": _FAILS, "aborted": _FAILS}
 NO_CAST = "no cast here — c starts one"
 LEAVES = "esc leaves"
 
@@ -79,21 +81,17 @@ def holder(view: CastView, prompt: Prompt, mine: set[str]) -> str:
     return "taken over here" if prompt.claim_id in mine else "claimed elsewhere"
 
 
-# What still happens under a fold, loudest first. Asks and fails are what the
-# operator acts on, so they are bold; running only says something is going on.
+# What still happens under a fold, in the words and the order of the bottom
+# line. A cast that waits or failed is what the operator acts on, so it is bold;
+# the rest only says something is going on.
 def tally(counts: Counts) -> Text:
-    parts = [
-        (counts.asks, "asks", _ASKS),
-        (counts.fails, "fail", _FAILS),
-        (counts.running, "running", _RUNNING),
-    ]
-    if not (shown := [(f"{n} {said}", style) for n, said, style in parts if n]):
+    if not (shown := tallied(counts)):
         return Text()
     text = Text(" (", "dim")
-    for index, (said, style) in enumerate(shown):
+    for index, (count, said) in enumerate(shown):
         if index:
             text.append(", ", "dim")
-        text.append(said, style)
+        text.append(f"{count} {said}", _LOUD.get(said, _RUNNING))
     text.append(")", "dim")
     return text
 

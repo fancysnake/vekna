@@ -59,9 +59,11 @@ the statuses of the casts it queued. The newest cast of the streak stands for
 it and says how long it is: `x8`. A slot is one line unless a cast in it
 failed.
 
-The line of the project counts its casts by state: `shop (1 asks, 1 fail, 1
-running)`. Asks and fails are the casts that need you. A running cast needs
-nothing from you.
+The line of the project counts its casts by state: `shop (1 running, 1
+waiting, 1 failed)`. The bottom line counts them in the same words and the same
+order. A cast that waits or failed needs you. A running or queued cast needs
+nothing from you. The project line leaves out the casts that are done and the
+failed casts you marked seen; the bottom line counts every cast.
 
 ## Find the cast that waits on you
 
@@ -131,7 +133,7 @@ line says 1 running, the finished line says 1 fail, and the right page lists
 the running ci_watch cast](assets/tui-fold.svg)
 
 `space` on a project, a ritual or the `finished` line folds it. The folded
-line says what still happens under it: `▸ ci_watch (1 fail, 1 running)`. A
+line says what still happens under it: `▸ ci_watch (1 running, 1 failed)`. A
 project line always says it. `w` and `t` still reach a cast that asks under a
 fold.
 

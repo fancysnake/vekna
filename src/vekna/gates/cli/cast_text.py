@@ -21,16 +21,9 @@ _WORD = {
     "error": "failed",
     "disconnected": "aborted",
 }
-_TALLY = (
-    "running",
-    "waiting",
-    "on child",
-    "recovering",
-    "queued",
-    "done",
-    "failed",
-    "aborted",
-)
+# What `word` says of a live cast.
+LIVE = ("running", "waiting", "on child", "recovering", "queued")
+_TALLY = (*LIVE, "done", "failed", "aborted")
 
 
 def live(view: CastView) -> bool:
@@ -93,10 +86,11 @@ def clipped(text: str, width: int) -> str:
     return f"{line[: width - 1]}…" if len(line) > width else line
 
 
+# A cast that ended with a prompt still open waits all the same.
 def word(view: CastView) -> str:
+    if view.waiting:
+        return "waiting"
     if view.status == "running":
-        if view.waiting:
-            return "waiting"
         if view.on_children:
             return "on child"
         if _recovering(view):
@@ -159,9 +153,14 @@ def elapsed(view: CastView, now: datetime) -> str:
     return clock((until - view.hello.started_at).total_seconds())
 
 
+# How many casts are in each state, in the one order every line says them in.
+def tallied(states: Counter[str]) -> list[tuple[int, str]]:
+    return [(states[said], said) for said in _TALLY if states[said]]
+
+
 def counted(casts: Sequence[CastView]) -> str:
-    tally = Counter(word(view) for view in casts)
-    return " · ".join(f"{tally[word]} {word}" for word in _TALLY if tally[word])
+    states = Counter(word(view) for view in casts)
+    return " · ".join(f"{count} {said}" for count, said in tallied(states))
 
 
 def labelled(hello: CastHello) -> str:

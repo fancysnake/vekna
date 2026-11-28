@@ -470,8 +470,8 @@ class VeknaApp(App[None]):
         start = keys.index(cursor) + 1 if cursor in keys else 0
         for index in list(range(start, len(keys))) + list(range(start)):
             entry = self._view.drawn.entries[keys[index]]
-            asking = entry.kind == "cast" and entry.counts.asks
-            if asking or (entry.folded and entry.counts.asks):
+            asks = entry.counts["waiting"]
+            if asks and (entry.kind == "cast" or entry.folded):
                 self._move_to(keys[index])
                 return
         self.say("no cast is waiting on you")

@@ -1,12 +1,13 @@
+from collections import Counter
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Literal, Self
+from typing import Literal
 
 from vekna.pacts.casts import CastView, RiteView, named
 
-from .cast_text import ended, innermost, live
+from .cast_text import LIVE, ended, innermost, live, word
 from .streaks import Kids, kids_of, said_args, streaks, with_kids
 
 Kind = Literal["project", "ritual", "cast", "more", "rite", "day", "finished"]
@@ -15,20 +16,13 @@ _HOLDS_CASTS: frozenset[Kind] = frozenset({"project", "ritual", "finished", "day
 
 
 # What happens under a node: a fold hides the node's children, and these are
-# what it says instead. A cast that asks is counted as asking only, and a
-# failed one marked seen is not counted.
-@dataclass(frozen=True)
-class Counts:
-    asks: int = 0
-    fails: int = 0
-    running: int = 0
+# what it says instead, each cast under the word its own line says. A cast that
+# ended is counted only when it failed and is not marked seen.
+Counts = Counter[str]
 
-    def __add__(self, other: Self) -> Self:
-        return type(self)(
-            asks=self.asks + other.asks,
-            fails=self.fails + other.fails,
-            running=self.running + other.running,
-        )
+
+def _alive(counts: Counts) -> bool:
+    return any(counts[said] for said in LIVE)
 
 
 # One line of the contents. The key is stable across repaints, so the cursor and
@@ -298,7 +292,7 @@ def _streak_lines(
     for streak in sorted(found, key=_newest_started, reverse=True):
         first = streak[0]
         entry = _cast(view=first, tree=tree, streak=streak)
-        (going if entry.total.asks or entry.total.running else past).append(entry)
+        (going if _alive(entry.total) else past).append(entry)
     return going, past
 
 
@@ -347,11 +341,8 @@ def _queued(view: CastView, tree: _Tree) -> list[Entry]:
 
 
 def _counts(view: CastView) -> Counts:
-    if view.waiting:
-        return Counts(asks=1)
-    if live(view):
-        return Counts(running=1)
-    return Counts(fails=int(view.failed and not view.seen))
+    counted = live(view) or view.waiting or (view.failed and not view.seen)
+    return Counts([word(view)] if counted else [])
 
 
 # The rite that says what the cast is doing: the one that asks, else the
@@ -450,7 +441,7 @@ def fitted(
     idle = {
         entry.key
         for entry in lines
-        if entry.kind == "project" and not (entry.counts.asks or entry.counts.running)
+        if entry.kind == "project" and not _alive(entry.counts)
     }
     tried = (running, running | finished, finished, finished | idle, projects)
     return next((folds for folds in tried if len(lines_with(folds)) <= rows), tried[-1])

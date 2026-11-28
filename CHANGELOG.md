@@ -49,6 +49,11 @@ when.
 
 ### Fixed
 
+- **The window counts casts the same way on every line.** A project, ritual or
+  folded line says the states in the words and the order of the bottom line:
+  `(2 running, 1 queued)`, not `(3 running)`; `waiting` and `failed`, not
+  `asks` and `fail`. A cast that ended with a prompt still open counts as
+  `waiting` on both.
 - **`vekna log <cast>` and the plain view strip terminal control codes** from a
   rite's name, summary, error and output.
 

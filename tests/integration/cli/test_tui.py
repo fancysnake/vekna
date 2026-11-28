@@ -17,6 +17,7 @@ from vekna.wire import (
     CastCancelRequested,
     CastGoodbye,
     CastHello,
+    CastQueued,
     CastRefused,
     CastRequested,
     CastSeen,
@@ -317,7 +318,7 @@ class TestContents:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines[:2] == ["proj (1 asks)", "  pr_fix"]
+        assert lines[:2] == ["proj (1 waiting)", "  pr_fix"]
         assert lines[2].endswith("  c1  asks")
 
     @staticmethod
@@ -722,7 +723,7 @@ class TestStreaks:
             lines = _contents(app)
             head = _text(app, "#head").splitlines()
         assert lines == [
-            "proj (1 fail)",
+            "proj (1 failed)",
             "  finished",
             "    sweep",
             "      ✓ @now  c3  x3",
@@ -744,7 +745,7 @@ class TestStreaks:
 
             lines = _contents(app)
         assert lines == [
-            "proj (3 fail)",
+            "proj (3 failed)",
             "  finished",
             "    sweep",
             "      ✗ @now  c3  x3",
@@ -767,7 +768,7 @@ class TestStreaks:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines[0] == "proj (2 fail)"
+        assert lines[0] == "proj (2 failed)"
 
     @staticmethod
     async def test_the_finished_line_lists_its_casts_on_the_right_page():
@@ -1056,7 +1057,7 @@ class TestStreaks:
 
             cursor = _cursor(app)
         assert lines == [
-            "proj (1 asks, 1 running)",
+            "proj (1 running, 1 waiting)",
             "  sweep",
             "    ▶ @now  c1",
             "      ⏸ pr_fix  c2  asks",
@@ -1353,11 +1354,33 @@ class TestHistory:
             await pilot.pause(_PAINTED)
 
             lines = _contents(app)
-        assert lines == ["proj (1 fail)", "  finished", "    sweep", "      ✗ @now  c1"]
+        assert lines == [
+            "proj (1 failed)",
+            "  finished",
+            "    sweep",
+            "      ✗ @now  c1",
+        ]
 
 
 @pytest.mark.asyncio
 class TestFolding:
+    @staticmethod
+    async def test_the_project_line_and_the_bottom_line_count_casts_alike():
+        hub = Hub()
+        hub.apply(_hello("c1", "sweep"))
+        hub.apply(_hello("c2", "ci_watch"))
+        hub.apply(_hello("c3", "pr_fix"))
+        hub.apply(CastQueued(cast_id="c3"))
+        app = _app(hub, [])
+
+        async with app.run_test() as pilot:
+            await pilot.pause(_PAINTED)
+
+            project = _contents(app)[0]
+            where = _text(app, "#scope")
+        assert project == "proj (2 running, 1 queued)"
+        assert where == "2 running · 1 queued  (proj)"
+
     @staticmethod
     async def test_a_fold_hides_its_lines_and_says_what_still_happens_there():
         hub = Hub()
@@ -1379,7 +1402,7 @@ class TestFolding:
             await pilot.pause(_PAINTED)
 
             unfolded = _contents(app)
-        assert folded == ["▸ proj (1 asks, 1 fail, 1 running)"]
+        assert folded == ["▸ proj (1 running, 1 waiting, 1 failed)"]
         assert unfolded == before
         assert len(before) > 1
 
@@ -1410,7 +1433,7 @@ class TestFolding:
             await pilot.pause(_PAINTED)
 
             left = _contents(app)
-        assert left[:3] == ["proj (1 fail)", "  finished", "    ci_watch"]
+        assert left[:3] == ["proj (1 failed)", "  finished", "    ci_watch"]
         assert left[3].endswith("  c1")
 
     @staticmethod
@@ -1531,7 +1554,7 @@ class TestFolding:
             await pilot.pause(_PAINTED)
 
             claim = _claim_then(sent)
-        assert folded == ["proj (1 asks)", "  ▸ pr_fix (1 asks)"]
+        assert folded == ["proj (1 waiting)", "  ▸ pr_fix (1 waiting)"]
         assert claim.request_id == "q1"
 
 
@@ -2603,14 +2626,14 @@ class TestSeen:
             await pilot.pause(_PAINTED)
             again, unmarked = _contents(app)[0], _text(app, "#note")
 
-        assert loud == "proj (1 fail)"
+        assert loud == "proj (1 failed)"
         assert quiet == "proj"
         assert marked == "marked nap c1abcdef seen"
         assert "failed · seen" in head
         assert isinstance(glyph, Text)
         assert glyph.plain.startswith("✗ ")
         assert [str(span.style) for span in glyph.spans if span.start == 0] == ["dim"]
-        assert again == "proj (1 fail)"
+        assert again == "proj (1 failed)"
         assert unmarked == "unmarked nap c1abcdef"
 
     @staticmethod
